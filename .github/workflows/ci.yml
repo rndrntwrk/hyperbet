@@ -1,0 +1,127 @@
+name: Hyperbet CI
+
+on:
+  push:
+    branches: [main, staging, develop, hackathon]
+    paths:
+      - "packages/hyperbet-solana/app/**"
+      - "packages/hyperbet-solana/keeper/**"
+      - "packages/hyperbet-bsc/app/**"
+      - "packages/hyperbet-bsc/keeper/**"
+      - "docs/betting-production-deploy.md"
+      - ".github/workflows/ci.yml"
+      - "package.json"
+      - "bun.lock"
+  pull_request:
+    branches: [main, staging, develop, hackathon]
+    paths:
+      - "packages/hyperbet-solana/app/**"
+      - "packages/hyperbet-solana/keeper/**"
+      - "packages/hyperbet-bsc/app/**"
+      - "packages/hyperbet-bsc/keeper/**"
+      - "docs/betting-production-deploy.md"
+      - ".github/workflows/ci.yml"
+      - "package.json"
+      - "bun.lock"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - hyperbet-solana
+          - hyperbet-bsc
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.38
+
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          bun install --cwd packages/${{ matrix.package }}/app --frozen-lockfile
+          bun install --cwd packages/${{ matrix.package }}/keeper --frozen-lockfile
+
+      - name: Type check app
+        run: bunx tsc --noEmit -p packages/${{ matrix.package }}/app/tsconfig.json
+
+      - name: Lint app
+        run: bun run --cwd packages/${{ matrix.package }}/app lint
+
+      - name: Run app unit tests
+        run: |
+          bun test \
+            packages/${{ matrix.package }}/app/tests/unit/modelMarkets.test.ts \
+            packages/${{ matrix.package }}/app/tests/unit/invite.test.ts \
+            packages/${{ matrix.package }}/app/tests/unit/invite-extended.test.ts
+
+      - name: Run keeper unit tests
+        run: |
+          bun test \
+            packages/${{ matrix.package }}/keeper/src/walletKeys.test.ts \
+            packages/${{ matrix.package }}/keeper/src/modelMarkets.test.ts \
+            packages/${{ matrix.package }}/keeper/src/db.test.ts \
+            packages/${{ matrix.package }}/keeper/src/perpsMath.test.ts
+
+      - name: Smoke test keeper service
+        run: |
+          PORT=18080 \
+          ENABLE_KEEPER_BOT=false \
+          SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
+          bun --bun packages/${{ matrix.package }}/keeper/src/service.ts >/tmp/${{ matrix.package }}-keeper.log 2>&1 &
+          KEEPER_PID=$!
+          trap 'kill "$KEEPER_PID" >/dev/null 2>&1 || true' EXIT
+
+          for attempt in $(seq 1 20); do
+            if curl -fsSL http://127.0.0.1:18080/status | jq -e '.ok == true and .proxies != null' >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat /tmp/${{ matrix.package }}-keeper.log
+          exit 1
+
+      - name: Verify tracked env files are sanitized
+        run: |
+          if rg -n "^(HELIUS_API_KEY|BIRDEYE_API_KEY)=.{1,}$" packages/${{ matrix.package }}/.env.mainnet; then
+            echo "Tracked mainnet env file still contains provider secrets"
+            exit 1
+          fi
+
+      - name: Build production app
+        run: bun run --cwd packages/${{ matrix.package }}/app build --mode mainnet-beta
+        env:
+          CF_PAGES_COMMIT_SHA: ${{ github.sha }}
+          VITE_GAME_API_URL: https://gold-betting-keeper-production.up.railway.app
+          VITE_GAME_WS_URL: wss://gold-betting-keeper-production.up.railway.app/ws
+          VITE_SOLANA_CLUSTER: mainnet-beta
+          VITE_USE_GAME_RPC_PROXY: "true"
+          VITE_USE_GAME_EVM_RPC_PROXY: "true"
+          VITE_BSC_CHAIN_ID: "97"
+          VITE_BASE_CHAIN_ID: "84532"
+          VITE_BSC_GOLD_CLOB_ADDRESS: "0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E"
+          VITE_BASE_GOLD_CLOB_ADDRESS: "0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E"
+
+      - name: Verify build artifacts
+        run: |
+          test -f packages/${{ matrix.package }}/app/dist/build-info.json
+          if find packages/${{ matrix.package }}/app/dist -name '*.map' | grep -q .; then
+            echo "Unexpected source maps in production dist"
+            exit 1
+          fi
+          if rg -n "api-key=" packages/${{ matrix.package }}/app/dist; then
+            echo "Provider key leak detected in dist"
+            exit 1
+          fi

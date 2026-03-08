@@ -1,0 +1,8 @@
+# Cloudflare Pages configuration for the betting frontend.
+# Project: hyperbet-solana
+
+name = "hyperbet-solana"
+compatibility_date = "2025-03-01"
+
+[assets]
+directory = "./dist"

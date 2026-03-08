@@ -1,0 +1,26 @@
+[workspace]
+members = [
+  "programs/fight_oracle",
+  "programs/gold_clob_market",
+  "programs/gold_perps_market",
+]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+[patch.crates-io]
+zmij = { path = "vendor/zmij" }
+anchor-lang = { path = "vendor/anchor-lang-0.31.1" }
+solana-account = { path = "vendor/solana-account-2.2.1" }
+solana-account-info = { path = "vendor/solana-account-info-2.3.0" }
+solana-address-lookup-table-interface = { path = "vendor/solana-address-lookup-table-interface-2.2.2" }
+solana-bincode = { path = "vendor/solana-bincode-2.2.1" }
+solana-feature-gate-interface = { path = "vendor/solana-feature-gate-interface-2.2.2" }
+solana-instruction = { path = "vendor/solana-instruction-2.3.3" }
+solana-message = { path = "vendor/solana-message-2.4.0" }
+solana-program = { path = "vendor/solana-program-2.3.0" }
+solana-sysvar = { path = "vendor/solana-sysvar-2.3.0" }
+solana-vote-interface = { path = "vendor/solana-vote-interface-2.2.6" }

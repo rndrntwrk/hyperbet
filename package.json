@@ -1,0 +1,43 @@
+{
+  "name": "@hyperbet/monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hyperbet private monorepo for betting, prediction, and futures products",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "build:solana": "bun run --cwd packages/hyperbet-solana build",
+    "build:bsc": "bun run --cwd packages/hyperbet-bsc build",
+    "test": "turbo run test",
+    "test:solana": "bun run --cwd packages/hyperbet-solana test:e2e:local",
+    "test:bsc": "bun run --cwd packages/hyperbet-bsc test:e2e:local",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf .turbo",
+    "dev:solana": "bun run --cwd packages/hyperbet-solana dev",
+    "dev:bsc": "bun run --cwd packages/hyperbet-bsc dev",
+    "dev:solana:stream-ui": "bun run --cwd packages/hyperbet-solana dev:stream-ui",
+    "dev:bsc:stream-ui": "bun run --cwd packages/hyperbet-bsc dev:stream-ui",
+    "deploy:pages": "bun run deploy:pages:solana",
+    "deploy:pages:solana": "bun run --cwd packages/hyperbet-solana build:mainnet",
+    "deploy:pages:bsc": "bun run --cwd packages/hyperbet-bsc build:mainnet",
+    "deploy:keeper": "bun run deploy:keeper:solana",
+    "deploy:keeper:solana": "bun run --cwd packages/hyperbet-solana keeper:service",
+    "deploy:keeper:bsc": "bun run --cwd packages/hyperbet-bsc keeper:service"
+  },
+  "devDependencies": {
+    "bun-types": "^1.2.20",
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.5",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "bun@1.1.38"
+}
