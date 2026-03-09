@@ -1,4 +1,3 @@
-import "@hyperbet/ui/lib/solanaCompat";
 import { mountHyperbetApp } from "@hyperbet/ui";
 import AppRoot from "./AppRoot";
 
