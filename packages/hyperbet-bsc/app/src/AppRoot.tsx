@@ -9,10 +9,12 @@ import { StreamUIApp } from "./StreamUIApp";
 
 export default createHyperbetAppRoot({
   getRpcUrl,
-  getWsUrl,
+  getWsUrl: getWsUrl as any,
   createHeadlessWalletsFromEnv,
-  ChainProvider,
-  wagmiConfig,
+  ChainProvider: ChainProvider as any,
+  // Cast needed: lockfile resolves two viem versions (local 2.46 vs hoisted 2.47)
+  // causing deep chain-type structural incompatibility. Identical at runtime.
+  wagmiConfig: wagmiConfig as any,
   App,
   StreamUIApp,
 });

@@ -297,7 +297,7 @@ async function ensureBalance(
   }
 }
 
-async function ensureTransferredBalance(
+async function _ensureTransferredBalance(
   connection: Connection,
   provider: AnchorProvider,
   recipient: PublicKey,
@@ -328,7 +328,7 @@ async function waitForSignatureConfirmation(
   const startedAt = Date.now();
   let lastPendingTickAt = 0;
   while (Date.now() - startedAt < timeoutMs) {
-    let shouldTick = false;
+    let shouldTick: boolean;
     try {
       const statuses = await withRpcRetry(() =>
         connection.getSignatureStatuses([signature], {

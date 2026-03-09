@@ -97,7 +97,7 @@ async function callJsonRpc<T>(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${method} fetch failed: ${message}`);
+    throw new Error(`${method} fetch failed: ${message}`, { cause: error });
   }
 
   if (!response.ok) {
