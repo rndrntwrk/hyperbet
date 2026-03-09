@@ -9,6 +9,7 @@ declare_id!("6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD");
 pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
 
+#[allow(clippy::too_many_arguments)]
 #[program]
 pub mod fight_oracle {
     use super::*;
@@ -51,6 +52,7 @@ pub mod fight_oracle {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn upsert_duel(
         ctx: Context<UpsertDuel>,
         duel_key: [u8; 32],
@@ -92,8 +94,17 @@ pub mod fight_oracle {
                     && duel_state.status != DuelStatus::Cancelled,
                 ErrorCode::DuelAlreadyFinalized
             );
+            require!(
+                duel_status_rank(status) >= duel_status_rank(duel_state.status),
+                ErrorCode::InvalidLifecycleTransition
+            );
         } else {
             duel_state.bump = ctx.bumps.duel_state;
+            duel_state.duel_end_ts = 0;
+            duel_state.winner = MarketSide::None;
+            duel_state.seed = 0;
+            duel_state.result_hash = [0_u8; 32];
+            duel_state.replay_hash = [0_u8; 32];
         }
 
         duel_state.duel_key = duel_key;
@@ -102,12 +113,7 @@ pub mod fight_oracle {
         duel_state.bet_open_ts = bet_open_ts;
         duel_state.bet_close_ts = bet_close_ts;
         duel_state.duel_start_ts = duel_start_ts;
-        duel_state.duel_end_ts = 0;
         duel_state.status = status;
-        duel_state.winner = MarketSide::None;
-        duel_state.seed = 0;
-        duel_state.result_hash = [0_u8; 32];
-        duel_state.replay_hash = [0_u8; 32];
         duel_state.metadata_uri = metadata_uri.clone();
 
         emit!(DuelUpserted {
@@ -129,7 +135,8 @@ pub mod fight_oracle {
     ) -> Result<()> {
         let duel_state = &mut ctx.accounts.duel_state;
         require!(
-            duel_state.status != DuelStatus::Resolved,
+            duel_state.status != DuelStatus::Resolved
+                && duel_state.status != DuelStatus::Cancelled,
             ErrorCode::DuelAlreadyFinalized
         );
         require!(
@@ -152,6 +159,7 @@ pub mod fight_oracle {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn report_result(
         ctx: Context<ReportResult>,
         _duel_key: [u8; 32],
@@ -201,6 +209,16 @@ pub mod fight_oracle {
         });
 
         Ok(())
+    }
+}
+
+fn duel_status_rank(status: DuelStatus) -> u8 {
+    match status {
+        DuelStatus::Scheduled => 0,
+        DuelStatus::BettingOpen => 1,
+        DuelStatus::Locked => 2,
+        DuelStatus::Resolved => 3,
+        DuelStatus::Cancelled => 4,
     }
 }
 

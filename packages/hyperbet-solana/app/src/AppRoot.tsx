@@ -9,10 +9,10 @@ import { StreamUIApp } from "./StreamUIApp";
 
 export default createHyperbetAppRoot({
   getRpcUrl,
-  getWsUrl,
+  getWsUrl: getWsUrl as any,
   createHeadlessWalletsFromEnv,
-  ChainProvider,
-  wagmiConfig,
+  ChainProvider: ChainProvider as any,
+  wagmiConfig: wagmiConfig as any,
   App,
   StreamUIApp,
 });

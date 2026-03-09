@@ -4,9 +4,7 @@
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use fight_oracle::{
-    self, DuelState as OracleDuelState, DuelStatus as OracleDuelStatus, MarketSide,
-};
+use fight_oracle::{self, DuelState as OracleDuelState, DuelStatus as OracleDuelStatus, MarketSide};
 
 declare_id!("ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi");
 
@@ -72,6 +70,7 @@ pub mod gold_clob_market {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_config(
         ctx: Context<UpdateConfig>,
         authority: Pubkey,
@@ -119,10 +118,7 @@ pub mod gold_clob_market {
         duel_key: [u8; 32],
         market_kind: u8,
     ) -> Result<()> {
-        require!(
-            market_kind == MARKET_KIND_DUEL_WINNER,
-            ErrorCode::InvalidMarketKind
-        );
+        require!(market_kind == MARKET_KIND_DUEL_WINNER, ErrorCode::InvalidMarketKind);
         require!(
             ctx.accounts.operator.key() == ctx.accounts.config.authority
                 || ctx.accounts.operator.key() == ctx.accounts.config.market_operator,
@@ -176,23 +172,13 @@ pub mod gold_clob_market {
         require!(amount > 0, ErrorCode::InvalidAmount);
 
         let market_state = &mut ctx.accounts.market_state;
-        sync_market_status(
-            market_state,
-            &ctx.accounts.duel_state,
-            ctx.accounts.duel_state.key(),
-        )?;
-        require!(
-            market_state.status == MarketStatus::Open,
-            ErrorCode::MarketNotOpen
-        );
+        sync_market_status(market_state, &ctx.accounts.duel_state, ctx.accounts.duel_state.key())?;
+        require!(market_state.status == MarketStatus::Open, ErrorCode::MarketNotOpen);
         require!(
             Clock::get()?.unix_timestamp < ctx.accounts.duel_state.bet_close_ts,
             ErrorCode::BettingClosed
         );
-        require!(
-            order_id == market_state.next_order_id,
-            ErrorCode::InvalidOrderId
-        );
+        require!(order_id == market_state.next_order_id, ErrorCode::InvalidOrderId);
         market_state.next_order_id = market_state
             .next_order_id
             .checked_add(1)
@@ -286,21 +272,15 @@ pub mod gold_clob_market {
                 ErrorCode::InvalidRemainingAccount
             );
             account_idx += 1;
-            let mut level: Account<PriceLevel> =
-                Account::try_from(level_info).map_err(|_| ErrorCode::InvalidRemainingAccount)?;
+            let mut level: Account<PriceLevel> = Account::try_from(level_info)
+                .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
             require_keys_eq!(
                 level.market_state,
                 market_key,
                 ErrorCode::InvalidRemainingAccount
             );
-            require!(
-                level.side == opposite_side,
-                ErrorCode::InvalidRemainingAccount
-            );
-            require!(
-                level.price == boundary_price,
-                ErrorCode::InvalidRemainingAccount
-            );
+            require!(level.side == opposite_side, ErrorCode::InvalidRemainingAccount);
+            require!(level.price == boundary_price, ErrorCode::InvalidRemainingAccount);
 
             if level.total_open == 0 || level.head_order_id == 0 {
                 mark_price_inactive(market_state, opposite_side, boundary_price);
@@ -330,25 +310,14 @@ pub mod gold_clob_market {
                 .get(account_idx)
                 .ok_or(ErrorCode::MissingMatchAccounts)?;
             account_idx += 1;
-            let mut maker_balance: Account<UserBalance> = Account::try_from(maker_balance_info)
-                .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
+            let mut maker_balance: Account<UserBalance> =
+                Account::try_from(maker_balance_info)
+                    .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
 
-            require!(
-                maker_order.market_state == market_key,
-                ErrorCode::InvalidRemainingAccount
-            );
-            require!(
-                maker_order.side == opposite_side,
-                ErrorCode::InvalidRemainingAccount
-            );
-            require!(
-                maker_order.price == boundary_price,
-                ErrorCode::InvalidRemainingAccount
-            );
-            require!(
-                maker_order.maker == maker_balance.user,
-                ErrorCode::InvalidRemainingAccount
-            );
+            require!(maker_order.market_state == market_key, ErrorCode::InvalidRemainingAccount);
+            require!(maker_order.side == opposite_side, ErrorCode::InvalidRemainingAccount);
+            require!(maker_order.price == boundary_price, ErrorCode::InvalidRemainingAccount);
+            require!(maker_order.maker == maker_balance.user, ErrorCode::InvalidRemainingAccount);
             require!(
                 maker_balance.market_state == market_key,
                 ErrorCode::InvalidRemainingAccount
@@ -383,23 +352,23 @@ pub mod gold_clob_market {
                 .ok_or(ErrorCode::MathOverflow)?;
 
             if side == SIDE_BID {
-                let maker_stake = quote_cost(SIDE_ASK, boundary_price, fill_amount)?;
-                let taker_stake = quote_cost(SIDE_BID, boundary_price, fill_amount)?;
+                let maker_locked = quote_cost(SIDE_ASK, boundary_price, fill_amount)?;
+                let taker_locked = quote_cost(SIDE_BID, boundary_price, fill_amount)?;
                 maker_balance.b_shares = maker_balance
                     .b_shares
                     .checked_add(fill_amount)
                     .ok_or(ErrorCode::MathOverflow)?;
-                maker_balance.b_stake = maker_balance
-                    .b_stake
-                    .checked_add(maker_stake)
+                maker_balance.b_locked_lamports = maker_balance
+                    .b_locked_lamports
+                    .checked_add(maker_locked)
                     .ok_or(ErrorCode::MathOverflow)?;
                 user_balance.a_shares = user_balance
                     .a_shares
                     .checked_add(fill_amount)
                     .ok_or(ErrorCode::MathOverflow)?;
-                user_balance.a_stake = user_balance
-                    .a_stake
-                    .checked_add(taker_stake)
+                user_balance.a_locked_lamports = user_balance
+                    .a_locked_lamports
+                    .checked_add(taker_locked)
                     .ok_or(ErrorCode::MathOverflow)?;
 
                 if price > boundary_price {
@@ -414,23 +383,23 @@ pub mod gold_clob_market {
                         .ok_or(ErrorCode::MathOverflow)?;
                 }
             } else {
-                let maker_stake = quote_cost(SIDE_BID, boundary_price, fill_amount)?;
-                let taker_stake = quote_cost(SIDE_ASK, boundary_price, fill_amount)?;
+                let maker_locked = quote_cost(SIDE_BID, boundary_price, fill_amount)?;
+                let taker_locked = quote_cost(SIDE_ASK, boundary_price, fill_amount)?;
                 maker_balance.a_shares = maker_balance
                     .a_shares
                     .checked_add(fill_amount)
                     .ok_or(ErrorCode::MathOverflow)?;
-                maker_balance.a_stake = maker_balance
-                    .a_stake
-                    .checked_add(maker_stake)
+                maker_balance.a_locked_lamports = maker_balance
+                    .a_locked_lamports
+                    .checked_add(maker_locked)
                     .ok_or(ErrorCode::MathOverflow)?;
                 user_balance.b_shares = user_balance
                     .b_shares
                     .checked_add(fill_amount)
                     .ok_or(ErrorCode::MathOverflow)?;
-                user_balance.b_stake = user_balance
-                    .b_stake
-                    .checked_add(taker_stake)
+                user_balance.b_locked_lamports = user_balance
+                    .b_locked_lamports
+                    .checked_add(taker_locked)
                     .ok_or(ErrorCode::MathOverflow)?;
 
                 if boundary_price > price {
@@ -482,11 +451,7 @@ pub mod gold_clob_market {
                 level.price = price;
                 level.bump = ctx.bumps.resting_level;
             } else {
-                require_keys_eq!(
-                    level.market_state,
-                    market_key,
-                    ErrorCode::PriceLevelMismatch
-                );
+                require_keys_eq!(level.market_state, market_key, ErrorCode::PriceLevelMismatch);
                 require!(level.side == side, ErrorCode::PriceLevelMismatch);
                 require!(level.price == price, ErrorCode::PriceLevelMismatch);
             }
@@ -515,8 +480,8 @@ pub mod gold_clob_market {
                     expected_tail_key,
                     ErrorCode::InvalidRemainingAccount
                 );
-                let mut tail_order: Account<Order> =
-                    Account::try_from(tail_info).map_err(|_| ErrorCode::InvalidRemainingAccount)?;
+                let mut tail_order: Account<Order> = Account::try_from(tail_info)
+                    .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
                 tail_order.next_order_id = order_id;
                 tail_order.exit(&crate::ID)?;
             } else {
@@ -567,10 +532,7 @@ pub mod gold_clob_market {
         require!(order.id == order_id, ErrorCode::InvalidOrderId);
         require!(order.side == side, ErrorCode::OrderSideMismatch);
         require!(order.price == price, ErrorCode::OrderPriceMismatch);
-        require!(
-            order.maker == ctx.accounts.user.key(),
-            ErrorCode::NotOrderMaker
-        );
+        require!(order.maker == ctx.accounts.user.key(), ErrorCode::NotOrderMaker);
 
         let remaining = order
             .amount
@@ -647,35 +609,32 @@ pub mod gold_clob_market {
 
     pub fn claim(ctx: Context<Claim>) -> Result<()> {
         let market_state = &mut ctx.accounts.market_state;
-        sync_market_status(
-            market_state,
-            &ctx.accounts.duel_state,
-            ctx.accounts.duel_state.key(),
-        )?;
-        require!(
-            market_state.status == MarketStatus::Resolved
-                || market_state.status == MarketStatus::Cancelled,
-            ErrorCode::MarketNotResolved
-        );
+        sync_market_status(market_state, &ctx.accounts.duel_state, ctx.accounts.duel_state.key())?;
 
         let user_balance = &mut ctx.accounts.user_balance;
-        let a_shares = user_balance.a_shares;
-        let b_shares = user_balance.b_shares;
-        let a_stake = user_balance.a_stake;
-        let b_stake = user_balance.b_stake;
-
-        let payout = if market_state.status == MarketStatus::Cancelled {
-            a_stake
-                .checked_add(b_stake)
-                .ok_or(ErrorCode::MathOverflow)?
+        let (fee, payout) = if market_state.status == MarketStatus::Cancelled {
+            let refund_lamports = user_balance
+                .a_locked_lamports
+                .checked_add(user_balance.b_locked_lamports)
+                .ok_or(ErrorCode::MathOverflow)?;
+            require!(refund_lamports > 0, ErrorCode::NothingToClaim);
+            user_balance.a_shares = 0;
+            user_balance.b_shares = 0;
+            user_balance.a_locked_lamports = 0;
+            user_balance.b_locked_lamports = 0;
+            (0, refund_lamports)
         } else {
-            let winning_shares = if market_state.winner == MarketSide::A {
-                a_shares
+            require!(market_state.status == MarketStatus::Resolved, ErrorCode::MarketNotResolved);
+            let mut winning_shares = 0_u64;
+            if market_state.winner == MarketSide::A {
+                winning_shares = user_balance.a_shares;
+                user_balance.a_shares = 0;
+                user_balance.a_locked_lamports = 0;
             } else if market_state.winner == MarketSide::B {
-                b_shares
-            } else {
-                0
-            };
+                winning_shares = user_balance.b_shares;
+                user_balance.b_shares = 0;
+                user_balance.b_locked_lamports = 0;
+            }
             require!(winning_shares > 0, ErrorCode::NothingToClaim);
 
             let fee = winning_shares
@@ -683,42 +642,30 @@ pub mod gold_clob_market {
                 .ok_or(ErrorCode::MathOverflow)?
                 .checked_div(10_000)
                 .ok_or(ErrorCode::MathOverflow)?;
-
-            if fee > 0 {
-                let market_key = market_state.key();
-                let vault_bump = market_state.vault_bump;
-                let seeds: &[&[u8]] = &[VAULT_SEED, market_key.as_ref(), &[vault_bump]];
-                let signer_seeds: &[&[&[u8]]] = &[seeds];
-
-                system_program::transfer(
-                    CpiContext::new_with_signer(
-                        ctx.accounts.system_program.to_account_info(),
-                        system_program::Transfer {
-                            from: ctx.accounts.vault.to_account_info(),
-                            to: ctx.accounts.market_maker.to_account_info(),
-                        },
-                        signer_seeds,
-                    ),
-                    fee,
-                )?;
-            }
-
-            winning_shares
+            let payout = winning_shares
                 .checked_sub(fee)
-                .ok_or(ErrorCode::MathOverflow)?
+                .ok_or(ErrorCode::MathOverflow)?;
+            (fee, payout)
         };
-
-        require!(payout > 0, ErrorCode::NothingToClaim);
-
-        user_balance.a_shares = 0;
-        user_balance.b_shares = 0;
-        user_balance.a_stake = 0;
-        user_balance.b_stake = 0;
 
         let market_key = market_state.key();
         let vault_bump = market_state.vault_bump;
         let seeds: &[&[u8]] = &[VAULT_SEED, market_key.as_ref(), &[vault_bump]];
         let signer_seeds: &[&[&[u8]]] = &[seeds];
+
+        if fee > 0 {
+            system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    system_program::Transfer {
+                        from: ctx.accounts.vault.to_account_info(),
+                        to: ctx.accounts.market_maker.to_account_info(),
+                    },
+                    signer_seeds,
+                ),
+                fee,
+            )?;
+        }
 
         system_program::transfer(
             CpiContext::new_with_signer(
@@ -1003,8 +950,8 @@ pub struct UserBalance {
     pub market_state: Pubkey,
     pub a_shares: u64,
     pub b_shares: u64,
-    pub a_stake: u64,
-    pub b_stake: u64,
+    pub a_locked_lamports: u64,
+    pub b_locked_lamports: u64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, Eq, PartialEq, InitSpace)]
@@ -1026,10 +973,7 @@ fn validate_fee_config(
         trade_treasury_fee_bps + trade_market_maker_fee_bps <= 10_000,
         ErrorCode::FeeTooHigh
     );
-    require!(
-        winnings_market_maker_fee_bps <= 10_000,
-        ErrorCode::FeeTooHigh
-    );
+    require!(winnings_market_maker_fee_bps <= 10_000, ErrorCode::FeeTooHigh);
     Ok(())
 }
 
@@ -1070,11 +1014,7 @@ fn sync_market_status(
     duel_state: &OracleDuelState,
     duel_pubkey: Pubkey,
 ) -> Result<()> {
-    require_keys_eq!(
-        market_state.duel_state,
-        duel_pubkey,
-        ErrorCode::DuelMismatch
-    );
+    require_keys_eq!(market_state.duel_state, duel_pubkey, ErrorCode::DuelMismatch);
     market_state.status = map_duel_status(duel_state.status);
     if duel_state.status == OracleDuelStatus::Resolved {
         market_state.winner = duel_state.winner;
@@ -1095,12 +1035,7 @@ fn derive_order_key(market_key: &Pubkey, order_id: u64) -> Pubkey {
 
 fn derive_level_key(market_key: &Pubkey, side: u8, price: u16) -> Pubkey {
     Pubkey::find_program_address(
-        &[
-            LEVEL_SEED,
-            market_key.as_ref(),
-            &[side],
-            &price.to_le_bytes(),
-        ],
+        &[LEVEL_SEED, market_key.as_ref(), &[side], &price.to_le_bytes()],
         &crate::ID,
     )
     .0
@@ -1119,7 +1054,9 @@ fn highest_set_price(bitmap: &[u64; BITMAP_WORDS]) -> Option<u16> {
         if *word == 0 {
             continue;
         }
-        let bit = 63_u32.checked_sub(word.leading_zeros()).unwrap_or_default() as usize;
+        let bit = 63_u32
+            .checked_sub(word.leading_zeros())
+            .unwrap_or_default() as usize;
         let price = word_idx
             .checked_mul(64)
             .and_then(|value| value.checked_add(bit))?;
@@ -1165,7 +1102,11 @@ fn mark_price_inactive(market_state: &mut MarketState, side: u8, price: u16) {
     bitmap[word_idx] &= !(1_u64 << bit_idx);
 }
 
-fn unlink_head_order(market_state: &mut MarketState, level: &mut PriceLevel, order: &mut Order) {
+fn unlink_head_order(
+    market_state: &mut MarketState,
+    level: &mut PriceLevel,
+    order: &mut Order,
+) {
     level.head_order_id = order.next_order_id;
     if level.head_order_id == 0 {
         level.tail_order_id = 0;
@@ -1208,10 +1149,7 @@ fn unlink_order(
         price_level.head_order_id = order.next_order_id;
     } else {
         let prev = prev_order.ok_or(ErrorCode::MissingLinkedOrderAccount)?;
-        require!(
-            prev.id == order.prev_order_id,
-            ErrorCode::InvalidRemainingAccount
-        );
+        require!(prev.id == order.prev_order_id, ErrorCode::InvalidRemainingAccount);
         prev.next_order_id = order.next_order_id;
     }
 
@@ -1219,10 +1157,7 @@ fn unlink_order(
         price_level.tail_order_id = order.prev_order_id;
     } else {
         let next = next_order.ok_or(ErrorCode::MissingLinkedOrderAccount)?;
-        require!(
-            next.id == order.next_order_id,
-            ErrorCode::InvalidRemainingAccount
-        );
+        require!(next.id == order.next_order_id, ErrorCode::InvalidRemainingAccount);
         next.prev_order_id = order.prev_order_id;
     }
 
@@ -1306,54 +1241,4 @@ pub enum ErrorCode {
     InvalidRemainingAccount,
     #[msg("Nothing to claim")]
     NothingToClaim,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sample_market_state() -> MarketState {
-        MarketState {
-            duel_state: Pubkey::default(),
-            duel_key: [0; 32],
-            market_kind: MARKET_KIND_DUEL_WINNER,
-            status: MarketStatus::Open,
-            winner: MarketSide::None,
-            next_order_id: 1,
-            best_bid: 0,
-            best_ask: 1000,
-            authority: Pubkey::default(),
-            bid_bitmap: [0; BITMAP_WORDS],
-            ask_bitmap: [0; BITMAP_WORDS],
-            vault_bump: 0,
-            bump: 0,
-        }
-    }
-
-    #[test]
-    fn bitmap_helpers_track_sparse_best_prices() {
-        let mut market = sample_market_state();
-
-        mark_price_active(&mut market, SIDE_BID, 300);
-        mark_price_active(&mut market, SIDE_BID, 725);
-        mark_price_active(&mut market, SIDE_ASK, 640);
-        mark_price_active(&mut market, SIDE_ASK, 900);
-        update_best_prices(&mut market);
-
-        assert_eq!(market.best_bid, 725);
-        assert_eq!(market.best_ask, 640);
-
-        mark_price_inactive(&mut market, SIDE_BID, 725);
-        mark_price_inactive(&mut market, SIDE_ASK, 640);
-        update_best_prices(&mut market);
-
-        assert_eq!(market.best_bid, 300);
-        assert_eq!(market.best_ask, 900);
-    }
-
-    #[test]
-    fn quote_cost_requires_whole_lamport_precision() {
-        assert_eq!(quote_cost(SIDE_BID, 500, 1_000).unwrap(), 500);
-        assert!(quote_cost(SIDE_BID, 333, 1).is_err());
-    }
 }
