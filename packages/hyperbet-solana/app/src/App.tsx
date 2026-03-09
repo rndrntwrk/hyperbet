@@ -11,8 +11,6 @@ import {
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount } from "wagmi";
 import {
   formatLocaleAmount,
   getLocaleTag,
@@ -35,10 +33,8 @@ import {
   getStoredInviteCode,
 } from "./lib/invite";
 import { StreamPlayer } from "./components/StreamPlayer";
-import { ChainSelector } from "./components/ChainSelector";
 import { PointsDisplay } from "./components/PointsDisplay";
 import type { SolanaClobMarketSnapshot } from "./components/SolanaClobPanel";
-import { useChain } from "./lib/ChainContext";
 import {
   FIGHT_ORACLE_PROGRAM_ID,
   GOLD_CLOB_MARKET_PROGRAM_ID,
@@ -169,7 +165,6 @@ function getAppCopy(locale: UiLocale) {
       loadingReferral: "正在加载推荐",
       loadingAgentStats: "正在加载代理数据",
       loadingModelMarkets: "正在加载模型市场",
-      loadingEvmMarket: "正在加载 EVM 市场",
       loadingSolanaMarket: "正在加载 Solana 市场",
       debugTitle: "极简对战下注",
       chain: "链",
@@ -179,14 +174,12 @@ function getAppCopy(locale: UiLocale) {
       noPool: "NO 池",
       refresh: "刷新",
       connectSol: "连接 SOL",
-      connectEvm: "连接 EVM",
       wrongNet: "网络错误",
       duels: "对决",
       models: "模型",
       modelMarkets: "模型市场",
       leaderboardAndStats: "排行榜与统计",
       addSolWallet: "添加 SOL 钱包",
-      addEvmWallet: "添加 EVM 钱包",
       switchNetwork: "切换网络",
       unmuteStream: "开启声音",
       muteStream: "静音",
@@ -262,7 +255,6 @@ function getAppCopy(locale: UiLocale) {
     loadingReferral: "Loading referral",
     loadingAgentStats: "Loading agent stats",
     loadingModelMarkets: "Loading model markets",
-    loadingEvmMarket: "Loading EVM market",
     loadingSolanaMarket: "Loading Solana market",
     debugTitle: "Ultra Simple Fight Bet",
     chain: "Chain",
@@ -272,14 +264,12 @@ function getAppCopy(locale: UiLocale) {
     noPool: "NO pool",
     refresh: "Refresh",
     connectSol: "Connect SOL",
-    connectEvm: "Connect EVM",
     wrongNet: "Wrong Net",
     duels: "Duels",
     models: "Models",
     modelMarkets: "Model Markets",
     leaderboardAndStats: "Leaderboard & Stats",
     addSolWallet: "Add SOL Wallet",
-    addEvmWallet: "Add EVM Wallet",
     switchNetwork: "Switch Network",
     unmuteStream: "Unmute stream",
     muteStream: "Mute stream",
@@ -371,11 +361,6 @@ function getMarketStatusLabel(
   return rawStatus ?? copy.statusPending;
 }
 
-const EvmBettingPanel = lazy(() =>
-  import("./components/EvmBettingPanel").then((module) => ({
-    default: module.EvmBettingPanel,
-  })),
-);
 const SolanaClobPanel = lazy(() =>
   import("./components/SolanaClobPanel").then((module) => ({
     default: module.SolanaClobPanel,
@@ -438,44 +423,18 @@ export function App() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { setVisible: setSolModalVisible } = useWalletModal();
-  const { address: evmWalletAddress } = useAccount();
-  const { activeChain, setActiveChain, availableChains } = useChain();
   const [locale, setLocale] = useState<UiLocale>(() => resolveUiLocale());
   const copy = useMemo(() => getAppCopy(locale), [locale]);
   const isE2eMode = import.meta.env.MODE === "e2e";
   const isE2eDebugMode =
     isE2eMode && new URLSearchParams(window.location.search).has("debug");
-  const isEvmChain =
-    activeChain === "bsc" ||
-    activeChain === "base" ||
-    activeChain === "avax";
   const solanaWalletAddress = wallet.publicKey?.toBase58() ?? null;
   // Only poll chain data when a wallet is connected (saves unnecessary RPC calls for spectators).
   const shouldPollChainData = Boolean(
     isE2eMode || wallet.publicKey || wallet.connected,
   );
-  const pointsWalletAddress = useMemo(() => {
-    if (activeChain === "solana" && solanaWalletAddress)
-      return solanaWalletAddress;
-    if (
-      (activeChain === "bsc" ||
-        activeChain === "base" ||
-        activeChain === "avax") &&
-      evmWalletAddress
-    ) {
-      return evmWalletAddress;
-    }
-    return solanaWalletAddress ?? evmWalletAddress ?? null;
-  }, [activeChain, evmWalletAddress, solanaWalletAddress]);
-  const invitePlatformQuery = useMemo<"solana" | "evm">(() => {
-    if (pointsWalletAddress && pointsWalletAddress === solanaWalletAddress) {
-      return "solana";
-    }
-    if (pointsWalletAddress && pointsWalletAddress === evmWalletAddress) {
-      return "evm";
-    }
-    return activeChain === "solana" ? "solana" : "evm";
-  }, [activeChain, evmWalletAddress, pointsWalletAddress, solanaWalletAddress]);
+  const pointsWalletAddress = solanaWalletAddress;
+  const invitePlatformQuery = "solana" as const;
 
   const [surfaceMode, setSurfaceMode] = useState<"DUELS" | "MODELS">("DUELS");
   const [status, setStatus] = useState<string>("");
@@ -623,7 +582,7 @@ export function App() {
       resizeObserver?.disconnect();
       window.removeEventListener("resize", updateDockHeight);
     };
-  }, [isE2eDebugMode, isEvmChain]);
+  }, [isE2eDebugMode]);
 
   const fixedMatchId = getFixedMatchId();
 
@@ -872,20 +831,10 @@ export function App() {
     (typeof effNoPot === "number" ? effNoPot : 0);
   const effPhaseLabel = getPhaseLabel(effCycle.phase, effCycle.countdown, copy);
 
-  const streamPhaseText = liveCycle?.phase ?? null;
-  const marketStatusText = isEvmChain
-    ? getMarketStatusLabel(
-        streamPhaseText ?? currentMatch?.status ?? copy.phaseLive,
-        copy,
-      )
-    : getMarketStatusLabel(solanaClobSnapshot.marketStatus, copy);
-  const countdownText = isEvmChain
-    ? liveCycle
-      ? formatCountdown(normalizeRemainingSeconds(liveCycle.timeRemaining))
-      : ""
-    : formatCountdown(
-        currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
-      );
+  const marketStatusText = getMarketStatusLabel(solanaClobSnapshot.marketStatus, copy);
+  const countdownText = formatCountdown(
+    currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
+  );
 
   // Sidebar bet state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1100,19 +1049,11 @@ export function App() {
               {pointsDrawerTab === "referral" && (
                 <Suspense fallback={<PanelFallback label={copy.loadingReferral} />}>
                   <ReferralPanel
-                    activeChain={activeChain}
+                    activeChain="solana"
                     solanaWallet={solanaWalletAddress}
-                    evmWallet={evmWalletAddress ?? null}
+                    evmWallet={null}
                     locale={locale}
-                    evmWalletPlatform={
-                      activeChain === "bsc"
-                        ? "BSC"
-                        : activeChain === "base"
-                          ? "BASE"
-                          : activeChain === "avax"
-                            ? "AVAX"
-                          : null
-                    }
+                    evmWalletPlatform={null}
                   />
                 </Suspense>
               )}
@@ -1261,33 +1202,9 @@ export function App() {
           <h1 style={{ margin: 0, fontSize: "18px" }}>
             {copy.debugTitle}
           </h1>
-          <div
-            style={{ display: "flex", alignItems: "center", gap: "8px" }}
-            data-testid="e2e-chain-picker"
-          >
-            <span>{copy.chain}:</span>
-            <select
-              data-testid="e2e-chain-select"
-              value={activeChain}
-              onChange={(event) =>
-                setActiveChain(
-                  event.target.value as "solana" | "bsc" | "base" | "avax",
-                )
-              }
-            >
-              {availableChains.map((chain) => (
-                <option key={chain} value={chain}>
-                  {chain.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div data-testid="e2e-active-chain">{activeChain}</div>
+          <div data-testid="e2e-active-chain">solana</div>
           <div data-testid="current-match-id">
-            {copy.currentMatch}:{" "}
-            {activeChain === "solana"
-              ? solanaClobSnapshot.matchLabel
-              : (currentMatch?.matchId ?? "-")}
+            {copy.currentMatch}: {solanaClobSnapshot.matchLabel}
           </div>
           <div data-testid="market-status">{copy.market}: {marketStatusText}</div>
           <div data-testid="pool-totals">
@@ -1323,7 +1240,6 @@ export function App() {
                   <br />
                   DUEL ARENA
                 </span>
-                <ChainSelector />
               </div>
               <div className="hm-header-mob-controls">
                 <LocaleSelector
@@ -1361,47 +1277,6 @@ export function App() {
                       : "SOL"}
                   </button>
                 )}
-                {/* EVM wallet */}
-                <ConnectButton.Custom>
-                  {({
-                    openConnectModal,
-                    openAccountModal,
-                    openChainModal,
-                    account,
-                    chain,
-                    mounted,
-                  }) => {
-                    if (!mounted || !account)
-                      return (
-                        <button
-                          type="button"
-                          className="hm-header-mob-wallet-btn"
-                          onClick={openConnectModal}
-                        >
-                          {copy.connectEvm}
-                        </button>
-                      );
-                    if (chain?.unsupported)
-                      return (
-                        <button
-                          type="button"
-                          className="hm-header-mob-wallet-btn"
-                          onClick={openChainModal}
-                        >
-                          ⚠ {copy.wrongNet}
-                        </button>
-                      );
-                    return (
-                      <button
-                        type="button"
-                        className="hm-header-mob-wallet-btn hm-header-mob-wallet-btn--linked"
-                        onClick={openAccountModal}
-                      >
-                        ⬡ {account.displayName?.slice(0, 6) ?? "EVM"}
-                      </button>
-                    );
-                  }}
-                </ConnectButton.Custom>
               </div>
             </div>
             {/* Row 2: Match strip — name + agent side-select chips */}
@@ -1469,7 +1344,6 @@ export function App() {
             <div className="hm-header-left">
               <div className="hm-logo">
                 <span className="hm-logo-text">HYPERSCAPE DUEL ARENA</span>
-                <ChainSelector />
               </div>
               <div className="hm-view-tabs hm-view-tabs--header">
                 <button
@@ -1565,46 +1439,6 @@ export function App() {
                     : ""}
                 </button>
               )}
-              <ConnectButton.Custom>
-                {({
-                  openConnectModal,
-                  openAccountModal,
-                  openChainModal,
-                  account,
-                  chain,
-                  mounted,
-                }) => {
-                  if (!mounted || !account)
-                    return (
-                      <button
-                        type="button"
-                        className="hm-wallet-btn"
-                        onClick={openConnectModal}
-                      >
-                        {copy.addEvmWallet}
-                      </button>
-                    );
-                  if (chain?.unsupported)
-                    return (
-                      <button
-                        type="button"
-                        className="hm-wallet-btn"
-                        onClick={openChainModal}
-                      >
-                        {copy.switchNetwork}
-                      </button>
-                    );
-                  return (
-                    <button
-                      type="button"
-                      className="hm-wallet-btn hm-wallet-btn--linked"
-                      onClick={openAccountModal}
-                    >
-                      EVM {account.displayName}
-                    </button>
-                  );
-                }}
-              </ConnectButton.Custom>
             </div>
           </>
         )}
@@ -2219,42 +2053,22 @@ export function App() {
               <div className="hm-market-panel-wrap">
                 {/* Active market panel */}
                 <div className="hm-market-panel-body">
-                  {isEvmChain ? (
-                    /* EVM — single panel, no tabs */
-                    <Suspense
-                      fallback={
-                        <PanelFallback
-                          label={copy.loadingEvmMarket}
-                          minHeight={360}
-                        />
-                      }
-                    >
-                      <EvmBettingPanel
-                        agent1Name={effAgent1Name}
-                        agent2Name={effAgent2Name}
-                        compact
-                        locale={locale}
+                  <Suspense
+                    fallback={
+                      <PanelFallback
+                        label={copy.loadingSolanaMarket}
+                        minHeight={360}
                       />
-                    </Suspense>
-                  ) : (
-                    /* Predictions — Solana CLOB panel */
-                    <Suspense
-                      fallback={
-                        <PanelFallback
-                          label={copy.loadingSolanaMarket}
-                          minHeight={360}
-                        />
-                      }
-                    >
-                      <SolanaClobPanel
-                        agent1Name={effAgent1Name}
-                        agent2Name={effAgent2Name}
-                        compact={!isE2eMode}
-                        onMarketSnapshot={handleSolanaClobSnapshot}
-                        locale={locale}
-                      />
-                    </Suspense>
-                  )}
+                    }
+                  >
+                    <SolanaClobPanel
+                      agent1Name={effAgent1Name}
+                      agent2Name={effAgent2Name}
+                      compact={!isE2eMode}
+                      onMarketSnapshot={handleSolanaClobSnapshot}
+                      locale={locale}
+                    />
+                  </Suspense>
                 </div>
               </div>
 

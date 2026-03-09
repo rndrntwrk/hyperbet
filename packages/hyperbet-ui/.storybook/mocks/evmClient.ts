@@ -1,5 +1,5 @@
 import type { Address, Hash, Hex } from "viem";
-import type { EvmChainConfig } from "../../../hyperbet-solana/app/src/lib/chainConfig";
+import type { EvmChainConfig } from "../../src/lib/chainConfig";
 
 export type MarketStatus = "NULL" | "OPEN" | "LOCKED" | "RESOLVED" | "CANCELLED";
 export type Side = "NONE" | "A" | "B";
