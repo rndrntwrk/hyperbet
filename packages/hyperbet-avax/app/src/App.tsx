@@ -8,9 +8,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount } from "wagmi";
+
 import {
   formatLocaleAmount,
   getLocaleTag,
@@ -33,12 +33,9 @@ import {
   getStoredInviteCode,
 } from "./lib/invite";
 import { StreamPlayer } from "./components/StreamPlayer";
+import { ChainSelector } from "./components/ChainSelector";
 import { PointsDisplay } from "./components/PointsDisplay";
-import type { SolanaClobMarketSnapshot } from "./components/SolanaClobPanel";
-import {
-  FIGHT_ORACLE_PROGRAM_ID,
-  GOLD_CLOB_MARKET_PROGRAM_ID,
-} from "./lib/programs";
+import { useChain } from "./lib/ChainContext";
 import { isHeadlessWalletEnabled } from "./lib/headlessWallet";
 import { useStreamingState } from "./spectator/useStreamingState";
 import { useDuelContext } from "./spectator/useDuelContext";
@@ -88,7 +85,6 @@ type BetSide = "YES" | "NO";
 
 type DiscoveredMatch = {
   matchId: number;
-  matchPda: PublicKey;
   status: "open" | "resolved" | "unknown";
   openTs: number;
   closeTs: number;
@@ -96,23 +92,6 @@ type DiscoveredMatch = {
   winner: BetSide | null;
   agent1Name: string;
   agent2Name: string;
-};
-
-type ProgramDeploymentState = {
-  checked: boolean;
-  oracle: boolean;
-  market: boolean;
-};
-
-const EMPTY_SOLANA_CLOB_SNAPSHOT: SolanaClobMarketSnapshot = {
-  matchLabel: "-",
-  marketStatus: "PENDING",
-  yesPool: 0n,
-  noPool: 0n,
-  bids: [],
-  asks: [],
-  recentTrades: [],
-  chartData: [],
 };
 
 function normalizeTimestamp(value: number): number {
@@ -165,7 +144,7 @@ function getAppCopy(locale: UiLocale) {
       loadingReferral: "正在加载推荐",
       loadingAgentStats: "正在加载代理数据",
       loadingModelMarkets: "正在加载模型市场",
-      loadingSolanaMarket: "正在加载 Solana 市场",
+      loadingEvmMarket: "正在加载 EVM 市场",
       debugTitle: "极简对战下注",
       chain: "链",
       currentMatch: "当前对局",
@@ -173,13 +152,13 @@ function getAppCopy(locale: UiLocale) {
       yesPool: "YES 池",
       noPool: "NO 池",
       refresh: "刷新",
-      connectSol: "连接 SOL",
+      connectEvm: "连接 EVM",
       wrongNet: "网络错误",
       duels: "对决",
       models: "模型",
       modelMarkets: "模型市场",
       leaderboardAndStats: "排行榜与统计",
-      addSolWallet: "添加 SOL 钱包",
+      addEvmWallet: "添加 EVM 钱包",
       switchNetwork: "切换网络",
       unmuteStream: "开启声音",
       muteStream: "静音",
@@ -255,7 +234,7 @@ function getAppCopy(locale: UiLocale) {
     loadingReferral: "Loading referral",
     loadingAgentStats: "Loading agent stats",
     loadingModelMarkets: "Loading model markets",
-    loadingSolanaMarket: "Loading Solana market",
+    loadingEvmMarket: "Loading EVM market",
     debugTitle: "Ultra Simple Fight Bet",
     chain: "Chain",
     currentMatch: "Current match",
@@ -263,13 +242,13 @@ function getAppCopy(locale: UiLocale) {
     yesPool: "YES pool",
     noPool: "NO pool",
     refresh: "Refresh",
-    connectSol: "Connect SOL",
+    connectEvm: "Connect EVM",
     wrongNet: "Wrong Net",
     duels: "Duels",
     models: "Models",
     modelMarkets: "Model Markets",
     leaderboardAndStats: "Leaderboard & Stats",
-    addSolWallet: "Add SOL Wallet",
+    addEvmWallet: "Add EVM Wallet",
     switchNetwork: "Switch Network",
     unmuteStream: "Unmute stream",
     muteStream: "Mute stream",
@@ -361,9 +340,9 @@ function getMarketStatusLabel(
   return rawStatus ?? copy.statusPending;
 }
 
-const SolanaClobPanel = lazy(() =>
-  import("./components/SolanaClobPanel").then((module) => ({
-    default: module.SolanaClobPanel,
+const EvmBettingPanel = lazy(() =>
+  import("./components/EvmBettingPanel").then((module) => ({
+    default: module.EvmBettingPanel,
   })),
 );
 const ModelsMarketView = lazy(() =>
@@ -420,21 +399,17 @@ function PanelFallback({
 }
 
 export function App() {
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const { setVisible: setSolModalVisible } = useWalletModal();
+  const { address: evmWalletAddress } = useAccount();
+  const { activeChain, setActiveChain, availableChains } = useChain();
   const [locale, setLocale] = useState<UiLocale>(() => resolveUiLocale());
   const copy = useMemo(() => getAppCopy(locale), [locale]);
   const isE2eMode = import.meta.env.MODE === "e2e";
   const isE2eDebugMode =
     isE2eMode && new URLSearchParams(window.location.search).has("debug");
-  const solanaWalletAddress = wallet.publicKey?.toBase58() ?? null;
   // Only poll chain data when a wallet is connected (saves unnecessary RPC calls for spectators).
-  const shouldPollChainData = Boolean(
-    isE2eMode || wallet.publicKey || wallet.connected,
-  );
-  const pointsWalletAddress = solanaWalletAddress;
-  const invitePlatformQuery = "solana" as const;
+  const shouldPollChainData = Boolean(isE2eMode || evmWalletAddress);
+  const pointsWalletAddress = evmWalletAddress ?? null;
+  const invitePlatformQuery = "evm" as const;
 
   const [surfaceMode, setSurfaceMode] = useState<"DUELS" | "MODELS">("DUELS");
   const [status, setStatus] = useState<string>("");
@@ -442,15 +417,6 @@ export function App() {
     null,
   );
   const [refreshNonce, setRefreshNonce] = useState(0);
-  const [nowTs, setNowTs] = useState(() => Math.floor(Date.now() / 1000));
-  const [programDeployment, setProgramDeployment] =
-    useState<ProgramDeploymentState>({
-      checked: false,
-      oracle: false,
-      market: false,
-    });
-  const [solanaClobSnapshot, setSolanaClobSnapshot] =
-    useState<SolanaClobMarketSnapshot>(EMPTY_SOLANA_CLOB_SNAPSHOT);
   const [_inviteCode, setInviteCode] = useState<string | null>(() =>
     getStoredInviteCode(),
   );
@@ -586,88 +552,6 @@ export function App() {
 
   const fixedMatchId = getFixedMatchId();
 
-  const programsReady =
-    programDeployment.checked &&
-    programDeployment.oracle &&
-    programDeployment.market;
-
-  const missingProgramMessage = useMemo(() => {
-    if (getCluster() === "localnet") return "";
-    if (programDeployment.oracle && programDeployment.market) return "";
-    return copy.bettingUnavailable(getCluster());
-  }, [copy, programDeployment.market, programDeployment.oracle]);
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setNowTs(Math.floor(Date.now() / 1000));
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    if (!shouldPollChainData) {
-      setProgramDeployment({ checked: true, oracle: true, market: true });
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [oracleInfo, marketInfo] = await Promise.all([
-          connection.getAccountInfo(FIGHT_ORACLE_PROGRAM_ID, "confirmed"),
-          connection.getAccountInfo(GOLD_CLOB_MARKET_PROGRAM_ID, "confirmed"),
-        ]);
-        if (cancelled) return;
-        setProgramDeployment({
-          checked: true,
-          oracle: Boolean(oracleInfo?.executable),
-          market: Boolean(marketInfo?.executable),
-        });
-      } catch {
-        if (cancelled) return;
-        setProgramDeployment({ checked: true, oracle: false, market: false });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [connection, shouldPollChainData]);
-
-  useEffect(() => {
-    if (!programDeployment.checked) return;
-    if (programsReady) return;
-    setStatus(missingProgramMessage);
-  }, [programDeployment.checked, programsReady, missingProgramMessage]);
-
-  useEffect(() => {
-    if (!isHeadlessWalletEnabled()) return;
-
-    const candidate = wallet.wallets.find((entry) => {
-      const name = entry.adapter.name.toLowerCase();
-      return name.includes("headless") || name.includes("e2e wallet");
-    });
-    if (!candidate) return;
-
-    const selected = wallet.wallet?.adapter?.name?.toLowerCase?.() ?? "";
-    const hasHeadlessSelected =
-      selected.includes("headless") || selected.includes("e2e wallet");
-
-    if (!hasHeadlessSelected) {
-      wallet.select(candidate.adapter.name);
-      return;
-    }
-
-    if (wallet.connected || wallet.connecting) return;
-    void wallet.connect();
-  }, [
-    wallet.wallet,
-    wallet.wallets,
-    wallet.connected,
-    wallet.connecting,
-    wallet.select,
-    wallet.connect,
-  ]);
-
   useEffect(() => {
     if (!shouldPollChainData) return;
     const id = window.setInterval(() => {
@@ -713,7 +597,6 @@ export function App() {
 
     setCurrentMatch({
       matchId: matchId ?? 0,
-      matchPda: PublicKey.default,
       status: liveCycle.phase === "RESOLUTION" ? "resolved" : "open",
       openTs,
       closeTs,
@@ -728,27 +611,14 @@ export function App() {
     setRefreshNonce((value) => value + 1);
   };
 
-  const handleSolanaClobSnapshot = useCallback(
-    (snapshot: SolanaClobMarketSnapshot) => {
-      setSolanaClobSnapshot(snapshot);
-    },
-    [],
-  );
-
-  const yesPot = asNumber(solanaClobSnapshot.yesPool, 0);
-  const noPot = asNumber(solanaClobSnapshot.noPool, 0);
-  const totalPot = yesPot + noPot;
-  const yesSharePercent =
-    totalPot > 0 ? Math.round((yesPot / totalPot) * 100) : 50;
-  const noSharePercent = 100 - yesSharePercent;
-  const effYesPot = yesPot;
-  const effNoPot = noPot;
-  const effYesPercent = yesSharePercent;
-  const effNoPercent = noSharePercent;
-  const effChartData = solanaClobSnapshot.chartData;
-  const effBids = solanaClobSnapshot.bids;
-  const effAsks = solanaClobSnapshot.asks;
-  const effRecentTrades = solanaClobSnapshot.recentTrades;
+  const effYesPot = 0;
+  const effNoPot = 0;
+  const effYesPercent = 50;
+  const effNoPercent = 50;
+  const effChartData: { time: number; pct: number }[] = [];
+  const effBids: { price: number; amount: number }[] = [];
+  const effAsks: { price: number; amount: number }[] = [];
+  const effRecentTrades: { id: string; side: "YES" | "NO"; amount: number; price: number; time: number; trader?: string }[] = [];
   const liveAgent1Name =
     liveCycle?.agent1?.name?.trim() && liveCycle.agent1.name.trim().length > 0
       ? liveCycle.agent1.name.trim()
@@ -829,18 +699,16 @@ export function App() {
   const effTotalPool =
     (typeof effYesPot === "number" ? effYesPot : 0) +
     (typeof effNoPot === "number" ? effNoPot : 0);
-  const effPhaseLabel = getPhaseLabel(
-    effCycle.phase,
-    typeof effCycle.countdown === "number"
-      ? normalizeRemainingSeconds(effCycle.countdown)
-      : effCycle.countdown,
+  const effPhaseLabel = getPhaseLabel(effCycle.phase, effCycle.countdown, copy);
+
+  const streamPhaseText = liveCycle?.phase ?? null;
+  const marketStatusText = getMarketStatusLabel(
+    streamPhaseText ?? currentMatch?.status ?? copy.phaseLive,
     copy,
   );
-
-  const marketStatusText = getMarketStatusLabel(solanaClobSnapshot.marketStatus, copy);
-  const countdownText = formatCountdown(
-    currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
-  );
+  const countdownText = liveCycle
+    ? formatCountdown(normalizeRemainingSeconds(liveCycle.timeRemaining))
+    : "";
 
   // Sidebar bet state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1055,11 +923,19 @@ export function App() {
               {pointsDrawerTab === "referral" && (
                 <Suspense fallback={<PanelFallback label={copy.loadingReferral} />}>
                   <ReferralPanel
-                    activeChain="solana"
-                    solanaWallet={solanaWalletAddress}
-                    evmWallet={null}
+                    activeChain={activeChain}
+                    solanaWallet={null}
+                    evmWallet={evmWalletAddress ?? null}
                     locale={locale}
-                    evmWalletPlatform={null}
+                    evmWalletPlatform={
+                      activeChain === "bsc"
+                        ? "BSC"
+                        : activeChain === "base"
+                          ? "BASE"
+                          : activeChain === "avax"
+                            ? "AVAX"
+                          : null
+                    }
                   />
                 </Suspense>
               )}
@@ -1208,14 +1084,34 @@ export function App() {
           <h1 style={{ margin: 0, fontSize: "18px" }}>
             {copy.debugTitle}
           </h1>
-          <div data-testid="e2e-active-chain">solana</div>
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "8px" }}
+            data-testid="e2e-chain-picker"
+          >
+            <span>{copy.chain}:</span>
+            <select
+              data-testid="e2e-chain-select"
+              value={activeChain}
+              onChange={(event) =>
+                setActiveChain(
+                  event.target.value as "solana" | "bsc" | "base" | "avax",
+                )
+              }
+            >
+              {availableChains.map((chain) => (
+                <option key={chain} value={chain}>
+                  {chain.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div data-testid="e2e-active-chain">{activeChain}</div>
           <div data-testid="current-match-id">
-            {copy.currentMatch}: {solanaClobSnapshot.matchLabel}
+            {copy.currentMatch}: {currentMatch?.matchId ?? "-"}
           </div>
           <div data-testid="market-status">{copy.market}: {marketStatusText}</div>
           <div data-testid="pool-totals">
-            {copy.yesPool}: {goldDisplay(yesPot)} GOLD | {copy.noPool}: {goldDisplay(noPot)}{" "}
-            GOLD
+            {copy.yesPool}: - GOLD | {copy.noPool}: - GOLD
           </div>
           <div data-testid="countdown">{countdownText}</div>
           <div data-testid="status">{status}</div>
@@ -1262,27 +1158,46 @@ export function App() {
                 >
                   🏆
                 </button>
-                {/* SOL wallet */}
-                {!wallet.connected ? (
-                  <button
-                    type="button"
-                    className="hm-header-mob-wallet-btn"
-                    onClick={() => setSolModalVisible(true)}
-                  >
-                    {copy.connectSol}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="hm-header-mob-wallet-btn hm-header-mob-wallet-btn--linked"
-                    onClick={() => wallet.disconnect()}
-                  >
-                    ◎{" "}
-                    {wallet.publicKey
-                      ? wallet.publicKey.toBase58().slice(0, 4) + "…"
-                      : "SOL"}
-                  </button>
-                )}
+                <ConnectButton.Custom>
+                  {({
+                    openConnectModal,
+                    openAccountModal,
+                    openChainModal,
+                    account,
+                    chain,
+                    mounted,
+                  }) => {
+                    if (!mounted || !account)
+                      return (
+                        <button
+                          type="button"
+                          className="hm-header-mob-wallet-btn"
+                          onClick={openConnectModal}
+                        >
+                          {copy.connectEvm}
+                        </button>
+                      );
+                    if (chain?.unsupported)
+                      return (
+                        <button
+                          type="button"
+                          className="hm-header-mob-wallet-btn"
+                          onClick={openChainModal}
+                        >
+                          ⚠ {copy.wrongNet}
+                        </button>
+                      );
+                    return (
+                      <button
+                        type="button"
+                        className="hm-header-mob-wallet-btn hm-header-mob-wallet-btn--linked"
+                        onClick={openAccountModal}
+                      >
+                        ⬡ {account.displayName?.slice(0, 6) ?? "EVM"}
+                      </button>
+                    );
+                  }}
+                </ConnectButton.Custom>
               </div>
             </div>
             {/* Row 2: Match strip — name + agent side-select chips */}
@@ -1350,6 +1265,7 @@ export function App() {
             <div className="hm-header-left">
               <div className="hm-logo">
                 <span className="hm-logo-text">HYPERSCAPE DUEL ARENA</span>
+                <ChainSelector />
               </div>
               <div className="hm-view-tabs hm-view-tabs--header">
                 <button
@@ -1425,26 +1341,46 @@ export function App() {
               >
                 🏆
               </button>
-              {!wallet.connected ? (
-                <button
-                  type="button"
-                  className="hm-wallet-btn"
-                  onClick={() => setSolModalVisible(true)}
-                >
-                  {copy.addSolWallet}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="hm-wallet-btn hm-wallet-btn--linked"
-                  onClick={() => wallet.disconnect()}
-                >
-                  SOL{" "}
-                  {wallet.publicKey
-                    ? `${wallet.publicKey.toBase58().slice(0, 4)}...${wallet.publicKey.toBase58().slice(-4)}`
-                    : ""}
-                </button>
-              )}
+              <ConnectButton.Custom>
+                {({
+                  openConnectModal,
+                  openAccountModal,
+                  openChainModal,
+                  account,
+                  chain,
+                  mounted,
+                }) => {
+                  if (!mounted || !account)
+                    return (
+                      <button
+                        type="button"
+                        className="hm-wallet-btn"
+                        onClick={openConnectModal}
+                      >
+                        {copy.addEvmWallet}
+                      </button>
+                    );
+                  if (chain?.unsupported)
+                    return (
+                      <button
+                        type="button"
+                        className="hm-wallet-btn"
+                        onClick={openChainModal}
+                      >
+                        {copy.switchNetwork}
+                      </button>
+                    );
+                  return (
+                    <button
+                      type="button"
+                      className="hm-wallet-btn hm-wallet-btn--linked"
+                      onClick={openAccountModal}
+                    >
+                      EVM {account.displayName}
+                    </button>
+                  );
+                }}
+              </ConnectButton.Custom>
             </div>
           </>
         )}
@@ -2062,16 +1998,15 @@ export function App() {
                   <Suspense
                     fallback={
                       <PanelFallback
-                        label={copy.loadingSolanaMarket}
+                        label={copy.loadingEvmMarket}
                         minHeight={360}
                       />
                     }
                   >
-                    <SolanaClobPanel
+                    <EvmBettingPanel
                       agent1Name={effAgent1Name}
                       agent2Name={effAgent2Name}
-                      compact={!isE2eMode}
-                      onMarketSnapshot={handleSolanaClobSnapshot}
+                      compact
                       locale={locale}
                     />
                   </Suspense>
