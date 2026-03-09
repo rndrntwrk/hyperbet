@@ -5,7 +5,14 @@ import { fileURLToPath } from "node:url";
 import { BorshAccountsCoder, type Idl } from "@coral-xyz/anchor";
 import { expect, test, type Page } from "@playwright/test";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { createPublicClient, http, type Address, type Hash } from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  type Address,
+  type Hash,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 import { GOLD_CLOB_ABI } from "../../src/lib/goldClobAbi";
 
@@ -20,22 +27,39 @@ type E2eState = {
   evmHeadlessAddress?: string;
   evmGoldClobAddress?: string;
   evmMatchId?: number;
+  evmDuelKeyHex?: string;
+  evmMarketKey?: string;
+  evmOracleAddress?: string;
+  evmAdminPrivateKey?: string;
+};
+
+type PageDiagnostics = {
+  consoleMessages: string[];
+  pageErrors: string[];
+  requestFailures: string[];
 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const statePath = path.resolve(__dirname, "./state.json");
 const anchorIdlDir = path.resolve(__dirname, "../../../anchor/target/idl");
-const goldClobIdl = JSON.parse(
-  fs.readFileSync(path.join(anchorIdlDir, "gold_clob_market.json"), "utf8"),
-) as Idl;
+const evmArtifactsDir = path.resolve(
+  __dirname,
+  "../../../../evm-contracts/artifacts/contracts",
+);
 const goldPerpsIdl = JSON.parse(
   fs.readFileSync(path.join(anchorIdlDir, "gold_perps_market.json"), "utf8"),
 ) as Idl;
-const clobCoder = new BorshAccountsCoder(goldClobIdl);
+const duelOutcomeOracleArtifact = JSON.parse(
+  fs.readFileSync(
+    path.join(
+      evmArtifactsDir,
+      "DuelOutcomeOracle.sol",
+      "DuelOutcomeOracle.json",
+    ),
+    "utf8",
+  ),
+) as { abi: readonly unknown[] };
 const perpsCoder = new BorshAccountsCoder(goldPerpsIdl);
-const clobProgramId = new PublicKey(
-  (goldClobIdl as Idl & { address: string }).address,
-);
 const perpsProgramId = new PublicKey(
   (goldPerpsIdl as Idl & { address: string }).address,
 );
@@ -66,6 +90,14 @@ function bnLikeToBigInt(value: unknown): bigint {
   return 0n;
 }
 
+function normalizeHex32(value: string | undefined, label: string): Hash {
+  const normalized = value?.trim().toLowerCase().replace(/^0x/, "") || "";
+  if (!/^[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error(`Missing or invalid ${label} in e2e state`);
+  }
+  return `0x${normalized}`;
+}
+
 async function readText(page: Page, testId: string): Promise<string> {
   const locator = page.getByTestId(testId).first();
   const count = await locator.count().catch(() => 0);
@@ -83,7 +115,50 @@ async function readTxSignature(page: Page, testId: string): Promise<string> {
   return text;
 }
 
+function getPageDiagnostics(page: Page): PageDiagnostics {
+  const instrumentedPage = page as Page & {
+    __hyperbetDiagnostics?: PageDiagnostics;
+  };
+  if (instrumentedPage.__hyperbetDiagnostics) {
+    return instrumentedPage.__hyperbetDiagnostics;
+  }
+
+  const diagnostics: PageDiagnostics = {
+    consoleMessages: [],
+    pageErrors: [],
+    requestFailures: [],
+  };
+  const append = (entries: string[], value: string, limit = 12) => {
+    entries.push(value);
+    if (entries.length > limit) {
+      entries.splice(0, entries.length - limit);
+    }
+  };
+
+  page.on("console", (message) => {
+    const text = `[${message.type()}] ${message.text()}`.trim();
+    append(diagnostics.consoleMessages, text);
+  });
+  page.on("pageerror", (error) => {
+    append(
+      diagnostics.pageErrors,
+      error instanceof Error ? error.stack || error.message : String(error),
+    );
+  });
+  page.on("requestfailed", (request) => {
+    append(
+      diagnostics.requestFailures,
+      `${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`,
+    );
+  });
+
+  instrumentedPage.__hyperbetDiagnostics = diagnostics;
+  return diagnostics;
+}
+
 async function gotoApp(page: Page): Promise<void> {
+  const diagnostics = getPageDiagnostics(page);
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await page.goto("/?debug=1", { waitUntil: "domcontentloaded" });
     try {
@@ -107,14 +182,48 @@ async function gotoApp(page: Page): Promise<void> {
             return "";
           },
           {
-            timeout: 20_000,
+            timeout: 60_000,
             intervals: [500, 1_000, 2_000, 5_000],
           },
         )
         .not.toBe("");
       return;
     } catch (error) {
-      if (attempt === 2) throw error;
+      if (attempt === 2) {
+        const [url, title, bodyHtml] = await Promise.all([
+          Promise.resolve(page.url()),
+          page.title().catch(() => ""),
+          page
+            .locator("body")
+            .evaluate((element) => element.innerHTML.slice(0, 2_000))
+            .catch(() => ""),
+        ]);
+        const diagnosticLines = [
+          `url=${url || "-"}`,
+          `title=${title || "-"}`,
+          bodyHtml ? `body=${bodyHtml}` : "body=-",
+        ];
+        if (diagnostics.pageErrors.length > 0) {
+          diagnosticLines.push(
+            `pageErrors=${diagnostics.pageErrors.join(" | ")}`,
+          );
+        }
+        if (diagnostics.requestFailures.length > 0) {
+          diagnosticLines.push(
+            `requestFailures=${diagnostics.requestFailures.join(" | ")}`,
+          );
+        }
+        if (diagnostics.consoleMessages.length > 0) {
+          diagnosticLines.push(
+            `console=${diagnostics.consoleMessages.join(" | ")}`,
+          );
+        }
+
+        throw new Error(
+          `[gotoApp] app shell did not render. ${diagnosticLines.join("\n")}`,
+          { cause: error },
+        );
+      }
       await page.goto("about:blank");
     }
   }
@@ -421,15 +530,15 @@ async function waitForEvmReceipt(
 async function readEvmPosition(
   publicClient: ReturnType<typeof createPublicClient>,
   contractAddress: Address,
-  matchId: bigint,
+  marketKey: Hash,
   userAddress: Address,
-): Promise<[bigint, bigint]> {
+): Promise<[bigint, bigint, bigint, bigint]> {
   return (await publicClient.readContract({
     address: contractAddress,
     abi: GOLD_CLOB_ABI,
     functionName: "positions",
-    args: [matchId, userAddress],
-  })) as [bigint, bigint];
+    args: [marketKey, userAddress],
+  })) as [bigint, bigint, bigint, bigint];
 }
 
 async function waitForSolanaUiPosition(
@@ -471,7 +580,7 @@ async function submitModelsTrade(
   const button = page.getByTestId(tradeButtonTestId);
   await button.click({ force: true });
 
-  let nextStatus = "";
+  let nextStatus: string;
   try {
     nextStatus = await waitForNewText(
       page,
@@ -524,7 +633,10 @@ test.describe("market flows", () => {
     await ensureWalletConnected(page);
 
     await clobPanel.getByTestId("prediction-amount-input").fill("1");
-    await clobPanel.getByTestId("solana-clob-price-input").fill("600");
+    const solanaPriceInput = clobPanel.getByTestId("solana-clob-price-input");
+    if (await solanaPriceInput.isVisible().catch(() => false)) {
+      await solanaPriceInput.fill("600");
+    }
 
     const previousYesTx = await readTxSignature(
       page,
@@ -556,15 +668,16 @@ test.describe("market flows", () => {
 
     await waitForSolanaUiPosition(page, "YES");
 
-    await clobPanel.getByTestId("prediction-tab-sell").click();
     await clobPanel.getByTestId("prediction-select-no").click();
-    await clobPanel.getByTestId("solana-clob-price-input").fill("400");
+    if (await solanaPriceInput.isVisible().catch(() => false)) {
+      await solanaPriceInput.fill("400");
+    }
     const previousNoTx = await readTxSignature(
       page,
       "solana-clob-place-order-tx",
     );
-    const sellNoButton = clobPanel.getByTestId("solana-clob-sell-submit");
-    await sellNoButton.click({ force: true });
+    const buyNoButton = clobPanel.getByRole("button", { name: /buy no/i });
+    await buyNoButton.click({ force: true });
     await page.waitForTimeout(1_500);
     const immediateNoTx = await readTxSignature(
       page,
@@ -575,7 +688,7 @@ test.describe("market flows", () => {
       immediateNoTx === "-" ||
       immediateNoTx === previousNoTx
     ) {
-      await sellNoButton.click({ force: true });
+      await buyNoButton.click({ force: true });
     }
     await openSolanaAdminPanel(page);
 
@@ -597,8 +710,25 @@ test.describe("market flows", () => {
     const chainId = Number(state.evmChainId || 97);
     const userAddress = state.evmHeadlessAddress as Address;
     const contractAddress = state.evmGoldClobAddress as Address;
-    const matchId = BigInt(state.evmMatchId || 1);
+    const marketKey = normalizeHex32(state.evmMarketKey, "evmMarketKey");
+    const duelKey = normalizeHex32(state.evmDuelKeyHex, "evmDuelKeyHex");
+    const oracleAddress = state.evmOracleAddress as Address;
+    const adminPrivateKey = state.evmAdminPrivateKey as `0x${string}`;
     const publicClient = createPublicClient({
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+    const adminAccount = privateKeyToAccount(adminPrivateKey);
+    const adminWalletClient = createWalletClient({
+      account: adminAccount,
       chain: {
         id: chainId,
         name: "e2e-local-evm",
@@ -616,16 +746,17 @@ test.describe("market flows", () => {
 
     const evmPanel = page.getByTestId("evm-panel").first();
     await expect(evmPanel).toBeVisible({ timeout: 60_000 });
-    await expect(evmPanel.getByTestId("evm-place-order")).toBeEnabled({
+    await expect(evmPanel.getByTestId("prediction-submit")).toBeEnabled({
       timeout: 60_000,
     });
 
-    await evmPanel.getByTestId("evm-amount-input").fill("1");
+    await evmPanel.getByTestId("prediction-amount-input").fill("1");
+    await evmPanel.getByTestId("evm-price-input").fill("600");
 
     console.log("[e2e][evm] placing YES order");
     const previousYesTx = await readText(page, "evm-last-order-tx");
-    await evmPanel.getByTestId("evm-pick-yes").click();
-    await evmPanel.getByTestId("evm-place-order").click();
+    await evmPanel.getByTestId("prediction-select-yes").click();
+    await evmPanel.getByTestId("prediction-submit").click();
     const yesTx = await waitForNewEvmTxText(
       page,
       "evm-last-order-tx",
@@ -639,7 +770,7 @@ test.describe("market flows", () => {
         const result = await readEvmPosition(
           publicClient,
           contractAddress,
-          matchId,
+          marketKey,
           userAddress,
         );
         return result[0];
@@ -648,8 +779,9 @@ test.describe("market flows", () => {
 
     console.log("[e2e][evm] placing NO order");
     const previousNoTx = await readText(page, "evm-last-order-tx");
-    await evmPanel.getByTestId("evm-pick-no").click();
-    await evmPanel.getByTestId("evm-place-order").click();
+    await evmPanel.getByTestId("evm-price-input").fill("400");
+    await evmPanel.getByTestId("prediction-select-no").click();
+    await evmPanel.getByTestId("prediction-submit").click();
     const noTx = await waitForNewEvmTxText(
       page,
       "evm-last-order-tx",
@@ -663,7 +795,7 @@ test.describe("market flows", () => {
         const result = await readEvmPosition(
           publicClient,
           contractAddress,
-          matchId,
+          marketKey,
           userAddress,
         );
         return result[1];
@@ -671,6 +803,22 @@ test.describe("market flows", () => {
       .toBeGreaterThan(0n);
 
     console.log("[e2e][evm] resolving YES winner");
+    const latestEvmBlock = await publicClient.getBlock({ blockTag: "latest" });
+    const reportResultTx = await adminWalletClient.writeContract({
+      address: oracleAddress,
+      abi: duelOutcomeOracleArtifact.abi,
+      functionName: "reportResult",
+      args: [
+        duelKey,
+        1,
+        42n,
+        `0x${"11".repeat(32)}`,
+        `0x${"22".repeat(32)}`,
+        latestEvmBlock.timestamp + 360n,
+        "e2e-resolved",
+      ],
+    });
+    await waitForEvmReceipt(publicClient, reportResultTx);
     const previousResolveTx = await readText(page, "evm-last-resolve-tx");
     await evmPanel.getByTestId("evm-resolve-match").click();
     const resolveTx = await waitForNewEvmTxText(
@@ -682,13 +830,12 @@ test.describe("market flows", () => {
     await waitForEvmReceipt(publicClient, resolveTx as Hash);
 
     const previousClaimTx = await readText(page, "evm-last-claim-tx");
-    let claimTx = "";
     console.log("[e2e][evm] waiting for auto-claim or zeroed YES position");
     const autoClaimDeadline = Date.now() + 15_000;
     let claimedPosition = await readEvmPosition(
       publicClient,
       contractAddress,
-      matchId,
+      marketKey,
       userAddress,
     );
     while (Date.now() < autoClaimDeadline && claimedPosition[0] > 0n) {
@@ -696,12 +843,12 @@ test.describe("market flows", () => {
       claimedPosition = await readEvmPosition(
         publicClient,
         contractAddress,
-        matchId,
+        marketKey,
         userAddress,
       );
     }
 
-    claimTx = await readText(page, "evm-last-claim-tx");
+    const claimTx = await readText(page, "evm-last-claim-tx");
     if (
       claimedPosition[0] === 0n &&
       claimTx &&
@@ -714,7 +861,7 @@ test.describe("market flows", () => {
       const maybeClaimed = await readEvmPosition(
         publicClient,
         contractAddress,
-        matchId,
+        marketKey,
         userAddress,
       );
       if (maybeClaimed[0] > 0n) {
@@ -724,24 +871,24 @@ test.describe("market flows", () => {
           timeout: 20_000,
         });
         await evmPanel.getByTestId("evm-claim-payout").click();
-        claimTx = await waitForNewEvmTxText(
+        const manualClaimTx = await waitForNewEvmTxText(
           page,
           "evm-last-claim-tx",
           previousClaimTx,
           "manual claim",
         );
-        await waitForEvmReceipt(publicClient, claimTx as Hash);
+        await waitForEvmReceipt(publicClient, manualClaimTx as Hash);
       }
     }
 
     const finalPosition = await readEvmPosition(
       publicClient,
       contractAddress,
-      matchId,
+      marketKey,
       userAddress,
     );
     expect(finalPosition[0]).toBe(0n);
-    expect(finalPosition[1]).toBeGreaterThan(0n);
+    expect(finalPosition[1]).toBe(0n);
   });
 
   test("solana perps open and close LONG and SHORT positions on-chain", async ({

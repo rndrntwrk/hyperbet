@@ -15,10 +15,10 @@ This is the recommended production topology for the Hyperbet stack in this repo.
 From repo root, deploy the keeper service path:
 
 ```bash
-railway up packages/hyperbet-solana/keeper --path-as-root -s hyperbet-keeper
+railway up packages/hyperbet-solana --path-as-root -s gold-betting-keeper
 ```
 
-Use `packages/hyperbet-solana/keeper/railway.json`.
+Use `packages/hyperbet-solana/railway.json`.
 
 Set these Railway variables at minimum:
 
@@ -34,6 +34,7 @@ Set these Railway variables at minimum:
 - `BSC_GOLD_CLOB_ADDRESS=...`
 - `BASE_RPC_URL=...`
 - `BASE_GOLD_CLOB_ADDRESS=...`
+- `AVAX_RPC_URL=...` if you proxy Avalanche RPC through the keeper
 - `BIRDEYE_API_KEY=...` if token-price proxying is enabled
 
 Persistence:
@@ -46,6 +47,7 @@ Notes:
 
 - The keeper serves the Pages app's read/write betting APIs. It is not the same process as the Hyperscape duel server.
 - The keeper also proxies Solana and EVM JSON-RPC for the public app. Keep provider-keyed RPC URLs on Railway, not in Cloudflare Pages build vars.
+- The keeper now keeps a short in-memory cache for read-only RPC and Birdeye proxy traffic. Tune it with `RPC_PROXY_CACHE_MAX_ENTRIES`, `RPC_PROXY_CACHE_MAX_PAYLOAD_BYTES`, and `BIRDEYE_PRICE_CACHE_TTL_MS` if needed.
 - The keeper will return boot fallback duel data until `STREAM_STATE_SOURCE_URL` is set and the upstream duel server responds.
 - The autonomous keeper bot also needs a funded signer wallet on Solana to create/resolve markets in production.
 

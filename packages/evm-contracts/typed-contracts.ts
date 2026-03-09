@@ -150,6 +150,8 @@ export interface SkillOracleContract extends TypedContract<SkillOracleContract> 
     mu: BigNumberish,
     sigma: BigNumberish,
   ): Promise<ContractTransactionResponse>;
+  getIndexPrice(agentId: BytesLike): Promise<bigint>;
+  globalMeanMu(): Promise<bigint>;
 }
 
 export interface MockERC20Contract extends TypedContract<MockERC20Contract> {

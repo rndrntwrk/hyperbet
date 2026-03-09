@@ -7,6 +7,9 @@ type E2eState = {
   evmHeadlessAddress?: string;
   perpsCharacterId?: string;
   perpsModelName?: string;
+  currentMatchId?: number;
+  currentDuelKeyHex?: string;
+  currentBetWindowSeconds?: number;
 };
 
 async function readState(): Promise<E2eState> {
@@ -54,6 +57,12 @@ async function main(): Promise<void> {
     "perpsCharacterId",
   );
   const perpsModelName = state.perpsModelName?.trim() || "E2E Model Alpha";
+  const duelKeyHex = requireString(state.currentDuelKeyHex, "currentDuelKeyHex");
+  const duelId = String(state.currentMatchId || Date.now());
+  const currentBetWindowSeconds = Math.max(
+    30,
+    Number(state.currentBetWindowSeconds || 45),
+  );
   const uplineWallet = "0x1000000000000000000000000000000000000001";
   const leaderboardWallet = "0x1000000000000000000000000000000000000002";
   const inviteeWallet = "0x1000000000000000000000000000000000000003";
@@ -155,14 +164,22 @@ async function main(): Promise<void> {
         cycle: {
           cycleId: "e2e-cycle-active",
           phase: "FIGHTING",
+          duelId,
+          duelKeyHex,
           cycleStartTime: Date.now() - 90_000,
           phaseStartTime: Date.now() - 30_000,
           phaseEndTime: Date.now() + 30_000,
+          betOpenTime: Date.now() - 15_000,
+          betCloseTime: Date.now() + currentBetWindowSeconds * 1_000,
+          fightStartTime: Date.now() + 60_000,
+          duelEndTime: null,
           countdown: 30,
           timeRemaining: 30_000,
           winnerId: null,
           winnerName: null,
           winReason: null,
+          seed: null,
+          replayHash: null,
           agent1: {
             id: perpsCharacterId,
             name: perpsModelName,
@@ -273,6 +290,8 @@ async function main(): Promise<void> {
         gameApiUrl,
         primaryWallet,
         linkedWallet,
+        duelId,
+        duelKeyHex,
         uplineInviteCode: uplineInvite.inviteCode,
         primaryInviteCode: primaryInvite.inviteCode,
         publishedSeq: publishedState.seq,

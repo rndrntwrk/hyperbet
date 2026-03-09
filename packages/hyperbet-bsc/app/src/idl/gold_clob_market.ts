@@ -1244,6 +1244,14 @@ export type GoldClobMarket = {
           {
             "name": "bShares",
             "type": "u64"
+          },
+          {
+            "name": "aStake",
+            "type": "u64"
+          },
+          {
+            "name": "bStake",
+            "type": "u64"
           }
         ]
       }

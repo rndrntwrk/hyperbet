@@ -13,6 +13,31 @@ RPC_URL="http://127.0.0.1:8899"
 
 VALIDATOR_PID=""
 
+resolve_wallet_path() {
+  local candidates=()
+
+  if [[ -n "${SOLANA_BOOTSTRAP_KEYPAIR:-}" ]]; then
+    candidates+=("${SOLANA_BOOTSTRAP_KEYPAIR}")
+  fi
+  if [[ -n "${ANCHOR_WALLET:-}" ]]; then
+    candidates+=("${ANCHOR_WALLET}")
+  fi
+  candidates+=(
+    "$HOME/.config/solana/hyperscape-keys/deployer.json"
+    "$HOME/.config/solana/id.json"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  printf '[local-demo] no bootstrap wallet found\n' >&2
+  exit 1
+}
+
 cleanup() {
   if [[ -n "$VALIDATOR_PID" ]] && kill -0 "$VALIDATOR_PID" >/dev/null 2>&1; then
     kill "$VALIDATOR_PID" >/dev/null 2>&1 || true
@@ -63,12 +88,13 @@ fi
 
 echo "[local-demo] starting local validator"
 rm -rf "$LEDGER_DIR"
+SOLANA_BOOTSTRAP_KEYPAIR="$(resolve_wallet_path)"
 solana-test-validator \
   --reset \
   --quiet \
   --ledger "$LEDGER_DIR" \
-  --bpf-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" \
-  --bpf-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" \
+  --upgradeable-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" "$SOLANA_BOOTSTRAP_KEYPAIR" \
+  --upgradeable-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" "$SOLANA_BOOTSTRAP_KEYPAIR" \
   >"$VALIDATOR_LOG" 2>&1 &
 VALIDATOR_PID="$!"
 

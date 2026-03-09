@@ -3,7 +3,14 @@
  * Defines supported chains and resolves config from environment variables.
  */
 
-import { bscTestnet, bsc, baseSepolia, base } from "wagmi/chains";
+import {
+  avalanche,
+  avalancheFuji,
+  bscTestnet,
+  bsc,
+  baseSepolia,
+  base,
+} from "wagmi/chains";
 import type { Chain } from "wagmi/chains";
 import {
   BSC_RPC_URL,
@@ -12,13 +19,16 @@ import {
   BASE_RPC_URL,
   BASE_CHAIN_ID,
   BASE_GOLD_CLOB_ADDRESS,
+  AVAX_RPC_URL,
+  AVAX_CHAIN_ID,
+  AVAX_GOLD_CLOB_ADDRESS,
 } from "./config";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type ChainId = "solana" | "bsc" | "base";
+export type ChainId = "solana" | "bsc" | "base" | "avax";
 
 export type EvmChainConfig = {
   chainId: ChainId;
@@ -93,6 +103,17 @@ function resolveBaseWagmiChain(): Chain {
   });
 }
 
+function resolveAvaxWagmiChain(): Chain {
+  if (AVAX_CHAIN_ID === 43114) return avalanche;
+  if (AVAX_CHAIN_ID === 43113) return avalancheFuji;
+  return createCustomChain(avalancheFuji, {
+    id: AVAX_CHAIN_ID,
+    name: `Avalanche Local (${AVAX_CHAIN_ID})`,
+    rpcUrl: AVAX_RPC_URL,
+    nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
+  });
+}
+
 const BSC_CONFIG: EvmChainConfig = {
   chainId: "bsc",
   evmChainId: BSC_CHAIN_ID,
@@ -141,6 +162,30 @@ const BASE_CONFIG: EvmChainConfig = {
   icon: "🔵",
 };
 
+const AVAX_CONFIG: EvmChainConfig = {
+  chainId: "avax",
+  evmChainId: AVAX_CHAIN_ID,
+  name:
+    AVAX_CHAIN_ID === 43114
+      ? "Avalanche"
+      : AVAX_CHAIN_ID === 43113
+        ? "Avalanche Fuji"
+        : `Avalanche Local (${AVAX_CHAIN_ID})`,
+  shortName: "AVAX",
+  rpcUrl: AVAX_RPC_URL,
+  goldClobAddress: AVAX_GOLD_CLOB_ADDRESS,
+  nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
+  blockExplorer:
+    AVAX_CHAIN_ID === 43114
+      ? "https://snowtrace.io"
+      : AVAX_CHAIN_ID === 43113
+        ? "https://testnet.snowtrace.io"
+        : AVAX_RPC_URL,
+  wagmiChain: resolveAvaxWagmiChain(),
+  color: "#E84142",
+  icon: "🔺",
+};
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -158,18 +203,24 @@ export function getEnabledEvmChains(): EvmChainConfig[] {
   if (hasConfiguredContracts(BASE_CONFIG)) {
     chains.push(BASE_CONFIG);
   }
+  if (hasConfiguredContracts(AVAX_CONFIG)) {
+    chains.push(AVAX_CONFIG);
+  }
   return chains;
 }
 
 /** Get config for a specific EVM chain. */
 export function getEvmChainConfig(
-  chainId: "bsc" | "base",
+  chainId: "bsc" | "base" | "avax",
 ): EvmChainConfig | null {
   if (chainId === "bsc") {
     return hasConfiguredContracts(BSC_CONFIG) ? BSC_CONFIG : null;
   }
   if (chainId === "base") {
     return hasConfiguredContracts(BASE_CONFIG) ? BASE_CONFIG : null;
+  }
+  if (chainId === "avax") {
+    return hasConfiguredContracts(AVAX_CONFIG) ? AVAX_CONFIG : null;
   }
   return null;
 }
@@ -183,12 +234,15 @@ export function getAvailableChains(): ChainId[] {
   if (hasConfiguredContracts(BASE_CONFIG)) {
     chains.push("base");
   }
+  if (hasConfiguredContracts(AVAX_CONFIG)) {
+    chains.push("avax");
+  }
   return chains;
 }
 
 /** Get wagmi chains array for provider config. */
 export function getWagmiChains(): [Chain, ...Chain[]] {
-  return [BSC_CONFIG.wagmiChain, BASE_CONFIG.wagmiChain];
+  return [BSC_CONFIG.wagmiChain, BASE_CONFIG.wagmiChain, AVAX_CONFIG.wagmiChain];
 }
 
 /** Display info for chains. */
@@ -208,6 +262,12 @@ export const CHAIN_DISPLAY: Record<
     shortName: "Base",
     icon: "🔵",
     color: "#0052FF",
+  },
+  avax: {
+    name: AVAX_CONFIG.name,
+    shortName: "AVAX",
+    icon: "🔺",
+    color: "#E84142",
   },
 };
 

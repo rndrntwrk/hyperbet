@@ -404,9 +404,9 @@ test.describe("app tabs and api coverage", () => {
         { timeout: 20_000 },
       )
       .toContain(points.totalPoints.toLocaleString());
-    await expect(page.getByTestId("points-display-gold")).toContainText(
-      multiplier.goldBalance,
-    );
+    await expect(
+      page.getByTestId("points-drawer").getByTestId("points-display-gold"),
+    ).toContainText(multiplier.goldBalance);
 
     await expect(
       page.getByTestId("points-drawer-panel-leaderboard"),

@@ -153,10 +153,7 @@ function ensureIdlAddress(idlJson: unknown, programId: PublicKey): Idl {
   const idlWithMaybeAddress = idlJson as Idl & { address?: string };
   return {
     ...idlWithMaybeAddress,
-    address:
-      idlWithMaybeAddress.address && idlWithMaybeAddress.address.trim()
-        ? idlWithMaybeAddress.address
-        : programId.toBase58(),
+    address: programId.toBase58(),
   } as Idl;
 }
 
@@ -235,7 +232,7 @@ export function findOracleConfigPda(
   )[0];
 }
 
-export const DUEL_WINNER_MARKET_KIND = 0;
+export const DUEL_WINNER_MARKET_KIND = 1;
 export const SIDE_BID = 1;
 export const SIDE_ASK = 2;
 
@@ -263,17 +260,16 @@ export function findMarketPda(
   marketKind = DUEL_WINNER_MARKET_KIND,
 ): PublicKey {
   return PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("market"),
-      duelStatePda.toBuffer(),
-      Uint8Array.of(marketKind),
-    ],
+    [Buffer.from("market"), duelStatePda.toBuffer(), Uint8Array.of(marketKind)],
     marketProgramId,
   )[0];
 }
 
 export function findMarketConfigPda(marketProgramId: PublicKey): PublicKey {
-  return PublicKey.findProgramAddressSync([Buffer.from("config")], marketProgramId)[0];
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    marketProgramId,
+  )[0];
 }
 
 export function findClobVaultPda(

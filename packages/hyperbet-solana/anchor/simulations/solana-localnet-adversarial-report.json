@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-03-09T04:28:09.551Z",
+  "authority": "DfEnrzh4cgnHxfuZRxLGX69fnLd9DP41XxGuE4gtyJpn",
+  "scenarios": [
+    {
+      "name": "low_liquidity_fifo",
+      "details": {
+        "remainingOpenLamports": "1000000",
+        "headOrderId": "2",
+        "makerOneFilledLamports": "1000000",
+        "makerTwoResting": true,
+        "takerAShares": "1000000"
+      }
+    },
+    {
+      "name": "mev_quote_sniping",
+      "details": {
+        "snipedPrice": 450,
+        "mevCapturedAShares": "1000000",
+        "retailRestingBid": 450,
+        "retailCapturedAShares": "0"
+      }
+    },
+    {
+      "name": "crossed_book_arbitrage",
+      "details": {
+        "combinedStakeLamports": "600000",
+        "theoreticalGrossEdgeLamports": "400000",
+        "balanceBeforeResolution": 7998079280,
+        "balanceAfterClaim": 7997773280,
+        "settlementCleared": true
+      }
+    },
+    {
+      "name": "unauthorized_oracle_attack",
+      "details": {
+        "rejected": true,
+        "expectedError": "Unauthorized"
+      }
+    }
+  ],
+  "initialBalances": {
+    "treasury": 8000000000,
+    "marketMaker": 8000000000,
+    "makerOne": 8000000000,
+    "makerTwo": 8000000000,
+    "taker": 8000000000,
+    "mevBot": 8000000000,
+    "retailBot": 8000000000,
+    "arbBot": 8000000000,
+    "arbCounterpartyAsk": 8000000000,
+    "arbCounterpartyBid": 8000000000,
+    "attacker": 8000000000
+  },
+  "finalBalances": {
+    "treasury": 8000048000,
+    "marketMaker": 8000068000,
+    "makerOne": 7989713840,
+    "makerTwo": 7996323080,
+    "taker": 7997722280,
+    "mevBot": 7997926280,
+    "retailBot": 7994856920,
+    "arbBot": 7998753280,
+    "arbCounterpartyAsk": 7994601920,
+    "arbCounterpartyBid": 7994601920,
+    "attacker": 8000000000
+  }
+}

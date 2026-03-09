@@ -374,6 +374,12 @@ async function main(): Promise<void> {
     provider,
   );
   const fight: any = fightProgram;
+  await assertProgramDeployed(
+    connection,
+    fightProgram.programId,
+    "fight_oracle",
+    cluster,
+  );
 
   const [oracleConfigPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("oracle_config")],
@@ -381,11 +387,11 @@ async function main(): Promise<void> {
   );
 
   const initializeOracle = async () => {
-    await fight.methods
-      .initializeOracle()
-      .accountsPartial({
-        authority: authority.publicKey,
-        oracleConfig: oracleConfigPda,
+      await fight.methods
+        .initializeOracle(authority.publicKey)
+        .accountsPartial({
+          authority: authority.publicKey,
+          oracleConfig: oracleConfigPda,
         program: fightProgram.programId,
         programData: deriveProgramDataAddress(fightProgram.programId),
         systemProgram: SystemProgram.programId,
@@ -540,9 +546,6 @@ async function main(): Promise<void> {
     "VITE_BET_FEE_BPS",
     DEFAULT_BET_FEE_BPS,
   );
-  const tradeTreasuryFeeBps = Math.floor(betFeeBps / 2);
-  const tradeMarketMakerFeeBps = Math.max(0, betFeeBps - tradeTreasuryFeeBps);
-  const winningsMarketMakerFeeBps = betFeeBps;
   const betGoldAmount = numFromEnv(
     mergedEnv,
     "E2E_BET_GOLD_AMOUNT",

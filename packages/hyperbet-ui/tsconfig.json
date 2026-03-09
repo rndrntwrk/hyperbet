@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "paths": {
+      "@hyperbet/ui": ["./src/index.ts"],
+      "@hyperbet/ui/*": ["./src/*"]
+    },
+    "types": ["bun-types"]
+  },
+  "include": ["src", "tests", "stories", ".storybook"]
+}

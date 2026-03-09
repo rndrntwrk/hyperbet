@@ -1,4 +1,4 @@
-import { cpSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,8 +20,8 @@ for (const programName of programNames) {
     throw new Error(`Missing generated Anchor IDL: ${sourceFile}`);
   }
 
-  cpSync(sourceFile, path.join(appIdlDir, `${programName}.json`));
-  cpSync(sourceFile, path.join(keeperIdlDir, `${programName}.json`));
+  copyFileSync(sourceFile, path.join(appIdlDir, `${programName}.json`));
+  copyFileSync(sourceFile, path.join(keeperIdlDir, `${programName}.json`));
 }
 
 console.log("[sync-anchor-artifacts] copied Anchor IDLs into app and keeper");

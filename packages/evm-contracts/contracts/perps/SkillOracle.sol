@@ -23,6 +23,7 @@ contract SkillOracle is Ownable {
     bytes32[] public activeAgents;
 
     uint256 public globalMeanMu; // The average mu of the population
+    uint256 private totalMu;
     uint256 public immutable basePrice; // Base index price (scaled to 1e18)
 
     event SkillUpdated(bytes32 indexed agentId, uint256 mu, uint256 sigma);
@@ -36,23 +37,18 @@ contract SkillOracle is Ownable {
      * @notice Updates the underlying skill data for an agent.
      */
     function updateAgentSkill(bytes32 agentId, uint256 mu, uint256 sigma) external onlyOwner {
+        uint256 activeAgentCount = activeAgents.length;
         if (!agentExists[agentId]) {
             agentExists[agentId] = true;
             activeAgents.push(agentId);
+            totalMu += mu;
+            activeAgentCount += 1;
+        } else {
+            totalMu = totalMu - agentSkills[agentId].mu + mu;
         }
         agentSkills[agentId] = AgentSkill(mu, sigma, block.timestamp);
-        _updateGlobalMean();
+        globalMeanMu = totalMu / activeAgentCount;
         emit SkillUpdated(agentId, mu, sigma);
-    }
-
-    function _updateGlobalMean() internal {
-        uint256 activeAgentCount = activeAgents.length;
-        if (activeAgentCount == 0) return;
-        uint256 sum = 0;
-        for (uint256 i = 0; i < activeAgentCount; i++) {
-            sum += agentSkills[activeAgents[i]].mu;
-        }
-        globalMeanMu = sum / activeAgentCount;
     }
 
     /**

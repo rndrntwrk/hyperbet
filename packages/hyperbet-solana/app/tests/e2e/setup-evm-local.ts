@@ -6,21 +6,29 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  keccak256,
   parseUnits,
+  stringToHex,
   type Address,
 } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 
 import mockErc20Artifact from "../../../../evm-contracts/artifacts/contracts/MockERC20.sol/MockERC20.json";
+import duelOutcomeOracleArtifact from "../../../../evm-contracts/artifacts/contracts/DuelOutcomeOracle.sol/DuelOutcomeOracle.json";
 import goldClobArtifact from "../../../../evm-contracts/artifacts/contracts/GoldClob.sol/GoldClob.json";
 
 type E2eState = Record<string, unknown> & {
+  currentDuelKeyHex?: string;
   evmRpcUrl?: string;
   evmChainId?: number;
   evmHeadlessAddress?: string;
   evmGoldTokenAddress?: string;
   evmGoldClobAddress?: string;
   evmMatchId?: number;
+  evmDuelKeyHex?: string;
+  evmMarketKey?: string;
+  evmOracleAddress?: string;
+  evmAdminPrivateKey?: string;
   evmSeedNoPrice?: number;
   evmSeedYesPrice?: number;
   evmSeedOrderAmount?: string;
@@ -32,6 +40,27 @@ const DEFAULT_ADMIN_PRIVATE_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const DEFAULT_ANVIL_MNEMONIC =
   "test test test test test test test test test test test junk";
+const MARKET_KIND_DUEL_WINNER = 0;
+const BUY_SIDE = 1;
+const SELL_SIDE = 2;
+const DUEL_STATUS_BETTING_OPEN = 2;
+
+function ensureHex32(value: string, label: string): `0x${string}` {
+  const normalized = value.trim().toLowerCase().replace(/^0x/, "");
+  if (!/^[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error(`Invalid ${label}; expected 32-byte hex string`);
+  }
+  return `0x${normalized}`;
+}
+
+function hashLabel(label: string): `0x${string}` {
+  return keccak256(stringToHex(label));
+}
+
+function quoteCost(side: number, price: number, amount: bigint): bigint {
+  const component = BigInt(side === BUY_SIDE ? price : 1000 - price);
+  return (amount * component) / 1000n;
+}
 
 function parseDotEnv(body: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -152,6 +181,16 @@ async function main(): Promise<void> {
     nextMakerNonce += 1;
     return nonce;
   };
+  const existingState = (await readJson<E2eState>(statePath)) || {};
+  const latestBlock = await publicClient.getBlock({ blockTag: "latest" });
+  const duelKey = ensureHex32(
+    existingState.currentDuelKeyHex ||
+      keccak256(stringToHex("hyperbet-e2e-evm:local")),
+    "currentDuelKeyHex",
+  );
+  const duelBetOpenTs = latestBlock.timestamp - 15n;
+  const duelBetCloseTs = duelBetOpenTs + 300n;
+  const duelStartTs = duelBetCloseTs + 60n;
 
   const tokenDeployTx = await walletClient.deployContract({
     abi: mockErc20Artifact.abi,
@@ -167,10 +206,30 @@ async function main(): Promise<void> {
     throw new Error("Token deployment did not return contract address");
   }
 
+  const oracleDeployTx = await walletClient.deployContract({
+    abi: duelOutcomeOracleArtifact.abi,
+    bytecode: duelOutcomeOracleArtifact.bytecode as `0x${string}`,
+    args: [adminAccount.address, adminAccount.address],
+    nonce: consumeNonce(),
+  });
+  const oracleDeployReceipt = await publicClient.waitForTransactionReceipt({
+    hash: oracleDeployTx,
+  });
+  const oracleAddress = oracleDeployReceipt.contractAddress;
+  if (!oracleAddress) {
+    throw new Error("Duel oracle deployment did not return contract address");
+  }
+
   const clobDeployTx = await walletClient.deployContract({
     abi: goldClobArtifact.abi,
     bytecode: goldClobArtifact.bytecode as `0x${string}`,
-    args: [adminAccount.address as Address, adminAccount.address as Address],
+    args: [
+      adminAccount.address,
+      adminAccount.address,
+      oracleAddress,
+      adminAccount.address,
+      adminAccount.address,
+    ],
     nonce: consumeNonce(),
   });
   const clobDeployReceipt = await publicClient.waitForTransactionReceipt({
@@ -191,37 +250,56 @@ async function main(): Promise<void> {
   });
   await publicClient.waitForTransactionReceipt({ hash: mintTx });
 
-  const createMatchTx = await walletClient.writeContract({
-    address: goldClobAddress as Address,
-    abi: goldClobArtifact.abi,
-    functionName: "createMatch",
-    args: [],
+  const upsertDuelTx = await walletClient.writeContract({
+    address: oracleAddress as Address,
+    abi: duelOutcomeOracleArtifact.abi,
+    functionName: "upsertDuel",
+    args: [
+      duelKey,
+      hashLabel("e2e-evm-agent-a"),
+      hashLabel("e2e-evm-agent-b"),
+      duelBetOpenTs,
+      duelBetCloseTs,
+      duelStartTs,
+      "hyperbet-local-evm",
+      DUEL_STATUS_BETTING_OPEN,
+    ],
     account: adminAccount,
     nonce: consumeNonce(),
   });
-  await publicClient.waitForTransactionReceipt({ hash: createMatchTx });
+  await publicClient.waitForTransactionReceipt({ hash: upsertDuelTx });
 
-  const nextMatchId = (await publicClient.readContract({
+  const createMarketTx = await walletClient.writeContract({
     address: goldClobAddress as Address,
     abi: goldClobArtifact.abi,
-    functionName: "nextMatchId",
-  })) as bigint;
-  const currentMatchId = nextMatchId > 1n ? nextMatchId - 1n : 1n;
+    functionName: "createMarketForDuel",
+    args: [duelKey, MARKET_KIND_DUEL_WINNER],
+    account: adminAccount,
+    nonce: consumeNonce(),
+  });
+  await publicClient.waitForTransactionReceipt({ hash: createMarketTx });
+
+  const marketKey = (await publicClient.readContract({
+    address: goldClobAddress as Address,
+    abi: goldClobArtifact.abi,
+    functionName: "marketKey",
+    args: [duelKey, MARKET_KIND_DUEL_WINNER],
+  })) as `0x${string}`;
 
   const seedNoOrderTx = await makerWalletClient.writeContract({
     address: goldClobAddress as Address,
     abi: goldClobArtifact.abi,
     functionName: "placeOrder",
     args: [
-      currentMatchId,
-      false,
+      duelKey,
+      MARKET_KIND_DUEL_WINNER,
+      SELL_SIDE,
       seedNoOrderPrice,
       parseUnits(seedOrderAmountUi, 18),
     ],
     value: (() => {
       const amount = parseUnits(seedOrderAmountUi, 18);
-      const priceComp = BigInt(1000 - seedNoOrderPrice);
-      const cost = (amount * priceComp) / 1000n;
+      const cost = quoteCost(SELL_SIDE, seedNoOrderPrice, amount);
       const tradeTreasuryFee = cost / 100n;
       const tradeMarketMakerFee = cost / 100n;
       return cost + tradeTreasuryFee + tradeMarketMakerFee;
@@ -236,15 +314,15 @@ async function main(): Promise<void> {
     abi: goldClobArtifact.abi,
     functionName: "placeOrder",
     args: [
-      currentMatchId,
-      true,
+      duelKey,
+      MARKET_KIND_DUEL_WINNER,
+      BUY_SIDE,
       seedYesOrderPrice,
       parseUnits(seedOrderAmountUi, 18),
     ],
     value: (() => {
       const amount = parseUnits(seedOrderAmountUi, 18);
-      const priceComp = BigInt(seedYesOrderPrice);
-      const cost = (amount * priceComp) / 1000n;
+      const cost = quoteCost(BUY_SIDE, seedYesOrderPrice, amount);
       const tradeTreasuryFee = cost / 100n;
       const tradeMarketMakerFee = cost / 100n;
       return cost + tradeTreasuryFee + tradeMarketMakerFee;
@@ -266,7 +344,6 @@ async function main(): Promise<void> {
   env.VITE_E2E_EVM_ADDRESS = adminAccount.address;
   await fs.writeFile(envPath, serializeDotEnv(env), "utf8");
 
-  const existingState = (await readJson<E2eState>(statePath)) || {};
   const state: E2eState = {
     ...existingState,
     evmRpcUrl: rpcUrl,
@@ -274,7 +351,11 @@ async function main(): Promise<void> {
     evmHeadlessAddress: adminAccount.address,
     evmGoldTokenAddress: goldTokenAddress,
     evmGoldClobAddress: goldClobAddress,
-    evmMatchId: Number(currentMatchId),
+    evmMatchId: 1,
+    evmDuelKeyHex: duelKey,
+    evmMarketKey: marketKey,
+    evmOracleAddress: oracleAddress,
+    evmAdminPrivateKey: adminPrivateKey,
     evmSeedNoPrice: seedNoOrderPrice,
     evmSeedYesPrice: seedYesOrderPrice,
     evmSeedOrderAmount: seedOrderAmountUi,
@@ -290,12 +371,16 @@ async function main(): Promise<void> {
         evmHeadlessAddress: adminAccount.address,
         evmGoldTokenAddress: goldTokenAddress,
         evmGoldClobAddress: goldClobAddress,
-        evmMatchId: Number(currentMatchId),
+        evmDuelKeyHex: duelKey,
+        evmMarketKey: marketKey,
+        evmOracleAddress: oracleAddress,
         tx: {
           tokenDeployTx,
+          oracleDeployTx,
           clobDeployTx,
           mintTx,
-          createMatchTx,
+          upsertDuelTx,
+          createMarketTx,
           seedNoOrderTx,
           seedYesOrderTx,
         },

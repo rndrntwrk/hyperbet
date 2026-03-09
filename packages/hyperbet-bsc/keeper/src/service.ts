@@ -94,6 +94,17 @@ type RateBucket = {
   lastRefillMs: number;
 };
 
+type JsonRpcRequestPayload = Record<string, unknown> & {
+  method: string;
+};
+
+type ProxyCacheEntry = {
+  status: number;
+  bodyText: string;
+  contentType: string;
+  expiresAt: number;
+};
+
 const encoder = new TextEncoder();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const keeperRoot = path.resolve(__dirname, "..");
@@ -145,6 +156,18 @@ const SOLANA_RPC_PROXY_MAX_BODY_BYTES = Math.max(
 const EVM_RPC_PROXY_MAX_BODY_BYTES = Math.max(
   1024,
   Number(process.env.EVM_RPC_PROXY_MAX_BODY_BYTES || 1_000_000),
+);
+const RPC_PROXY_CACHE_MAX_ENTRIES = Math.max(
+  32,
+  Number(process.env.RPC_PROXY_CACHE_MAX_ENTRIES || 512),
+);
+const RPC_PROXY_CACHE_MAX_PAYLOAD_BYTES = Math.max(
+  1024,
+  Number(process.env.RPC_PROXY_CACHE_MAX_PAYLOAD_BYTES || 512_000),
+);
+const BIRDEYE_PRICE_CACHE_TTL_MS = Math.max(
+  1_000,
+  Number(process.env.BIRDEYE_PRICE_CACHE_TTL_MS || 5_000),
 );
 
 const GOLD_CLOB_READ_ABI = [
@@ -214,6 +237,8 @@ let streamSourceBackoffUntil = 0;
 const sseClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const manifestCache = new Map<string, unknown>();
 const rateBuckets = new Map<string, RateBucket>();
+const proxyResponseCache = new Map<string, ProxyCacheEntry>();
+const proxyResponseInFlight = new Map<string, Promise<ProxyCacheEntry>>();
 
 // ── Persistent state (hydrated from SQLite on startup, written through on change)
 const _db = loadAll(BET_STORE_LIMIT);
@@ -273,6 +298,7 @@ const baseRpcUrl = (
   process.env.BASE_SEPOLIA_RPC ||
   ""
 ).trim();
+const avaxRpcUrl = (process.env.AVAX_RPC_URL || "").trim();
 const baseContractAddress = (
   process.env.BASE_GOLD_CLOB_ADDRESS ||
   process.env.CLOB_CONTRACT_ADDRESS_BASE ||
@@ -290,7 +316,46 @@ const baseClient =
 const EVM_RPC_PROXY_TARGETS = {
   bsc: bscRpcUrl,
   base: baseRpcUrl,
+  avax: avaxRpcUrl,
 } as const;
+type SupportedEvmRpcChain = keyof typeof EVM_RPC_PROXY_TARGETS;
+
+const SOLANA_RPC_CACHE_TTL_MS: Record<string, number> = {
+  getAccountInfo: 750,
+  getBalance: 750,
+  getBlockHeight: 250,
+  getBlockTime: 5_000,
+  getEpochInfo: 5_000,
+  getEpochSchedule: 300_000,
+  getFeeForMessage: 750,
+  getGenesisHash: 300_000,
+  getHealth: 1_000,
+  getIdentity: 300_000,
+  getLatestBlockhash: 250,
+  getMinimumBalanceForRentExemption: 300_000,
+  getMultipleAccounts: 750,
+  getProgramAccounts: 750,
+  getRecentPrioritizationFees: 500,
+  getSlot: 250,
+  getSupply: 5_000,
+  getTokenAccountBalance: 750,
+  getTokenLargestAccounts: 5_000,
+  getTokenSupply: 5_000,
+  getVersion: 300_000,
+};
+
+const EVM_RPC_CACHE_TTL_MS: Record<string, number> = {
+  eth_blockNumber: 250,
+  eth_call: 750,
+  eth_chainId: 300_000,
+  eth_getBalance: 750,
+  eth_getBlockByNumber: 750,
+  eth_getCode: 60_000,
+  eth_getLogs: 750,
+  eth_getStorageAt: 5_000,
+  net_version: 300_000,
+  web3_clientVersion: 300_000,
+};
 
 parsers.bsc.enabled = Boolean(bscClient);
 parsers.base.enabled = Boolean(baseClient);
@@ -741,6 +806,142 @@ function parseBoundedInteger(
   const parsed = Number(rawValue);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.floor(parsed)));
+}
+
+function buildProxyCacheKey(namespace: string, rawKey: string): string {
+  return createHash("sha256")
+    .update(namespace)
+    .update("\n")
+    .update(rawKey)
+    .digest("hex");
+}
+
+function resolveJsonRpcCacheTtlMs(
+  requests: readonly JsonRpcRequestPayload[],
+  ttlByMethod: Record<string, number>,
+): number {
+  let ttlMs: number | null = null;
+  for (const request of requests) {
+    const methodTtlMs = ttlByMethod[request.method];
+    if (!methodTtlMs || methodTtlMs <= 0) {
+      return 0;
+    }
+    ttlMs = ttlMs === null ? methodTtlMs : Math.min(ttlMs, methodTtlMs);
+  }
+  return ttlMs ?? 0;
+}
+
+function getProxyCacheEntry(key: string): ProxyCacheEntry | null {
+  const cached = proxyResponseCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    proxyResponseCache.delete(key);
+    return null;
+  }
+  proxyResponseCache.delete(key);
+  proxyResponseCache.set(key, cached);
+  return cached;
+}
+
+function pruneProxyResponseCache(): void {
+  const now = Date.now();
+  for (const [key, entry] of proxyResponseCache) {
+    if (entry.expiresAt <= now) {
+      proxyResponseCache.delete(key);
+    }
+  }
+  while (proxyResponseCache.size > RPC_PROXY_CACHE_MAX_ENTRIES) {
+    const oldestKey = proxyResponseCache.keys().next();
+    if (oldestKey.done) break;
+    proxyResponseCache.delete(oldestKey.value);
+  }
+}
+
+function setProxyCacheEntry(key: string, entry: ProxyCacheEntry): void {
+  if (entry.bodyText.length > RPC_PROXY_CACHE_MAX_PAYLOAD_BYTES) {
+    return;
+  }
+  proxyResponseCache.delete(key);
+  proxyResponseCache.set(key, entry);
+  pruneProxyResponseCache();
+}
+
+async function fetchProxyResponseWithCache(
+  key: string,
+  ttlMs: number,
+  load: () => Promise<Omit<ProxyCacheEntry, "expiresAt">>,
+): Promise<{ entry: ProxyCacheEntry; cacheStatus: "HIT" | "MISS" | "BYPASS" }> {
+  if (ttlMs <= 0) {
+    const loaded = await load();
+    return {
+      entry: { ...loaded, expiresAt: 0 },
+      cacheStatus: "BYPASS",
+    };
+  }
+
+  const cached = getProxyCacheEntry(key);
+  if (cached) {
+    return { entry: cached, cacheStatus: "HIT" };
+  }
+
+  const inFlight = proxyResponseInFlight.get(key);
+  if (inFlight) {
+    return { entry: await inFlight, cacheStatus: "HIT" };
+  }
+
+  const startedAt = Date.now();
+  const loadPromise = (async () => {
+    const loaded = await load();
+    const entry: ProxyCacheEntry = {
+      ...loaded,
+      expiresAt: startedAt + ttlMs,
+    };
+    if (loaded.status >= 200 && loaded.status < 300) {
+      setProxyCacheEntry(key, entry);
+    }
+    return entry;
+  })();
+
+  proxyResponseInFlight.set(key, loadPromise);
+  try {
+    return { entry: await loadPromise, cacheStatus: "MISS" };
+  } finally {
+    proxyResponseInFlight.delete(key);
+  }
+}
+
+async function fetchUpstreamText(
+  target: string,
+  init: RequestInit,
+): Promise<Omit<ProxyCacheEntry, "expiresAt">> {
+  const upstream = await fetch(target, init);
+  return {
+    status: upstream.status,
+    bodyText: await upstream.text(),
+    contentType:
+      upstream.headers.get("content-type") || "application/json; charset=utf-8",
+  };
+}
+
+function proxyTextResponse(
+  req: Request,
+  entry: Pick<ProxyCacheEntry, "status" | "bodyText" | "contentType">,
+  cacheStatus: "HIT" | "MISS" | "BYPASS",
+): Response {
+  const headers = new Headers({
+    "content-type": entry.contentType || "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "x-hyperbet-proxy-cache": cacheStatus,
+    ...securityHeaders(),
+  });
+  applyCors(req, headers);
+  return new Response(entry.bodyText, { status: entry.status, headers });
+}
+
+function isSupportedEvmRpcChain(
+  value: string,
+): value is SupportedEvmRpcChain {
+  return Object.hasOwn(EVM_RPC_PROXY_TARGETS, value);
 }
 
 function handlePerpsOracleHistory(req: Request, url: URL): Response {
@@ -1711,24 +1912,28 @@ async function handleSolanaRpcProxy(req: Request): Promise<Response> {
   }
 
   try {
-    const upstream = await fetch(SOLANA_RPC_PROXY_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: rpcBody.bodyText,
-      cache: "no-store",
-    });
-    const payload = await upstream.text();
-    const headers = new Headers({
-      "content-type":
-        upstream.headers.get("content-type") ||
-        "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      ...securityHeaders(),
-    });
-    applyCors(req, headers);
-    return new Response(payload, { status: upstream.status, headers });
+    const ttlMs = resolveJsonRpcCacheTtlMs(
+      rpcBody.requests,
+      SOLANA_RPC_CACHE_TTL_MS,
+    );
+    const cacheKey = buildProxyCacheKey(
+      "solana-rpc",
+      `${SOLANA_RPC_PROXY_URL}\n${rpcBody.bodyText}`,
+    );
+    const { entry, cacheStatus } = await fetchProxyResponseWithCache(
+      cacheKey,
+      ttlMs,
+      () =>
+        fetchUpstreamText(SOLANA_RPC_PROXY_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: rpcBody.bodyText,
+          cache: "no-store",
+        }),
+    );
+    return proxyTextResponse(req, entry, cacheStatus);
   } catch (error) {
     return jsonResponse(
       req,
@@ -1744,7 +1949,7 @@ async function handleSolanaRpcProxy(req: Request): Promise<Response> {
 }
 
 type JsonRpcBodyResult =
-  | { ok: true; bodyText: string }
+  | { ok: true; bodyText: string; requests: JsonRpcRequestPayload[] }
   | { ok: false; response: Response };
 
 async function readJsonRpcBody(
@@ -1789,7 +1994,9 @@ async function readJsonRpcBody(
     };
   }
 
-  const requests = Array.isArray(parsedBody) ? parsedBody : [parsedBody];
+  const requests = (
+    Array.isArray(parsedBody) ? parsedBody : [parsedBody]
+  ) as JsonRpcRequestPayload[];
   const hasInvalidRequest = requests.some((entry) => {
     if (!entry || typeof entry !== "object") return true;
     const method = (entry as Record<string, unknown>).method;
@@ -1802,14 +2009,22 @@ async function readJsonRpcBody(
     };
   }
 
-  return { ok: true, bodyText };
+  return {
+    ok: true,
+    bodyText,
+    requests: requests.map((entry) => ({
+      ...entry,
+      method: entry.method.trim(),
+    })),
+  };
 }
 
 async function handleEvmRpcProxy(req: Request, url: URL): Promise<Response> {
-  const chain = url.searchParams.get("chain")?.trim().toLowerCase();
-  if (chain !== "bsc" && chain !== "base") {
+  const chainRaw = url.searchParams.get("chain")?.trim().toLowerCase();
+  if (!chainRaw || !isSupportedEvmRpcChain(chainRaw)) {
     return jsonResponse(req, { error: "Invalid EVM chain" }, 400);
   }
+  const chain = chainRaw;
 
   const target = EVM_RPC_PROXY_TARGETS[chain];
   if (!target) {
@@ -1826,24 +2041,28 @@ async function handleEvmRpcProxy(req: Request, url: URL): Promise<Response> {
   }
 
   try {
-    const upstream = await fetch(target, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: rpcBody.bodyText,
-      cache: "no-store",
-    });
-    const payload = await upstream.text();
-    const headers = new Headers({
-      "content-type":
-        upstream.headers.get("content-type") ||
-        "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      ...securityHeaders(),
-    });
-    applyCors(req, headers);
-    return new Response(payload, { status: upstream.status, headers });
+    const ttlMs = resolveJsonRpcCacheTtlMs(
+      rpcBody.requests,
+      EVM_RPC_CACHE_TTL_MS,
+    );
+    const cacheKey = buildProxyCacheKey(
+      `evm-rpc:${chain}`,
+      `${target}\n${rpcBody.bodyText}`,
+    );
+    const { entry, cacheStatus } = await fetchProxyResponseWithCache(
+      cacheKey,
+      ttlMs,
+      () =>
+        fetchUpstreamText(target, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: rpcBody.bodyText,
+          cache: "no-store",
+        }),
+    );
+    return proxyTextResponse(req, entry, cacheStatus);
   } catch (error) {
     return jsonResponse(
       req,
@@ -1872,16 +2091,20 @@ async function handleBirdeyePrice(req: Request, url: URL): Promise<Response> {
   }
 
   try {
-    const upstream = await fetch(
-      `${BIRDEYE_API_BASE}/defi/price?address=${encodeURIComponent(address)}`,
-      {
-        headers: {
-          "x-api-key": BIRDEYE_API_KEY,
-        },
-      },
+    const target = `${BIRDEYE_API_BASE}/defi/price?address=${encodeURIComponent(address)}`;
+    const cacheKey = buildProxyCacheKey("birdeye-price", address);
+    const { entry, cacheStatus } = await fetchProxyResponseWithCache(
+      cacheKey,
+      BIRDEYE_PRICE_CACHE_TTL_MS,
+      () =>
+        fetchUpstreamText(target, {
+          headers: {
+            "x-api-key": BIRDEYE_API_KEY,
+          },
+          cache: "no-store",
+        }),
     );
-    const payload = await upstream.json();
-    return jsonResponse(req, payload, upstream.status);
+    return proxyTextResponse(req, entry, cacheStatus);
   } catch (error) {
     return jsonResponse(
       req,

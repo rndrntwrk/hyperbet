@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./DuelOutcomeOracle.sol";
@@ -15,6 +16,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint8 public constant MARKET_KIND_DUEL_WINNER = 0;
     uint8 private constant BUY_SIDE = 1;
     uint8 private constant SELL_SIDE = 2;
+    uint16 private constant MAX_PRICE = 1000;
+    uint256 private constant PRICE_BITMAP_WORDS = 4;
     uint256 public constant MAX_FEE_BPS = 10_000;
 
     DuelOutcomeOracle public duelOracle;
@@ -95,6 +98,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     mapping(bytes32 => mapping(address => Position)) public positions;
     mapping(bytes32 => mapping(uint64 => Order)) public orders;
     mapping(bytes32 => mapping(uint8 => mapping(uint16 => PriceLevel))) private priceLevels;
+    mapping(bytes32 => mapping(uint8 => uint256[PRICE_BITMAP_WORDS])) private priceBitmaps;
 
     event MarketCreated(bytes32 indexed duelKey, bytes32 indexed marketKey, uint8 marketKind);
     event MarketSynced(bytes32 indexed duelKey, bytes32 indexed marketKey, MarketStatus status, Side winner);
@@ -159,8 +163,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint8 side,
         uint16 price
     ) external view returns (uint64 headOrderId, uint64 tailOrderId, uint128 totalOpen) {
-        PriceLevel storage level = priceLevels[marketKey(duelKey, marketKind)][side][price];
-        return (level.headOrderId, level.tailOrderId, level.totalOpen);
+        return _priceLevelState(marketKey(duelKey, marketKind), side, price);
     }
 
     function orderQueues(
@@ -169,8 +172,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint8 side,
         uint16 price
     ) external view returns (uint64 headOrderId, uint64 tailOrderId, uint128 totalOpen) {
-        PriceLevel storage level = priceLevels[marketKey(duelKey, marketKind)][side][price];
-        return (level.headOrderId, level.tailOrderId, level.totalOpen);
+        return _priceLevelState(marketKey(duelKey, marketKind), side, price);
     }
 
     function setOracle(address oracle) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -242,15 +244,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         require(market.exists, "market missing");
 
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
-        market.status = _mapDuelStatus(duel.status);
-        if (duel.status == DuelOutcomeOracle.DuelStatus.RESOLVED) {
-            market.winner = _mapWinner(duel.winner);
-        } else if (duel.status == DuelOutcomeOracle.DuelStatus.CANCELLED) {
-            market.winner = Side.NONE;
-        }
-
-        emit MarketSynced(duelKey, key, market.status, market.winner);
-        return market.status;
+        return _syncMarketFromOracle(duelKey, key, market, duel);
     }
 
     function placeOrder(
@@ -261,15 +255,14 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint128 amount
     ) external payable nonReentrant {
         require(side == BUY_SIDE || side == SELL_SIDE, "invalid side");
-        require(price > 0 && price < 1000, "invalid price");
+        require(price > 0 && price < MAX_PRICE, "invalid price");
         require(amount > 0, "invalid amount");
 
         bytes32 key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
         require(market.exists, "market missing");
-        require(syncMarketFromOracle(duelKey, marketKind) == MarketStatus.OPEN, "market not open");
-
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
+        require(_syncMarketFromOracle(duelKey, key, market, duel) == MarketStatus.OPEN, "market not open");
         require(block.timestamp < duel.betCloseTs, "betting closed");
 
         uint64 takerOrderId = market.nextOrderId;
@@ -303,7 +296,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         bytes32 key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
         require(market.exists, "market missing");
-        require(syncMarketFromOracle(duelKey, marketKind) == MarketStatus.OPEN, "market not open");
+        syncMarketFromOracle(duelKey, marketKind);
 
         Order storage order = orders[key][orderId];
         require(order.maker == msg.sender, "not maker");
@@ -336,9 +329,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         MarketStatus status = syncMarketFromOracle(duelKey, marketKind);
         Position storage position = positions[key][msg.sender];
 
-        uint256 payout;
+        uint256 payout = 0;
         if (status == MarketStatus.RESOLVED) {
-            uint256 winningShares;
+            uint256 winningShares = 0;
             if (market.winner == Side.A) {
                 winningShares = position.aShares;
             } else if (market.winner == Side.B) {
@@ -408,12 +401,17 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     }
 
     function _quoteCost(uint8 side, uint16 price, uint128 amount) internal pure returns (uint256) {
-        uint256 priceComponent = side == BUY_SIDE ? price : 1000 - price;
+        uint256 priceComponent = side == BUY_SIDE ? price : MAX_PRICE - price;
         uint256 quoteValue = uint256(amount) * priceComponent;
-        require(quoteValue % 1000 == 0, "precision error");
-        uint256 cost = quoteValue / 1000;
+        require(quoteValue % MAX_PRICE == 0, "precision error");
+        uint256 cost = quoteValue / MAX_PRICE;
         require(cost > 0, "cost too low");
         return cost;
+    }
+
+    function _fillStakes(uint16 price, uint128 amount) internal pure returns (uint128 bidStake, uint128 askStake) {
+        bidStake = uint128(_quoteCost(BUY_SIDE, price, amount));
+        askStake = amount - bidStake;
     }
 
     function _matchBuyOrder(
@@ -429,12 +427,12 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         while (
             progress.remainingAmount > 0
                 && progress.boundaryPrice <= limitPrice
-                && progress.boundaryPrice < 1000
+                && progress.boundaryPrice < MAX_PRICE
                 && progress.matchesCount < 100
         ) {
             PriceLevel storage level = priceLevels[key][SELL_SIDE][progress.boundaryPrice];
             if (level.headOrderId == 0 || level.totalOpen == 0) {
-                _deactivatePrice(market, SELL_SIDE, progress.boundaryPrice);
+                _deactivatePrice(key, market, SELL_SIDE, progress.boundaryPrice);
                 progress.boundaryPrice = market.bestAsk;
                 progress.matchesCount += 1;
                 continue;
@@ -459,17 +457,18 @@ contract GoldClob is AccessControl, ReentrancyGuard {
 
             Position storage makerPosition = positions[key][makerOrder.maker];
             Position storage takerPosition = positions[key][msg.sender];
+            (uint128 bidStake, uint128 askStake) = _fillStakes(progress.boundaryPrice, fillAmount);
             makerPosition.bShares += fillAmount;
-            makerPosition.bStake += uint128(_quoteCost(SELL_SIDE, progress.boundaryPrice, fillAmount));
+            makerPosition.bStake += askStake;
             takerPosition.aShares += fillAmount;
-            takerPosition.aStake += uint128(_quoteCost(BUY_SIDE, progress.boundaryPrice, fillAmount));
+            takerPosition.aStake += bidStake;
             market.totalAShares += fillAmount;
             market.totalBShares += fillAmount;
 
             if (limitPrice > progress.boundaryPrice) {
                 progress.totalImprovement +=
                     (uint256(fillAmount) * (limitPrice - progress.boundaryPrice)) /
-                    1000;
+                    MAX_PRICE;
             }
 
             emit OrderMatched(key, makerOrder.id, takerOrderId, fillAmount, progress.boundaryPrice);
@@ -501,7 +500,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         ) {
             PriceLevel storage level = priceLevels[key][BUY_SIDE][progress.boundaryPrice];
             if (level.headOrderId == 0 || level.totalOpen == 0) {
-                _deactivatePrice(market, BUY_SIDE, progress.boundaryPrice);
+                _deactivatePrice(key, market, BUY_SIDE, progress.boundaryPrice);
                 progress.boundaryPrice = market.bestBid;
                 progress.matchesCount += 1;
                 continue;
@@ -526,17 +525,18 @@ contract GoldClob is AccessControl, ReentrancyGuard {
 
             Position storage makerPosition = positions[key][makerOrder.maker];
             Position storage takerPosition = positions[key][msg.sender];
+            (uint128 bidStake, uint128 askStake) = _fillStakes(progress.boundaryPrice, fillAmount);
             makerPosition.aShares += fillAmount;
-            makerPosition.aStake += uint128(_quoteCost(BUY_SIDE, progress.boundaryPrice, fillAmount));
+            makerPosition.aStake += bidStake;
             takerPosition.bShares += fillAmount;
-            takerPosition.bStake += uint128(_quoteCost(SELL_SIDE, progress.boundaryPrice, fillAmount));
+            takerPosition.bStake += askStake;
             market.totalAShares += fillAmount;
             market.totalBShares += fillAmount;
 
             if (progress.boundaryPrice > limitPrice) {
                 progress.totalImprovement +=
                     (uint256(fillAmount) * (progress.boundaryPrice - limitPrice)) /
-                    1000;
+                    MAX_PRICE;
             }
 
             emit OrderMatched(key, makerOrder.id, takerOrderId, fillAmount, progress.boundaryPrice);
@@ -579,7 +579,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         level.tailOrderId = orderId;
         level.totalOpen += amount;
 
-        _activatePrice(market, side, price);
+        _activatePrice(key, market, side, price);
         emit OrderPlaced(key, orderId, msg.sender, side, price, amount);
     }
 
@@ -590,11 +590,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         if (quote.tradeMarketMakerFee > 0) {
             payable(marketMaker).sendValue(quote.tradeMarketMakerFee);
         }
-        if (totalImprovement > 0) {
-            payable(msg.sender).sendValue(totalImprovement);
-        }
-        if (quote.excess > 0) {
-            payable(msg.sender).sendValue(quote.excess);
+        uint256 traderRefund = totalImprovement + quote.excess;
+        if (traderRefund > 0) {
+            payable(msg.sender).sendValue(traderRefund);
         }
     }
 
@@ -607,7 +605,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         if (level.headOrderId == 0) {
             level.tailOrderId = 0;
             level.totalOpen = 0;
-            _deactivatePrice(market, side, price);
+            _deactivatePrice(key, market, side, price);
         }
 
         head.active = false;
@@ -639,13 +637,14 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             level.headOrderId = 0;
             level.tailOrderId = 0;
             level.totalOpen = 0;
-            _deactivatePrice(market, order.side, order.price);
+            _deactivatePrice(key, market, order.side, order.price);
         } else {
-            _refreshBestPrices(market);
+            _refreshBestPrices(key, market);
         }
     }
 
-    function _activatePrice(Market storage market, uint8 side, uint16 price) internal {
+    function _activatePrice(bytes32 key, Market storage market, uint8 side, uint16 price) internal {
+        _setPriceActive(key, side, price);
         if (side == BUY_SIDE) {
             if (price > market.bestBid) {
                 market.bestBid = price;
@@ -655,30 +654,108 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         }
     }
 
-    function _deactivatePrice(Market storage market, uint8 side, uint16 price) internal {
-        delete priceLevels[marketKey(market.duelKey, market.marketKind)][side][price];
-        _refreshBestPrices(market);
+    function _deactivatePrice(bytes32 key, Market storage market, uint8 side, uint16 price) internal {
+        delete priceLevels[key][side][price];
+        _setPriceInactive(key, side, price);
+
+        if (side == BUY_SIDE) {
+            if (market.bestBid == price) {
+                market.bestBid = _highestSetPrice(key, BUY_SIDE);
+            }
+            return;
+        }
+
+        if (market.bestAsk == price) {
+            uint16 nextBestAsk = _lowestSetPrice(key, SELL_SIDE);
+            market.bestAsk = nextBestAsk == 0 ? MAX_PRICE : nextBestAsk;
+        }
     }
 
-    function _refreshBestPrices(Market storage market) internal {
-        bytes32 key = marketKey(market.duelKey, market.marketKind);
-        market.bestBid = 0;
-        for (uint16 price = 999; price > 0; price--) {
-            PriceLevel storage level = priceLevels[key][BUY_SIDE][price];
-            if (level.headOrderId != 0 && level.totalOpen > 0) {
-                market.bestBid = price;
-                break;
+    function _refreshBestPrices(bytes32 key, Market storage market) internal {
+        market.bestBid = _highestSetPrice(key, BUY_SIDE);
+        uint16 bestAsk = _lowestSetPrice(key, SELL_SIDE);
+        market.bestAsk = bestAsk == 0 ? MAX_PRICE : bestAsk;
+    }
+
+    function _syncMarketFromOracle(
+        bytes32 duelKey,
+        bytes32 key,
+        Market storage market,
+        DuelOutcomeOracle.DuelState memory duel
+    ) internal returns (MarketStatus) {
+        market.status = _mapDuelStatus(duel.status);
+        if (duel.status == DuelOutcomeOracle.DuelStatus.RESOLVED) {
+            market.winner = _mapWinner(duel.winner);
+        } else if (duel.status == DuelOutcomeOracle.DuelStatus.CANCELLED) {
+            market.winner = Side.NONE;
+        }
+
+        emit MarketSynced(duelKey, key, market.status, market.winner);
+        return market.status;
+    }
+
+    function _priceLevelState(bytes32 key, uint8 side, uint16 price)
+        internal
+        view
+        returns (uint64 headOrderId, uint64 tailOrderId, uint128 totalOpen)
+    {
+        PriceLevel storage level = priceLevels[key][side][price];
+        return (level.headOrderId, level.tailOrderId, level.totalOpen);
+    }
+
+    function _setPriceActive(bytes32 key, uint8 side, uint16 price) internal {
+        (uint256 wordIndex, uint256 bitIndex) = _bitmapSlot(price);
+        priceBitmaps[key][side][wordIndex] |= uint256(1) << bitIndex;
+    }
+
+    function _setPriceInactive(bytes32 key, uint8 side, uint16 price) internal {
+        (uint256 wordIndex, uint256 bitIndex) = _bitmapSlot(price);
+        priceBitmaps[key][side][wordIndex] &= ~(uint256(1) << bitIndex);
+    }
+
+    function _highestSetPrice(bytes32 key, uint8 side) internal view returns (uint16) {
+        uint256[PRICE_BITMAP_WORDS] storage bitmap = priceBitmaps[key][side];
+
+        for (uint256 wordIndex = PRICE_BITMAP_WORDS; wordIndex > 0; ) {
+            unchecked {
+                wordIndex -= 1;
+            }
+            uint256 word = bitmap[wordIndex];
+            if (word == 0) {
+                continue;
+            }
+
+            uint256 price = (wordIndex * 256) + Math.log2(word);
+            if (price < MAX_PRICE) {
+                return uint16(price);
             }
         }
 
-        market.bestAsk = 1000;
-        for (uint16 price = 1; price < 1000; price++) {
-            PriceLevel storage level = priceLevels[key][SELL_SIDE][price];
-            if (level.headOrderId != 0 && level.totalOpen > 0) {
-                market.bestAsk = price;
-                break;
+        return 0;
+    }
+
+    function _lowestSetPrice(bytes32 key, uint8 side) internal view returns (uint16) {
+        uint256[PRICE_BITMAP_WORDS] storage bitmap = priceBitmaps[key][side];
+
+        for (uint256 wordIndex = 0; wordIndex < PRICE_BITMAP_WORDS; wordIndex++) {
+            uint256 word = bitmap[wordIndex];
+            if (word == 0) {
+                continue;
+            }
+
+            uint256 isolatedBit = word & (~word + 1);
+            uint256 price = (wordIndex * 256) + Math.log2(isolatedBit);
+            if (price > 0 && price < MAX_PRICE) {
+                return uint16(price);
             }
         }
+
+        return 0;
+    }
+
+    function _bitmapSlot(uint16 price) internal pure returns (uint256 wordIndex, uint256 bitIndex) {
+        wordIndex = uint256(price) / 256;
+        bitIndex = uint256(price) % 256;
     }
 
     function _mapDuelStatus(DuelOutcomeOracle.DuelStatus status) internal pure returns (MarketStatus) {

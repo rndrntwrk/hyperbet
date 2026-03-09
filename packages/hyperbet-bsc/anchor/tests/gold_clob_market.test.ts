@@ -7,6 +7,8 @@ import {
   SIDE_ASK,
   SIDE_BID,
   airdrop,
+  cancelDuel,
+  claimClobWinnings,
   createOpenMarketFixture,
   duelStatusBettingOpen,
   ensureClobConfig,
@@ -14,6 +16,7 @@ import {
   hasProgramError,
   initializeCanonicalMarket,
   placeClobOrder,
+  syncMarketFromDuel,
   uniqueDuelKey,
   upsertDuel,
   writableAccount,
@@ -42,7 +45,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       status: duelStatusBettingOpen(),
       betOpenTs: now - 15,
       betCloseTs: now + 600,
-      duelStartTs: now + 90,
+      duelStartTs: now + 660,
       metadataUri: "https://hyperscape.gg/tests/clob/init",
     });
     const market = await initializeCanonicalMarket(
@@ -168,7 +171,9 @@ describe("gold_clob_market (native SOL settlement)", () => {
       firstAsk.restingLevel,
     );
     const makerOneOrder = await clobProgram.account.order.fetch(firstAsk.order);
-    const makerTwoOrder = await clobProgram.account.order.fetch(secondAsk.order);
+    const makerTwoOrder = await clobProgram.account.order.fetch(
+      secondAsk.order,
+    );
     const makerOneBalance = await clobProgram.account.userBalance.fetch(
       firstAsk.userBalance,
     );
@@ -190,7 +195,9 @@ describe("gold_clob_market (native SOL settlement)", () => {
     assert.strictEqual(makerTwoBalance.bShares.toString(), "0");
     assert.strictEqual(takerBalance.aShares.toString(), "1000");
 
-    const treasuryAfter = await provider.connection.getBalance(treasury.publicKey);
+    const treasuryAfter = await provider.connection.getBalance(
+      treasury.publicKey,
+    );
     const marketMakerAfter = await provider.connection.getBalance(
       marketMaker.publicKey,
     );
@@ -252,5 +259,103 @@ describe("gold_clob_market (native SOL settlement)", () => {
 
     const firstOrder = await clobProgram.account.order.fetch(firstAsk.order);
     assert.strictEqual(firstOrder.nextOrderId.toString(), "0");
+  });
+
+  it("refunds matched stake when a duel is cancelled", async () => {
+    const maker = Keypair.generate();
+    const taker = Keypair.generate();
+    await Promise.all([
+      airdrop(provider.connection, maker.publicKey, 5),
+      airdrop(provider.connection, taker.publicKey, 5),
+    ]);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      { duelKey: uniqueDuelKey("cancelled-refund") },
+    );
+
+    const makerAsk = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: maker,
+      orderId: 1,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 1000,
+    });
+
+    const takerBid = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+      orderId: 2,
+      side: SIDE_BID,
+      price: 600,
+      amount: 1000,
+      remainingAccounts: [
+        writableAccount(makerAsk.restingLevel),
+        writableAccount(makerAsk.order),
+        writableAccount(makerAsk.userBalance),
+      ],
+    });
+
+    const makerBalanceBefore = await clobProgram.account.userBalance.fetch(
+      makerAsk.userBalance,
+    );
+    const takerBalanceBefore = await clobProgram.account.userBalance.fetch(
+      takerBid.userBalance,
+    );
+    assert.strictEqual(makerBalanceBefore.bStake.toString(), "400");
+    assert.strictEqual(takerBalanceBefore.aStake.toString(), "600");
+
+    await cancelDuel(fightProgram, authority, market.duelKey);
+    await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
+
+    const cancelledMarket = await clobProgram.account.marketState.fetch(
+      market.marketState,
+    );
+    assert.deepStrictEqual(cancelledMarket.status, { cancelled: {} });
+
+    await claimClobWinnings(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: maker,
+    });
+    await claimClobWinnings(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+    });
+
+    const makerBalanceAfter = await clobProgram.account.userBalance.fetch(
+      makerAsk.userBalance,
+    );
+    const takerBalanceAfter = await clobProgram.account.userBalance.fetch(
+      takerBid.userBalance,
+    );
+    assert.strictEqual(makerBalanceAfter.aShares.toString(), "0");
+    assert.strictEqual(makerBalanceAfter.bShares.toString(), "0");
+    assert.strictEqual(makerBalanceAfter.aStake.toString(), "0");
+    assert.strictEqual(makerBalanceAfter.bStake.toString(), "0");
+    assert.strictEqual(takerBalanceAfter.aShares.toString(), "0");
+    assert.strictEqual(takerBalanceAfter.bShares.toString(), "0");
+    assert.strictEqual(takerBalanceAfter.aStake.toString(), "0");
+    assert.strictEqual(takerBalanceAfter.bStake.toString(), "0");
   });
 });

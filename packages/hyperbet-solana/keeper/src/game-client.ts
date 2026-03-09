@@ -40,7 +40,9 @@ export type DuelLifecycleEvent = {
   agent2: StreamingAgent | null;
 };
 
-function normalizeLifecycleEvent(cycle: StreamingCycle): DuelLifecycleEvent | null {
+function normalizeLifecycleEvent(
+  cycle: StreamingCycle,
+): DuelLifecycleEvent | null {
   if (!cycle.duelId || !cycle.duelKeyHex) {
     return null;
   }
@@ -65,9 +67,15 @@ function normalizeLifecycleEvent(cycle: StreamingCycle): DuelLifecycleEvent | nu
 export class GameClient {
   private url: string;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
-  private onDuelStartCb: ((data: DuelLifecycleEvent) => void) | null = null;
-  private onBettingLockedCb: ((data: DuelLifecycleEvent) => void) | null = null;
-  private onDuelEndCb: ((data: DuelLifecycleEvent) => void) | null = null;
+  private onDuelStartCb:
+    | ((data: DuelLifecycleEvent) => void | Promise<void>)
+    | null = null;
+  private onBettingLockedCb:
+    | ((data: DuelLifecycleEvent) => void | Promise<void>)
+    | null = null;
+  private onDuelEndCb:
+    | ((data: DuelLifecycleEvent) => void | Promise<void>)
+    | null = null;
   private pollInFlight = false;
   private readonly pollTimeoutMs: number;
   private readonly pollIntervalMs: number;
@@ -76,6 +84,8 @@ export class GameClient {
 
   private lastCycleId: string | null = null;
   private lastPhase: string | null = null;
+  private lastLockedCycleId: string | null = null;
+  private lastResolutionEventKey: string | null = null;
 
   constructor(url: string) {
     this.url = url.replace(/\/$/, "");
@@ -95,7 +105,10 @@ export class GameClient {
     console.log(
       `[GameClient] Connected via HTTP polling to ${this.url} (interval=${this.pollIntervalMs}ms timeout=${this.pollTimeoutMs}ms)`,
     );
-    this.pollInterval = setInterval(() => void this.poll(), this.pollIntervalMs);
+    this.pollInterval = setInterval(
+      () => void this.poll(),
+      this.pollIntervalMs,
+    );
     void this.poll();
   }
 
@@ -118,6 +131,47 @@ export class GameClient {
   private resetPollFailures() {
     this.consecutivePollFailures = 0;
     this.pollBackoffUntil = 0;
+  }
+
+  private isLockedPhase(phase: string | null): boolean {
+    return (
+      phase === "COUNTDOWN" || phase === "FIGHTING" || phase === "RESOLUTION"
+    );
+  }
+
+  private resolutionEventKey(event: DuelLifecycleEvent): string {
+    return [
+      event.cycleId,
+      event.winnerId ?? "",
+      event.seed ?? "",
+      event.replayHash ?? "",
+    ].join(":");
+  }
+
+  private async emitDuelStart(event: DuelLifecycleEvent) {
+    if (this.onDuelStartCb) {
+      await this.onDuelStartCb(event);
+    }
+  }
+
+  private async emitBettingLocked(event: DuelLifecycleEvent) {
+    if (!this.onBettingLockedCb || this.lastLockedCycleId === event.cycleId) {
+      return;
+    }
+    this.lastLockedCycleId = event.cycleId;
+    await this.onBettingLockedCb(event);
+  }
+
+  private async emitDuelEnd(event: DuelLifecycleEvent) {
+    if (!this.onDuelEndCb) {
+      return;
+    }
+    const nextEventKey = this.resolutionEventKey(event);
+    if (this.lastResolutionEventKey === nextEventKey) {
+      return;
+    }
+    this.lastResolutionEventKey = nextEventKey;
+    await this.onDuelEndCb(event);
   }
 
   private async poll() {
@@ -161,9 +215,17 @@ export class GameClient {
       if (currentCycle.cycleId !== this.lastCycleId) {
         this.lastCycleId = currentCycle.cycleId;
         this.lastPhase = currentPhase;
+        this.lastLockedCycleId = null;
+        this.lastResolutionEventKey = null;
 
-        if (lifecycleEvent && this.onDuelStartCb) {
-          this.onDuelStartCb(lifecycleEvent);
+        if (lifecycleEvent) {
+          await this.emitDuelStart(lifecycleEvent);
+          if (this.isLockedPhase(currentPhase)) {
+            await this.emitBettingLocked(lifecycleEvent);
+          }
+          if (currentPhase === "RESOLUTION") {
+            await this.emitDuelEnd(lifecycleEvent);
+          }
         }
 
         return;
@@ -171,20 +233,14 @@ export class GameClient {
 
       const transitionedToLocked =
         lifecycleEvent &&
-        (currentPhase === "COUNTDOWN" || currentPhase === "FIGHTING") &&
-        this.lastPhase !== "COUNTDOWN" &&
-        this.lastPhase !== "FIGHTING" &&
-        this.lastPhase !== "RESOLUTION";
-      if (transitionedToLocked && this.onBettingLockedCb) {
-        this.onBettingLockedCb(lifecycleEvent);
+        this.isLockedPhase(currentPhase) &&
+        !this.isLockedPhase(this.lastPhase);
+      if (transitionedToLocked) {
+        await this.emitBettingLocked(lifecycleEvent);
       }
 
-      const transitionedToResolution =
-        lifecycleEvent &&
-        this.lastPhase !== "RESOLUTION" &&
-        currentPhase === "RESOLUTION";
-      if (transitionedToResolution && this.onDuelEndCb) {
-        this.onDuelEndCb(lifecycleEvent);
+      if (lifecycleEvent && currentPhase === "RESOLUTION") {
+        await this.emitDuelEnd(lifecycleEvent);
       }
 
       this.lastPhase = currentPhase;
@@ -202,15 +258,21 @@ export class GameClient {
     }
   }
 
-  public onDuelStart(callback: (data: DuelLifecycleEvent) => void) {
+  public onDuelStart(
+    callback: (data: DuelLifecycleEvent) => void | Promise<void>,
+  ) {
     this.onDuelStartCb = callback;
   }
 
-  public onBettingLocked(callback: (data: DuelLifecycleEvent) => void) {
+  public onBettingLocked(
+    callback: (data: DuelLifecycleEvent) => void | Promise<void>,
+  ) {
     this.onBettingLockedCb = callback;
   }
 
-  public onDuelEnd(callback: (data: DuelLifecycleEvent) => void) {
+  public onDuelEnd(
+    callback: (data: DuelLifecycleEvent) => void | Promise<void>,
+  ) {
     this.onDuelEndCb = callback;
   }
 
