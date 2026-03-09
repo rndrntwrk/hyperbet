@@ -292,7 +292,7 @@ export default defineConfig(async ({ mode }) => {
         process.env.GITHUB_SHA?.trim() ||
         readGitRevision();
       const buildInfo = {
-        app: "hyperbet-bsc",
+        app: "hyperbet-avax",
         mode,
         commitHash: commitHash || null,
         builtAt: new Date().toISOString(),

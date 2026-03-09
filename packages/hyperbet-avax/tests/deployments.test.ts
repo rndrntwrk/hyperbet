@@ -30,11 +30,9 @@ describe("betting deployment manifest", () => {
 
   test("maps app environments to the correct default evm networks", () => {
     const testnetDefaults = resolveBettingEvmDefaults("testnet");
-    expect(testnetDefaults.bsc.networkKey).toBe("bscTestnet");
-    expect(testnetDefaults.base.networkKey).toBe("baseSepolia");
+    expect(testnetDefaults.avax.networkKey).toBe("avaxFuji");
 
     const mainnetDefaults = resolveBettingEvmDefaults("mainnet-beta");
-    expect(mainnetDefaults.bsc.networkKey).toBe("bsc");
-    expect(mainnetDefaults.base.networkKey).toBe("base");
+    expect(mainnetDefaults.avax.networkKey).toBe("avax");
   });
 });

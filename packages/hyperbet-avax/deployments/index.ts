@@ -6,8 +6,8 @@ export type BettingSolanaCluster =
   | "testnet"
   | "mainnet-beta";
 export type BettingAppEnvironment = BettingSolanaCluster | "e2e" | "stream-ui";
-export type BettingEvmNetwork = "bscTestnet" | "bsc" | "baseSepolia" | "base";
-export type BettingEvmChain = "bsc" | "base";
+export type BettingEvmNetwork = "avaxFuji" | "avax";
+export type BettingEvmChain = "avax";
 export type BettingTargetKind = "testnet" | "mainnet";
 
 export interface BettingSolanaDeployment {
@@ -48,10 +48,8 @@ const SOLANA_CLUSTERS: BettingSolanaCluster[] = [
   "mainnet-beta",
 ] as const;
 const EVM_NETWORKS: BettingEvmNetwork[] = [
-  "bscTestnet",
-  "bsc",
-  "baseSepolia",
-  "base",
+  "avaxFuji",
+  "avax",
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -187,18 +185,15 @@ export function resolveBettingEvmDeployment(
 }
 
 export function resolveBettingEvmDefaults(environment: BettingAppEnvironment): {
-  bsc: BettingEvmDeployment;
-  base: BettingEvmDeployment;
+  avax: BettingEvmDeployment;
 } {
   if (environment === "mainnet-beta") {
     return {
-      bsc: BETTING_DEPLOYMENTS.evm.bsc,
-      base: BETTING_DEPLOYMENTS.evm.base,
+      avax: BETTING_DEPLOYMENTS.evm.avax,
     };
   }
 
   return {
-    bsc: BETTING_DEPLOYMENTS.evm.bscTestnet,
-    base: BETTING_DEPLOYMENTS.evm.baseSepolia,
+    avax: BETTING_DEPLOYMENTS.evm.avaxFuji,
   };
 }

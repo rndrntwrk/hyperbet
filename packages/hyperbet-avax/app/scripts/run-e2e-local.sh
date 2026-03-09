@@ -23,7 +23,7 @@ SOLANA_WS_PORT="${E2E_SOLANA_WS_PORT:-18900}"
 SOLANA_FAUCET_PORT="${E2E_SOLANA_FAUCET_PORT:-18901}"
 SOLANA_DYNAMIC_PORT_START="${E2E_SOLANA_DYNAMIC_PORT_START:-$((SOLANA_RPC_PORT + 100))}"
 SOLANA_DYNAMIC_PORT_END="${E2E_SOLANA_DYNAMIC_PORT_END:-$((SOLANA_DYNAMIC_PORT_START + 99))}"
-LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-/tmp/hyperbet-bsc-e2e-ledger-${SOLANA_RPC_PORT}}"
+LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-/tmp/hyperbet-avax-e2e-ledger-${SOLANA_RPC_PORT}}"
 SOLANA_RPC_URL="http://127.0.0.1:${SOLANA_RPC_PORT}"
 SOLANA_WS_URL="ws://127.0.0.1:${SOLANA_WS_PORT}"
 SOLANA_PROXY_PORT="${E2E_SOLANA_PROXY_PORT:-19898}"
@@ -294,16 +294,16 @@ pkill -f "anvil --silent --host 127.0.0.1 --port $ANVIL_PORT" >/dev/null 2>&1 ||
 pkill -f "$APP_DIR/tests/e2e/setup-localnet.ts" >/dev/null 2>&1 || true
 pkill -f "$APP_DIR/tests/e2e/setup-evm-local.ts" >/dev/null 2>&1 || true
 kill_stale_playwright
-pkill -f "packages/hyperbet-bsc/app/scripts/solana-rpc-proxy.mjs" >/dev/null 2>&1 || true
+pkill -f "$APP_DIR/scripts/solana-rpc-proxy.mjs" >/dev/null 2>&1 || true
 kill_listeners "$SOLANA_PROXY_PORT"
 kill_listeners "$ANVIL_PORT"
 rm -f "$KEEPER_DB_PATH" "${KEEPER_DB_PATH}-shm" "${KEEPER_DB_PATH}-wal"
 
 echo "[e2e] building anchor programs"
-bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-bsc-e2e-build.log 2>&1
+bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-avax-e2e-build.log 2>&1
 
 echo "[e2e] compiling evm contracts"
-bun run --cwd "$EVM_DIR" compile >/tmp/hyperbet-bsc-e2e-evm-build.log 2>&1
+bun run --cwd "$EVM_DIR" compile >/tmp/hyperbet-avax-e2e-evm-build.log 2>&1
 
 IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
 IDL_MARKET_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_perps_market.json" 2>/dev/null || true)"
@@ -444,7 +444,7 @@ echo "[e2e] pre-bundling vite dependencies"
   env \
     VITE_GAME_API_URL="$GAME_API_URL" \
     ./node_modules/.bin/vite optimize --force --mode e2e
-) >/tmp/hyperbet-bsc-e2e-vite-optimize.log 2>&1
+) >/tmp/hyperbet-avax-e2e-vite-optimize.log 2>&1
 (
   cd "$APP_DIR"
   exec env \

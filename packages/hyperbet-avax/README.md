@@ -1,37 +1,37 @@
-# Hyperbet BSC
+# Hyperbet AVAX
 
-BSC-focused Hyperbet package for betting, CLOB, and futures interfaces backed by the shared duel oracle.
+Avalanche C-Chain focused Hyperbet package for betting, CLOB, and futures interfaces backed by the shared duel oracle.
 
 ## What this includes
 
-- `anchor/programs/fight_oracle`: on-chain match lifecycle and winner posting.
-- `anchor/programs/gold_clob_market`: on-chain native-SOL CLOB market for binary prediction trading and winner claims.
-- `anchor/programs/gold_perps_market`: on-chain perps market used by the models / futures view.
-- `anchor/tests/hyperbet.ts`: local end-to-end tests using mock GOLD token accounts and local validator.
-- `app`: standalone Vite app for wallet connect, market creation, bet placement, Jupiter conversion (SOL/USDC -> GOLD), settlement, and claiming.
-- `keeper`: CLI automation scripts for market-maker seeding and oracle resolution, using Helius RPC.
-  - includes a market bot that keeps rounds running, resolves finished rounds, and seeds liquidity.
+- `app`: standalone Vite app for wallet connect, market creation, bet placement, EVM GOLD token interactions, settlement, and claiming on Avalanche.
+- `deployments/contracts.json`: shared source of truth for AVAX contract addresses, chain IDs, and RPC env var names.
 
-## Core behavior
+## EVM Chain Configuration
 
-- Betting window is created on oracle match creation (`300s` by default in app / `.env.mainnet`).
-- Market maker can seed equal liquidity on both sides only if no user bets exist after 10 seconds.
-- Trading fees are collected on every placed CLOB order and routed to configured treasury / market-maker wallets.
-- Perps trade fees accrue inside each model market; the market-maker fee bucket can be recycled into that market's insurance reserve.
-- Oracle and betting are separate programs.
-- Market resolves only from oracle result.
-- Solana CLOB collateral / payouts are in native SOL.
-- The perps market also uses native SOL for margin, fees, and settlement.
+- **Mainnet**: Avalanche C-Chain (chain ID `43114`)
+- **Testnet**: Avalanche Fuji (chain ID `43113`)
 
-## Programs
+Contract addresses are populated in `deployments/contracts.json` after EVM deployment. The app reads these at build time; override with env vars at runtime.
 
-- Fight oracle program id: `6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD`
-- GOLD CLOB program id: `ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi`
-- GOLD perps program id: `HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik`
-- Mainnet GOLD mint: `DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump`
+## Deployment prep
 
-Public contract metadata now lives in `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-bsc/deployments/contracts.json`.
-That file is the shared source of truth for app defaults, keeper defaults, local scripts, and EVM deploy receipt syncing.
+Preflight the repo before touching real chains:
+
+```bash
+bun run deploy:preflight:testnet
+bun run deploy:preflight:mainnet
+```
+
+Deploy EVM GoldClob contracts to Avalanche:
+
+```bash
+bun run deploy:evm:avax-fuji
+bun run deploy:evm:avax
+```
+
+The EVM deploy script writes a receipt to `packages/evm-contracts/deployments/<network>.json`
+and updates `packages/hyperbet-avax/deployments/contracts.json` automatically.
 
 ## Local E2E tests (Anchor + mock GOLD)
 

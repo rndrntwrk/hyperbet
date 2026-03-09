@@ -233,7 +233,7 @@ test.describe("app tabs and api coverage", () => {
     const characterId = state.perpsCharacterId || "";
 
     const status = await fetchJson<{ service: string }>(request, "/status");
-    expect(status.service).toBe("hyperbet-bsc-backend");
+    expect(status.service).toBe("hyperbet-avax-backend");
 
     const streamState = await fetchJson<StreamingStateResponse>(
       request,

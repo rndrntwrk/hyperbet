@@ -333,10 +333,10 @@ async function main(): Promise<void> {
   await publicClient.waitForTransactionReceipt({ hash: seedYesOrderTx });
 
   const env = await readEnv(envPath);
-  env.VITE_BSC_RPC_URL = rpcUrl;
-  env.VITE_BSC_CHAIN_ID = String(chainId);
-  env.VITE_BSC_GOLD_CLOB_ADDRESS = goldClobAddress;
-  env.VITE_BSC_GOLD_TOKEN_ADDRESS = goldTokenAddress;
+  env.VITE_AVAX_RPC_URL = rpcUrl;
+  env.VITE_AVAX_CHAIN_ID = String(chainId);
+  env.VITE_AVAX_GOLD_CLOB_ADDRESS = goldClobAddress;
+  env.VITE_AVAX_GOLD_TOKEN_ADDRESS = goldTokenAddress;
   env.VITE_EVM_PRIVATE_KEY = adminPrivateKey;
   env.VITE_HEADLESS_EVM_PRIVATE_KEY = adminPrivateKey;
   env.VITE_HEADLESS_EVM_ADDRESS = adminAccount.address;
