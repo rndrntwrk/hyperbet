@@ -90,7 +90,7 @@ The app runs in `--mode e2e` with generated `/app/.env.e2e`.
 
 ## UI E2E tests on public clusters (headless wallet)
 
-From `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-solana/app`:
+From `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-solana/app`:
 
 ```bash
 bun run test:e2e:testnet
@@ -125,7 +125,7 @@ Notes for balances:
 
 ## Run the Vite app
 
-From `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-solana`:
+From `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-solana`:
 
 ```bash
 bun run dev
@@ -166,7 +166,7 @@ bun run build:mainnet
 
 ## Keeper scripts
 
-From `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-solana/keeper`:
+From `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-solana/keeper`:
 
 ```bash
 bun install
@@ -241,14 +241,14 @@ bun run deploy:evm:base-sepolia
 bun run deploy:evm:base
 ```
 
-The EVM deploy script now writes a receipt to `/Users/shawwalters/eliza-workspace/hyperscape/packages/evm-contracts/deployments/<network>.json`
-and updates `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-solana/deployments/contracts.json` automatically.
+The EVM deploy script now writes a receipt to `/Users/shawwalters/eliza-workspace/hyperbet/packages/evm-contracts/deployments/<network>.json`
+and updates `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-solana/deployments/contracts.json` automatically.
 
 Private env files stay local:
 
-- `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-solana/.env.mainnet`
-- `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-solana/.env.testnet`
-- `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-solana/app/.env.mainnet`
+- `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-solana/.env.mainnet`
+- `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-solana/.env.testnet`
+- `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-solana/app/.env.mainnet`
 
 These should hold RPC URLs, signer paths, and private API keys. They should not be treated as public deployment metadata.
 

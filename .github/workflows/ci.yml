@@ -8,7 +8,7 @@ on:
       - "packages/hyperbet-solana/keeper/**"
       - "packages/hyperbet-bsc/app/**"
       - "packages/hyperbet-bsc/keeper/**"
-      - "docs/betting-production-deploy.md"
+      - "docs/hyperbet-production-deploy.md"
       - ".github/workflows/ci.yml"
       - "package.json"
       - "bun.lock"
@@ -19,7 +19,7 @@ on:
       - "packages/hyperbet-solana/keeper/**"
       - "packages/hyperbet-bsc/app/**"
       - "packages/hyperbet-bsc/keeper/**"
-      - "docs/betting-production-deploy.md"
+      - "docs/hyperbet-production-deploy.md"
       - ".github/workflows/ci.yml"
       - "package.json"
       - "bun.lock"
@@ -104,8 +104,8 @@ jobs:
         run: bun run --cwd packages/${{ matrix.package }}/app build --mode mainnet-beta
         env:
           CF_PAGES_COMMIT_SHA: ${{ github.sha }}
-          VITE_GAME_API_URL: https://gold-betting-keeper-production.up.railway.app
-          VITE_GAME_WS_URL: wss://gold-betting-keeper-production.up.railway.app/ws
+          VITE_GAME_API_URL: https://api.hyperbet.win
+          VITE_GAME_WS_URL: wss://api.hyperbet.win/ws
           VITE_SOLANA_CLUSTER: mainnet-beta
           VITE_USE_GAME_RPC_PROXY: "true"
           VITE_USE_GAME_EVM_RPC_PROXY: "true"

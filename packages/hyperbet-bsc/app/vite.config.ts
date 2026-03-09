@@ -58,7 +58,6 @@ function assertPublicBuildSecrets(
   }
 
   const forbiddenPublicVars = [
-    "VITE_ARENA_EXTERNAL_BET_WRITE_KEY",
     "VITE_HEADLESS_WALLET_SECRET_KEY",
     "VITE_HEADLESS_WALLETS",
   ] as const;

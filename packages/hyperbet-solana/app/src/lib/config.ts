@@ -504,7 +504,6 @@ export function toBaseUnits(amount: number, decimals = GOLD_DECIMALS): bigint {
 export const STREAM_URL: string = CONFIG.streamUrl;
 export const STREAM_URLS: string[] = resolvedStreamSources;
 export const GAME_API_URL: string = CONFIG.gameApiUrl;
-export const ARENA_EXTERNAL_BET_WRITE_KEY: string = ""; // Usually secrets shouldn't be here, skipping for now, we can read from import.meta.env if needed
 export const GAME_WS_URL: string = CONFIG.gameWsUrl;
 export const UI_SYNC_DELAY_MS: number = CONFIG.uiSyncDelayMs;
 // Mainnet must route through backend RPC proxy so we can use server-side
@@ -541,14 +540,9 @@ export const ENABLE_MANUAL_MARKET_ADMIN_CONTROLS = isPublicBrowserRuntime()
   : configuredManualMarketControls;
 
 export function buildArenaWriteHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
+  return {
     "Content-Type": "application/json",
   };
-  const writeKey = import.meta.env.VITE_ARENA_EXTERNAL_BET_WRITE_KEY || "";
-  if (writeKey) {
-    headers["x-arena-write-key"] = writeKey;
-  }
-  return headers;
 }
 
 export function getFixedMatchId(): number | null {

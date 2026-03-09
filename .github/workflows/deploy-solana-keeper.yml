@@ -1,12 +1,12 @@
-name: Deploy Hyperbet Keeper
+name: Deploy Hyperbet Solana Keeper
 
 on:
   push:
     branches: [main]
     paths:
       - "packages/hyperbet-solana/keeper/**"
-      - ".github/workflows/deploy-keeper.yml"
-      - "docs/betting-production-deploy.md"
+      - ".github/workflows/deploy-solana-keeper.yml"
+      - "docs/hyperbet-production-deploy.md"
       - "package.json"
       - "bun.lock"
   workflow_dispatch:
@@ -16,10 +16,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BETTING_KEEPER_URL: ${{ vars.HYPERBET_KEEPER_URL != '' && vars.HYPERBET_KEEPER_URL || 'https://gold-betting-keeper-production.up.railway.app' }}
-  RAILWAY_PROJECT_ID: e5f5ba11-0380-4d71-aa0b-343d89a58c0d
-  RAILWAY_PRODUCTION_ENVIRONMENT_ID: 194f3565-ba2f-4c98-87d2-85dfc3a5110b
-  RAILWAY_KEEPER_SERVICE_ID: 330ea18e-b215-4cf9-9fe2-4bb09fc2ec63
+  HYPERBET_KEEPER_URL: ${{ vars.HYPERBET_SOLANA_KEEPER_URL != '' && vars.HYPERBET_SOLANA_KEEPER_URL || 'https://api.hyperbet.win' }}
+  RAILWAY_PROJECT_ID: ${{ vars.HYPERBET_SOLANA_RAILWAY_PROJECT_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_PROJECT_ID || 'e5f5ba11-0380-4d71-aa0b-343d89a58c0d' }}
+  RAILWAY_PRODUCTION_ENVIRONMENT_ID: ${{ vars.HYPERBET_SOLANA_RAILWAY_PRODUCTION_ENVIRONMENT_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_PRODUCTION_ENVIRONMENT_ID || '194f3565-ba2f-4c98-87d2-85dfc3a5110b' }}
+  RAILWAY_KEEPER_SERVICE_ID: ${{ vars.HYPERBET_SOLANA_RAILWAY_KEEPER_SERVICE_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_KEEPER_SERVICE_ID || '330ea18e-b215-4cf9-9fe2-4bb09fc2ec63' }}
 
 jobs:
   deploy:
@@ -71,7 +71,7 @@ jobs:
           PORT=18080 \
           ENABLE_KEEPER_BOT=false \
           SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
-          bun --bun packages/hyperbet-solana/keeper/src/service.ts >/tmp/betting-keeper.log 2>&1 &
+          bun --bun packages/hyperbet-solana/keeper/src/service.ts >/tmp/hyperbet-solana-keeper.log 2>&1 &
           KEEPER_PID=$!
           trap 'kill "$KEEPER_PID" >/dev/null 2>&1 || true' EXIT
 
@@ -82,7 +82,7 @@ jobs:
             sleep 1
           done
 
-          cat /tmp/betting-keeper.log
+          cat /tmp/hyperbet-solana-keeper.log
           exit 1
 
       - name: Install Railway CLI
@@ -100,7 +100,7 @@ jobs:
             "projects": {
               "${keeper_path}": {
                 "projectPath": "${keeper_path}",
-                "name": "hyperscape",
+                "name": "hyperbet",
                 "project": "${RAILWAY_PROJECT_ID}",
                 "environment": "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}",
                 "environmentName": "production",
@@ -131,14 +131,14 @@ jobs:
       - name: Verify keeper endpoints
         run: |
           for attempt in $(seq 1 20); do
-            status_payload="$(curl -fsSL "${BETTING_KEEPER_URL}/status" || true)"
+            status_payload="$(curl -fsSL "${HYPERBET_KEEPER_URL}/status" || true)"
             if [ -n "$status_payload" ] && echo "$status_payload" | jq -e '.ok == true and .proxies.solanaRpc == true and .parsers != null' >/dev/null; then
               break
             fi
             sleep 15
           done
 
-          curl -fsSL "${BETTING_KEEPER_URL}/status" | jq -e '.ok == true'
-          curl -fsSL "${BETTING_KEEPER_URL}/api/streaming/duel-context" | jq -e '.type == "STREAMING_DUEL_CONTEXT"'
-          curl -fsSL "${BETTING_KEEPER_URL}/api/streaming/leaderboard/details" | jq -e '.leaderboard != null and .cycle != null'
-          curl -fsSL "${BETTING_KEEPER_URL}/api/perps/markets" | jq -e '.markets != null'
+          curl -fsSL "${HYPERBET_KEEPER_URL}/status" | jq -e '.ok == true'
+          curl -fsSL "${HYPERBET_KEEPER_URL}/api/streaming/duel-context" | jq -e '.type == "STREAMING_DUEL_CONTEXT"'
+          curl -fsSL "${HYPERBET_KEEPER_URL}/api/streaming/leaderboard/details" | jq -e '.leaderboard != null and .cycle != null'
+          curl -fsSL "${HYPERBET_KEEPER_URL}/api/perps/markets" | jq -e '.markets != null'

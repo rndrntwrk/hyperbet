@@ -1,12 +1,12 @@
-name: Deploy Hyperbet Pages
+name: Deploy Hyperbet BSC Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "packages/hyperbet-solana/app/**"
-      - ".github/workflows/deploy-pages.yml"
-      - "docs/betting-production-deploy.md"
+      - "packages/hyperbet-bsc/app/**"
+      - ".github/workflows/deploy-bsc-pages.yml"
+      - "docs/hyperbet-production-deploy.md"
       - "package.json"
       - "bun.lock"
   workflow_dispatch:
@@ -25,15 +25,16 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CLOUDFLARE_ACCOUNT_ID: 50ad2052bbc6ca528d6993a689b419a4
-  PAGES_PROJECT_NAME: ${{ vars.HYPERBET_PAGES_PROJECT_NAME != '' && vars.HYPERBET_PAGES_PROJECT_NAME || 'hyperscape-betting' }}
-  PAGES_PRODUCTION_URL: https://hyperbet.win
-  BETTING_API_URL: ${{ vars.HYPERBET_KEEPER_URL != '' && vars.HYPERBET_KEEPER_URL || 'https://gold-betting-keeper-production.up.railway.app' }}
-  BETTING_WS_URL: ${{ vars.HYPERBET_KEEPER_WS_URL != '' && vars.HYPERBET_KEEPER_WS_URL || 'wss://gold-betting-keeper-production.up.railway.app/ws' }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.HYPERBET_CLOUDFLARE_ACCOUNT_ID != '' && vars.HYPERBET_CLOUDFLARE_ACCOUNT_ID || '50ad2052bbc6ca528d6993a689b419a4' }}
+  PAGES_PROJECT_NAME: ${{ vars.HYPERBET_BSC_PAGES_PROJECT_NAME != '' && vars.HYPERBET_BSC_PAGES_PROJECT_NAME || 'hyperbet-bsc' }}
+  PAGES_PRODUCTION_URL: ${{ vars.HYPERBET_BSC_PAGES_PRODUCTION_URL != '' && vars.HYPERBET_BSC_PAGES_PRODUCTION_URL || 'https://bsc.hyperbet.win' }}
+  HYPERBET_API_URL: ${{ vars.HYPERBET_BSC_KEEPER_URL != '' && vars.HYPERBET_BSC_KEEPER_URL || 'https://bsc-api.hyperbet.win' }}
+  HYPERBET_WS_URL: ${{ vars.HYPERBET_BSC_KEEPER_WS_URL != '' && vars.HYPERBET_BSC_KEEPER_WS_URL || 'wss://bsc-api.hyperbet.win/ws' }}
 
 jobs:
   deploy:
-    name: Deploy hyperbet-solana pages
+    if: ${{ vars.HYPERBET_BSC_DEPLOY_ENABLED == 'true' }}
+    name: Deploy hyperbet-bsc pages
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -48,14 +49,14 @@ jobs:
       - name: Install dependencies
         run: |
           bun install --frozen-lockfile
-          bun install --cwd packages/hyperbet-solana/app --frozen-lockfile
+          bun install --cwd packages/hyperbet-bsc/app --frozen-lockfile
 
       - name: Build production app
-        run: bun run --cwd packages/hyperbet-solana/app build --mode mainnet-beta
+        run: bun run --cwd packages/hyperbet-bsc/app build --mode mainnet-beta
         env:
           CF_PAGES_COMMIT_SHA: ${{ github.sha }}
-          VITE_GAME_API_URL: ${{ env.BETTING_API_URL }}
-          VITE_GAME_WS_URL: ${{ env.BETTING_WS_URL }}
+          VITE_GAME_API_URL: ${{ env.HYPERBET_API_URL }}
+          VITE_GAME_WS_URL: ${{ env.HYPERBET_WS_URL }}
           VITE_SOLANA_CLUSTER: mainnet-beta
           VITE_USE_GAME_RPC_PROXY: "true"
           VITE_USE_GAME_EVM_RPC_PROXY: "true"
@@ -66,18 +67,18 @@ jobs:
 
       - name: Verify dist hygiene
         run: |
-          test -f packages/hyperbet-solana/app/dist/build-info.json
-          if find packages/hyperbet-solana/app/dist -name '*.map' | grep -q .; then
+          test -f packages/hyperbet-bsc/app/dist/build-info.json
+          if find packages/hyperbet-bsc/app/dist -name '*.map' | grep -q .; then
             echo "Unexpected source maps in production dist"
             exit 1
           fi
-          if rg -n "api-key=" packages/hyperbet-solana/app/dist; then
+          if rg -n "api-key=" packages/hyperbet-bsc/app/dist; then
             echo "Provider key leak detected in dist"
             exit 1
           fi
 
       - name: Deploy to Cloudflare Pages
-        working-directory: packages/hyperbet-solana/app
+        working-directory: packages/hyperbet-bsc/app
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.environment }}" = "preview" ]; then
             BRANCH="preview-${{ github.run_id }}"

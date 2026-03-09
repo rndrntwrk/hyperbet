@@ -1,0 +1,112 @@
+name: Deploy Hyperbet Solana Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/hyperbet-solana/app/**"
+      - ".github/workflows/deploy-solana-pages.yml"
+      - "docs/hyperbet-production-deploy.md"
+      - "package.json"
+      - "bun.lock"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment target"
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - preview
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.HYPERBET_CLOUDFLARE_ACCOUNT_ID != '' && vars.HYPERBET_CLOUDFLARE_ACCOUNT_ID || '50ad2052bbc6ca528d6993a689b419a4' }}
+  PAGES_PROJECT_NAME: ${{ vars.HYPERBET_SOLANA_PAGES_PROJECT_NAME != '' && vars.HYPERBET_SOLANA_PAGES_PROJECT_NAME || 'hyperscape-betting' }}
+  PAGES_PRODUCTION_URL: ${{ vars.HYPERBET_SOLANA_PAGES_PRODUCTION_URL != '' && vars.HYPERBET_SOLANA_PAGES_PRODUCTION_URL || 'https://hyperbet.win' }}
+  HYPERBET_API_URL: ${{ vars.HYPERBET_SOLANA_KEEPER_URL != '' && vars.HYPERBET_SOLANA_KEEPER_URL || 'https://api.hyperbet.win' }}
+  HYPERBET_WS_URL: ${{ vars.HYPERBET_SOLANA_KEEPER_WS_URL != '' && vars.HYPERBET_SOLANA_KEEPER_WS_URL || 'wss://api.hyperbet.win/ws' }}
+
+jobs:
+  deploy:
+    name: Deploy hyperbet-solana pages
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.38
+
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          bun install --cwd packages/hyperbet-solana/app --frozen-lockfile
+
+      - name: Build production app
+        run: bun run --cwd packages/hyperbet-solana/app build --mode mainnet-beta
+        env:
+          CF_PAGES_COMMIT_SHA: ${{ github.sha }}
+          VITE_GAME_API_URL: ${{ env.HYPERBET_API_URL }}
+          VITE_GAME_WS_URL: ${{ env.HYPERBET_WS_URL }}
+          VITE_SOLANA_CLUSTER: mainnet-beta
+          VITE_USE_GAME_RPC_PROXY: "true"
+          VITE_USE_GAME_EVM_RPC_PROXY: "true"
+          VITE_BSC_CHAIN_ID: "97"
+          VITE_BASE_CHAIN_ID: "84532"
+          VITE_BSC_GOLD_CLOB_ADDRESS: "0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E"
+          VITE_BASE_GOLD_CLOB_ADDRESS: "0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E"
+
+      - name: Verify dist hygiene
+        run: |
+          test -f packages/hyperbet-solana/app/dist/build-info.json
+          if find packages/hyperbet-solana/app/dist -name '*.map' | grep -q .; then
+            echo "Unexpected source maps in production dist"
+            exit 1
+          fi
+          if rg -n "api-key=" packages/hyperbet-solana/app/dist; then
+            echo "Provider key leak detected in dist"
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        working-directory: packages/hyperbet-solana/app
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.environment }}" = "preview" ]; then
+            BRANCH="preview-${{ github.run_id }}"
+          else
+            BRANCH="main"
+          fi
+
+          COMMIT_MSG=$(git log -1 --pretty=%s | tr -d '"' | cut -c1-100)
+
+          npx wrangler pages deploy dist \
+            --project-name="${PAGES_PROJECT_NAME}" \
+            --branch="${BRANCH}" \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-message="${COMMIT_MSG}" \
+            --commit-dirty=true \
+            --skip-caching
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Verify production build metadata
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.environment == 'production' }}
+        run: |
+          for attempt in $(seq 1 20); do
+            payload="$(curl -fsSL "${PAGES_PRODUCTION_URL}/build-info.json" || true)"
+            if [ -n "$payload" ] && echo "$payload" | jq -e --arg sha "$GITHUB_SHA" '.commitHash == $sha' >/dev/null; then
+              echo "build-info.json matches ${GITHUB_SHA}"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for ${PAGES_PRODUCTION_URL}/build-info.json to report ${GITHUB_SHA}"
+          exit 1

@@ -7,6 +7,7 @@ Private monorepo for Hyperbet betting, gambling, and futures products.
 - `packages/hyperbet-solana`: Solana-focused betting stack copied from the current betting workspace.
 - `packages/hyperbet-bsc`: BSC-focused betting stack copied from the current betting workspace.
 - `packages/evm-contracts`: Hyperbet-owned EVM contracts for CLOB and futures flows.
+- `packages/market-maker-bot`: optional automated market-maker and wallet export tooling for Hyperbet environments.
 
 ## Relationship To Hyperscape
 
@@ -25,3 +26,7 @@ bun run build
 bun run dev:solana
 bun run dev:bsc
 ```
+
+Deployment runbook:
+
+- `docs/hyperbet-production-deploy.md`

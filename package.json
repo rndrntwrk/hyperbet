@@ -26,7 +26,11 @@
     "deploy:pages:bsc": "bun run --cwd packages/hyperbet-bsc build:mainnet",
     "deploy:keeper": "bun run deploy:keeper:solana",
     "deploy:keeper:solana": "bun run --cwd packages/hyperbet-solana keeper:service",
-    "deploy:keeper:bsc": "bun run --cwd packages/hyperbet-bsc keeper:service"
+    "deploy:keeper:bsc": "bun run --cwd packages/hyperbet-bsc keeper:service",
+    "market-maker:start": "bun run --cwd packages/market-maker-bot start",
+    "market-maker:start:multi": "bun run --cwd packages/market-maker-bot start:multi",
+    "market-maker:wallets:generate": "bun run --cwd packages/market-maker-bot wallets:generate",
+    "market-maker:wallets:ui-env": "bun run --cwd packages/market-maker-bot wallets:ui-env"
   },
   "devDependencies": {
     "bun-types": "^1.2.20",

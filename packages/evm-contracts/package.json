@@ -1,5 +1,5 @@
 {
-    "name": "@hyperscape/evm-contracts",
+    "name": "@hyperbet/evm-contracts",
     "version": "0.1.0",
     "private": true,
     "type": "commonjs",

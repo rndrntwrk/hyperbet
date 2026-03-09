@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChainId } from "../lib/chainConfig";
-import { ARENA_EXTERNAL_BET_WRITE_KEY, GAME_API_URL } from "../lib/config";
+import { buildArenaWriteHeaders, GAME_API_URL } from "../lib/config";
 
 type EvmPlatform = "BSC" | "BASE";
 
@@ -206,12 +206,7 @@ export function ReferralPanel(props: {
     try {
       const response = await fetch(`${GAME_API_URL}/api/arena/invite/redeem`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(ARENA_EXTERNAL_BET_WRITE_KEY
-            ? { "x-arena-write-key": ARENA_EXTERNAL_BET_WRITE_KEY }
-            : {}),
-        },
+        headers: buildArenaWriteHeaders(),
         body: JSON.stringify({ wallet: primaryWallet, inviteCode: code }),
       });
       const payload = (await response.json()) as {
@@ -266,12 +261,7 @@ export function ReferralPanel(props: {
     try {
       const response = await fetch(`${GAME_API_URL}/api/arena/wallet-link`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(ARENA_EXTERNAL_BET_WRITE_KEY
-            ? { "x-arena-write-key": ARENA_EXTERNAL_BET_WRITE_KEY }
-            : {}),
-        },
+        headers: buildArenaWriteHeaders(),
         body: JSON.stringify(requestBody),
       });
       const payload = (await response.json()) as WalletLinkResponse;
