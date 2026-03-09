@@ -35,7 +35,6 @@ import {
   getStoredInviteCode,
 } from "./lib/invite";
 import { StreamPlayer } from "./components/StreamPlayer";
-import { ChainSelector } from "./components/ChainSelector";
 import { PointsDisplay } from "./components/PointsDisplay";
 import type { SolanaClobMarketSnapshot } from "./components/SolanaClobPanel";
 import { useChain } from "./lib/ChainContext";
@@ -1323,7 +1322,6 @@ export function App() {
                   <br />
                   DUEL ARENA
                 </span>
-                <ChainSelector />
               </div>
               <div className="hm-header-mob-controls">
                 <LocaleSelector
@@ -1427,35 +1425,9 @@ export function App() {
                 </button>
               </div>
               {surfaceMode === "DUELS" ? (
-                <>
-                  <span className="hm-market-name">
-                    {effA1.name} vs {effA2.name}
-                  </span>
-                  <div className="hm-header-mob-chips">
-                    <button
-                      className={`hm-side-chip hm-side-chip--yes${hmSide === "YES" ? " hm-side-chip--active" : ""}`}
-                      onClick={() => setHmSide("YES")}
-                      type="button"
-                      aria-pressed={hmSide === "YES"}
-                    >
-                      {effA1.name}{" "}
-                      <span className="hm-mob-chip-odds">
-                        {(effYesPercent / 100).toFixed(2)}
-                      </span>
-                    </button>
-                    <button
-                      className={`hm-side-chip hm-side-chip--no${hmSide === "NO" ? " hm-side-chip--active" : ""}`}
-                      onClick={() => setHmSide("NO")}
-                      type="button"
-                      aria-pressed={hmSide === "NO"}
-                    >
-                      {effA2.name}{" "}
-                      <span className="hm-mob-chip-odds">
-                        {(effNoPercent / 100).toFixed(2)}
-                      </span>
-                    </button>
-                  </div>
-                </>
+                <span className="hm-market-name">
+                  {effA1.name} vs {effA2.name}
+                </span>
               ) : (
                 <div className="hm-mode-summary hm-mode-summary--mobile">
                   <span className="hm-market-name">{copy.modelMarkets}</span>
@@ -1469,7 +1441,6 @@ export function App() {
             <div className="hm-header-left">
               <div className="hm-logo">
                 <span className="hm-logo-text">HYPERSCAPE DUEL ARENA</span>
-                <ChainSelector />
               </div>
               <div className="hm-view-tabs hm-view-tabs--header">
                 <button
@@ -1493,34 +1464,11 @@ export function App() {
               </div>
 
               {surfaceMode === "DUELS" ? (
-                <>
-                  <div className="hm-market-info">
-                    <span className="hm-market-name">
-                      {effA1.name} vs {effA2.name}
-                    </span>
-                    <span
-                      className={`hm-phase-badge hm-phase-badge--${effCycle.phase.toLowerCase()}`}
-                    >
-                      {effPhaseLabel}
-                    </span>
-                    <button
-                      className={`hm-side-chip hm-side-chip--yes ${hmSide === "YES" ? "hm-side-chip--active" : ""}`}
-                      onClick={() => setHmSide("YES")}
-                      type="button"
-                      aria-pressed={hmSide === "YES"}
-                    >
-                      {effA1.name} {(effYesPercent / 100).toFixed(2)}
-                    </button>
-                    <button
-                      className={`hm-side-chip hm-side-chip--no ${hmSide === "NO" ? "hm-side-chip--active" : ""}`}
-                      onClick={() => setHmSide("NO")}
-                      type="button"
-                      aria-pressed={hmSide === "NO"}
-                    >
-                      {effA2.name} {(effNoPercent / 100).toFixed(2)}
-                    </button>
-                  </div>
-                </>
+                <div className="hm-market-info">
+                  <span className="hm-market-name">
+                    {effA1.name} vs {effA2.name}
+                  </span>
+                </div>
               ) : (
                 <div className="hm-mode-summary">
                   <span className="hm-market-name">{copy.modelMarkets}</span>
