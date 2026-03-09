@@ -1,2 +1,0 @@
-[build]
-rustflags = ["--cfg", "zmij_no_select_unpredictable"]
