@@ -334,7 +334,7 @@ async function waitForSignatureConfirmation(
   const startedAt = Date.now();
   let lastPendingTickAt = 0;
   while (Date.now() - startedAt < timeoutMs) {
-    let shouldTick = false;
+    let shouldTick: boolean;
     try {
       const statuses = await withRpcRetry(() =>
         connection.getSignatureStatuses([signature], {
@@ -448,7 +448,7 @@ async function reliableSendAndConfirm(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${currentSendStage}: ${message}`);
+    throw new Error(`${currentSendStage}: ${message}`, { cause: error });
   }
   return signature;
 }

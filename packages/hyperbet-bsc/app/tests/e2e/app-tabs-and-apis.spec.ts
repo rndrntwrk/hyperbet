@@ -317,7 +317,7 @@ test.describe("app tabs and api coverage", () => {
     const state = loadState();
     const wallet = state.solanaTraderPublicKey || "";
 
-    const streamState = await fetchJson<StreamingStateResponse>(
+    const _streamState = await fetchJson<StreamingStateResponse>(
       request,
       "/api/streaming/state",
     );
