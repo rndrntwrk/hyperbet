@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "packages/hyperbet-solana/keeper/**"
+      - "packages/market-maker-bot/src/**"
+      - "packages/market-maker-bot/package.json"
       - ".github/workflows/deploy-solana-keeper.yml"
       - "docs/hyperbet-production-deploy.md"
       - "package.json"
@@ -47,7 +49,7 @@ jobs:
           printf '%s\n' "$changed_files"
 
           keeper_source_changed=false
-          if printf '%s\n' "$changed_files" | grep -Eq '^packages/hyperbet-solana/keeper/'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^packages/hyperbet-solana/keeper/|^packages/market-maker-bot/'; then
             keeper_source_changed=true
           fi
 
@@ -114,6 +116,13 @@ jobs:
           EOF
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Stage market-maker-bot into build context
+        if: steps.keeper_changes.outputs.keeper_source_changed == 'true'
+        run: |
+          mkdir -p packages/hyperbet-solana/market-maker-bot/src
+          cp packages/market-maker-bot/package.json packages/hyperbet-solana/market-maker-bot/
+          cp -r packages/market-maker-bot/src/ packages/hyperbet-solana/market-maker-bot/src/
 
       - name: Deploy keeper
         if: steps.keeper_changes.outputs.keeper_source_changed == 'true'
