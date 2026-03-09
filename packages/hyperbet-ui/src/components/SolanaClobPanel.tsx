@@ -164,6 +164,19 @@ function sumOrderLevels(levels: OrderLevel[]): number {
   return levels.reduce((total, level) => total + level.amount, 0);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isRetryableRefreshError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /failed to fetch|fetch failed|networkerror|load failed|429/i.test(
+    message,
+  );
+}
+
 function getCycleDuelStatusLabel(
   phase: string | undefined,
   duelKeyHex: string | null | undefined,
@@ -257,6 +270,7 @@ export function SolanaClobPanel({
     yes: 0n,
     no: 0n,
   });
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
   const writablePrograms = useMemo(
     () => (walletReady(wallet) ? createPrograms(connection, wallet) : null),
@@ -503,187 +517,178 @@ export function SolanaClobPanel({
     ],
   );
 
-  const refreshData = useCallback(async () => {
+  const runRefreshData = useCallback(async () => {
     const clobProgram: any = readonlyPrograms.goldClobMarket;
     const oracleProgram: any = readonlyPrograms.fightOracle;
     const runtimeConfigPda = findClobConfigPda(clobProgram.programId);
-    setIsRefreshing(true);
 
-    try {
-      const config =
-        await clobProgram.account.marketConfig.fetchNullable(runtimeConfigPda);
-      if (!config) {
-        setStatus(copy.marketConfigNotDeployed);
-        setActiveMarket(null);
-        return;
+    const config =
+      await clobProgram.account.marketConfig.fetchNullable(runtimeConfigPda);
+    if (!config) {
+      setStatus(copy.marketConfigNotDeployed);
+      setActiveMarket(null);
+      return;
+    }
+
+    if (!duelKeyHex) {
+      setActiveMarket(null);
+      setBids([]);
+      setAsks([]);
+      setYesPool(0n);
+      setNoPool(0n);
+      setPosition({ aShares: 0n, bShares: 0n });
+      setStatus(getCycleDuelStatusLabel(cycle?.phase, duelKeyHex, resolvedLocale));
+      return;
+    }
+
+    const duelKeyBytes = duelKeyHexToBytes(duelKeyHex);
+    const duelState = findDuelStatePda(oracleProgram.programId, duelKeyBytes);
+    const marketState = findMarketStatePda(
+      clobProgram.programId,
+      duelState,
+      DUEL_WINNER_MARKET_KIND,
+    );
+    const vault = findClobVaultPda(clobProgram.programId, marketState);
+
+    const [duelAccount, marketAccount, allLevels, allOrders, allBalances] =
+      await Promise.all([
+        oracleProgram.account.duelState.fetchNullable(duelState),
+        clobProgram.account.marketState.fetchNullable(marketState),
+        clobProgram.account.priceLevel.all(),
+        clobProgram.account.order.all(),
+        clobProgram.account.userBalance.all(),
+      ]);
+
+    if (!duelAccount) {
+      setStatus(copy.waitingOracleReporter);
+      setActiveMarket(null);
+      return;
+    }
+
+    if (!marketAccount) {
+      setStatus(copy.waitingMarketOperator);
+      setActiveMarket(null);
+      return;
+    }
+
+    const marketStatus = enumName(marketAccount.status);
+    const winner = enumName(marketAccount.winner);
+
+    const levels = (allLevels as PriceLevelAccount[]).filter((entry) =>
+      (entry.account.marketState as PublicKey).equals(marketState),
+    );
+    const orders = (allOrders as OrderAccount[]).filter((entry) =>
+      (entry.account.marketState as PublicKey).equals(marketState),
+    );
+    const balances = (allBalances as BalanceAccount[]).filter((entry) =>
+      (entry.account.marketState as PublicKey).equals(marketState),
+    );
+
+    const bidRows = levels
+      .filter(
+        (entry) =>
+          Number(entry.account.side) === SIDE_BID &&
+          asBigInt(entry.account.totalOpen) > 0n,
+      )
+      .sort((a, b) => Number(b.account.price) - Number(a.account.price))
+      .map((entry) => ({
+        price: Number(entry.account.price) / 1000,
+        amount: fmtAmount(asBigInt(entry.account.totalOpen)),
+        total: 0,
+      }));
+
+    const askRows = levels
+      .filter(
+        (entry) =>
+          Number(entry.account.side) === SIDE_ASK &&
+          asBigInt(entry.account.totalOpen) > 0n,
+      )
+      .sort((a, b) => Number(a.account.price) - Number(b.account.price))
+      .map((entry) => ({
+        price: Number(entry.account.price) / 1000,
+        amount: fmtAmount(asBigInt(entry.account.totalOpen)),
+        total: 0,
+      }));
+
+    let bidTotal = 0;
+    const normalizedBids = bidRows.slice(0, 12).map((row) => {
+      bidTotal += row.amount;
+      return { ...row, total: bidTotal };
+    });
+    let askTotal = 0;
+    const normalizedAsks = askRows.slice(0, 12).map((row) => {
+      askTotal += row.amount;
+      return { ...row, total: askTotal };
+    });
+
+    let nextYesPool = 0n;
+    let nextNoPool = 0n;
+    let userPosition: UserPosition = { aShares: 0n, bShares: 0n };
+    for (const balance of balances) {
+      const aShares = asBigInt(balance.account.aShares);
+      const bShares = asBigInt(balance.account.bShares);
+      nextYesPool += aShares;
+      nextNoPool += bShares;
+      if (
+        wallet.publicKey &&
+        (balance.account.user as PublicKey).equals(wallet.publicKey)
+      ) {
+        userPosition = { aShares, bShares };
       }
+    }
 
-      if (!duelKeyHex) {
-        setActiveMarket(null);
-        setBids([]);
-        setAsks([]);
-        setYesPool(0n);
-        setNoPool(0n);
-        setPosition({ aShares: 0n, bShares: 0n });
-        setStatus(getCycleDuelStatusLabel(cycle?.phase, duelKeyHex, resolvedLocale));
-        return;
-      }
-
-      const duelKeyBytes = duelKeyHexToBytes(duelKeyHex);
-      const duelState = findDuelStatePda(oracleProgram.programId, duelKeyBytes);
-      const marketState = findMarketStatePda(
-        clobProgram.programId,
-        duelState,
-        DUEL_WINNER_MARKET_KIND,
-      );
-      const vault = findClobVaultPda(clobProgram.programId, marketState);
-
-      const [duelAccount, marketAccount, allLevels, allOrders, allBalances] =
-        await Promise.all([
-          oracleProgram.account.duelState.fetchNullable(duelState),
-          clobProgram.account.marketState.fetchNullable(marketState),
-          clobProgram.account.priceLevel.all(),
-          clobProgram.account.order.all(),
-          clobProgram.account.userBalance.all(),
-        ]);
-
-      if (!duelAccount) {
-        setStatus(copy.waitingOracleReporter);
-        setActiveMarket(null);
-        return;
-      }
-
-      if (!marketAccount) {
-        setStatus(copy.waitingMarketOperator);
-        setActiveMarket(null);
-        return;
-      }
-
-      const marketStatus = enumName(marketAccount.status);
-      const winner = enumName(marketAccount.winner);
-
-      const levels = (allLevels as PriceLevelAccount[]).filter((entry) =>
-        (entry.account.marketState as PublicKey).equals(marketState),
-      );
-      const orders = (allOrders as OrderAccount[]).filter((entry) =>
-        (entry.account.marketState as PublicKey).equals(marketState),
-      );
-      const balances = (allBalances as BalanceAccount[]).filter((entry) =>
-        (entry.account.marketState as PublicKey).equals(marketState),
-      );
-
-      const bidRows = levels
-        .filter(
-          (entry) =>
-            Number(entry.account.side) === SIDE_BID &&
-            asBigInt(entry.account.totalOpen) > 0n,
-        )
-        .sort((a, b) => Number(b.account.price) - Number(a.account.price))
-        .map((entry) => ({
-          price: Number(entry.account.price) / 1000,
-          amount: fmtAmount(asBigInt(entry.account.totalOpen)),
-          total: 0,
-        }));
-
-      const askRows = levels
-        .filter(
-          (entry) =>
-            Number(entry.account.side) === SIDE_ASK &&
-            asBigInt(entry.account.totalOpen) > 0n,
-        )
-        .sort((a, b) => Number(a.account.price) - Number(b.account.price))
-        .map((entry) => ({
-          price: Number(entry.account.price) / 1000,
-          amount: fmtAmount(asBigInt(entry.account.totalOpen)),
-          total: 0,
-        }));
-
-      let bidTotal = 0;
-      const normalizedBids = bidRows.slice(0, 12).map((row) => {
-        bidTotal += row.amount;
-        return { ...row, total: bidTotal };
-      });
-      let askTotal = 0;
-      const normalizedAsks = askRows.slice(0, 12).map((row) => {
-        askTotal += row.amount;
-        return { ...row, total: askTotal };
-      });
-
-      let nextYesPool = 0n;
-      let nextNoPool = 0n;
-      let userPosition: UserPosition = { aShares: 0n, bShares: 0n };
-      for (const balance of balances) {
-        const aShares = asBigInt(balance.account.aShares);
-        const bShares = asBigInt(balance.account.bShares);
-        nextYesPool += aShares;
-        nextNoPool += bShares;
-        if (
+    const userOpenOrders = orders
+      .filter(
+        (entry) =>
           wallet.publicKey &&
-          (balance.account.user as PublicKey).equals(wallet.publicKey)
-        ) {
-          userPosition = { aShares, bShares };
-        }
-      }
+          (entry.account.maker as PublicKey).equals(wallet.publicKey) &&
+          entry.account.active &&
+          asBigInt(entry.account.amount) > asBigInt(entry.account.filled),
+      )
+      .sort((a, b) => Number(asBigInt(b.account.id) - asBigInt(a.account.id)));
 
-      const userOpenOrders = orders
-        .filter(
-          (entry) =>
-            wallet.publicKey &&
-            (entry.account.maker as PublicKey).equals(wallet.publicKey) &&
-            entry.account.active &&
-            asBigInt(entry.account.amount) > asBigInt(entry.account.filled),
-        )
-        .sort((a, b) =>
-          Number(asBigInt(b.account.id) - asBigInt(a.account.id)),
-        );
+    setActiveMarket({
+      duelId: cycleDuelId ?? shortDuelKey(duelKeyHex),
+      duelKeyHex,
+      duelState,
+      marketState,
+      vault,
+      marketStatus: marketStatus ?? "unknown",
+      winner,
+      nextOrderId: asBigInt(marketAccount.nextOrderId),
+      bestBid: Number(marketAccount.bestBid ?? 0),
+      bestAsk: Number(marketAccount.bestAsk ?? 1000),
+      betCloseTime:
+        typeof cycle?.betCloseTime === "number" ? cycle.betCloseTime : null,
+    });
+    setPosition(userPosition);
+    setYesPool(nextYesPool);
+    setNoPool(nextNoPool);
+    setBids(normalizedBids);
+    setAsks(normalizedAsks);
+    setLastOrderId(
+      userOpenOrders.length > 0
+        ? asBigInt(userOpenOrders[0].account.id)
+        : null,
+    );
+    updateChartAndTrades(nextYesPool, nextNoPool);
 
-      setActiveMarket({
-        duelId: cycleDuelId ?? shortDuelKey(duelKeyHex),
-        duelKeyHex,
-        duelState,
-        marketState,
-        vault,
-        marketStatus: marketStatus ?? "unknown",
-        winner,
-        nextOrderId: asBigInt(marketAccount.nextOrderId),
-        bestBid: Number(marketAccount.bestBid ?? 0),
-        bestAsk: Number(marketAccount.bestAsk ?? 1000),
-        betCloseTime:
-          typeof cycle?.betCloseTime === "number" ? cycle.betCloseTime : null,
-      });
-      setPosition(userPosition);
-      setYesPool(nextYesPool);
-      setNoPool(nextNoPool);
-      setBids(normalizedBids);
-      setAsks(normalizedAsks);
-      setLastOrderId(
-        userOpenOrders.length > 0
-          ? asBigInt(userOpenOrders[0].account.id)
-          : null,
+    if (marketStatus === "resolved") {
+      setStatus(
+        winner === "a"
+          ? copy.resolvedFor(effectiveAgent1)
+          : winner === "b"
+            ? copy.resolvedFor(effectiveAgent2)
+            : copy.resolved,
       );
-      updateChartAndTrades(nextYesPool, nextNoPool);
-
-      if (marketStatus === "resolved") {
-        setStatus(
-          winner === "a"
-            ? copy.resolvedFor(effectiveAgent1)
-            : winner === "b"
-              ? copy.resolvedFor(effectiveAgent2)
-              : copy.resolved,
-        );
-      } else if (marketStatus === "cancelled") {
-        setStatus(copy.marketCancelled);
-      } else if (marketStatus === "locked") {
-        setStatus(copy.bettingLocked);
-      } else if (marketStatus === "open") {
-        setStatus(copy.marketOpen);
-      } else {
-        setStatus(formatStatus(marketStatus, resolvedLocale));
-      }
-    } catch (error) {
-      setStatus(copy.refreshFailed((error as Error).message));
-    } finally {
-      setIsRefreshing(false);
+    } else if (marketStatus === "cancelled") {
+      setStatus(copy.marketCancelled);
+    } else if (marketStatus === "locked") {
+      setStatus(copy.bettingLocked);
+    } else if (marketStatus === "open") {
+      setStatus(copy.marketOpen);
+    } else {
+      setStatus(formatStatus(marketStatus, resolvedLocale));
     }
   }, [
     cycle?.betCloseTime,
@@ -699,6 +704,37 @@ export function SolanaClobPanel({
     updateChartAndTrades,
     wallet.publicKey,
   ]);
+
+  const refreshData = useCallback(async () => {
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
+
+    const promise = (async () => {
+      setIsRefreshing(true);
+      try {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            await runRefreshData();
+            return;
+          } catch (error) {
+            if (!isRetryableRefreshError(error) || attempt === 2) {
+              throw error;
+            }
+            await sleep(250 * (attempt + 1));
+          }
+        }
+      } catch (error) {
+        setStatus(copy.refreshFailed((error as Error).message));
+      } finally {
+        setIsRefreshing(false);
+        refreshPromiseRef.current = null;
+      }
+    })();
+
+    refreshPromiseRef.current = promise;
+    return promise;
+  }, [copy, runRefreshData]);
 
   useEffect(() => {
     void refreshData();
@@ -966,6 +1002,14 @@ export function SolanaClobPanel({
 
       const signature = await submitTransaction(tx, copy.placingOrderContext);
       setLastPlaceOrderTx(signature);
+      setActiveMarket((current) =>
+        current
+          ? {
+              ...current,
+              nextOrderId: orderId + 1n,
+            }
+          : current,
+      );
       setStatus(copy.orderPlaced);
       await refreshData();
     } catch (error) {

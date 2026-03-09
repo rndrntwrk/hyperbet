@@ -108,6 +108,25 @@ type ProxyCacheEntry = {
 const encoder = new TextEncoder();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const keeperRoot = path.resolve(__dirname, "..");
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+function readPositiveEnvInteger(
+  name: string,
+  fallback: number,
+  minimum: number,
+): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, Math.floor(parsed));
+}
+
+function readEnvBoolean(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
 
 const PORT = Number(process.env.PORT || 8080);
 const ARENA_WRITE_KEY = process.env.ARENA_EXTERNAL_BET_WRITE_KEY?.trim() || "";
@@ -169,6 +188,27 @@ const BIRDEYE_PRICE_CACHE_TTL_MS = Math.max(
   1_000,
   Number(process.env.BIRDEYE_PRICE_CACHE_TTL_MS || 5_000),
 );
+const READ_RATE_LIMIT_PER_MINUTE = readPositiveEnvInteger(
+  "READ_RATE_LIMIT_PER_MINUTE",
+  IS_PRODUCTION ? 360 : 2_400,
+  1,
+);
+const READ_RATE_LIMIT_BURST = readPositiveEnvInteger(
+  "READ_RATE_LIMIT_BURST",
+  IS_PRODUCTION ? 180 : 1_200,
+  1,
+);
+const WRITE_RATE_LIMIT_PER_MINUTE = readPositiveEnvInteger(
+  "WRITE_RATE_LIMIT_PER_MINUTE",
+  IS_PRODUCTION ? 120 : 600,
+  1,
+);
+const WRITE_RATE_LIMIT_BURST = readPositiveEnvInteger(
+  "WRITE_RATE_LIMIT_BURST",
+  IS_PRODUCTION ? 60 : 300,
+  1,
+);
+const DISABLE_RATE_LIMIT = readEnvBoolean("DISABLE_RATE_LIMIT", false);
 
 const GOLD_CLOB_READ_ABI = [
   {
@@ -1043,21 +1083,70 @@ function handleStreamingLeaderboardDetails(req: Request, url: URL): Response {
 }
 
 function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
+  const directHeaders = [
+    "cf-connecting-ip",
+    "true-client-ip",
+    "x-real-ip",
+  ] as const;
+  for (const name of directHeaders) {
+    const value = req.headers.get(name)?.trim();
+    if (value) return value;
+  }
+
+  const forwarded = req.headers.get("x-forwarded-for")?.trim();
   if (forwarded) {
     const first = forwarded.split(",")[0]?.trim();
     if (first) return first;
   }
+
+  const userAgent = req.headers.get("user-agent")?.trim();
+  if (userAgent) {
+    return `ua:${createHash("sha256")
+      .update(userAgent)
+      .digest("hex")
+      .slice(0, 16)}`;
+  }
+
   return "unknown";
 }
 
+function normalizeRateLimitPath(pathname: string): string {
+  if (pathname.startsWith("/api/arena/points/history/")) {
+    return "/api/arena/points/history/:wallet";
+  }
+  if (pathname.startsWith("/api/arena/points/rank/")) {
+    return "/api/arena/points/rank/:wallet";
+  }
+  if (pathname.startsWith("/api/arena/points/multiplier/")) {
+    return "/api/arena/points/multiplier/:wallet";
+  }
+  if (pathname.startsWith("/api/arena/points/")) {
+    return "/api/arena/points/:wallet";
+  }
+  if (pathname.startsWith("/api/arena/invite/")) {
+    return "/api/arena/invite/:wallet";
+  }
+  return pathname;
+}
+
 function checkRateLimit(
-  ip: string,
+  req: Request,
+  pathname: string,
   limitPerMinute: number,
   burst: number,
 ): boolean {
+  if (DISABLE_RATE_LIMIT) {
+    return true;
+  }
+
   const now = Date.now();
-  const key = `${ip}:${limitPerMinute}:${burst}`;
+  const key = [
+    clientIp(req),
+    req.method.toUpperCase(),
+    normalizeRateLimitPath(pathname),
+    limitPerMinute,
+    burst,
+  ].join(":");
   const bucket = rateBuckets.get(key) ?? {
     tokens: burst,
     lastRefillMs: now,
@@ -2194,13 +2283,13 @@ const server = Bun.serve({
   development: process.env.NODE_ENV !== "production",
   fetch: async (req: Request) => {
     const url = new URL(req.url);
-    const ip = clientIp(req);
     const isWriteRoute =
       req.method === "POST" || url.pathname === "/api/streaming/state/publish";
     const allowed = checkRateLimit(
-      ip,
-      isWriteRoute ? 120 : 360,
-      isWriteRoute ? 60 : 180,
+      req,
+      url.pathname,
+      isWriteRoute ? WRITE_RATE_LIMIT_PER_MINUTE : READ_RATE_LIMIT_PER_MINUTE,
+      isWriteRoute ? WRITE_RATE_LIMIT_BURST : READ_RATE_LIMIT_BURST,
     );
     if (!allowed) {
       return jsonResponse(req, { error: "Rate limit exceeded" }, 429);

@@ -128,19 +128,19 @@ wait_for_solana_rpc() {
   return 1
 }
 
-read_solana_block_height() {
+read_solana_slot() {
   local response
-  local height
+  local slot
 
   response="$(curl -s -X POST "$SOLANA_RPC_URL" \
     -H "content-type: application/json" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"getBlockHeight"}')"
-  height="$(printf "%s" "$response" | jq -r '.result // empty')"
-  if [[ ! "$height" =~ ^[0-9]+$ ]]; then
+    -d '{"jsonrpc":"2.0","id":1,"method":"getSlot","params":[{"commitment":"processed"}]}')"
+  slot="$(printf "%s" "$response" | jq -r '.result // empty')"
+  if [[ ! "$slot" =~ ^[0-9]+$ ]]; then
     return 1
   fi
 
-  printf "%s\n" "$height"
+  printf "%s\n" "$slot"
 }
 
 wait_for_solana_ws() {
@@ -156,14 +156,14 @@ wait_for_solana_ws() {
 }
 
 wait_for_solana_block_production() {
-  local previous_height=""
+  local previous_slot=""
   for _ in {1..120}; do
-    local current_height
-    if current_height="$(read_solana_block_height)"; then
-      if [[ -n "$previous_height" && "$current_height" -gt "$previous_height" ]]; then
+    local current_slot
+    if current_slot="$(read_solana_slot)"; then
+      if [[ -n "$previous_slot" && "$current_slot" -gt "$previous_slot" ]]; then
         return 0
       fi
-      previous_height="$current_height"
+      previous_slot="$current_slot"
     fi
     sleep 1
   done

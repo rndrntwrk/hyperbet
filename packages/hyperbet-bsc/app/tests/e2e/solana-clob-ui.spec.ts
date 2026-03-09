@@ -223,15 +223,15 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 }
 
 async function openSolanaAdminPanel(page: Page): Promise<void> {
-  const adminToggle = page.getByTestId("solana-clob-admin-toggle");
+  const adminPanel = page.getByTestId("solana-clob-admin-panel");
+  if (await adminPanel.isVisible().catch(() => false)) return;
+
+  const adminToggle = page.getByTestId("solana-clob-admin-toggle").first();
   if (!(await adminToggle.isVisible().catch(() => false))) return;
 
-  const expanded = await adminToggle.getAttribute("aria-expanded");
-  if (expanded !== "true") {
-    await adminToggle.click();
-  }
+  await adminToggle.click({ force: true });
 
-  await expect(page.getByTestId("solana-clob-admin-panel")).toBeVisible({
+  await expect(adminPanel).toBeVisible({
     timeout: 30_000,
   });
 }

@@ -455,12 +455,14 @@ async function selectChain(
 }
 
 async function openSolanaAdminPanel(page: Page): Promise<void> {
-  const adminToggle = page.getByTestId("solana-clob-admin-toggle");
+  const adminPanel = page.getByTestId("solana-clob-admin-panel");
+  if (await adminPanel.isVisible().catch(() => false)) return;
+
+  const adminToggle = page.getByTestId("solana-clob-admin-toggle").first();
   if (!(await adminToggle.isVisible().catch(() => false))) return;
-  if ((await adminToggle.getAttribute("aria-expanded")) !== "true") {
-    await adminToggle.click();
-  }
-  await expect(page.getByTestId("solana-clob-admin-panel")).toBeVisible();
+
+  await adminToggle.click({ force: true });
+  await expect(adminPanel).toBeVisible();
 }
 
 async function expectSolanaTxSuccess(
