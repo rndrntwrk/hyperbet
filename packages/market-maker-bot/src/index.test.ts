@@ -57,7 +57,7 @@ vi.mock("ethers", () => {
   }
   class MockWallet {
     address = "0xTestWallet";
-    constructor() {}
+    constructor() { }
   }
   class MockContract {
     constructor() {
@@ -101,9 +101,9 @@ vi.mock("@solana/web3.js", () => {
     Connection: MockConnection,
     Keypair: {
       // `vi.mock` is hoisted, so defer access to test-local mocks until runtime.
-      generate: (...args: unknown[]) => mockGenerate(...args),
-      fromSecretKey: (...args: unknown[]) => mockFromSecretKey(...args),
-      fromSeed: (...args: unknown[]) => mockFromSeed(...args),
+      generate: (...args: any[]) => mockGenerate(...args),
+      fromSecretKey: (...args: any[]) => mockFromSecretKey(...args),
+      fromSeed: (...args: any[]) => mockFromSeed(...args),
     },
     PublicKey: class MockPublicKey {
       private value: string;
@@ -137,6 +137,8 @@ describe("CrossChainMarketMaker", () => {
     process.env.SOLANA_PRIVATE_KEY = bs58.encode(new Uint8Array(64).fill(7));
     process.env.TARGET_SPREAD_BPS = "200";
     process.env.MAX_INVENTORY_CAP = "500";
+    process.env.MAX_ORDERS_PER_SIDE = "3";
+    process.env.CANCEL_STALE_AGE_MS = "30000";
     Object.values(mockContract).forEach((value) => {
       if (
         typeof value === "function" &&

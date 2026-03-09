@@ -180,6 +180,28 @@ const SOLANA_RPC_PROXY_MAX_BODY_BYTES = Math.max(
   Number(process.env.SOLANA_RPC_PROXY_MAX_BODY_BYTES || 1_000_000),
 );
 
+const READ_RATE_LIMIT_PER_MINUTE = readPositiveEnvInteger(
+  "READ_RATE_LIMIT_PER_MINUTE",
+  IS_PRODUCTION ? 360 : 2_400,
+  1,
+);
+const READ_RATE_LIMIT_BURST = readPositiveEnvInteger(
+  "READ_RATE_LIMIT_BURST",
+  IS_PRODUCTION ? 180 : 1_200,
+  1,
+);
+const WRITE_RATE_LIMIT_PER_MINUTE = readPositiveEnvInteger(
+  "WRITE_RATE_LIMIT_PER_MINUTE",
+  IS_PRODUCTION ? 120 : 600,
+  1,
+);
+const WRITE_RATE_LIMIT_BURST = readPositiveEnvInteger(
+  "WRITE_RATE_LIMIT_BURST",
+  IS_PRODUCTION ? 60 : 300,
+  1,
+);
+const DISABLE_RATE_LIMIT = readEnvBoolean("DISABLE_RATE_LIMIT", false);
+
 const defaultAgentA = {
   id: "agent-a",
   name: "Agent A",
