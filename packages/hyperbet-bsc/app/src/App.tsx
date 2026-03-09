@@ -23,9 +23,7 @@ import { LocaleSelector } from "@hyperbet/ui/components/LocaleSelector";
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
   GAME_API_URL,
-  GOLD_DECIMALS,
   getFixedMatchId,
-  getCluster,
   STREAM_URLS,
 } from "./lib/config";
 import {
@@ -36,7 +34,6 @@ import { StreamPlayer } from "./components/StreamPlayer";
 import { ChainSelector } from "./components/ChainSelector";
 import { PointsDisplay } from "./components/PointsDisplay";
 import { useChain } from "./lib/ChainContext";
-import { isHeadlessWalletEnabled } from "./lib/headlessWallet";
 import { useStreamingState } from "./spectator/useStreamingState";
 import { useDuelContext } from "./spectator/useDuelContext";
 import { useResizePanel, useIsMobile } from "./lib/useResizePanel";
@@ -117,20 +114,6 @@ function formatCountdown(seconds: number): string {
   return `${m}:${s}`;
 }
 
-function asNumber(value: unknown, fallback = 0): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "bigint") return Number(value);
-  if (value && typeof value === "object" && "toString" in value) {
-    const parsed = Number((value as { toString: () => string }).toString());
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return fallback;
-}
-
-function goldDisplay(amount: unknown): string {
-  const raw = asNumber(amount, 0);
-  return (raw / 10 ** GOLD_DECIMALS).toFixed(6);
-}
 
 function getAppCopy(locale: UiLocale) {
   if (locale === "zh") {
@@ -412,7 +395,7 @@ export function App() {
   const invitePlatformQuery = "evm" as const;
 
   const [surfaceMode, setSurfaceMode] = useState<"DUELS" | "MODELS">("DUELS");
-  const [status, setStatus] = useState<string>("");
+  const [status, _setStatus] = useState<string>("");
   const [currentMatch, setCurrentMatch] = useState<DiscoveredMatch | null>(
     null,
   );
