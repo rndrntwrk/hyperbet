@@ -13,6 +13,7 @@ export default tseslint.config(
       "**/playwright-report/**",
       "**/simulations/**",
       "**/src/idl/**",
+      "**/src/generated/**",
     ],
   },
   {
