@@ -1,5 +1,6 @@
 #![allow(unexpected_cfgs)]
 #![allow(deprecated)]
+#![allow(clippy::too_many_arguments)]
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
@@ -69,6 +70,7 @@ pub mod gold_clob_market {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_config(
         ctx: Context<UpdateConfig>,
         authority: Pubkey,
@@ -350,13 +352,23 @@ pub mod gold_clob_market {
                 .ok_or(ErrorCode::MathOverflow)?;
 
             if side == SIDE_BID {
+                let maker_locked = quote_cost(SIDE_ASK, boundary_price, fill_amount)?;
+                let taker_locked = quote_cost(SIDE_BID, boundary_price, fill_amount)?;
                 maker_balance.b_shares = maker_balance
                     .b_shares
                     .checked_add(fill_amount)
                     .ok_or(ErrorCode::MathOverflow)?;
+                maker_balance.b_locked_lamports = maker_balance
+                    .b_locked_lamports
+                    .checked_add(maker_locked)
+                    .ok_or(ErrorCode::MathOverflow)?;
                 user_balance.a_shares = user_balance
                     .a_shares
                     .checked_add(fill_amount)
+                    .ok_or(ErrorCode::MathOverflow)?;
+                user_balance.a_locked_lamports = user_balance
+                    .a_locked_lamports
+                    .checked_add(taker_locked)
                     .ok_or(ErrorCode::MathOverflow)?;
 
                 if price > boundary_price {
@@ -371,13 +383,23 @@ pub mod gold_clob_market {
                         .ok_or(ErrorCode::MathOverflow)?;
                 }
             } else {
+                let maker_locked = quote_cost(SIDE_BID, boundary_price, fill_amount)?;
+                let taker_locked = quote_cost(SIDE_ASK, boundary_price, fill_amount)?;
                 maker_balance.a_shares = maker_balance
                     .a_shares
                     .checked_add(fill_amount)
                     .ok_or(ErrorCode::MathOverflow)?;
+                maker_balance.a_locked_lamports = maker_balance
+                    .a_locked_lamports
+                    .checked_add(maker_locked)
+                    .ok_or(ErrorCode::MathOverflow)?;
                 user_balance.b_shares = user_balance
                     .b_shares
                     .checked_add(fill_amount)
+                    .ok_or(ErrorCode::MathOverflow)?;
+                user_balance.b_locked_lamports = user_balance
+                    .b_locked_lamports
+                    .checked_add(taker_locked)
                     .ok_or(ErrorCode::MathOverflow)?;
 
                 if boundary_price > price {
@@ -528,13 +550,13 @@ pub mod gold_clob_market {
 
             let mut cursor = 0_usize;
             let mut prev_order = load_adjacent_order(
-                &ctx.remaining_accounts,
+                ctx.remaining_accounts,
                 &mut cursor,
                 market_state.key(),
                 order.prev_order_id,
             )?;
             let mut next_order = load_adjacent_order(
-                &ctx.remaining_accounts,
+                ctx.remaining_accounts,
                 &mut cursor,
                 market_state.key(),
                 order.next_order_id,
@@ -588,27 +610,43 @@ pub mod gold_clob_market {
     pub fn claim(ctx: Context<Claim>) -> Result<()> {
         let market_state = &mut ctx.accounts.market_state;
         sync_market_status(market_state, &ctx.accounts.duel_state, ctx.accounts.duel_state.key())?;
-        require!(market_state.status == MarketStatus::Resolved, ErrorCode::MarketNotResolved);
 
         let user_balance = &mut ctx.accounts.user_balance;
-        let mut winning_shares = 0_u64;
-        if market_state.winner == MarketSide::A {
-            winning_shares = user_balance.a_shares;
+        let (fee, payout) = if market_state.status == MarketStatus::Cancelled {
+            let refund_lamports = user_balance
+                .a_locked_lamports
+                .checked_add(user_balance.b_locked_lamports)
+                .ok_or(ErrorCode::MathOverflow)?;
+            require!(refund_lamports > 0, ErrorCode::NothingToClaim);
             user_balance.a_shares = 0;
-        } else if market_state.winner == MarketSide::B {
-            winning_shares = user_balance.b_shares;
             user_balance.b_shares = 0;
-        }
-        require!(winning_shares > 0, ErrorCode::NothingToClaim);
+            user_balance.a_locked_lamports = 0;
+            user_balance.b_locked_lamports = 0;
+            (0, refund_lamports)
+        } else {
+            require!(market_state.status == MarketStatus::Resolved, ErrorCode::MarketNotResolved);
+            let mut winning_shares = 0_u64;
+            if market_state.winner == MarketSide::A {
+                winning_shares = user_balance.a_shares;
+                user_balance.a_shares = 0;
+                user_balance.a_locked_lamports = 0;
+            } else if market_state.winner == MarketSide::B {
+                winning_shares = user_balance.b_shares;
+                user_balance.b_shares = 0;
+                user_balance.b_locked_lamports = 0;
+            }
+            require!(winning_shares > 0, ErrorCode::NothingToClaim);
 
-        let fee = winning_shares
-            .checked_mul(ctx.accounts.config.winnings_market_maker_fee_bps as u64)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(10_000)
-            .ok_or(ErrorCode::MathOverflow)?;
-        let payout = winning_shares
-            .checked_sub(fee)
-            .ok_or(ErrorCode::MathOverflow)?;
+            let fee = winning_shares
+                .checked_mul(ctx.accounts.config.winnings_market_maker_fee_bps as u64)
+                .ok_or(ErrorCode::MathOverflow)?
+                .checked_div(10_000)
+                .ok_or(ErrorCode::MathOverflow)?;
+            let payout = winning_shares
+                .checked_sub(fee)
+                .ok_or(ErrorCode::MathOverflow)?;
+            (fee, payout)
+        };
 
         let market_key = market_state.key();
         let vault_bump = market_state.vault_bump;
@@ -912,6 +950,8 @@ pub struct UserBalance {
     pub market_state: Pubkey,
     pub a_shares: u64,
     pub b_shares: u64,
+    pub a_locked_lamports: u64,
+    pub b_locked_lamports: u64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, Eq, PartialEq, InitSpace)]

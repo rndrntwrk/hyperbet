@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
   BETTING_DEPLOYMENTS,
   normalizeSolanaCluster,
-  resolveBettingEvmDefaults,
   resolveBettingSolanaDeployment,
 } from "../deployments";
 
@@ -28,13 +27,11 @@ describe("betting deployment manifest", () => {
     );
   });
 
-  test("maps app environments to the correct default evm networks", () => {
-    const testnetDefaults = resolveBettingEvmDefaults("testnet");
-    expect(testnetDefaults.bsc.networkKey).toBe("bscTestnet");
-    expect(testnetDefaults.base.networkKey).toBe("baseSepolia");
-
-    const mainnetDefaults = resolveBettingEvmDefaults("mainnet-beta");
-    expect(mainnetDefaults.bsc.networkKey).toBe("bsc");
-    expect(mainnetDefaults.base.networkKey).toBe("base");
+  test("requires non-empty Solana program ids for every cluster", () => {
+    for (const deployment of Object.values(BETTING_DEPLOYMENTS.solana)) {
+      expect(deployment.fightOracleProgramId.length).toBeGreaterThan(0);
+      expect(deployment.goldClobMarketProgramId.length).toBeGreaterThan(0);
+      expect(deployment.goldPerpsMarketProgramId.length).toBeGreaterThan(0);
+    }
   });
 });

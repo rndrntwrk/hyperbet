@@ -1238,6 +1238,14 @@
           {
             "name": "b_shares",
             "type": "u64"
+          },
+          {
+            "name": "a_locked_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "b_locked_lamports",
+            "type": "u64"
           }
         ]
       }

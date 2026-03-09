@@ -24,7 +24,6 @@ const EVENT_LABELS: Record<string, { label: string; icon: string }> = {
   SIGNUP_REFERRER: { label: "Signup Bonus (Referrer)", icon: "🎁" },
   SIGNUP_REFEREE: { label: "Signup Bonus", icon: "🎉" },
   STAKING_DAILY: { label: "Staking Reward", icon: "💎" },
-  WALLET_LINK: { label: "Wallet Link Bonus", icon: "🔗" },
 };
 
 const EVENT_FILTERS = [
@@ -33,7 +32,6 @@ const EVENT_FILTERS = [
   { value: "BET_WON", label: "Wins" },
   { value: "REFERRAL_WIN", label: "Referral Wins" },
   { value: "STAKING_DAILY", label: "Staking" },
-  { value: "WALLET_LINK", label: "Wallet Link" },
 ];
 
 function formatTimestamp(ms: number): string {

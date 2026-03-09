@@ -17,6 +17,7 @@ import {
 } from "@solana/web3.js";
 
 import { findClobConfigPda, findClobVaultPda } from "../lib/clobPdas";
+import { CONFIG, GAME_API_URL } from "../lib/config";
 import { duelKeyHexToBytes, shortDuelKey } from "../lib/duelKey";
 import {
   DUEL_WINNER_MARKET_KIND,
@@ -28,8 +29,11 @@ import {
 } from "../lib/pdas";
 import { createPrograms, createReadonlyPrograms } from "../lib/programs";
 import {
+  buildPriorityFeeInstructions,
   confirmSignatureViaRpc,
   getLatestBlockhashViaRpc,
+  JITO_TIP_LAMPORTS,
+  randomJitoTipAccount,
   sendRawTransactionViaRpc,
 } from "../lib/solanaRpc";
 import { useStreamingState } from "../spectator/useStreamingState";
@@ -42,6 +46,14 @@ import { PointsDisplay } from "./PointsDisplay";
 import { type Trade } from "./RecentTrades";
 
 type BetSide = "YES" | "NO";
+type ClobProgram = ReturnType<typeof createReadonlyPrograms>["goldClobMarket"];
+type AccountNamespaceFetcher = {
+  fetch: (pubkey: PublicKey) => Promise<Record<string, unknown>>;
+  fetchNullable: (pubkey: PublicKey) => Promise<Record<string, unknown> | null>;
+  all: () => Promise<
+    Array<{ publicKey: PublicKey; account: Record<string, unknown> }>
+  >;
+};
 
 type UserPosition = {
   aShares: bigint;
@@ -202,7 +214,7 @@ export function SolanaClobPanel({
   const [status, setStatus] = useState("Waiting for live Hyperscape duel");
   const [side, setSide] = useState<BetSide>("YES");
   const [amountInput, setAmountInput] = useState("1");
-  const [priceInput, setPriceInput] = useState("500");
+  const [priceInput] = useState("500");
   const [activeMarket, setActiveMarket] = useState<MarketSnapshot | null>(null);
   const [position, setPosition] = useState<UserPosition>({
     aShares: 0n,
@@ -300,6 +312,20 @@ export function SolanaClobPanel({
       let stage = "fetching blockhash";
       try {
         transaction.feePayer = wallet.publicKey;
+        const useHeliusSender = CONFIG.cluster === "mainnet-beta";
+        if (useHeliusSender) {
+          const accountKeys = [wallet.publicKey.toBase58()];
+          const feeInstructions = await buildPriorityFeeInstructions(
+            connection.rpcEndpoint,
+            accountKeys,
+          );
+          const tipInstruction = SystemProgram.transfer({
+            fromPubkey: wallet.publicKey,
+            toPubkey: new PublicKey(randomJitoTipAccount()),
+            lamports: JITO_TIP_LAMPORTS,
+          });
+          transaction.instructions.unshift(...feeInstructions, tipInstruction);
+        }
         const latest = await getLatestBlockhashViaRpc(connection);
         transaction.recentBlockhash = latest.blockhash;
 
@@ -307,7 +333,10 @@ export function SolanaClobPanel({
         const signed = await wallet.signTransaction(transaction);
 
         stage = "sending transaction";
-        const signature = await sendRawTransactionViaRpc(connection, signed);
+        const signature = await sendRawTransactionViaRpc(connection, signed, {
+          gameApiUrl: useHeliusSender ? GAME_API_URL : undefined,
+          useHeliusSender,
+        });
 
         stage = "confirming transaction";
         await confirmSignatureViaRpc(connection, signature);
@@ -346,15 +375,21 @@ export function SolanaClobPanel({
   );
 
   const refreshData = useCallback(async () => {
-    const clobProgram: any = readonlyPrograms.goldClobMarket;
-    const oracleProgram: any = readonlyPrograms.fightOracle;
+    const clobProgram = readonlyPrograms.goldClobMarket;
+    const oracleProgram = readonlyPrograms.fightOracle;
+    const clobAccounts = clobProgram.account as Record<
+      string,
+      AccountNamespaceFetcher
+    >;
+    const oracleAccounts = oracleProgram.account as Record<
+      string,
+      AccountNamespaceFetcher
+    >;
     const runtimeConfigPda = findClobConfigPda(clobProgram.programId);
     setIsRefreshing(true);
 
     try {
-      const config = await clobProgram.account.marketConfig.fetchNullable(
-        runtimeConfigPda,
-      );
+      const config = await clobAccounts.marketConfig.fetchNullable(runtimeConfigPda);
       if (!config) {
         setStatus("Market config not deployed");
         setActiveMarket(null);
@@ -383,11 +418,11 @@ export function SolanaClobPanel({
 
       const [duelAccount, marketAccount, allLevels, allOrders, allBalances] =
         await Promise.all([
-          oracleProgram.account.duelState.fetchNullable(duelState),
-          clobProgram.account.marketState.fetchNullable(marketState),
-          clobProgram.account.priceLevel.all(),
-          clobProgram.account.order.all(),
-          clobProgram.account.userBalance.all(),
+          oracleAccounts.duelState.fetchNullable(duelState),
+          clobAccounts.marketState.fetchNullable(marketState),
+          clobAccounts.priceLevel.all(),
+          clobAccounts.order.all(),
+          clobAccounts.userBalance.all(),
         ]);
 
       if (!duelAccount) {
@@ -545,70 +580,57 @@ export function SolanaClobPanel({
 
   const buildPlaceOrderRemainingAccounts = useCallback(
     async (
-      clobProgram: any,
+      clobProgram: ClobProgram,
       market: MarketSnapshot,
       sideValue: number,
       price: number,
       amount: bigint,
     ): Promise<AccountMeta[]> => {
+      const clobAccounts = clobProgram.account as Record<
+        string,
+        AccountNamespaceFetcher
+      >;
       const metas: AccountMeta[] = [];
-      const marketAccount = await clobProgram.account.marketState.fetch(
-        market.marketState,
-      );
       const oppositeSide = sideValue === SIDE_BID ? SIDE_ASK : SIDE_BID;
       let remaining = amount;
-      let boundary =
-        sideValue === SIDE_BID
-          ? Number(marketAccount.bestAsk)
-          : Number(marketAccount.bestBid);
       let matches = 0;
-
-      while (remaining > 0n && matches < MAX_MATCH_ACCOUNTS) {
-        const crosses =
+      const oppositeLevels = ((await clobAccounts.priceLevel.all()) as PriceLevelAccount[])
+        .filter((entry) => {
+          const sameMarket = entry.account.marketState.equals(market.marketState);
+          const sameSide = Number(entry.account.side) === oppositeSide;
+          const hasLiquidity = asBigInt(entry.account.totalOpen) > 0n;
+          if (!sameMarket || !sameSide || !hasLiquidity) {
+            return false;
+          }
+          const levelPrice = Number(entry.account.price);
+          return sideValue === SIDE_BID ? levelPrice <= price : levelPrice >= price;
+        })
+        .sort((a, b) =>
           sideValue === SIDE_BID
-            ? boundary <= price && boundary > 0 && boundary < 1000
-            : boundary >= price && boundary > 0 && boundary < 1000;
-        if (!crosses) {
-          break;
-        }
-
-        const levelPda = findPriceLevelPda(
-          clobProgram.programId,
-          market.marketState,
-          oppositeSide,
-          boundary,
+            ? Number(a.account.price) - Number(b.account.price)
+            : Number(b.account.price) - Number(a.account.price),
         );
-        const level = await clobProgram.account.priceLevel.fetchNullable(levelPda);
-        if (!level) {
+
+      for (const level of oppositeLevels) {
+        if (remaining <= 0n || matches >= MAX_MATCH_ACCOUNTS) {
           break;
         }
 
         metas.push({
-          pubkey: levelPda,
+          pubkey: level.publicKey,
           isSigner: false,
           isWritable: true,
         });
 
-        const levelOpen = asBigInt(level.totalOpen);
-        const headOrderId = asBigInt(level.headOrderId);
-        if (levelOpen === 0n || headOrderId === 0n) {
-          boundary =
-            sideValue === SIDE_BID
-              ? boundary + 1
-              : boundary - 1;
-          matches += 1;
-          continue;
-        }
-
-        let currentHead = headOrderId;
-        let currentLevelOpen = levelOpen;
+        let currentHead = asBigInt(level.account.headOrderId);
+        let currentLevelOpen = asBigInt(level.account.totalOpen);
         while (remaining > 0n && currentHead > 0n && currentLevelOpen > 0n) {
           const orderPda = findOrderPda(
             clobProgram.programId,
             market.marketState,
             currentHead,
           );
-          const order = await clobProgram.account.order.fetch(orderPda);
+          const order = await clobAccounts.order.fetch(orderPda);
           const makerBalancePda = findUserBalancePda(
             clobProgram.programId,
             market.marketState,
@@ -645,17 +667,12 @@ export function SolanaClobPanel({
           matches += 1;
           if (remaining > 0n && currentHead > 0n && currentLevelOpen > 0n) {
             metas.push({
-              pubkey: levelPda,
+              pubkey: level.publicKey,
               isSigner: false,
               isWritable: true,
             });
           }
         }
-
-        boundary =
-          sideValue === SIDE_BID
-            ? boundary + 1
-            : boundary - 1;
         matches += 1;
       }
 
@@ -666,7 +683,7 @@ export function SolanaClobPanel({
         price,
       );
       const restingLevel =
-        await clobProgram.account.priceLevel.fetchNullable(restingLevelPda);
+        await clobAccounts.priceLevel.fetchNullable(restingLevelPda);
       if (restingLevel && asBigInt(restingLevel.tailOrderId) > 0n) {
         metas.push({
           pubkey: findOrderPda(
@@ -686,17 +703,31 @@ export function SolanaClobPanel({
 
   const buildCancelRemainingAccounts = useCallback(
     async (
-      clobProgram: any,
+      clobProgram: ClobProgram,
       marketState: PublicKey,
       orderId: bigint,
     ): Promise<{
-      order: any;
+      order: {
+        side: BN | bigint | number;
+        price: BN | bigint | number;
+        prevOrderId: BN | bigint | number;
+        nextOrderId: BN | bigint | number;
+      };
       orderPda: PublicKey;
       priceLevelPda: PublicKey;
       metas: AccountMeta[];
     }> => {
+      const clobAccounts = clobProgram.account as Record<
+        string,
+        AccountNamespaceFetcher
+      >;
       const orderPda = findOrderPda(clobProgram.programId, marketState, orderId);
-      const order = await clobProgram.account.order.fetch(orderPda);
+      const order = (await clobAccounts.order.fetch(orderPda)) as {
+        side: BN | bigint | number;
+        price: BN | bigint | number;
+        prevOrderId: BN | bigint | number;
+        nextOrderId: BN | bigint | number;
+      };
       const priceLevelPda = findPriceLevelPda(
         clobProgram.programId,
         marketState,
@@ -729,22 +760,30 @@ export function SolanaClobPanel({
   );
 
   const handlePlaceOrder = useCallback(async () => {
-    const clobProgram: any = writablePrograms?.goldClobMarket;
+    const clobProgram = writablePrograms?.goldClobMarket;
     if (!clobProgram || !wallet.publicKey || !activeMarket) {
       setStatus("Connect wallet to trade");
       return;
     }
 
     try {
+      const clobAccounts = clobProgram.account as Record<
+        string,
+        AccountNamespaceFetcher
+      >;
       const amount = toBaseUnits(amountInput);
       if (amount <= 0n) {
         setStatus("Amount must be greater than zero");
         return;
       }
 
+      const latestMarketAccount = await clobAccounts.marketState.fetch(
+        activeMarket.marketState,
+      );
+
       const price = clampPrice(priceInput);
       const sideValue = side === "YES" ? SIDE_BID : SIDE_ASK;
-      const orderId = activeMarket.nextOrderId;
+      const orderId = asBigInt(latestMarketAccount.nextOrderId);
       const userBalance = findUserBalancePda(
         clobProgram.programId,
         activeMarket.marketState,
@@ -780,10 +819,10 @@ export function SolanaClobPanel({
           newOrder,
           restingLevel,
           config: findClobConfigPda(clobProgram.programId),
-          treasury: (await clobProgram.account.marketConfig.fetch(
+          treasury: (await clobAccounts.marketConfig.fetch(
             findClobConfigPda(clobProgram.programId),
           )).treasury as PublicKey,
-          marketMaker: (await clobProgram.account.marketConfig.fetch(
+          marketMaker: (await clobAccounts.marketConfig.fetch(
             findClobConfigPda(clobProgram.programId),
           )).marketMaker as PublicKey,
           vault: activeMarket.vault,
@@ -813,7 +852,7 @@ export function SolanaClobPanel({
   ]);
 
   const handleCancelLastOrder = useCallback(async () => {
-    const clobProgram: any = writablePrograms?.goldClobMarket;
+    const clobProgram = writablePrograms?.goldClobMarket;
     if (!clobProgram || !wallet.publicKey || !activeMarket || !lastOrderId) {
       setStatus("No active order to cancel");
       return;
@@ -862,20 +901,24 @@ export function SolanaClobPanel({
   ]);
 
   const handleClaim = useCallback(async () => {
-    const clobProgram: any = writablePrograms?.goldClobMarket;
+    const clobProgram = writablePrograms?.goldClobMarket;
     if (!clobProgram || !wallet.publicKey || !activeMarket) {
       setStatus("Connect wallet to claim");
       return;
     }
 
     try {
+      const clobAccounts = clobProgram.account as Record<
+        string,
+        AccountNamespaceFetcher
+      >;
       const userBalance = findUserBalancePda(
         clobProgram.programId,
         activeMarket.marketState,
         wallet.publicKey,
       );
       const configPda = findClobConfigPda(clobProgram.programId);
-      const config = await clobProgram.account.marketConfig.fetch(configPda);
+      const config = await clobAccounts.marketConfig.fetch(configPda);
 
       const tx = await clobProgram.methods
         .claim()
@@ -952,7 +995,6 @@ export function SolanaClobPanel({
       programsReady={Boolean(activeMarket)}
       agent1Name={effectiveAgent1}
       agent2Name={effectiveAgent2}
-      isEvm={false}
       supportsSell
       chartData={chartData}
       bids={bids}
@@ -982,7 +1024,7 @@ export function SolanaClobPanel({
             flexWrap: "wrap",
           }}
         >
-          <span>{status}</span>
+          <span data-testid="solana-clob-status">{status}</span>
           <span>{isRefreshing ? "Refreshing..." : duelLabel}</span>
         </div>
         <div

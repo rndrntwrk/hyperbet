@@ -519,7 +519,6 @@ export function useMockStreamingEngine(
       if (phase === "RESOLUTION" && elapsed < 500) {
         setAgent1((prev) => {
           if (winnerId) return prev;
-          const a1Dead = prev.hp <= 0;
           return prev;
         });
 

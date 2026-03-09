@@ -5,10 +5,8 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_DIR="$(cd "$APP_DIR/.." && pwd)"
 ANCHOR_DIR="$DEMO_DIR/anchor"
 KEEPER_DIR="$DEMO_DIR/keeper"
-EVM_DIR="$(cd "$DEMO_DIR/../evm-contracts" && pwd)"
 LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-/tmp/hyperscape-gold-e2e-ledger}"
 VALIDATOR_LOG="$APP_DIR/.e2e-validator.log"
-ANVIL_LOG="$APP_DIR/.e2e-anvil.log"
 APP_LOG="$APP_DIR/.e2e-app.log"
 SOLANA_PROXY_LOG="$APP_DIR/.e2e-solana-proxy.log"
 KEEPER_LOG="$APP_DIR/.e2e-keeper.log"
@@ -27,14 +25,44 @@ SOLANA_WS_URL="ws://127.0.0.1:${SOLANA_WS_PORT}"
 SOLANA_PROXY_PORT="${E2E_SOLANA_PROXY_PORT:-$((20000 + RANDOM % 10000))}"
 SOLANA_PROXY_URL="http://127.0.0.1:${SOLANA_PROXY_PORT}"
 SOLANA_PROXY_WS_URL="ws://127.0.0.1:${SOLANA_PROXY_PORT}"
-SOLANA_MINT_AUTHORITY="${E2E_SOLANA_MINT_AUTHORITY:-DfEnrzh4cgnHxfuZRxLGX69fnLd9DP41XxGuE4gtyJpn}"
-ANVIL_PORT="${E2E_EVM_PORT:-18545}"
-# Always target the local anvil instance spawned by this script.
-ANVIL_RPC_URL="http://127.0.0.1:${ANVIL_PORT}"
-EVM_CHAIN_ID="${E2E_EVM_CHAIN_ID:-31337}"
+resolve_localnet_wallet_path() {
+  local candidates=()
+
+  if [[ -n "${E2E_SOLANA_BOOTSTRAP_KEYPAIR:-}" ]]; then
+    candidates+=("${E2E_SOLANA_BOOTSTRAP_KEYPAIR}")
+  fi
+  candidates+=(
+    "$HOME/.config/solana/hyperscape-keys/deployer.json"
+    "$HOME/.config/solana/id.json"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  printf 'No local E2E bootstrap wallet found. Checked:\n' >&2
+  printf '  %s\n' "${candidates[@]}" >&2
+  exit 1
+}
+
+resolve_localnet_mint_authority() {
+  local wallet_path="$1"
+
+  if [[ -n "${E2E_SOLANA_MINT_AUTHORITY:-}" ]]; then
+    printf '%s\n' "${E2E_SOLANA_MINT_AUTHORITY}"
+    return 0
+  fi
+
+  solana-keygen pubkey "$wallet_path"
+}
+
+BOOTSTRAP_WALLET_PATH="$(resolve_localnet_wallet_path)"
+SOLANA_MINT_AUTHORITY="$(resolve_localnet_mint_authority "$BOOTSTRAP_WALLET_PATH")"
 
 VALIDATOR_PID=""
-ANVIL_PID=""
 APP_PID=""
 SOLANA_PROXY_PID=""
 KEEPER_PID=""
@@ -47,10 +75,6 @@ cleanup() {
   if [[ -n "$KEEPER_PID" ]] && kill -0 "$KEEPER_PID" >/dev/null 2>&1; then
     kill "$KEEPER_PID" >/dev/null 2>&1 || true
     wait "$KEEPER_PID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$ANVIL_PID" ]] && kill -0 "$ANVIL_PID" >/dev/null 2>&1; then
-    kill "$ANVIL_PID" >/dev/null 2>&1 || true
-    wait "$ANVIL_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "$SOLANA_PROXY_PID" ]] && kill -0 "$SOLANA_PROXY_PID" >/dev/null 2>&1; then
     kill "$SOLANA_PROXY_PID" >/dev/null 2>&1 || true
@@ -97,33 +121,6 @@ wait_for_solana_proxy() {
     sleep 1
   done
   return 1
-}
-
-wait_for_anvil_rpc() {
-  for _ in {1..90}; do
-    if curl -s -X POST "$ANVIL_RPC_URL" \
-      -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' | rg -q '"result"'; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-read_anvil_chain_id() {
-  local response
-  local chain_id_hex
-
-  response="$(curl -s -X POST "$ANVIL_RPC_URL" \
-    -H "content-type: application/json" \
-    -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}')"
-  chain_id_hex="$(printf "%s" "$response" | jq -r '.result // empty')"
-  if [[ ! "$chain_id_hex" =~ ^0x[0-9a-fA-F]+$ ]]; then
-    return 1
-  fi
-
-  printf "%d\n" "$((16#${chain_id_hex#0x}))"
 }
 
 wait_for_app() {
@@ -179,14 +176,10 @@ kill_listeners "$SOLANA_WS_PORT"
 kill_listeners "$SOLANA_FAUCET_PORT"
 pkill -f "packages/hyperbet-solana/app/scripts/solana-rpc-proxy.mjs" >/dev/null 2>&1 || true
 kill_listeners "$SOLANA_PROXY_PORT"
-kill_listeners "$ANVIL_PORT"
 rm -f "$KEEPER_DB_PATH" "${KEEPER_DB_PATH}-shm" "${KEEPER_DB_PATH}-wal"
 
 echo "[e2e] building anchor programs"
 bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-solana-e2e-build.log 2>&1
-
-echo "[e2e] compiling evm contracts"
-bun run --cwd "$EVM_DIR" compile >/tmp/hyperbet-solana-e2e-evm-build.log 2>&1
 
 IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
 IDL_MARKET_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_perps_market.json" 2>/dev/null || true)"
@@ -210,9 +203,9 @@ solana-test-validator \
   --faucet-port "$SOLANA_FAUCET_PORT" \
   --mint "$SOLANA_MINT_AUTHORITY" \
   --ledger "$LEDGER_DIR" \
-  --bpf-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" \
-  --bpf-program "$PROGRAM_MARKET_ID" "$ANCHOR_DIR/target/deploy/gold_perps_market.so" \
-  --bpf-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" \
+  --upgradeable-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" "$BOOTSTRAP_WALLET_PATH" \
+  --upgradeable-program "$PROGRAM_MARKET_ID" "$ANCHOR_DIR/target/deploy/gold_perps_market.so" "$BOOTSTRAP_WALLET_PATH" \
+  --upgradeable-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" "$BOOTSTRAP_WALLET_PATH" \
   >"$VALIDATOR_LOG" 2>&1 &
 VALIDATOR_PID="$!"
 
@@ -242,30 +235,6 @@ if ! wait_for_solana_proxy; then
   exit 1
 fi
 
-echo "[e2e] starting local anvil"
-anvil \
-  --silent \
-  --host 127.0.0.1 \
-  --port "$ANVIL_PORT" \
-  --chain-id "$EVM_CHAIN_ID" \
-  >"$ANVIL_LOG" 2>&1 &
-ANVIL_PID="$!"
-
-if ! wait_for_anvil_rpc; then
-  echo "[e2e] anvil did not become ready"
-  tail -n 80 "$ANVIL_LOG" || true
-  exit 1
-fi
-
-if ACTUAL_EVM_CHAIN_ID="$(read_anvil_chain_id)"; then
-  if [[ "$ACTUAL_EVM_CHAIN_ID" != "$EVM_CHAIN_ID" ]]; then
-    echo "[e2e] anvil reported chain id ${ACTUAL_EVM_CHAIN_ID} (requested ${EVM_CHAIN_ID})"
-  fi
-  EVM_CHAIN_ID="$ACTUAL_EVM_CHAIN_ID"
-else
-  echo "[e2e] failed to read anvil chain id; continuing with configured ${EVM_CHAIN_ID}"
-fi
-
 echo "[e2e] seeding local solana state + writing .env.e2e"
 run_with_retries \
   "solana e2e setup" \
@@ -276,15 +245,6 @@ run_with_retries \
     E2E_BROWSER_SOLANA_RPC_URL="$SOLANA_PROXY_URL" \
     E2E_BROWSER_SOLANA_WS_URL="$SOLANA_PROXY_WS_URL" \
     bun run "$APP_DIR/tests/e2e/setup-localnet.ts"
-
-echo "[e2e] seeding local evm state + extending .env.e2e"
-run_with_retries \
-  "evm e2e setup" \
-  3 \
-  env \
-    E2E_EVM_RPC_URL="$ANVIL_RPC_URL" \
-    E2E_EVM_CHAIN_ID="$EVM_CHAIN_ID" \
-    bun run "$APP_DIR/tests/e2e/setup-evm-local.ts"
 
 echo "[e2e] seeding keeper database"
 env \

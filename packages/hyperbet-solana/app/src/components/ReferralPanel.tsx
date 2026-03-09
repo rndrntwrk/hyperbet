@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ChainId } from "../lib/chainConfig";
+import { useCallback, useEffect, useState } from "react";
 import { buildArenaWriteHeaders, GAME_API_URL } from "../lib/config";
-
-type EvmPlatform = "BSC" | "BASE";
 
 type PointsSnapshot = {
   wallet: string;
-  pointsScope?: "WALLET" | "LINKED";
-  identityWalletCount?: number;
+  pointsScope?: "WALLET";
   totalPoints: number;
   selfPoints: number;
   winPoints: number;
@@ -32,14 +28,6 @@ type InviteSummary = {
   activeReferralCount: number;
   pendingSignupBonuses: number;
   totalReferralWinPoints: number;
-};
-
-type WalletLinkResponse = {
-  result?: {
-    alreadyLinked: boolean;
-    awardedPoints: number;
-  };
-  error?: string;
 };
 
 const LOCAL_INVITE_ORIGIN = "http://localhost:4179";
@@ -76,48 +64,18 @@ function buildInviteShareLink(inviteCode: string): string {
   return url.toString();
 }
 
-export function ReferralPanel(props: {
-  activeChain: ChainId;
-  solanaWallet: string | null;
-  evmWallet: string | null;
-  evmWalletPlatform: EvmPlatform | null;
-}) {
-  const { activeChain, solanaWallet, evmWallet, evmWalletPlatform } = props;
-
-  const primaryWallet = useMemo(() => {
-    if (activeChain === "solana" && solanaWallet) return solanaWallet;
-    if ((activeChain === "bsc" || activeChain === "base") && evmWallet) {
-      return evmWallet;
-    }
-    return solanaWallet ?? evmWallet ?? null;
-  }, [activeChain, solanaWallet, evmWallet]);
-
-  const platformQuery = useMemo(() => {
-    if (primaryWallet && primaryWallet === solanaWallet) return "solana";
-    if (primaryWallet && primaryWallet === evmWallet) return "evm";
-    return activeChain === "solana" ? "solana" : "evm";
-  }, [activeChain, evmWallet, primaryWallet, solanaWallet]);
-  const walletModeLabel = useMemo(() => {
-    if (!primaryWallet) return "";
-    if (primaryWallet === solanaWallet) {
-      return activeChain === "solana" ? "Solana wallet" : "Solana fallback";
-    }
-    if (primaryWallet === evmWallet) {
-      return activeChain === "solana" ? "EVM fallback" : "EVM wallet";
-    }
-    return "Wallet";
-  }, [activeChain, evmWallet, primaryWallet, solanaWallet]);
-
+export function ReferralPanel(props: { solanaWallet: string | null }) {
+  const { solanaWallet: wallet } = props;
   const [points, setPoints] = useState<PointsSnapshot | null>(null);
   const [invite, setInvite] = useState<InviteSummary | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [statsError, setStatsError] = useState("");
   const [redeemCode, setRedeemCode] = useState("");
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
   const refreshStats = useCallback(async () => {
-    if (!primaryWallet) {
+    if (!wallet) {
       setPoints(null);
       setInvite(null);
       setStatsError("");
@@ -129,18 +87,12 @@ export function ReferralPanel(props: {
       setLoadingStats(true);
       setStatsError("");
       const [pointsRes, inviteRes] = await Promise.all([
-        fetch(
-          `${GAME_API_URL}/api/arena/points/${primaryWallet}?scope=linked`,
-          {
-            cache: "no-store",
-          },
-        ),
-        fetch(
-          `${GAME_API_URL}/api/arena/invite/${primaryWallet}?platform=${platformQuery}`,
-          {
-            cache: "no-store",
-          },
-        ),
+        fetch(`${GAME_API_URL}/api/arena/points/${wallet}?scope=wallet`, {
+          cache: "no-store",
+        }),
+        fetch(`${GAME_API_URL}/api/arena/invite/${wallet}?platform=solana`, {
+          cache: "no-store",
+        }),
       ]);
 
       const errors: string[] = [];
@@ -157,9 +109,7 @@ export function ReferralPanel(props: {
         errors.push(`invite ${inviteRes.status}`);
       }
 
-      if (errors.length > 0) {
-        setStatsError(`Stats unavailable (${errors.join(", ")})`);
-      }
+      setStatsError(errors.length > 0 ? `Stats unavailable (${errors.join(", ")})` : "");
     } catch {
       setPoints(null);
       setInvite(null);
@@ -167,7 +117,7 @@ export function ReferralPanel(props: {
     } finally {
       setLoadingStats(false);
     }
-  }, [platformQuery, primaryWallet]);
+  }, [wallet]);
 
   useEffect(() => {
     void refreshStats();
@@ -185,13 +135,9 @@ export function ReferralPanel(props: {
     );
   }, []);
 
-  const canLinkWallets = Boolean(
-    solanaWallet && evmWallet && evmWalletPlatform,
-  );
-
   const handleRedeem = useCallback(async () => {
-    if (!primaryWallet) {
-      setStatus("Connect wallet to redeem invite code");
+    if (!wallet) {
+      setStatus("Connect a Solana wallet to redeem an invite code");
       return;
     }
 
@@ -207,7 +153,7 @@ export function ReferralPanel(props: {
       const response = await fetch(`${GAME_API_URL}/api/arena/invite/redeem`, {
         method: "POST",
         headers: buildArenaWriteHeaders(),
-        body: JSON.stringify({ wallet: primaryWallet, inviteCode: code }),
+        body: JSON.stringify({ wallet, inviteCode: code }),
       });
       const payload = (await response.json()) as {
         error?: string;
@@ -233,278 +179,138 @@ export function ReferralPanel(props: {
     } finally {
       setBusy(false);
     }
-  }, [primaryWallet, redeemCode, refreshStats]);
+  }, [redeemCode, refreshStats, wallet]);
 
-  const handleLinkWallets = useCallback(async () => {
-    if (!solanaWallet || !evmWallet || !evmWalletPlatform) {
-      setStatus("Connect both Solana and EVM wallets first");
-      return;
-    }
-
-    const requestBody =
-      activeChain === "solana"
-        ? {
-            wallet: solanaWallet,
-            walletPlatform: "SOLANA",
-            linkedWallet: evmWallet,
-            linkedWalletPlatform: evmWalletPlatform,
-          }
-        : {
-            wallet: evmWallet,
-            walletPlatform: evmWalletPlatform,
-            linkedWallet: solanaWallet,
-            linkedWalletPlatform: "SOLANA",
-          };
-
-    setBusy(true);
-    setStatus("Linking wallets...");
-    try {
-      const response = await fetch(`${GAME_API_URL}/api/arena/wallet-link`, {
-        method: "POST",
-        headers: buildArenaWriteHeaders(),
-        body: JSON.stringify(requestBody),
-      });
-      const payload = (await response.json()) as WalletLinkResponse;
-      if (!response.ok) {
-        setStatus(payload.error ?? "Wallet link failed");
-        return;
-      }
-      if (payload.result?.alreadyLinked) {
-        setStatus("Wallets are already linked");
-      } else {
-        const bonus = payload.result?.awardedPoints ?? 0;
-        setStatus(`Wallets linked (+${bonus} points)`);
-      }
-      await refreshStats();
-    } catch {
-      setStatus("Wallet link failed");
-    } finally {
-      setBusy(false);
-    }
-  }, [activeChain, evmWallet, evmWalletPlatform, refreshStats, solanaWallet]);
-
-  const handleCopyInvite = useCallback(async () => {
-    if (!invite?.inviteCode) return;
-    try {
-      await navigator.clipboard.writeText(
-        buildInviteShareLink(invite.inviteCode),
-      );
-      setStatus("Invite link copied");
-    } catch {
-      setStatus("Failed to copy invite link");
-    }
-  }, [invite?.inviteCode]);
-
-  const noPrimaryWallet = !primaryWallet;
+  const shareLink = invite?.inviteCode
+    ? buildInviteShareLink(invite.inviteCode)
+    : "";
 
   return (
-    <div
-      data-testid="referral-panel"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        padding: 14,
-        borderRadius: 12,
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
-      }}
-    >
-      <div style={{ fontSize: 12, textTransform: "uppercase", opacity: 0.65 }}>
-        Invite + Fee Share
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.56)" }}>
+          Active wallet
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700 }}>
+          {wallet ? shortWallet(wallet) : "Connect SOL wallet"}
+        </div>
       </div>
 
-      {noPrimaryWallet ? (
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
-          Connect the active-chain wallet to view invite code, points, and fee
-          share.
+      <div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.56)" }}>
+          Invite code
         </div>
-      ) : (
-        <>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>
-            Wallet: {shortWallet(primaryWallet)}
+        <div
+          data-testid="referral-panel-invite-code"
+          style={{ fontSize: 14, fontWeight: 700 }}
+        >
+          {invite?.inviteCode || "Not available"}
+        </div>
+        {shareLink ? (
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.52)" }}>
+            {shareLink}
           </div>
-          <div
-            data-testid="referral-panel-wallet-mode"
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.52)" }}
-          >
-            Viewing: {walletModeLabel}
-          </div>
-          <div
-            data-testid="referral-panel-points-scope"
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.52)" }}
-          >
-            Points Scope: {points?.pointsScope ?? "WALLET"} (
-            {points?.identityWalletCount ?? 1} wallet
-            {(points?.identityWalletCount ?? 1) === 1 ? "" : "s"})
-          </div>
-          {points?.referredBy ? (
-            <div
-              data-testid="referral-panel-referred-by"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                background: "rgba(74,222,128,0.08)",
-                border: "1px solid rgba(74,222,128,0.2)",
-                fontSize: 11,
-                marginBottom: 2,
-              }}
-            >
-              <div
-                style={{ color: "#4ade80", fontWeight: 600, marginBottom: 2 }}
-              >
-                Referred by {shortWallet(points.referredBy.wallet)}
-              </div>
-              <div style={{ color: "rgba(255,255,255,0.55)" }}>
-                Code: {points.referredBy.code} &middot; +25 signup bonus
-              </div>
-            </div>
-          ) : null}
+        ) : null}
+      </div>
 
-          <div
-            style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12 }}
-          >
-            <span>Points: {points?.totalPoints?.toLocaleString() ?? "0"}</span>
-            <span>
-              Referrals: {invite?.activeReferralCount ?? 0}/
-              {invite?.invitedWalletCount ?? 0}
-              {(invite?.pendingSignupBonuses ?? 0) > 0
-                ? ` (${invite?.pendingSignupBonuses} pending)`
-                : ""}
-            </span>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              fontSize: 11,
-              color: "rgba(255,255,255,0.6)",
-            }}
-          >
-            <span>
-              Fee Share: {invite?.feeShareFromReferralsGold ?? "0"} GOLD
-            </span>
-            {(invite?.totalReferralWinPoints ?? 0) > 0 ? (
-              <span>
-                Win Bonuses: +{invite?.totalReferralWinPoints?.toLocaleString()}{" "}
-                pts
-              </span>
-            ) : null}
-          </div>
-          {invite?.invitedWalletsTruncated ? (
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.56)" }}>
-              Showing {invite.invitedWallets.length} of{" "}
-              {invite.invitedWalletCount} referred wallets.
-            </div>
-          ) : null}
-          {loadingStats ? (
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.56)" }}>
-              Refreshing points...
-            </div>
-          ) : null}
-          {statsError ? (
-            <div style={{ fontSize: 11, color: "#fca5a5" }}>{statsError}</div>
-          ) : null}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <StatCard label="Total Points" value={String(points?.totalPoints ?? 0)} />
+        <StatCard
+          label="Referral Points"
+          value={String(points?.referralPoints ?? 0)}
+        />
+        <StatCard
+          label="Invited Wallets"
+          value={String(invite?.invitedWalletCount ?? 0)}
+        />
+        <StatCard
+          label="Referral Fee Share"
+          value={invite?.feeShareFromReferralsGold ?? "0.000000"}
+        />
+      </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <code
-              data-testid="referral-panel-invite-code"
-              style={{
-                flex: 1,
-                fontSize: 11,
-                padding: "8px 10px",
-                borderRadius: 8,
-                background: "rgba(0,0,0,0.45)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {invite?.inviteCode ?? "-"}
-            </code>
-            <button
-              type="button"
-              onClick={handleCopyInvite}
-              disabled={!invite?.inviteCode}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(0,0,0,0.35)",
-                color: "#fff",
-                cursor: invite?.inviteCode ? "pointer" : "not-allowed",
-              }}
-            >
-              Copy Link
-            </button>
-          </div>
-        </>
-      )}
+      <div
+        data-testid="referral-panel-referred-by"
+        style={{ fontSize: 12, color: "rgba(255,255,255,0.72)" }}
+      >
+        Referred by:{" "}
+        {points?.referredBy
+          ? `${shortWallet(points.referredBy.wallet)} (${points.referredBy.code})`
+          : "None"}
+      </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <label
+          htmlFor="invite-redeem-code"
+          style={{ fontSize: 12, color: "rgba(255,255,255,0.56)" }}
+        >
+          Redeem invite
+        </label>
         <input
+          id="invite-redeem-code"
           data-testid="referral-panel-redeem-input"
-          type="text"
-          placeholder="Redeem invite code or link"
           value={redeemCode}
           onChange={(event) => setRedeemCode(event.target.value)}
+          placeholder="INVITE CODE"
           style={{
-            flex: 1,
             padding: "10px 12px",
             borderRadius: 8,
             border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(0,0,0,0.35)",
-            color: "#fff",
-            fontSize: 12,
+            background: "rgba(255,255,255,0.04)",
+            color: "white",
           }}
         />
         <button
           type="button"
-          data-testid="referral-panel-redeem-button"
           onClick={() => void handleRedeem()}
-          disabled={busy || !primaryWallet}
+          disabled={busy || !wallet}
           style={{
             padding: "10px 12px",
             borderRadius: 8,
-            border: "1px solid rgba(234,179,8,0.45)",
-            background: "rgba(234,179,8,0.2)",
-            color: "#fbbf24",
-            cursor: busy || !primaryWallet ? "not-allowed" : "pointer",
-            fontSize: 12,
+            border: "1px solid rgba(242,208,138,0.35)",
+            background: "rgba(242,208,138,0.12)",
+            color: "#f2d08a",
             fontWeight: 700,
+            cursor: busy || !wallet ? "not-allowed" : "pointer",
+            opacity: busy || !wallet ? 0.6 : 1,
           }}
         >
-          Redeem
+          Redeem Code
         </button>
       </div>
 
-      <button
-        type="button"
-        data-testid="referral-panel-link-wallets"
-        onClick={() => void handleLinkWallets()}
-        disabled={busy || !canLinkWallets}
-        style={{
-          padding: "10px 12px",
-          borderRadius: 8,
-          border: "1px solid rgba(96,165,250,0.45)",
-          background: "rgba(96,165,250,0.18)",
-          color: "#93c5fd",
-          cursor: busy || !canLinkWallets ? "not-allowed" : "pointer",
-          fontSize: 12,
-          fontWeight: 700,
-          textAlign: "left",
-        }}
-      >
-        Link Solana + EVM wallets (+100 points)
-      </button>
-
+      {loadingStats ? (
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.56)" }}>
+          Loading referral stats...
+        </div>
+      ) : null}
+      {statsError ? (
+        <div style={{ fontSize: 12, color: "#fda4af" }}>{statsError}</div>
+      ) : null}
       {status ? (
-        <div
-          data-testid="referral-panel-status"
-          style={{ fontSize: 11, color: "rgba(255,255,255,0.68)" }}
-        >
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.72)" }}>
           {status}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function StatCard(props: { label: string; value: string }) {
+  const { label, value } = props;
+  return (
+    <div
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.03)",
+      }}
+    >
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.52)" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 800 }}>{value}</div>
     </div>
   );
 }

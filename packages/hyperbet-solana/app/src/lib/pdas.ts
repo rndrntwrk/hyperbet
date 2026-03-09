@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { findProgramAddressSync } from "./programAddress";
 
-export const DUEL_WINNER_MARKET_KIND = 0;
+export const DUEL_WINNER_MARKET_KIND = 1;
 
 export function findOracleConfigPda(
   fightOracleProgramId: PublicKey,

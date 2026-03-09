@@ -32,7 +32,6 @@ interface PredictionMarketPanelProps {
   programsReady: boolean;
   agent1Name: string;
   agent2Name: string;
-  isEvm: boolean;
   supportsSell?: boolean;
   chartData?: ChartDataPoint[];
   bids?: OrderLevel[];
@@ -62,7 +61,6 @@ export function PredictionMarketPanel({
   programsReady,
   agent1Name,
   agent2Name,
-  isEvm,
   supportsSell = false,
   chartData = [],
   bids = [],
@@ -81,7 +79,7 @@ export function PredictionMarketPanel({
   const yesSelected = side === "YES";
   const noSelected = side === "NO";
   const canBet = isWalletReady && programsReady;
-  const sellSupported = isEvm || supportsSell;
+  const sellSupported = supportsSell;
 
   // Compact mode colour tokens (hm-* theme)
   const C_YES_ACTIVE_BG = compact
@@ -570,9 +568,7 @@ export function PredictionMarketPanel({
               >
                 {sellSupported
                   ? "Submit sell-side orders with the controls below."
-                  : isEvm
-                    ? "EVM sell orders supported via the EVM panel."
-                    : "Sell disabled until market resolution."}
+                  : "Sell disabled until market resolution."}
               </p>
               {sellSupported ? (
                 (children ?? (

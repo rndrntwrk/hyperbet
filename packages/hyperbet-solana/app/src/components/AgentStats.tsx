@@ -1,19 +1,19 @@
 import React from "react";
 
-type StreamingInventoryItem = {
+export type StreamingInventoryItem = {
   slot: number;
   itemId: string;
   quantity: number;
 };
 
-type StreamingMonologue = {
+export type StreamingMonologue = {
   id: string;
   type: string;
   content: string;
   timestamp: number;
 };
 
-type StreamingAgentContext = {
+export type StreamingAgentContext = {
   id: string;
   name: string;
   provider: string;

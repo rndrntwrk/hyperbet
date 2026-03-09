@@ -1,10 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import BN from "bn.js";
-import { AnchorProvider, Idl, Program, Wallet } from "@coral-xyz/anchor";
+import {
+  AnchorProvider,
+  type Idl,
+  Program,
+  Wallet,
+} from "@coral-xyz/anchor";
 import {
   Connection,
   Keypair,
@@ -92,6 +96,14 @@ export function getRpcUrl(): string {
   }
 
   return "https://api.mainnet-beta.solana.com";
+}
+
+export function getSenderUrl(): string | null {
+  const heliusApiKey = process.env.HELIUS_API_KEY;
+  if (heliusApiKey) {
+    return `https://sender.helius-rpc.com/fast?api-key=${heliusApiKey}`;
+  }
+  return null;
 }
 
 export function readKeypair(keypairRef: string): Keypair {
@@ -197,9 +209,9 @@ const GOLD_PERPS_MARKET_IDL = ensureIdlAddress(
 export function createPrograms(signer: Keypair): {
   connection: Connection;
   provider: AnchorProvider;
-  fightOracle: Program<any>;
-  goldClobMarket: Program<any>;
-  goldPerpsMarket: Program<any>;
+  fightOracle: Program<Idl>;
+  goldClobMarket: Program<Idl>;
+  goldPerpsMarket: Program<Idl>;
   /** @deprecated Binary market removed. Returns null. */
   goldBinaryMarket: null;
 } {
@@ -235,7 +247,7 @@ export function findOracleConfigPda(
   )[0];
 }
 
-export const DUEL_WINNER_MARKET_KIND = 0;
+export const DUEL_WINNER_MARKET_KIND = 1;
 export const SIDE_BID = 1;
 export const SIDE_ASK = 2;
 

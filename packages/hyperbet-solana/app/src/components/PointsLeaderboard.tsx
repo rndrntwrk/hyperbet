@@ -8,7 +8,7 @@ interface LeaderboardEntry {
 }
 
 type TimeWindow = "alltime" | "daily" | "weekly" | "monthly";
-type Scope = "linked" | "wallet";
+type Scope = "wallet";
 
 const TIME_WINDOW_OPTIONS: { value: TimeWindow; label: string }[] = [
   { value: "alltime", label: "All Time" },
@@ -18,7 +18,6 @@ const TIME_WINDOW_OPTIONS: { value: TimeWindow; label: string }[] = [
 ];
 
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
-  { value: "linked", label: "Linked" },
   { value: "wallet", label: "Wallet" },
 ];
 
@@ -33,7 +32,7 @@ export function PointsLeaderboard() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("alltime");
-  const [scope, setScope] = useState<Scope>("linked");
+  const [scope, setScope] = useState<Scope>("wallet");
   const pageSize = 20;
 
   const fetchLeaderboard = useCallback(async () => {

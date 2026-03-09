@@ -12,7 +12,6 @@ import { modelMarketIdFromCharacterId } from "../../src/lib/modelMarkets";
 
 type E2eState = {
   solanaTraderPublicKey?: string;
-  evmHeadlessAddress?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
   perpsModelName?: string;
@@ -40,10 +39,6 @@ async function main(): Promise<void> {
     state.solanaTraderPublicKey,
     "solanaTraderPublicKey",
   );
-  const linkedWallet = assertString(
-    state.evmHeadlessAddress,
-    "evmHeadlessAddress",
-  );
   const characterId = assertString(state.perpsCharacterId, "perpsCharacterId");
   const marketId =
     Number(state.perpsMarketId) || modelMarketIdFromCharacterId(characterId);
@@ -52,10 +47,9 @@ async function main(): Promise<void> {
 
   const seededWallets = [
     primaryWallet,
-    linkedWallet,
-    "0x1000000000000000000000000000000000000001",
-    "0x1000000000000000000000000000000000000002",
-    "0x1000000000000000000000000000000000000003",
+    "SeedReferrer11111111111111111111111111111111",
+    "SeedLeader1111111111111111111111111111111",
+    "SeedInvitee111111111111111111111111111111",
   ];
 
   for (const wallet of seededWallets) {
@@ -67,12 +61,7 @@ async function main(): Promise<void> {
     goldHoldDays: 14,
     updatedAt: now,
   });
-  saveWalletGoldState(normalizeWallet(linkedWallet), {
-    goldBalance: 25_000,
-    goldHoldDays: 3,
-    updatedAt: now,
-  });
-  saveWalletGoldState("0x1000000000000000000000000000000000000002", {
+  saveWalletGoldState("seedleader1111111111111111111111111111111", {
     goldBalance: 5_000,
     goldHoldDays: 1,
     updatedAt: now,
@@ -124,7 +113,6 @@ async function main(): Promise<void> {
           process.env.E2E_KEEPER_DB_PATH ||
           "default",
         primaryWallet,
-        linkedWallet,
         marketId,
         characterId,
         oracleSnapshots: oracleSnapshots.length,

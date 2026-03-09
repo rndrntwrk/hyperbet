@@ -18,6 +18,11 @@ import {
 import fightOracleIdl from "../../../anchor/target/idl/fight_oracle.json";
 import goldClobIdl from "../../../anchor/target/idl/gold_clob_market.json";
 import goldPerpsIdl from "../../../anchor/target/idl/gold_perps_market.json";
+import {
+  createOpenMarketFixture,
+  deriveUserBalancePda,
+  uniqueDuelKey,
+} from "../../../anchor/tests/clob-test-helpers";
 import { modelMarketIdFromCharacterId } from "../../src/lib/modelMarkets";
 
 type SignableTx = Transaction | VersionedTransaction;
@@ -27,6 +32,9 @@ type IdlWithAddress = Idl & {
   metadata?: {
     address?: string;
   };
+};
+type AccountNamespace = {
+  fetchNullable: (pubkey: PublicKey) => Promise<unknown>;
 };
 
 function resolveIdlAddress(idl: IdlWithAddress, label: string): string {
@@ -63,15 +71,41 @@ function lamportsBn(sol: number): BN {
   return new BN(Math.round(sol * LAMPORTS_PER_SOL).toString());
 }
 
-async function loadBootstrapAuthority(): Promise<Keypair> {
-  const keypairPath =
-    process.env.E2E_SOLANA_BOOTSTRAP_KEYPAIR ||
+async function loadBootstrapAuthority(): Promise<{
+  keypair: Keypair;
+  keypairPath: string;
+}> {
+  const candidates = [
+    process.env.E2E_SOLANA_BOOTSTRAP_KEYPAIR,
     path.join(
       process.env.HOME ?? "",
       ".config/solana/hyperscape-keys/deployer.json",
+    ),
+    path.join(process.env.HOME ?? "", ".config/solana/id.json"),
+  ].filter((value): value is string => Boolean(value?.trim()));
+
+  let keypairPath: string | null = null;
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      keypairPath = candidate;
+      break;
+    } catch {
+      // Try the next configured wallet path.
+    }
+  }
+
+  if (!keypairPath) {
+    throw new Error(
+      `Could not find a bootstrap Solana keypair. Checked: ${candidates.join(", ")}`,
     );
+  }
+
   const secret = JSON.parse(await fs.readFile(keypairPath, "utf8")) as number[];
-  return Keypair.fromSecretKey(Uint8Array.from(secret));
+  return {
+    keypair: Keypair.fromSecretKey(Uint8Array.from(secret)),
+    keypairPath,
+  };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -286,35 +320,23 @@ async function main(): Promise<void> {
     goldClobIdl as unknown as IdlWithAddress,
     "gold_clob_market",
   );
-  const perpsProgramId = resolveIdlAddress(
-    goldPerpsIdl as unknown as IdlWithAddress,
-    "gold_perps_market",
-  );
-
   const connection = new Connection(solanaRpcUrl, {
     commitment: "confirmed",
     wsEndpoint: solanaWsUrl,
     confirmTransactionInitialTimeout: 120_000,
   });
-  const authority = await loadBootstrapAuthority();
+  const bootstrapAuthority = await loadBootstrapAuthority();
+  const authority = bootstrapAuthority.keypair;
   const trader = Keypair.fromSeed(E2E_TRADER_SEED);
-  let provider = new AnchorProvider(connection, toWallet(authority), {
+  const provider = new AnchorProvider(connection, toWallet(authority), {
     commitment: "confirmed",
     preflightCommitment: "confirmed",
   });
   attachReliableSendAndConfirm(provider, connection);
 
-  let fightProgram = new Program(fightOracleIdl as Idl, provider);
-  let fight: any = fightProgram;
+  const fightProgram = new Program(fightOracleIdl as Idl, provider);
   const clobProgram = new Program(goldClobIdl as Idl, provider);
-  const clob: any = clobProgram;
   const perpsProgram = new Program(goldPerpsIdl as Idl, provider);
-  const perps: any = perpsProgram;
-
-  const [oracleConfigPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("oracle_config")],
-    fightProgram.programId,
-  );
 
   await ensureBalance(connection, authority.publicKey, 30 * LAMPORTS_PER_SOL);
   await ensureTransferredBalance(
@@ -339,107 +361,30 @@ async function main(): Promise<void> {
   const e2eModelMu = 28;
   const e2eModelSigma = 4;
   const e2ePerpsMarketId = modelMarketIdFromCharacterId(e2eModelCharacterId);
-
-  await fight.methods
-    .initializeOracle()
-    .accountsPartial({
-      authority: authority.publicKey,
-      oracleConfig: oracleConfigPda,
-      program: fightProgram.programId,
-      programData: deriveProgramDataAddress(fightProgram.programId),
-      systemProgram: SystemProgram.programId,
-    })
-    .rpc();
-
-  const deriveMarket = (matchId: number) => {
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("match"), new BN(matchId).toArrayLike(Buffer, "le", 8)],
-      fightProgram.programId,
-    );
-    return {
-      matchPda,
-    };
-  };
-
-  const resolvedMatchId = Date.now() - 100_000;
-  const resolved = deriveMarket(resolvedMatchId);
-  await fight.methods
-    .createMatch(
-      new BN(resolvedMatchId),
-      new BN(2),
-      JSON.stringify({
-        agent1: "E2E Resolved Agent A",
-        agent2: "E2E Resolved Agent B",
-      }),
-    )
-    .accountsPartial({
-      authority: authority.publicKey,
-      oracleConfig: oracleConfigPda,
-      matchResult: resolved.matchPda,
-      systemProgram: SystemProgram.programId,
-    })
-    .rpc();
-
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      await fight.methods
-        .postResult({ yes: {} }, new BN(42), Array.from(new Uint8Array(32)))
-        .accountsPartial({
-          authority: authority.publicKey,
-          oracleConfig: oracleConfigPda,
-          matchResult: resolved.matchPda,
-        })
-        .rpc();
-      break;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("BetWindowStillOpen")) throw error;
-      if (attempt === 19) {
-        throw new Error(
-          "Timed out waiting for resolved e2e match betting window to close",
-        );
-      }
-      await sleep(1_000);
-    }
-  }
-
+  const now = Math.floor(Date.now() / 1000);
   const currentMatchId = Date.now();
-  const current = deriveMarket(currentMatchId);
-  await fight.methods
-    .createMatch(
-      new BN(currentMatchId),
-      new BN(45),
-      JSON.stringify({
-        agent1: "E2E Active Agent A",
-        agent2: "E2E Active Agent B",
-      }),
-    )
-    .accountsPartial({
-      authority: authority.publicKey,
-      oracleConfig: oracleConfigPda,
-      matchResult: current.matchPda,
-      systemProgram: SystemProgram.programId,
-    })
-    .rpc();
-
-  const [clobConfigPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config")],
-    clobProgram.programId,
+  const currentDuelMetadata = JSON.stringify({
+    duelId: currentMatchId,
+    matchId: currentMatchId,
+    agent1: "E2E Active Agent A",
+    agent2: "E2E Active Agent B",
+  });
+  const currentMarket = await createOpenMarketFixture(
+    fightProgram as never,
+    clobProgram as never,
+    authority,
+    {
+      duelKey: uniqueDuelKey("e2e-current-duel"),
+      betOpenTs: now - 30,
+      // Keep the duel market open long enough for the full local Playwright
+      // suite to seed liquidity and submit prediction trades across multiple
+      // specs without flaking on wall-clock expiry.
+      betCloseTs: now + 3_600,
+      duelStartTs: now + 60,
+      metadataUri: currentDuelMetadata,
+    },
   );
-  const existingClobConfig =
-    await clob.account.marketConfig.fetchNullable(clobConfigPda);
-  if (!existingClobConfig) {
-    await clob.methods
-      .initializeConfig(authority.publicKey, authority.publicKey, 100, 100, 200)
-      .accountsPartial({
-        authority: authority.publicKey,
-        config: clobConfigPda,
-        program: clobProgram.programId,
-        programData: deriveProgramDataAddress(clobProgram.programId),
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
-  }
+  const currentDuelKeyHex = Buffer.from(currentMarket.duelKey).toString("hex");
 
   const [perpsConfigPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
@@ -449,10 +394,11 @@ async function main(): Promise<void> {
     [Buffer.from("market"), encodeMarketId(e2ePerpsMarketId)],
     perpsProgram.programId,
   );
+  const perpsAccounts = perpsProgram.account as Record<string, AccountNamespace>;
   const existingPerpsConfig =
-    await perps.account.configState.fetchNullable(perpsConfigPda);
+    await perpsAccounts.configState.fetchNullable(perpsConfigPda);
   if (!existingPerpsConfig) {
-    await perps.methods
+    await perpsProgram.methods
       .initializeConfig(
         authority.publicKey,
         authority.publicKey,
@@ -483,7 +429,7 @@ async function main(): Promise<void> {
     await waitForAccountExists(connection, perpsConfigPda);
   }
 
-  await perps.methods
+  await perpsProgram.methods
     .updateMarketOracle(
       new BN(String(e2ePerpsMarketId)),
       lamportsBn(e2eModelSpotIndex),
@@ -498,7 +444,7 @@ async function main(): Promise<void> {
     })
     .rpc();
 
-  await perps.methods
+  await perpsProgram.methods
     .depositInsurance(new BN(String(e2ePerpsMarketId)), lamportsBn(12))
     .accountsPartial({
       market: perpsMarketPda,
@@ -507,122 +453,11 @@ async function main(): Promise<void> {
     })
     .rpc();
 
-  const clobMatchState = Keypair.generate();
-  const [clobVaultPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("vault"), clobMatchState.publicKey.toBuffer()],
+  const clobUserBalancePda = deriveUserBalancePda(
     clobProgram.programId,
+    currentMarket.marketState,
+    trader.publicKey,
   );
-  await clob.methods
-    .initializeMatch(500)
-    .accountsPartial({
-      matchState: clobMatchState.publicKey,
-      user: authority.publicKey,
-      config: clobConfigPda,
-      oracleMatch: current.matchPda,
-      vault: clobVaultPda,
-      systemProgram: SystemProgram.programId,
-    })
-    .signers([clobMatchState])
-    .rpc();
-
-  const clobOrderBook = Keypair.generate();
-  await clob.methods
-    .initializeOrderBook()
-    .accountsPartial({
-      user: authority.publicKey,
-      matchState: clobMatchState.publicKey,
-      orderBook: clobOrderBook.publicKey,
-      systemProgram: SystemProgram.programId,
-    })
-    .signers([clobOrderBook])
-    .rpc();
-
-  const [clobUserBalancePda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("balance"),
-      clobMatchState.publicKey.toBuffer(),
-      trader.publicKey.toBuffer(),
-    ],
-    clobProgram.programId,
-  );
-  const [clobAuthorityBalancePda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("balance"),
-      clobMatchState.publicKey.toBuffer(),
-      authority.publicKey.toBuffer(),
-    ],
-    clobProgram.programId,
-  );
-  const [clobFirstOrderPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("order"),
-      clobMatchState.publicKey.toBuffer(),
-      authority.publicKey.toBuffer(),
-      new BN(1).toArrayLike(Buffer, "le", 8),
-    ],
-    clobProgram.programId,
-  );
-  const [clobSecondOrderPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("order"),
-      clobMatchState.publicKey.toBuffer(),
-      authority.publicKey.toBuffer(),
-      new BN(2).toArrayLike(Buffer, "le", 8),
-    ],
-    clobProgram.programId,
-  );
-
-  const minVaultLamports = await connection.getMinimumBalanceForRentExemption(
-    0,
-    "confirmed",
-  );
-  const currentVaultLamports = await connection.getBalance(
-    clobVaultPda,
-    "confirmed",
-  );
-  if (currentVaultLamports < minVaultLamports) {
-    const topUpLamports = minVaultLamports - currentVaultLamports;
-    const topUpTx = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: authority.publicKey,
-        toPubkey: clobVaultPda,
-        lamports: topUpLamports,
-      }),
-    );
-    await provider.sendAndConfirm(topUpTx);
-  }
-
-  await clob.methods
-    .placeOrder(new BN(1), false, 600, lamportsBn(3))
-    .accountsPartial({
-      matchState: clobMatchState.publicKey,
-      orderBook: clobOrderBook.publicKey,
-      userBalance: clobAuthorityBalancePda,
-      newOrder: clobFirstOrderPda,
-      config: clobConfigPda,
-      treasury: authority.publicKey,
-      marketMaker: authority.publicKey,
-      vault: clobVaultPda,
-      user: authority.publicKey,
-      systemProgram: SystemProgram.programId,
-    })
-    .rpc();
-
-  await clob.methods
-    .placeOrder(new BN(2), true, 400, lamportsBn(3))
-    .accountsPartial({
-      matchState: clobMatchState.publicKey,
-      orderBook: clobOrderBook.publicKey,
-      userBalance: clobAuthorityBalancePda,
-      newOrder: clobSecondOrderPda,
-      config: clobConfigPda,
-      treasury: authority.publicKey,
-      marketMaker: authority.publicKey,
-      vault: clobVaultPda,
-      user: authority.publicKey,
-      systemProgram: SystemProgram.programId,
-    })
-    .rpc();
 
   const oracleRecordedAt = Date.now();
 
@@ -661,11 +496,6 @@ async function main(): Promise<void> {
     `VITE_BINARY_MARKET_MAKER_WALLET=${authority.publicKey.toBase58()}`,
     `VITE_BINARY_TRADE_TREASURY_WALLET=${authority.publicKey.toBase58()}`,
     `VITE_BINARY_TRADE_MARKET_MAKER_WALLET=${authority.publicKey.toBase58()}`,
-    `VITE_E2E_CLOB_MATCH_STATE=${clobMatchState.publicKey.toBase58()}`,
-    `VITE_E2E_CLOB_ORDER_BOOK=${clobOrderBook.publicKey.toBase58()}`,
-    `VITE_E2E_CLOB_VAULT=${clobVaultPda.toBase58()}`,
-    `VITE_E2E_CLOB_USER_BALANCE=${clobUserBalancePda.toBase58()}`,
-    `VITE_E2E_CLOB_FIRST_ORDER=${clobFirstOrderPda.toBase58()}`,
     `VITE_HEADLESS_WALLET_SECRET_KEY=${Array.from(trader.secretKey).join(",")}`,
     "VITE_HEADLESS_WALLET_NAME=E2E Trader",
     "VITE_HEADLESS_WALLET_AUTO_CONNECT=true",
@@ -680,21 +510,25 @@ async function main(): Promise<void> {
         cluster: "localnet",
         solanaRpcUrl,
         authority: authority.publicKey.toBase58(),
+        bootstrapWalletPath: bootstrapAuthority.keypairPath,
         solanaTraderPublicKey: trader.publicKey.toBase58(),
         goldMint: goldMint.toBase58(),
         currentMatchId,
-        currentMatchPda: current.matchPda.toBase58(),
-        clobMatchState: clobMatchState.publicKey.toBase58(),
-        clobOrderBook: clobOrderBook.publicKey.toBase58(),
-        clobVault: clobVaultPda.toBase58(),
+        currentDuelId: String(currentMatchId),
+        currentDuelKeyHex,
+        clobConfig: currentMarket.config.toBase58(),
+        clobMarketState: currentMarket.marketState.toBase58(),
+        clobDuelState: currentMarket.duelState.toBase58(),
+        clobTreasury: currentMarket.treasury.toBase58(),
+        clobMarketMaker: currentMarket.marketMaker.toBase58(),
+        clobVault: currentMarket.vault.toBase58(),
         clobUserBalance: clobUserBalancePda.toBase58(),
-        lastResolvedMatchId: resolvedMatchId,
         expectedSeedSuccess: true,
         canStartNewRound: true,
-        placeBetPayAsset: "GOLD",
+        placeBetPayAsset: "SOL",
         placeBetAmount: "1",
         placeBetSide: "YES",
-        currentBetWindowSeconds: 45,
+        currentBetWindowSeconds: 300,
         perpsCharacterId: e2eModelCharacterId,
         perpsModelName: e2eModelName,
         perpsMarketId: e2ePerpsMarketId,
@@ -717,10 +551,10 @@ async function main(): Promise<void> {
         browserSolanaRpcUrl,
         browserSolanaWsUrl,
         currentMatchId,
-        clobMatchState: clobMatchState.publicKey.toBase58(),
+        currentDuelKeyHex,
+        clobMarketState: currentMarket.marketState.toBase58(),
         clobUserBalance: clobUserBalancePda.toBase58(),
         perpsMarketId: e2ePerpsMarketId,
-        lastResolvedMatchId: resolvedMatchId,
       },
       null,
       2,

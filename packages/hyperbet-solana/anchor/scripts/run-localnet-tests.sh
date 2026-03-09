@@ -9,7 +9,6 @@ TEST_LOG="${ANCHOR_TEST_LOG:-/tmp/hyperscape-anchor-localnet-test.log}"
 RPC_PORT="${ANCHOR_TEST_RPC_PORT:-8899}"
 WS_PORT="${ANCHOR_TEST_WS_PORT:-8900}"
 FAUCET_PORT="${ANCHOR_TEST_FAUCET_PORT:-9900}"
-MINT_AUTHORITY="${ANCHOR_TEST_MINT_AUTHORITY:-DfEnrzh4cgnHxfuZRxLGX69fnLd9DP41XxGuE4gtyJpn}"
 MAX_ORACLE_STALENESS_SECONDS="${HYPERSCAPE_MAX_ORACLE_STALENESS_SECONDS:-5}"
 DEFAULT_STALE_WAIT_MS="$(((MAX_ORACLE_STALENESS_SECONDS + 2) * 1000))"
 STALE_WAIT_MS="${GOLD_PERPS_TEST_STALE_WAIT_MS:-$DEFAULT_STALE_WAIT_MS}"
@@ -54,6 +53,22 @@ resolve_program_id() {
   fi
 
   printf '%s\n' "$fallback"
+}
+
+resolve_mint_authority() {
+  local wallet_path="$1"
+
+  if [[ -n "${ANCHOR_TEST_MINT_AUTHORITY:-}" ]]; then
+    printf '%s\n' "${ANCHOR_TEST_MINT_AUTHORITY}"
+    return 0
+  fi
+
+  if ! command -v solana-keygen >/dev/null 2>&1; then
+    printf 'Missing required command: solana-keygen\n' >&2
+    exit 1
+  fi
+
+  solana-keygen pubkey "$wallet_path"
 }
 
 kill_stale_validator_listener() {
@@ -172,6 +187,7 @@ if [[ ${#TEST_TARGETS[@]} -eq 0 ]]; then
 fi
 
 WALLET_PATH="$(resolve_wallet_path)"
+MINT_AUTHORITY="$(resolve_mint_authority "$WALLET_PATH")"
 PROGRAM_ORACLE_ID="$(resolve_program_id fight_oracle 6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD)"
 PROGRAM_CLOB_ID="$(resolve_program_id gold_clob_market ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi)"
 PROGRAM_PERPS_ID="$(resolve_program_id gold_perps_market HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik)"

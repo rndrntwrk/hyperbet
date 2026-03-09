@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash } from "node:crypto";
 import BN from "bn.js";
 import {
+  Connection,
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -29,6 +29,7 @@ import {
   readKeypair,
   requireEnv,
 } from "./common";
+import { buildResultHash } from "./resultHash";
 
 function asNum(value: unknown, fallback = 0): number {
   if (typeof value === "number") return value;
@@ -86,157 +87,6 @@ function hashParticipant(agent: { id?: string; name?: string } | null): number[]
   return Array.from(createHash("sha256").update(id).digest());
 }
 
-function buildResultHash(
-  duelKeyHex: string,
-  winnerSide: "A" | "B",
-  seed: string,
-  replayHashHex: string,
-): number[] {
-  return Array.from(
-    createHash("sha256")
-      .update(
-        JSON.stringify({
-          duelKeyHex,
-          winnerSide,
-          seed,
-          replayHashHex: replayHashHex.toLowerCase(),
-        }),
-      )
-      .digest(),
-  );
-}
-
-function normalizeHex32(value: string): Hex {
-  const normalized = value.trim().toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(normalized)) {
-    throw new Error("expected 32-byte hex");
-  }
-  return `0x${normalized}`;
-}
-
-function participantHashHex(agent: { id?: string; name?: string } | null): Hex {
-  const id = agent?.id ?? agent?.name ?? "unknown";
-  return `0x${createHash("sha256").update(id).digest("hex")}`;
-}
-
-function resultHashHex(
-  duelKeyHex: string,
-  winnerSide: "A" | "B",
-  seed: string,
-  replayHashHex: string,
-): Hex {
-  return `0x${createHash("sha256")
-    .update(
-      JSON.stringify({
-        duelKeyHex,
-        winnerSide,
-        seed,
-        replayHashHex: replayHashHex.toLowerCase(),
-      }),
-    )
-    .digest("hex")}`;
-}
-
-const DUEL_OUTCOME_ORACLE_ABI = [
-  {
-    type: "function",
-    name: "upsertDuel",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
-      { type: "bytes32" },
-      { type: "bytes32" },
-      { type: "uint64" },
-      { type: "uint64" },
-      { type: "uint64" },
-      { type: "string" },
-      { type: "uint8" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "reportResult",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
-      { type: "uint8" },
-      { type: "uint64" },
-      { type: "bytes32" },
-      { type: "bytes32" },
-      { type: "uint64" },
-      { type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "getDuel",
-    stateMutability: "view",
-    inputs: [{ type: "bytes32" }],
-    outputs: [
-      {
-        components: [
-          { name: "duelKey", type: "bytes32" },
-          { name: "participantAHash", type: "bytes32" },
-          { name: "participantBHash", type: "bytes32" },
-          { name: "status", type: "uint8" },
-          { name: "winner", type: "uint8" },
-          { name: "betOpenTs", type: "uint64" },
-          { name: "betCloseTs", type: "uint64" },
-          { name: "duelStartTs", type: "uint64" },
-          { name: "duelEndTs", type: "uint64" },
-          { name: "seed", type: "uint64" },
-          { name: "resultHash", type: "bytes32" },
-          { name: "replayHash", type: "bytes32" },
-          { name: "metadataUri", type: "string" },
-        ],
-        type: "tuple",
-      },
-    ],
-  },
-] as const;
-
-const EVM_GOLD_CLOB_ADMIN_ABI = [
-  {
-    type: "function",
-    name: "getMarket",
-    stateMutability: "view",
-    inputs: [{ type: "bytes32" }, { type: "uint8" }],
-    outputs: [
-      {
-        components: [
-          { name: "exists", type: "bool" },
-          { name: "duelKey", type: "bytes32" },
-          { name: "marketKind", type: "uint8" },
-          { name: "status", type: "uint8" },
-          { name: "winner", type: "uint8" },
-          { name: "nextOrderId", type: "uint64" },
-          { name: "bestBid", type: "uint16" },
-          { name: "bestAsk", type: "uint16" },
-          { name: "totalAShares", type: "uint128" },
-          { name: "totalBShares", type: "uint128" },
-        ],
-        type: "tuple",
-      },
-    ],
-  },
-  {
-    type: "function",
-    name: "createMarketForDuel",
-    stateMutability: "nonpayable",
-    inputs: [{ type: "bytes32" }, { type: "uint8" }],
-    outputs: [{ type: "bytes32" }],
-  },
-  {
-    type: "function",
-    name: "syncMarketFromOracle",
-    stateMutability: "nonpayable",
-    inputs: [{ type: "bytes32" }, { type: "uint8" }],
-    outputs: [{ type: "uint8" }],
-  },
-] as const;
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -290,7 +140,7 @@ function isRpcConnectivityError(error: unknown): boolean {
 }
 
 async function waitForTxBySignature(
-  connection: any,
+  connection: Connection,
   signature: string,
   timeoutMs = 90_000,
 ): Promise<boolean> {
@@ -311,7 +161,7 @@ async function waitForTxBySignature(
 
 async function runWithRecovery<T>(
   fn: () => Promise<T>,
-  connection: any,
+  connection: Connection,
 ): Promise<T> {
   try {
     return await fn();
@@ -419,14 +269,6 @@ import {
 import path from "node:path";
 import fs_node from "node:fs";
 import {
-  createPublicClient,
-  createWalletClient,
-  http,
-  type Address,
-  type Hex,
-} from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import {
   loadAgentRatings,
   loadPerpsMarkets,
   saveAgentRating,
@@ -476,11 +318,16 @@ const botKeypair = readKeypair(
 );
 const { connection, provider, fightOracle, goldClobMarket, goldPerpsMarket } =
   createPrograms(botKeypair);
-const fightProgram = fightOracle as Program<FightOracle>;
-const marketProgram = goldClobMarket as Program<GoldClobMarket>;
-const perpsProgram = goldPerpsMarket as Program<GoldPerpsMarket>;
+const fightProgram = fightOracle as unknown as Program<FightOracle>;
+const marketProgram = goldClobMarket as unknown as Program<GoldClobMarket>;
+const perpsProgram = goldPerpsMarket as unknown as Program<GoldPerpsMarket>;
+type DuelStatusArg = Parameters<typeof fightProgram.methods.upsertDuel>[7];
+type ReportWinnerArg = Parameters<typeof fightProgram.methods.reportResult>[1];
 
-function hasProgramMethod(program: any, method: string): boolean {
+function hasProgramMethod(
+  program: { methods?: Record<string, unknown> },
+  method: string,
+): boolean {
   return typeof program?.methods?.[method] === "function";
 }
 
@@ -1324,6 +1171,21 @@ const botCluster = (
 )
   .toLowerCase()
   .trim();
+
+function readConfiguredWallet(
+  envName: string,
+  fallback: PublicKey,
+): PublicKey {
+  const configured = process.env[envName]?.trim();
+  if (configured) {
+    return new PublicKey(configured);
+  }
+  if (botCluster === "mainnet-beta") {
+    throw new Error(`Missing required environment variable: ${envName}`);
+  }
+  return fallback;
+}
+
 const minSignerLamports = Math.max(
   5_000,
   Number(process.env.BOT_MIN_BALANCE_LAMPORTS || 100_000),
@@ -1365,18 +1227,22 @@ const tradeMarketMakerFeeBps = Number.isFinite(legacyFeeBps)
 const winningsMarketMakerFeeBps = Number.isFinite(legacyFeeBps)
   ? Math.max(0, Math.floor(legacyFeeBps))
   : Math.max(0, Math.floor(Number(args["winnings-market-maker-fee-bps"])));
-const configuredTradeTreasuryWallet = process.env.TRADE_TREASURY_WALLET
-  ? new PublicKey(process.env.TRADE_TREASURY_WALLET)
-  : botKeypair.publicKey;
-const configuredTradeMarketMakerWallet = process.env.TRADE_MARKET_MAKER_WALLET
-  ? new PublicKey(process.env.TRADE_MARKET_MAKER_WALLET)
-  : botKeypair.publicKey;
-const configuredPerpsTreasuryWallet = process.env.PERPS_TREASURY_WALLET
-  ? new PublicKey(process.env.PERPS_TREASURY_WALLET)
-  : botKeypair.publicKey;
-const configuredPerpsMarketMakerWallet = process.env.PERPS_MARKET_MAKER_WALLET
-  ? new PublicKey(process.env.PERPS_MARKET_MAKER_WALLET)
-  : botKeypair.publicKey;
+const configuredTradeTreasuryWallet = readConfiguredWallet(
+  "TRADE_TREASURY_WALLET",
+  botKeypair.publicKey,
+);
+const configuredTradeMarketMakerWallet = readConfiguredWallet(
+  "TRADE_MARKET_MAKER_WALLET",
+  botKeypair.publicKey,
+);
+const configuredPerpsTreasuryWallet = readConfiguredWallet(
+  "PERPS_TREASURY_WALLET",
+  botKeypair.publicKey,
+);
+const configuredPerpsMarketMakerWallet = readConfiguredWallet(
+  "PERPS_MARKET_MAKER_WALLET",
+  botKeypair.publicKey,
+);
 const configuredSeedSol = Number.isFinite(Number(args["seed-gold"]))
   ? Number(args["seed-gold"])
   : Number(args["seed-sol"]);
@@ -1396,78 +1262,6 @@ const configuredAskPrice = Math.max(
   configuredBidPrice + 1,
   Math.min(999, Math.floor(Number(process.env.MARKET_MAKER_ASK_PRICE || 600))),
 );
-
-type EvmKeeperRuntime = {
-  label: string;
-  duelOracleAddress: Address;
-  goldClobAddress: Address;
-  publicClient: ReturnType<typeof createPublicClient>;
-  walletClient: ReturnType<typeof createWalletClient>;
-  account: ReturnType<typeof privateKeyToAccount>;
-};
-
-function parseAddressEnv(value: string | undefined): Address | null {
-  const trimmed = value?.trim() ?? "";
-  if (!/^0x[0-9a-fA-F]{40}$/.test(trimmed)) {
-    return null;
-  }
-  return trimmed as Address;
-}
-
-function parsePrivateKey(value: string | undefined): `0x${string}` | null {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) return null;
-  const withPrefix = trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
-  if (!/^0x[0-9a-fA-F]{64}$/.test(withPrefix)) {
-    return null;
-  }
-  return withPrefix as `0x${string}`;
-}
-
-function buildEvmRuntime(
-  label: string,
-  rpcUrl: string | undefined,
-  duelOracleAddress: string | undefined,
-  goldClobAddress: string | undefined,
-  privateKey: `0x${string}` | null,
-): EvmKeeperRuntime | null {
-  const oracle = parseAddressEnv(duelOracleAddress);
-  const clob = parseAddressEnv(goldClobAddress);
-  if (!rpcUrl || !oracle || !clob || !privateKey) {
-    return null;
-  }
-
-  const account = privateKeyToAccount(privateKey);
-  const transport = http(rpcUrl.trim());
-  return {
-    label,
-    duelOracleAddress: oracle,
-    goldClobAddress: clob,
-    publicClient: createPublicClient({ transport }),
-    walletClient: createWalletClient({ account, transport }),
-    account,
-  };
-}
-
-const evmKeeperPrivateKey = parsePrivateKey(
-  process.env.EVM_KEEPER_PRIVATE_KEY ?? process.env.PRIVATE_KEY,
-);
-const evmKeeperChains = [
-  buildEvmRuntime(
-    "bsc",
-    process.env.BSC_RPC_URL ?? process.env.BSC_MAINNET_RPC ?? process.env.BSC_TESTNET_RPC,
-    process.env.BSC_DUEL_ORACLE_ADDRESS,
-    process.env.BSC_GOLD_CLOB_ADDRESS,
-    evmKeeperPrivateKey,
-  ),
-  buildEvmRuntime(
-    "base",
-    process.env.BASE_RPC_URL ?? process.env.BASE_MAINNET_RPC ?? process.env.BASE_SEPOLIA_RPC,
-    process.env.BASE_DUEL_ORACLE_ADDRESS,
-    process.env.BASE_GOLD_CLOB_ADDRESS,
-    evmKeeperPrivateKey,
-  ),
-].filter((chain): chain is EvmKeeperRuntime => chain !== null);
 
 const requiredPrograms = [
   {
@@ -1783,13 +1577,15 @@ const ensureMarketConfigReady = async (): Promise<void> => {
   }
 };
 
-async function getDuelState(duelStatePda: PublicKey): Promise<any | null> {
+async function getDuelState(
+  duelStatePda: PublicKey,
+): Promise<Record<string, unknown> | null> {
   return fightProgram.account.duelState.fetchNullable(duelStatePda);
 }
 
 async function getClobMarketState(
   marketStatePda: PublicKey,
-): Promise<any | null> {
+): Promise<Record<string, unknown> | null> {
   return marketProgram.account.marketState.fetchNullable(marketStatePda);
 }
 
@@ -1844,14 +1640,18 @@ function buildDuelMetadata(data: DuelLifecycleEvent): string {
 
 function duelStatusEnum(
   status: "scheduled" | "bettingOpen" | "locked",
-): Record<string, Record<string, never>> {
+): DuelStatusArg {
   if (status === "scheduled") {
-    return { scheduled: {} };
+    return { scheduled: {} } as DuelStatusArg;
   }
   if (status === "locked") {
-    return { locked: {} };
+    return { locked: {} } as DuelStatusArg;
   }
-  return { bettingOpen: {} };
+  return { bettingOpen: {} } as DuelStatusArg;
+}
+
+function winnerSideEnum(side: "A" | "B"): ReportWinnerArg {
+  return (side === "A" ? { a: {} } : { b: {} }) as ReportWinnerArg;
 }
 
 async function upsertDuelLifecycle(
@@ -1886,7 +1686,7 @@ async function upsertDuelLifecycle(
           new BN(betCloseTs),
           new BN(duelStartTs),
           buildDuelMetadata(data),
-          duelStatusEnum(requestedStatus) as any,
+          duelStatusEnum(requestedStatus),
         )
         .accountsPartial({
           reporter: botKeypair.publicKey,
@@ -1923,7 +1723,7 @@ async function placeManagedClobOrder(
   price: number,
 ): Promise<ManagedClobOrder> {
   const marketState = await getClobMarketState(trackedMatch.marketState);
-  if (!enumIs(marketState?.status, "open")) {
+  if (!marketState || !enumIs(marketState.status, "open")) {
     throw new Error(
       `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
     );
@@ -2106,7 +1906,7 @@ async function maybeSeedMarket(trackedMatch: ActiveClobMatch): Promise<void> {
   }
 
   const marketState = await getClobMarketState(trackedMatch.marketState);
-  if (!enumIs(marketState?.status, "open")) {
+  if (!marketState || !enumIs(marketState.status, "open")) {
     return;
   }
 
@@ -2117,126 +1917,6 @@ async function maybeSeedMarket(trackedMatch: ActiveClobMatch): Promise<void> {
 
 const activeClobMatches = new Map<string, ActiveClobMatch>();
 const unresolvedOracleWarningMatches = new Set<string>();
-
-async function upsertEvmDuelLifecycle(
-  data: DuelLifecycleEvent,
-  status: 1 | 2 | 3,
-): Promise<void> {
-  if (evmKeeperChains.length === 0) {
-    return;
-  }
-
-  const duelKey = normalizeHex32(data.duelKeyHex);
-  const betOpenTs = BigInt(Math.floor((data.betOpenTime ?? Date.now()) / 1000));
-  const betCloseTs = BigInt(
-    Math.floor((data.betCloseTime ?? data.fightStartTime ?? Date.now() + 1_000) / 1000),
-  );
-  const duelStartTs = BigInt(
-    Math.floor((data.fightStartTime ?? data.betCloseTime ?? Date.now()) / 1000),
-  );
-  const metadata = buildDuelMetadata(data);
-
-  await Promise.allSettled(
-    evmKeeperChains.map(async (chain) => {
-      await chain.walletClient.writeContract({
-        chain: undefined,
-        address: chain.duelOracleAddress,
-        abi: DUEL_OUTCOME_ORACLE_ABI,
-        functionName: "upsertDuel",
-        args: [
-          duelKey,
-          participantHashHex(data.agent1),
-          participantHashHex(data.agent2),
-          betOpenTs,
-          betCloseTs,
-          duelStartTs,
-          metadata,
-          status,
-        ],
-        account: chain.account,
-      });
-
-      const market = (await chain.publicClient.readContract({
-        address: chain.goldClobAddress,
-        abi: EVM_GOLD_CLOB_ADMIN_ABI,
-        functionName: "getMarket",
-        args: [duelKey, DUEL_WINNER_MARKET_KIND],
-      })) as { exists: boolean };
-
-      if (!market.exists) {
-        await chain.walletClient.writeContract({
-          chain: undefined,
-          address: chain.goldClobAddress,
-          abi: EVM_GOLD_CLOB_ADMIN_ABI,
-          functionName: "createMarketForDuel",
-          args: [duelKey, DUEL_WINNER_MARKET_KIND],
-          account: chain.account,
-        });
-      }
-
-      await chain.walletClient.writeContract({
-        chain: undefined,
-        address: chain.goldClobAddress,
-        abi: EVM_GOLD_CLOB_ADMIN_ABI,
-        functionName: "syncMarketFromOracle",
-        args: [duelKey, DUEL_WINNER_MARKET_KIND],
-        account: chain.account,
-      });
-    }),
-  );
-}
-
-async function reportEvmResult(data: DuelLifecycleEvent): Promise<void> {
-  if (evmKeeperChains.length === 0 || !data.seed || !data.replayHash) {
-    return;
-  }
-
-  const duelKey = normalizeHex32(data.duelKeyHex);
-  const replayHash = normalizeHex32(data.replayHash);
-  const winner =
-    data.winnerId === data.agent1?.id ? 1 : data.winnerId === data.agent2?.id ? 2 : 0;
-  if (winner === 0) {
-    return;
-  }
-
-  const duelEndTs = BigInt(Math.floor((data.duelEndTime ?? Date.now()) / 1000));
-  const metadata = buildDuelMetadata(data);
-
-  await Promise.allSettled(
-    evmKeeperChains.map(async (chain) => {
-      await chain.walletClient.writeContract({
-        chain: undefined,
-        address: chain.duelOracleAddress,
-        abi: DUEL_OUTCOME_ORACLE_ABI,
-        functionName: "reportResult",
-        args: [
-          duelKey,
-          winner,
-          BigInt(data.seed!),
-          replayHash,
-          resultHashHex(
-            data.duelKeyHex,
-            winner === 1 ? "A" : "B",
-            data.seed!,
-            data.replayHash!,
-          ),
-          duelEndTs,
-          metadata,
-        ],
-        account: chain.account,
-      });
-
-      await chain.walletClient.writeContract({
-        chain: undefined,
-        address: chain.goldClobAddress,
-        abi: EVM_GOLD_CLOB_ADMIN_ABI,
-        functionName: "syncMarketFromOracle",
-        args: [duelKey, DUEL_WINNER_MARKET_KIND],
-        account: chain.account,
-      });
-    }),
-  );
-}
 
 async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   const trackedMatch = activeClobMatches.get(data.duelId);
@@ -2299,7 +1979,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
       fightProgram.methods
         .reportResult(
           Array.from(duelKey),
-          winnerSide === "A" ? ({ a: {} } as any) : ({ b: {} } as any),
+          winnerSideEnum(winnerSide),
           new BN(resolvedSeed),
           Array.from(Buffer.from(replayHashHex, "hex")),
           buildResultHash(
@@ -2367,7 +2047,6 @@ gameClient.onDuelStart(async (data) => {
     await ensureMarketConfigReady();
     const trackedMatch = await createOrSyncRound(data);
     activeClobMatches.set(data.duelId, trackedMatch);
-    await upsertEvmDuelLifecycle(data, 2);
     await maybeSeedMarket(trackedMatch);
     console.log(`Created canonical CLOB market for duel ${data.duelId}`);
   } catch (err) {
@@ -2387,7 +2066,6 @@ gameClient.onBettingLocked(async (data) => {
 
   try {
     await lockRound(data);
-    await upsertEvmDuelLifecycle(data, 3);
     console.log(`Locked duel market for ${data.duelId}`);
   } catch (error) {
     console.error("Failed to lock market for duel:", error);
@@ -2465,7 +2143,6 @@ gameClient.onDuelEnd(async (data) => {
       );
     }
     await reportRoundResult(data);
-    await reportEvmResult(data);
     console.log(`Resolved market for duel ${data.duelId}`);
   } catch (err) {
     console.error("Failed to resolve market:", err);

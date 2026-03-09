@@ -15,7 +15,6 @@ import {
 import { Toaster, toast } from "sonner";
 
 import goldPerpsIdl from "../idl/gold_perps_market.json";
-import { useChain } from "../lib/ChainContext";
 import { CONFIG, GAME_API_URL } from "../lib/config";
 import {
   buildOracleHistoryLabel,
@@ -29,14 +28,19 @@ import {
 } from "../lib/modelMarkets";
 import { findProgramAddressSync } from "../lib/programAddress";
 import {
+  createGoldPerpsProgram,
+  GOLD_PERPS_MARKET_PROGRAM_ID,
+} from "../lib/programs";
+import {
+  buildPriorityFeeInstructions,
   confirmSignatureViaRpc,
   getLatestBlockhashViaRpc,
+  JITO_TIP_LAMPORTS,
+  randomJitoTipAccount,
   sendRawTransactionViaRpc,
 } from "../lib/solanaRpc";
 
-const PROGRAM_ID = new PublicKey(
-  CONFIG.goldPerpsMarketProgramId || goldPerpsIdl.address,
-);
+const PROGRAM_ID = GOLD_PERPS_MARKET_PROGRAM_ID;
 const POLL_INTERVAL_MS = 5_000;
 const CHAIN_POLL_INTERVAL_MS = 6_000;
 const DEFAULT_SKEW_SCALE_SOL = 100;
@@ -406,7 +410,6 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
-  const { activeChain, setActiveChain } = useChain();
 
   const [data, setData] = React.useState<PerpsMarketsResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -899,12 +902,6 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
   );
 
   const ensureTradable = (intent: "open" | "close"): boolean => {
-    if (activeChain !== "solana") {
-      setLastTradeStatus("Switch the demo to Solana to trade model perps.");
-      toast.error("Switch the demo to Solana to trade model perps.");
-      return false;
-    }
-
     if (!wallet.publicKey || !wallet.connected) {
       setLastTradeStatus("Connect a Solana wallet to trade model perps.");
       setWalletModalVisible(true);
@@ -950,14 +947,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
   }, [data]);
 
   const getProgram = React.useCallback(() => {
-    const provider = new anchor.AnchorProvider(
-      connection,
-      wallet as unknown as anchor.Wallet,
-      {
-        commitment: "confirmed",
-      },
-    );
-    return new anchor.Program(goldPerpsIdl as anchor.Idl, provider);
+    return createGoldPerpsProgram(connection, wallet);
   }, [connection, wallet]);
 
   const handleOpenPosition = async (direction: TradeDirection) => {
@@ -979,8 +969,9 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
     let tradeStage = "building transaction";
     try {
       const program = getProgram();
+      const traderPublicKey = wallet.publicKey as PublicKey;
       const positionAddress = derivePositionPda(
-        wallet.publicKey as PublicKey,
+        traderPublicKey,
         marketId,
       );
       const marginDeltaLamports = toLamports(collateralSol);
@@ -1012,11 +1003,30 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
           config: deriveConfigPda(),
           market: deriveMarketPda(marketId),
           position: positionAddress,
-          trader: wallet.publicKey as PublicKey,
+          trader: traderPublicKey,
           systemProgram: SystemProgram.programId,
         })
         .transaction();
-      transaction.feePayer = wallet.publicKey as PublicKey;
+      transaction.feePayer = traderPublicKey;
+      const useHeliusSender = CONFIG.cluster === "mainnet-beta";
+      if (useHeliusSender) {
+        const accountKeys = [
+          traderPublicKey.toBase58(),
+          PROGRAM_ID.toBase58(),
+          deriveMarketPda(marketId).toBase58(),
+          positionAddress.toBase58(),
+        ];
+        const feeInstructions = await buildPriorityFeeInstructions(
+          connection.rpcEndpoint,
+          accountKeys,
+        );
+        const tipInstruction = SystemProgram.transfer({
+          fromPubkey: traderPublicKey,
+          toPubkey: new PublicKey(randomJitoTipAccount()),
+          lamports: JITO_TIP_LAMPORTS,
+        });
+        transaction.instructions.unshift(...feeInstructions, tipInstruction);
+      }
       tradeStage = "fetching blockhash";
       const latest = await getLatestBlockhashViaRpc(connection);
       transaction.recentBlockhash = latest.blockhash;
@@ -1027,7 +1037,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
       tradeStage = "signing transaction";
       const signed = await signTransaction(transaction);
       tradeStage = "sending transaction";
-      const signature = await sendRawTransactionViaRpc(connection, signed);
+      const signature = await sendRawTransactionViaRpc(connection, signed, {
+        gameApiUrl: useHeliusSender ? GAME_API_URL : undefined,
+        useHeliusSender,
+      });
       tradeStage = "confirming transaction";
       await confirmSignatureViaRpc(connection, signature);
 
@@ -1093,6 +1106,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
     let tradeStage = "building transaction";
     try {
       const program = getProgram();
+      const traderPublicKey = wallet.publicKey as PublicKey;
       const marketId = selectedEntry.marketId;
       const closeSizeLamports = -toLamports(selectedPosition.signedSize);
       const quotedClosePrice =
@@ -1123,12 +1137,32 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
         .accountsPartial({
           config: deriveConfigPda(),
           market: deriveMarketPda(marketId),
-          position: derivePositionPda(wallet.publicKey as PublicKey, marketId),
-          trader: wallet.publicKey as PublicKey,
+          position: derivePositionPda(traderPublicKey, marketId),
+          trader: traderPublicKey,
           systemProgram: SystemProgram.programId,
         })
         .transaction();
-      transaction.feePayer = wallet.publicKey as PublicKey;
+      transaction.feePayer = traderPublicKey;
+      const useHeliusSender = CONFIG.cluster === "mainnet-beta";
+      if (useHeliusSender) {
+        const positionAddress = derivePositionPda(traderPublicKey, marketId);
+        const accountKeys = [
+          traderPublicKey.toBase58(),
+          PROGRAM_ID.toBase58(),
+          deriveMarketPda(marketId).toBase58(),
+          positionAddress.toBase58(),
+        ];
+        const feeInstructions = await buildPriorityFeeInstructions(
+          connection.rpcEndpoint,
+          accountKeys,
+        );
+        const tipInstruction = SystemProgram.transfer({
+          fromPubkey: traderPublicKey,
+          toPubkey: new PublicKey(randomJitoTipAccount()),
+          lamports: JITO_TIP_LAMPORTS,
+        });
+        transaction.instructions.unshift(...feeInstructions, tipInstruction);
+      }
       tradeStage = "fetching blockhash";
       const latest = await getLatestBlockhashViaRpc(connection);
       transaction.recentBlockhash = latest.blockhash;
@@ -1139,7 +1173,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
       tradeStage = "signing transaction";
       const signed = await signTransaction(transaction);
       tradeStage = "sending transaction";
-      const signature = await sendRawTransactionViaRpc(connection, signed);
+      const signature = await sendRawTransactionViaRpc(connection, signed, {
+        gameApiUrl: useHeliusSender ? GAME_API_URL : undefined,
+        useHeliusSender,
+      });
       tradeStage = "confirming transaction";
       await confirmSignatureViaRpc(connection, signature);
 
@@ -1197,21 +1234,6 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
           </article>
         </div>
       </section>
-
-      {activeChain !== "solana" && (
-        <div className="models-market-banner">
-          <div>
-            <strong>Trading is Solana-only in this demo.</strong>
-            <span>
-              Data stays visible on any chain, but orders route through the
-              Solana perp program.
-            </span>
-          </div>
-          <button type="button" onClick={() => setActiveChain("solana")}>
-            Switch To Solana
-          </button>
-        </div>
-      )}
 
       <section className="models-market-grid">
         <article className="models-market-card models-market-card--table">

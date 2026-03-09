@@ -11,8 +11,6 @@ import {
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount } from "wagmi";
 
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
@@ -22,10 +20,8 @@ import {
   getFixedMatchId,
   getCluster,
   STREAM_URLS,
-  CONFIG,
 } from "./lib/config";
 import {
-  buildInviteShareLink,
   captureInviteCodeFromLocation,
   getStoredInviteCode,
 } from "./lib/invite";
@@ -33,7 +29,6 @@ import { StreamPlayer } from "./components/StreamPlayer";
 import { ChainSelector } from "./components/ChainSelector";
 import { PointsDisplay } from "./components/PointsDisplay";
 import type { SolanaClobMarketSnapshot } from "./components/SolanaClobPanel";
-import { useChain } from "./lib/ChainContext";
 import {
   FIGHT_ORACLE_PROGRAM_ID,
   GOLD_CLOB_MARKET_PROGRAM_ID,
@@ -60,15 +55,6 @@ function formatGold(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
   return String(v);
-}
-
-function formatAmount(v: number): string {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
-  if (v >= 1)
-    return `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-  if (v > 0) return `$${v.toFixed(4)}`;
-  return "$0";
 }
 
 function formatTimeAgo(ts: number): string {
@@ -98,6 +84,13 @@ type DiscoveredMatch = {
   agent2Name: string;
 };
 
+type DuelMetadata = {
+  duelId?: number;
+  matchId?: number;
+  agent1?: string;
+  agent2?: string;
+};
+
 type ProgramDeploymentState = {
   checked: boolean;
   oracle: boolean;
@@ -118,13 +111,6 @@ const EMPTY_SOLANA_CLOB_SNAPSHOT: SolanaClobMarketSnapshot = {
 function normalizeTimestamp(value: number): number {
   if (value > 1_000_000_000_000) return Math.floor(value / 1000);
   return Math.floor(value);
-}
-
-function normalizeRemainingSeconds(value: number | null | undefined): number {
-  if (!Number.isFinite(value as number)) return 0;
-  const raw = Math.max(0, Number(value));
-  // Streaming API reports ms, while mock mode reports whole seconds.
-  return raw > 10_000 ? Math.floor(raw / 1000) : Math.floor(raw);
 }
 
 function formatCountdown(seconds: number): string {
@@ -164,12 +150,6 @@ function goldDisplay(amount: unknown): string {
   const raw = asNumber(amount, 0);
   return (raw / 10 ** GOLD_DECIMALS).toFixed(6);
 }
-
-const EvmBettingPanel = lazy(() =>
-  import("./components/EvmBettingPanel").then((module) => ({
-    default: module.EvmBettingPanel,
-  })),
-);
 const SolanaClobPanel = lazy(() =>
   import("./components/SolanaClobPanel").then((module) => ({
     default: module.SolanaClobPanel,
@@ -195,12 +175,6 @@ const ReferralPanel = lazy(() =>
     default: module.ReferralPanel,
   })),
 );
-const AgentStats = lazy(() =>
-  import("./components/AgentStats").then((module) => ({
-    default: module.AgentStats,
-  })),
-);
-
 function PanelFallback({
   label,
   minHeight = 220,
@@ -232,34 +206,13 @@ export function App() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { setVisible: setSolModalVisible } = useWalletModal();
-  const { address: evmWalletAddress } = useAccount();
-  const { activeChain, setActiveChain, availableChains } = useChain();
   const isE2eMode = import.meta.env.MODE === "e2e";
   const isE2eDebugMode =
     isE2eMode && new URLSearchParams(window.location.search).has("debug");
-  const isEvmChain = activeChain === "bsc" || activeChain === "base";
   const solanaWalletAddress = wallet.publicKey?.toBase58() ?? null;
-  // Only poll chain data when a wallet is connected (saves unnecessary RPC calls for spectators).
-  const shouldPollChainData = Boolean(
-    isE2eMode || wallet.publicKey || wallet.connected,
-  );
-  const pointsWalletAddress = useMemo(() => {
-    if (activeChain === "solana" && solanaWalletAddress)
-      return solanaWalletAddress;
-    if ((activeChain === "bsc" || activeChain === "base") && evmWalletAddress) {
-      return evmWalletAddress;
-    }
-    return solanaWalletAddress ?? evmWalletAddress ?? null;
-  }, [activeChain, evmWalletAddress, solanaWalletAddress]);
-  const invitePlatformQuery = useMemo<"solana" | "evm">(() => {
-    if (pointsWalletAddress && pointsWalletAddress === solanaWalletAddress) {
-      return "solana";
-    }
-    if (pointsWalletAddress && pointsWalletAddress === evmWalletAddress) {
-      return "evm";
-    }
-    return activeChain === "solana" ? "solana" : "evm";
-  }, [activeChain, evmWalletAddress, pointsWalletAddress, solanaWalletAddress]);
+  const shouldPollChainData = true;
+  const pointsWalletAddress = solanaWalletAddress;
+  const invitePlatformQuery = "solana";
 
   const [surfaceMode, setSurfaceMode] = useState<"DUELS" | "MODELS">("DUELS");
   const [status, setStatus] = useState<string>("");
@@ -276,13 +229,10 @@ export function App() {
     });
   const [solanaClobSnapshot, setSolanaClobSnapshot] =
     useState<SolanaClobMarketSnapshot>(EMPTY_SOLANA_CLOB_SNAPSHOT);
-  const [inviteCode, setInviteCode] = useState<string | null>(() =>
+  const [_inviteCode, setInviteCode] = useState<string | null>(() =>
     getStoredInviteCode(),
   );
   const [inviteShareStatus, setInviteShareStatus] = useState("");
-  const [selectedAgentForStats, setSelectedAgentForStats] = useState<any>(null); // For agent stats modal
-  const [isShowingStats, setIsShowingStats] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
   const [streamSourceIndex, setStreamSourceIndex] = useState(0);
   const [showPointsDrawer, setShowPointsDrawer] = useState(false);
 
@@ -333,15 +283,6 @@ export function App() {
     if (streamSourceIndex < streamSources.length) return;
     setStreamSourceIndex(0);
   }, [streamSourceIndex, streamSources.length]);
-
-  const forcedE2eWinner = useMemo<BetSide | null>(() => {
-    const raw = (import.meta.env.VITE_E2E_FORCE_WINNER as string | undefined)
-      ?.trim()
-      .toUpperCase();
-    if (raw === "YES") return "YES";
-    if (raw === "NO") return "NO";
-    return null;
-  }, []);
 
   useEffect(() => {
     captureInviteCodeFromLocation();
@@ -410,7 +351,7 @@ export function App() {
       resizeObserver?.disconnect();
       window.removeEventListener("resize", updateDockHeight);
     };
-  }, [isE2eDebugMode, isEvmChain]);
+  }, [isE2eDebugMode]);
 
   const readonlyPrograms = useMemo(
     () => createReadonlyPrograms(connection),
@@ -427,7 +368,7 @@ export function App() {
   const missingProgramMessage = useMemo(() => {
     if (getCluster() === "localnet") return "";
     if (programDeployment.oracle && programDeployment.market) return "";
-    return `Betting is temporarily unavailable on ${getCluster()}. Please try again later or switch chain.`;
+    return `Betting is temporarily unavailable on ${getCluster()}. Please try again later.`;
   }, [programDeployment.oracle, programDeployment.market]);
 
   useEffect(() => {
@@ -515,35 +456,51 @@ export function App() {
 
     void (async () => {
       try {
-        const fightProgram: any = readonlyPrograms.fightOracle;
-
-        const allMatchesRaw = await fightProgram.account.matchResult.all();
-        const matches = (allMatchesRaw as any[])
-          .map<DiscoveredMatch>((entry: any) => {
+        const fightProgram = readonlyPrograms.fightOracle;
+        const fightAccounts = fightProgram.account as Record<
+          string,
+          {
+            all: () => Promise<
+              Array<{ publicKey: PublicKey; account: Record<string, unknown> }>
+            >;
+          }
+        >;
+        const allMatchesRaw = await fightAccounts["duelState"].all();
+        const matches = (
+          allMatchesRaw as Array<{
+            publicKey: PublicKey;
+            account: Record<string, unknown>;
+          }>
+        )
+          .map<DiscoveredMatch>((entry) => {
             const account = entry.account;
-            const status = enumIs(account.status, "open")
+            const status = enumIs(account.status, "bettingOpen") ||
+              enumIs(account.status, "locked")
               ? "open"
               : enumIs(account.status, "resolved")
                 ? "resolved"
                 : "unknown";
 
-            const matchId = asNumber(account.matchId, 0);
-            const openTs = normalizeTimestamp(asNumber(account.openTs, 0));
+            const openTs = normalizeTimestamp(asNumber(account.betOpenTs, 0));
             const closeTs = normalizeTimestamp(asNumber(account.betCloseTs, 0));
-            const resolvedTs = account.resolvedTs
-              ? normalizeTimestamp(asNumber(account.resolvedTs))
+            const resolvedTs = account.duelEndTs
+              ? normalizeTimestamp(asNumber(account.duelEndTs))
               : null;
 
-            const metadataUri = account.metadataUri ?? "";
+            const metadataUri = (account.metadataUri as string | undefined) ?? "";
             let agent1Name = "Agent A";
             let agent2Name = "Agent B";
+            let matchId = 0;
             try {
               if (metadataUri.startsWith("{")) {
-                const meta = JSON.parse(metadataUri);
+                const meta = JSON.parse(metadataUri) as DuelMetadata;
                 agent1Name = meta.agent1 || "Agent A";
                 agent2Name = meta.agent2 || "Agent B";
+                matchId = Number(meta.duelId ?? meta.matchId ?? 0);
               }
-            } catch {}
+            } catch {
+              // Ignore malformed inline metadata and fall back to defaults.
+            }
 
             return {
               matchId,
@@ -619,37 +576,6 @@ export function App() {
     [],
   );
 
-  const handleShareInvite = useCallback(async () => {
-    const code = inviteCode ?? getStoredInviteCode();
-    if (!code) {
-      setInviteShareStatus("Invite code unavailable");
-      return;
-    }
-    const link = buildInviteShareLink(code);
-    if (!link) {
-      setInviteShareStatus("Invite link unavailable");
-      return;
-    }
-
-    try {
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({
-          title: "Join HyperScape Betting",
-          text: "Use my invite link to join HyperScape betting.",
-          url: link,
-        });
-        setInviteShareStatus("Invite shared");
-      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(link);
-        setInviteShareStatus("Invite link copied");
-      } else {
-        setInviteShareStatus("Share not supported");
-      }
-    } catch {
-      setInviteShareStatus("Share cancelled");
-    }
-  }, [inviteCode]);
-
   useEffect(() => {
     if (!inviteShareStatus) return;
     const id = window.setTimeout(() => setInviteShareStatus(""), 3000);
@@ -687,7 +613,6 @@ export function App() {
     return "rgba(255,255,255,0.78)";
   })();
   const effStatus = status;
-  const effPhase = liveCycle?.phase ?? "IDLE";
   const contextAgent1 = duelContext?.cycle.agent1 ?? null;
   const contextAgent2 = duelContext?.cycle.agent2 ?? null;
 
@@ -765,62 +690,13 @@ export function App() {
     return "IDLE";
   })();
 
-  const streamPhaseText = liveCycle?.phase ?? null;
-  const marketStatusText = isEvmChain
-    ? (streamPhaseText ??
-      (currentMatch ? currentMatch.status.toUpperCase() : "LIVE"))
-    : solanaClobSnapshot.marketStatus;
-  const countdownText = isEvmChain
-    ? liveCycle
-      ? formatCountdown(normalizeRemainingSeconds(liveCycle.timeRemaining))
-      : ""
-    : formatCountdown(
-        currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
-      );
-  const displayedInviteCode = (inviteCode ?? getStoredInviteCode() ?? "")
-    .trim()
-    .toUpperCase();
-
-  const handleAgentClick = (side: BetSide) => {
-    // Prefer enriched duel context (has inventory + monologues), fall back to
-    // basic streaming state agent (hp, wins, losses) then on-chain match names.
-    const contextAgent =
-      side === "YES" ? duelContext?.cycle.agent1 : duelContext?.cycle.agent2;
-    const liveAgent = side === "YES" ? liveCycle?.agent1 : liveCycle?.agent2;
-    const fallbackName =
-      side === "YES"
-        ? (currentMatch?.agent1Name ?? liveAgent1Name ?? "Agent A")
-        : (currentMatch?.agent2Name ?? liveAgent2Name ?? "Agent B");
-
-    const realAgent = {
-      id: contextAgent?.id ?? liveAgent?.id ?? side,
-      name: contextAgent?.name ?? liveAgent?.name ?? fallbackName,
-      provider: contextAgent?.provider ?? liveAgent?.provider ?? "AI",
-      model: contextAgent?.model ?? liveAgent?.model ?? "v1",
-      hp: contextAgent?.hp ?? liveAgent?.hp ?? 100,
-      maxHp: contextAgent?.maxHp ?? liveAgent?.maxHp ?? 100,
-      combatLevel: contextAgent?.combatLevel ?? liveAgent?.combatLevel ?? 1,
-      wins: contextAgent?.wins ?? liveAgent?.wins ?? 0,
-      losses: contextAgent?.losses ?? liveAgent?.losses ?? 0,
-      damageDealtThisFight:
-        contextAgent?.damageDealtThisFight ??
-        liveAgent?.damageDealtThisFight ??
-        0,
-      inventory: contextAgent?.inventory ?? [],
-      monologues: contextAgent?.monologues ?? [],
-    };
-
-    setSelectedAgentForStats(realAgent);
-    setIsShowingStats(true);
-  };
-
+  const marketStatusText = solanaClobSnapshot.marketStatus;
+  const countdownText = formatCountdown(
+    currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
+  );
   // Sidebar bet state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [hmSide, setHmSide] = useState<BetSide>("YES");
-  const [hmOrderType, setHmOrderType] = useState<"market" | "limit" | "pro">(
-    "market",
-  );
-  const [hmSharesInput, setHmSharesInput] = useState("");
   const [hmBottomTab, setHmBottomTab] = useState<
     "positions" | "orders" | "trades" | "topTraders" | "holders" | "news"
   >("trades");
@@ -831,13 +707,6 @@ export function App() {
       setIsSidebarOpen(false);
     }
   }, [surfaceMode]);
-
-  const hmSharesVal = parseInt(hmSharesInput || "0", 10);
-  const hmPrice = hmSide === "YES" ? effYesPercent / 100 : effNoPercent / 100;
-  const hmEstCost = hmSharesVal * hmPrice;
-  const hmEstPayout = hmSharesVal > 0 ? hmSharesVal * 1.0 : 0;
-
-  const canBetNow = effPhase === "FIGHTING" || effPhase === "COUNTDOWN";
 
   return (
     <div className="hm-root" ref={appRootRef}>
@@ -1037,140 +906,9 @@ export function App() {
               )}
               {pointsDrawerTab === "referral" && (
                 <Suspense fallback={<PanelFallback label="Loading referral" />}>
-                  <ReferralPanel
-                    activeChain={activeChain}
-                    solanaWallet={solanaWalletAddress}
-                    evmWallet={evmWalletAddress ?? null}
-                    evmWalletPlatform={
-                      activeChain === "bsc"
-                        ? "BSC"
-                        : activeChain === "base"
-                          ? "BASE"
-                          : null
-                    }
-                  />
+                  <ReferralPanel solanaWallet={solanaWalletAddress} />
                 </Suspense>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Agent Stats Modal */}
-      {isShowingStats && selectedAgentForStats && (
-        <div
-          className="agent-stats-modal-overlay"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            zIndex: 100,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-          onClick={() => setIsShowingStats(false)}
-        >
-          <div
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(20,22,30,0.95) 0%, rgba(14,16,24,0.98) 100%)",
-              backdropFilter: "blur(32px) saturate(1.4)",
-              WebkitBackdropFilter: "blur(32px) saturate(1.4)",
-              padding: 24,
-              borderRadius: 2,
-              border: "1px solid rgba(229,184,74,0.2)",
-              width: 340,
-              boxShadow:
-                "0 24px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(229,184,74,0.08), 0 0 0 1px rgba(0,0,0,0.5)",
-              position: "relative",
-              overflow: "hidden",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Glass highlight */}
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                height: "40%",
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%)",
-                pointerEvents: "none",
-                borderRadius: "2px 2px 0 0",
-              }}
-            />
-            {/* Top highlight line */}
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 24,
-                right: 24,
-                height: 1,
-                background:
-                  "linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)",
-                pointerEvents: "none",
-              }}
-            />
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                marginBottom: 8,
-                position: "relative",
-                zIndex: 1,
-              }}
-            >
-              <button
-                onClick={() => setIsShowingStats(false)}
-                style={{
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 10,
-                  color: "rgba(255,255,255,0.5)",
-                  cursor: "pointer",
-                  fontSize: 14,
-                  width: 32,
-                  height: 32,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.12)";
-                  e.currentTarget.style.color = "#fff";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.06)";
-                  e.currentTarget.style.color = "rgba(255,255,255,0.5)";
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            <div style={{ position: "relative", zIndex: 1 }}>
-              <Suspense
-                fallback={
-                  <PanelFallback label="Loading agent stats" minHeight={320} />
-                }
-              >
-                <AgentStats
-                  agent={selectedAgentForStats}
-                  side={selectedAgentForStats.id === "YES" ? "left" : "right"}
-                />
-              </Suspense>
             </div>
           </div>
         </div>
@@ -1199,27 +937,11 @@ export function App() {
             style={{ display: "flex", alignItems: "center", gap: "8px" }}
             data-testid="e2e-chain-picker"
           >
-            <span>Chain:</span>
-            <select
-              data-testid="e2e-chain-select"
-              value={activeChain}
-              onChange={(event) =>
-                setActiveChain(event.target.value as "solana" | "bsc" | "base")
-              }
-            >
-              {availableChains.map((chain) => (
-                <option key={chain} value={chain}>
-                  {chain.toUpperCase()}
-                </option>
-              ))}
-            </select>
+            <span>Chain: SOLANA</span>
           </div>
-          <div data-testid="e2e-active-chain">{activeChain}</div>
+          <div data-testid="e2e-active-chain">solana</div>
           <div data-testid="current-match-id">
-            Current match:{" "}
-            {activeChain === "solana"
-              ? solanaClobSnapshot.matchLabel
-              : (currentMatch?.matchId ?? "-")}
+            Current match: {solanaClobSnapshot.matchLabel}
           </div>
           <div data-testid="market-status">Market: {marketStatusText}</div>
           <div data-testid="pool-totals">
@@ -1288,47 +1010,6 @@ export function App() {
                       : "SOL"}
                   </button>
                 )}
-                {/* EVM wallet */}
-                <ConnectButton.Custom>
-                  {({
-                    openConnectModal,
-                    openAccountModal,
-                    openChainModal,
-                    account,
-                    chain,
-                    mounted,
-                  }) => {
-                    if (!mounted || !account)
-                      return (
-                        <button
-                          type="button"
-                          className="hm-header-mob-wallet-btn"
-                          onClick={openConnectModal}
-                        >
-                          Connect EVM
-                        </button>
-                      );
-                    if (chain?.unsupported)
-                      return (
-                        <button
-                          type="button"
-                          className="hm-header-mob-wallet-btn"
-                          onClick={openChainModal}
-                        >
-                          ⚠ Wrong Net
-                        </button>
-                      );
-                    return (
-                      <button
-                        type="button"
-                        className="hm-header-mob-wallet-btn hm-header-mob-wallet-btn--linked"
-                        onClick={openAccountModal}
-                      >
-                        ⬡ {account.displayName?.slice(0, 6) ?? "EVM"}
-                      </button>
-                    );
-                  }}
-                </ConnectButton.Custom>
               </div>
             </div>
             {/* Row 2: Match strip — name + agent side-select chips */}
@@ -1540,46 +1221,6 @@ export function App() {
                     : ""}
                 </button>
               )}
-              <ConnectButton.Custom>
-                {({
-                  openConnectModal,
-                  openAccountModal,
-                  openChainModal,
-                  account,
-                  chain,
-                  mounted,
-                }) => {
-                  if (!mounted || !account)
-                    return (
-                      <button
-                        type="button"
-                        className="hm-wallet-btn"
-                        onClick={openConnectModal}
-                      >
-                        Add EVM Wallet
-                      </button>
-                    );
-                  if (chain?.unsupported)
-                    return (
-                      <button
-                        type="button"
-                        className="hm-wallet-btn"
-                        onClick={openChainModal}
-                      >
-                        Switch Network
-                      </button>
-                    );
-                  return (
-                    <button
-                      type="button"
-                      className="hm-wallet-btn hm-wallet-btn--linked"
-                      onClick={openAccountModal}
-                    >
-                      EVM {account.displayName}
-                    </button>
-                  );
-                }}
-              </ConnectButton.Custom>
             </div>
           </>
         )}
@@ -2189,42 +1830,22 @@ export function App() {
 
               {/* Market type tabs + betting panels */}
               <div className="hm-market-panel-wrap">
-                {/* Active market panel */}
                 <div className="hm-market-panel-body">
-                  {isEvmChain ? (
-                    /* EVM — single panel, no tabs */
-                    <Suspense
-                      fallback={
-                        <PanelFallback
-                          label="Loading EVM market"
-                          minHeight={360}
-                        />
-                      }
-                    >
-                      <EvmBettingPanel
-                        agent1Name={effAgent1Name}
-                        agent2Name={effAgent2Name}
-                        compact
+                  <Suspense
+                    fallback={
+                      <PanelFallback
+                        label="Loading Solana market"
+                        minHeight={360}
                       />
-                    </Suspense>
-                  ) : (
-                    /* Predictions — Solana CLOB panel */
-                    <Suspense
-                      fallback={
-                        <PanelFallback
-                          label="Loading Solana market"
-                          minHeight={360}
-                        />
-                      }
-                    >
-                      <SolanaClobPanel
-                        agent1Name={effAgent1Name}
-                        agent2Name={effAgent2Name}
-                        compact={!isE2eMode}
-                        onMarketSnapshot={handleSolanaClobSnapshot}
-                      />
-                    </Suspense>
-                  )}
+                    }
+                  >
+                    <SolanaClobPanel
+                      agent1Name={effAgent1Name}
+                      agent2Name={effAgent2Name}
+                      compact={!isE2eMode}
+                      onMarketSnapshot={handleSolanaClobSnapshot}
+                    />
+                  </Suspense>
                 </div>
               </div>
 

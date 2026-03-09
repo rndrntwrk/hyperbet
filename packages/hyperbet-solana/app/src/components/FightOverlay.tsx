@@ -111,7 +111,6 @@ function AgentHPBar({
   const isCritical = hpPercent < 20;
   const hpColor = isCritical ? "#ff0d3c" : "#00ffcc";
   const isRight = side === "right";
-  const equipCount = Object.keys(agent.equipment).length;
   const [itemIconMap, setItemIconMap] = useState<Record<string, string>>({});
   const hpOuterClipPath = isRight
     ? "polygon(2% 0, 100% 0, 98% 100%, 0 100%)"
@@ -764,7 +763,7 @@ export function FightOverlay({
   countdown,
   timeRemaining,
   winnerId,
-  winnerName,
+  winnerName: _winnerName,
   winReason,
 }: FightOverlayProps) {
   const showHPBars = phase === "FIGHTING" || phase === "COUNTDOWN";

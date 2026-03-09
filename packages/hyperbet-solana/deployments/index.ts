@@ -6,9 +6,6 @@ export type BettingSolanaCluster =
   | "testnet"
   | "mainnet-beta";
 export type BettingAppEnvironment = BettingSolanaCluster | "e2e" | "stream-ui";
-export type BettingEvmNetwork = "bscTestnet" | "bsc" | "baseSepolia" | "base";
-export type BettingEvmChain = "bsc" | "base";
-export type BettingTargetKind = "testnet" | "mainnet";
 
 export interface BettingSolanaDeployment {
   cluster: BettingSolanaCluster;
@@ -19,26 +16,8 @@ export interface BettingSolanaDeployment {
   usdcMint: string;
 }
 
-export interface BettingEvmDeployment {
-  networkKey: BettingEvmNetwork;
-  chain: BettingEvmChain;
-  chainId: number;
-  label: string;
-  targetKind: BettingTargetKind;
-  rpcEnvVar: string;
-  duelOracleAddress: string;
-  goldClobAddress: string;
-  adminAddress: string;
-  marketOperatorAddress: string;
-  treasuryAddress: string;
-  marketMakerAddress: string;
-  deploymentVersion: string;
-  goldTokenAddress: string;
-}
-
 export interface BettingDeploymentManifest {
   solana: Record<BettingSolanaCluster, BettingSolanaDeployment>;
-  evm: Record<BettingEvmNetwork, BettingEvmDeployment>;
 }
 
 const SOLANA_CLUSTERS: BettingSolanaCluster[] = [
@@ -46,12 +25,6 @@ const SOLANA_CLUSTERS: BettingSolanaCluster[] = [
   "devnet",
   "testnet",
   "mainnet-beta",
-] as const;
-const EVM_NETWORKS: BettingEvmNetwork[] = [
-  "bscTestnet",
-  "bsc",
-  "baseSepolia",
-  "base",
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,21 +34,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readRequiredString(
   record: Record<string, unknown>,
   key: string,
+  options: { allowEmpty?: boolean } = {},
 ): string {
   const value = record[key];
   if (typeof value !== "string") {
     throw new Error(`Deployment manifest field '${key}' must be a string`);
   }
-  return value;
-}
-
-function readRequiredNumber(
-  record: Record<string, unknown>,
-  key: string,
-): number {
-  const value = record[key];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`Deployment manifest field '${key}' must be a number`);
+  if (!options.allowEmpty && value.trim().length === 0) {
+    throw new Error(`Deployment manifest field '${key}' must be non-empty`);
   }
   return value;
 }
@@ -86,9 +52,8 @@ function validateManifest(manifest: unknown): BettingDeploymentManifest {
   }
 
   const solanaRaw = manifest.solana;
-  const evmRaw = manifest.evm;
-  if (!isRecord(solanaRaw) || !isRecord(evmRaw)) {
-    throw new Error("Deployment manifest must include solana and evm sections");
+  if (!isRecord(solanaRaw)) {
+    throw new Error("Deployment manifest must include a solana section");
   }
 
   const solana = {} as Record<BettingSolanaCluster, BettingSolanaDeployment>;
@@ -111,42 +76,16 @@ function validateManifest(manifest: unknown): BettingDeploymentManifest {
         clusterValue,
         "goldPerpsMarketProgramId",
       ),
-      goldMint: readRequiredString(clusterValue, "goldMint"),
-      usdcMint: readRequiredString(clusterValue, "usdcMint"),
+      goldMint: readRequiredString(clusterValue, "goldMint", {
+        allowEmpty: true,
+      }),
+      usdcMint: readRequiredString(clusterValue, "usdcMint", {
+        allowEmpty: true,
+      }),
     };
   }
 
-  const evm = {} as Record<BettingEvmNetwork, BettingEvmDeployment>;
-  for (const network of EVM_NETWORKS) {
-    const networkValue = evmRaw[network];
-    if (!isRecord(networkValue)) {
-      throw new Error(`Missing evm deployment config for '${network}'`);
-    }
-    evm[network] = {
-      networkKey: network,
-      chain: readRequiredString(networkValue, "chain") as BettingEvmChain,
-      chainId: readRequiredNumber(networkValue, "chainId"),
-      label: readRequiredString(networkValue, "label"),
-      targetKind: readRequiredString(
-        networkValue,
-        "targetKind",
-      ) as BettingTargetKind,
-      rpcEnvVar: readRequiredString(networkValue, "rpcEnvVar"),
-      duelOracleAddress: readRequiredString(networkValue, "duelOracleAddress"),
-      goldClobAddress: readRequiredString(networkValue, "goldClobAddress"),
-      adminAddress: readRequiredString(networkValue, "adminAddress"),
-      marketOperatorAddress: readRequiredString(
-        networkValue,
-        "marketOperatorAddress",
-      ),
-      treasuryAddress: readRequiredString(networkValue, "treasuryAddress"),
-      marketMakerAddress: readRequiredString(networkValue, "marketMakerAddress"),
-      deploymentVersion: readRequiredString(networkValue, "deploymentVersion"),
-      goldTokenAddress: readRequiredString(networkValue, "goldTokenAddress"),
-    };
-  }
-
-  return { solana, evm };
+  return { solana };
 }
 
 export const BETTING_DEPLOYMENTS = validateManifest(rawManifest);
@@ -178,27 +117,4 @@ export function resolveBettingSolanaDeployment(
   cluster: string,
 ): BettingSolanaDeployment {
   return BETTING_DEPLOYMENTS.solana[normalizeSolanaCluster(cluster)];
-}
-
-export function resolveBettingEvmDeployment(
-  network: BettingEvmNetwork,
-): BettingEvmDeployment {
-  return BETTING_DEPLOYMENTS.evm[network];
-}
-
-export function resolveBettingEvmDefaults(environment: BettingAppEnvironment): {
-  bsc: BettingEvmDeployment;
-  base: BettingEvmDeployment;
-} {
-  if (environment === "mainnet-beta") {
-    return {
-      bsc: BETTING_DEPLOYMENTS.evm.bsc,
-      base: BETTING_DEPLOYMENTS.evm.base,
-    };
-  }
-
-  return {
-    bsc: BETTING_DEPLOYMENTS.evm.bscTestnet,
-    base: BETTING_DEPLOYMENTS.evm.baseSepolia,
-  };
 }

@@ -19,7 +19,7 @@ const DB_PATH = process.env.KEEPER_DB_PATH?.trim()
 export type DbBetRecord = {
   id: string;
   bettorWallet: string;
-  chain: "SOLANA" | "BSC" | "BASE";
+  chain: "SOLANA";
   sourceAsset: string;
   sourceAmount: number;
   goldAmount: number;

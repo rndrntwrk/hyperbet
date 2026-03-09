@@ -27,6 +27,13 @@ type ClusterName = "mainnet-beta" | "testnet";
 type PayAsset = "GOLD" | "SOL";
 type SignableTx = Transaction | VersionedTransaction;
 type AnchorLikeWallet = Wallet & { payer: Keypair };
+type IdlWithAddress = Idl & { address?: string };
+type OracleConfigAccount = {
+  authority: PublicKey;
+};
+type AccountNamespace = {
+  fetchNullable: (pubkey: PublicKey) => Promise<OracleConfigAccount | null>;
+};
 
 type SetupState = {
   mode: "public";
@@ -249,8 +256,8 @@ function getWsUrl(cluster: ClusterName, env: Record<string, string>): string {
   return "wss://api.mainnet-beta.solana.com/";
 }
 
-function idlWithAddress(idl: Idl, programId: PublicKey): Idl {
-  return { ...(idl as any), address: programId.toBase58() } as Idl;
+function idlWithAddress(idl: Idl, programId: PublicKey): IdlWithAddress {
+  return { ...(idl as IdlWithAddress), address: programId.toBase58() };
 }
 
 function deriveProgramDataAddress(programId: PublicKey): PublicKey {
@@ -373,15 +380,17 @@ async function main(): Promise<void> {
     idlWithAddress(fightOracleIdl as Idl, fightProgramId),
     provider,
   );
-  const fight: any = fightProgram;
+  const fightAccounts = fightProgram.account as Record<string, AccountNamespace>;
 
   const [oracleConfigPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("oracle_config")],
     fightProgram.programId,
   );
 
+  await assertProgramDeployed(connection, fightProgramId, "fight_oracle", cluster);
+
   const initializeOracle = async () => {
-    await fight.methods
+    await fightProgram.methods
       .initializeOracle()
       .accountsPartial({
         authority: authority.publicKey,
@@ -393,15 +402,15 @@ async function main(): Promise<void> {
       .rpc();
   };
 
-  let oracleConfig = await (
-    fightProgram as any
-  ).account.oracleConfig.fetchNullable(oracleConfigPda);
+  let oracleConfig = await fightAccounts.oracleConfig.fetchNullable(
+    oracleConfigPda,
+  );
   if (!oracleConfig) {
     await initializeOracle();
     for (let i = 0; i < 10; i += 1) {
-      oracleConfig = await (
-        fightProgram as any
-      ).account.oracleConfig.fetchNullable(oracleConfigPda);
+      oracleConfig = await fightAccounts.oracleConfig.fetchNullable(
+        oracleConfigPda,
+      );
       if (oracleConfig) break;
       await sleep(800);
     }
@@ -540,9 +549,6 @@ async function main(): Promise<void> {
     "VITE_BET_FEE_BPS",
     DEFAULT_BET_FEE_BPS,
   );
-  const tradeTreasuryFeeBps = Math.floor(betFeeBps / 2);
-  const tradeMarketMakerFeeBps = Math.max(0, betFeeBps - tradeTreasuryFeeBps);
-  const winningsMarketMakerFeeBps = betFeeBps;
   const betGoldAmount = numFromEnv(
     mergedEnv,
     "E2E_BET_GOLD_AMOUNT",
@@ -594,7 +600,7 @@ async function main(): Promise<void> {
     resolvedMatchId,
   );
 
-  await fight.methods
+  await fightProgram.methods
     .createMatch(
       new BN(resolvedMatchId),
       new BN(resolvedWindowSeconds),
@@ -614,7 +620,7 @@ async function main(): Promise<void> {
   await sleep((resolvedWindowSeconds + 3) * 1000);
 
   try {
-    await fight.methods
+    await fightProgram.methods
       .postResult({ yes: {} }, new BN(42), Array.from(new Uint8Array(32)))
       .accountsPartial({
         authority: authority.publicKey,
@@ -627,7 +633,7 @@ async function main(): Promise<void> {
   }
 
   const current = deriveMarketAddresses(fightProgram.programId, currentMatchId);
-  await fight.methods
+  await fightProgram.methods
     .createMatch(
       new BN(currentMatchId),
       new BN(betWindowSeconds),

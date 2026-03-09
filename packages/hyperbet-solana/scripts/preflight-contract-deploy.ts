@@ -6,7 +6,6 @@ import { Keypair } from "@solana/web3.js";
 
 import {
   BETTING_DEPLOYMENTS,
-  type BettingEvmNetwork,
   type BettingSolanaCluster,
 } from "../deployments";
 
@@ -40,13 +39,6 @@ const PROGRAMS: SolanaProgramCheck[] = [
   },
 ] as const;
 
-const HARDHAT_RPC_FALLBACKS: Record<BettingEvmNetwork, string> = {
-  bscTestnet: "https://data-seed-prebsc-1-s1.binance.org:8545",
-  baseSepolia: "https://sepolia.base.org",
-  bsc: "https://bsc-dataseed.binance.org",
-  base: "https://mainnet.base.org",
-};
-
 function parseTarget(argv: string[]): Target {
   const index = argv.findIndex((arg) => arg === "--target");
   const value = index >= 0 ? argv[index + 1] : "testnet";
@@ -54,22 +46,6 @@ function parseTarget(argv: string[]): Target {
     return value;
   }
   throw new Error(`Unsupported --target value '${value}'`);
-}
-
-function parseDotEnv(filepath: string): Record<string, string> {
-  if (!fs.existsSync(filepath)) return {};
-  const body = fs.readFileSync(filepath, "utf8");
-  const env: Record<string, string> = {};
-  for (const rawLine of body.split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const equals = line.indexOf("=");
-    if (equals <= 0) continue;
-    const key = line.slice(0, equals).trim();
-    const value = line.slice(equals + 1).trim();
-    env[key] = value;
-  }
-  return env;
 }
 
 function readJson(filepath: string): unknown {
@@ -115,21 +91,6 @@ function appendStatus(
   }
 }
 
-function loadMergedEvmEnv(evmDir: string): Record<string, string> {
-  return {
-    ...parseDotEnv(path.join(evmDir, ".env")),
-    ...Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      ),
-    ),
-  };
-}
-
-function getTargetNetworks(target: Target): BettingEvmNetwork[] {
-  return target === "mainnet" ? ["bsc", "base"] : ["bscTestnet", "baseSepolia"];
-}
-
 function getTargetCluster(target: Target): BettingSolanaCluster {
   return target === "mainnet" ? "mainnet-beta" : "testnet";
 }
@@ -139,7 +100,6 @@ async function main(): Promise<void> {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const bettingDir = path.resolve(__dirname, "..");
   const anchorDir = path.join(bettingDir, "anchor");
-  const evmDir = path.resolve(bettingDir, "..", "evm-contracts");
   const appDir = path.join(bettingDir, "app");
   const keeperDir = path.join(bettingDir, "keeper");
 
@@ -214,61 +174,6 @@ async function main(): Promise<void> {
     );
   }
 
-  const evmEnv = loadMergedEvmEnv(evmDir);
-  const requiredSharedEnv = [
-    "PRIVATE_KEY",
-    "ADMIN_ADDRESS",
-    "MARKET_OPERATOR_ADDRESS",
-    "REPORTER_ADDRESS",
-    "TREASURY_ADDRESS",
-    "MARKET_MAKER_ADDRESS",
-  ] as const;
-  for (const envName of requiredSharedEnv) {
-    appendStatus(
-      typeof evmEnv[envName] === "string" && evmEnv[envName].trim().length > 0,
-      `EVM deploy env provides ${envName}`,
-      failures,
-      warnings,
-    );
-  }
-
-  for (const network of getTargetNetworks(target)) {
-    const deployment = BETTING_DEPLOYMENTS.evm[network];
-    const rpcConfigured =
-      typeof evmEnv[deployment.rpcEnvVar] === "string" &&
-      evmEnv[deployment.rpcEnvVar]!.trim().length > 0;
-    const fallbackRpc = HARDHAT_RPC_FALLBACKS[network];
-    const rpcAvailable = rpcConfigured || fallbackRpc.trim().length > 0;
-    const rpcMessage = rpcConfigured
-      ? `${deployment.label} deploy RPC env ${deployment.rpcEnvVar} is configured`
-      : `${deployment.label} deploy RPC env ${deployment.rpcEnvVar} is missing; using Hardhat fallback ${fallbackRpc}`;
-    appendStatus(rpcAvailable, rpcMessage, failures, warnings, !rpcConfigured);
-
-    const hasClobAddress = deployment.goldClobAddress.trim().length > 0;
-    const hasOracleAddress = deployment.duelOracleAddress.trim().length > 0;
-    appendStatus(
-      hasOracleAddress,
-      `${deployment.label} DuelOutcomeOracle address is ${hasOracleAddress ? "present" : "pending"} in deployment manifest`,
-      failures,
-      warnings,
-      true,
-    );
-    appendStatus(
-      hasClobAddress,
-      `${deployment.label} GoldClob address is ${hasClobAddress ? "present" : "pending"} in deployment manifest`,
-      failures,
-      warnings,
-      true,
-    );
-    appendStatus(
-      deployment.deploymentVersion === "v2",
-      `${deployment.label} deployment manifest version is ${deployment.deploymentVersion}`,
-      failures,
-      warnings,
-      true,
-    );
-  }
-
   if (warnings.length > 0) {
     console.log(`[preflight] warnings=${warnings.length}`);
   }
@@ -278,7 +183,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log("[preflight] all required checks passed");
+  console.log("[preflight] all required Solana checks passed");
 }
 
 void main().catch((error) => {

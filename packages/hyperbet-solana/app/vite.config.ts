@@ -46,8 +46,6 @@ function assertPublicBuildSecrets(
 
   const publicRpcVars = [
     "VITE_SOLANA_RPC_URL",
-    "VITE_BSC_RPC_URL",
-    "VITE_BASE_RPC_URL",
   ] as const;
   for (const name of publicRpcVars) {
     if (looksLikePublicSecretUrl(env[name]?.trim())) {

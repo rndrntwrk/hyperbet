@@ -26,7 +26,6 @@ type StreamingStateResponse = {
 
 type PointsResponse = {
   totalPoints: number;
-  identityWalletCount: number;
   invitedWalletCount: number;
   referredBy: { wallet: string; code: string } | null;
 };
@@ -87,7 +86,6 @@ const HISTORY_LABELS: Record<string, string> = {
   SIGNUP_REFERRER: "Signup Bonus (Referrer)",
   SIGNUP_REFEREE: "Signup Bonus",
   STAKING_DAILY: "Staking Reward",
-  WALLET_LINK: "Wallet Link Bonus",
 };
 
 function loadState(): E2eState {
@@ -199,29 +197,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   await expect.poll(hasConnectedSolanaWallet, { timeout: 60_000 }).toBe(true);
 }
 
-async function selectChain(
-  page: Page,
-  chain: "solana" | "bsc" | "base",
-): Promise<void> {
-  const normalizedChain = chain.toLowerCase();
-  const debugSelector = page.getByTestId("e2e-chain-select").first();
-  const primarySelector = page.locator("#chain-selector").first();
-
-  if (await debugSelector.isVisible().catch(() => false)) {
-    await debugSelector.selectOption(normalizedChain);
-    await expect(page.getByTestId("e2e-active-chain")).toHaveText(
-      normalizedChain,
-    );
-    return;
-  }
-
-  if (await primarySelector.isVisible().catch(() => false)) {
-    await primarySelector.selectOption(normalizedChain);
-    await expect(primarySelector).toHaveValue(normalizedChain);
-    return;
-  }
-
-  throw new Error(`Unable to select ${chain} chain`);
+async function selectChain(_page: Page, _chain: "solana"): Promise<void> {
+  // Solana is the only supported runtime for this package.
 }
 
 test.describe("app tabs and api coverage", () => {
@@ -251,10 +228,9 @@ test.describe("app tabs and api coverage", () => {
 
     const points = await fetchJson<PointsResponse>(
       request,
-      `/api/arena/points/${encodeURIComponent(wallet)}?scope=linked`,
+      `/api/arena/points/${encodeURIComponent(wallet)}?scope=wallet`,
     );
     expect(points.totalPoints).toBeGreaterThan(0);
-    expect(points.identityWalletCount).toBeGreaterThanOrEqual(2);
     expect(points.invitedWalletCount).toBeGreaterThanOrEqual(1);
 
     const rank = await fetchJson<RankResponse>(
@@ -279,13 +255,9 @@ test.describe("app tabs and api coverage", () => {
     expect(
       history.entries.some((entry) => entry.eventType === "BET_PLACED"),
     ).toBe(true);
-    expect(
-      history.entries.some((entry) => entry.eventType === "WALLET_LINK"),
-    ).toBe(true);
-
     const leaderboard = await fetchJson<LeaderboardResponse>(
       request,
-      "/api/arena/points/leaderboard?scope=linked&window=alltime&limit=5",
+      "/api/arena/points/leaderboard?scope=wallet&window=alltime&limit=5",
     );
     expect(leaderboard.leaderboard.length).toBeGreaterThan(0);
 
@@ -323,7 +295,7 @@ test.describe("app tabs and api coverage", () => {
     );
     const points = await fetchJson<PointsResponse>(
       request,
-      `/api/arena/points/${encodeURIComponent(wallet)}?scope=linked`,
+      `/api/arena/points/${encodeURIComponent(wallet)}?scope=wallet`,
     );
     const multiplier = await fetchJson<MultiplierResponse>(
       request,
@@ -331,7 +303,7 @@ test.describe("app tabs and api coverage", () => {
     );
     const leaderboard = await fetchJson<LeaderboardResponse>(
       request,
-      "/api/arena/points/leaderboard?scope=linked&window=alltime&limit=5",
+      "/api/arena/points/leaderboard?scope=wallet&window=alltime&limit=5",
     );
     const history = await fetchJson<HistoryResponse>(
       request,
@@ -404,9 +376,12 @@ test.describe("app tabs and api coverage", () => {
         { timeout: 20_000 },
       )
       .toContain(points.totalPoints.toLocaleString());
-    await expect(page.getByTestId("points-display-gold")).toContainText(
-      multiplier.goldBalance,
-    );
+    await expect(
+      page
+        .getByTestId("points-drawer")
+        .getByTestId("points-display-gold")
+        .first(),
+    ).toContainText(multiplier.goldBalance);
 
     await expect(
       page.getByTestId("points-drawer-panel-leaderboard"),
@@ -427,11 +402,6 @@ test.describe("app tabs and api coverage", () => {
     await expect(page.getByTestId("points-history")).toContainText(
       `${latestHistory.totalPoints.toLocaleString()} pts`,
     );
-    await page.getByTestId("points-history-filter").selectOption("WALLET_LINK");
-    await expect(page.getByTestId("points-history")).toContainText(
-      HISTORY_LABELS.WALLET_LINK,
-    );
-
     await page.getByTestId("points-drawer-tab-referral").click();
     await expect(
       page.getByTestId("points-drawer-panel-referral"),
@@ -439,12 +409,8 @@ test.describe("app tabs and api coverage", () => {
     await expect(page.getByTestId("referral-panel-invite-code")).toContainText(
       invite.inviteCode,
     );
-    await expect(page.getByTestId("referral-panel-points-scope")).toContainText(
-      String(points.identityWalletCount),
-    );
     await expect(page.getByTestId("referral-panel-referred-by")).toBeVisible();
     await expect(page.getByTestId("referral-panel-redeem-input")).toBeVisible();
-    await expect(page.getByTestId("referral-panel-link-wallets")).toBeVisible();
 
     await page.getByTestId("points-drawer-close").click();
     await expect(page.getByTestId("points-drawer")).toBeHidden();

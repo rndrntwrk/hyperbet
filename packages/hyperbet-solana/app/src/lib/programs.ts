@@ -1,9 +1,21 @@
-import { AnchorProvider, BN, Idl, Program } from "@coral-xyz/anchor";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { WalletContextState } from "@solana/wallet-adapter-react";
+import {
+  AnchorProvider,
+  BN,
+  Program,
+  type Idl,
+  type Wallet,
+} from "@coral-xyz/anchor";
+import {
+  Connection,
+  PublicKey,
+  type Transaction,
+  type VersionedTransaction,
+} from "@solana/web3.js";
+import type { WalletContextState } from "@solana/wallet-adapter-react";
 
 import fightOracleIdl from "../idl/fight_oracle.json";
 import goldClobMarketIdl from "../idl/gold_clob_market.json";
+import goldPerpsMarketIdl from "../idl/gold_perps_market.json";
 import { CONFIG } from "./config";
 
 function extractProgramAddressFromIdl(idlJson: unknown): string | null {
@@ -62,6 +74,11 @@ export const GOLD_CLOB_MARKET_PROGRAM_ID = resolveConfiguredProgramId(
   goldClobMarketIdl,
   "",
 );
+export const GOLD_PERPS_MARKET_PROGRAM_ID = resolveConfiguredProgramId(
+  CONFIG.goldPerpsMarketProgramId,
+  goldPerpsMarketIdl,
+  "",
+);
 
 const FIGHT_ORACLE_IDL = ensureIdlAddress(
   fightOracleIdl,
@@ -71,14 +88,29 @@ const GOLD_CLOB_MARKET_IDL = ensureIdlAddress(
   goldClobMarketIdl,
   GOLD_CLOB_MARKET_PROGRAM_ID,
 );
+const GOLD_PERPS_MARKET_IDL = ensureIdlAddress(
+  goldPerpsMarketIdl,
+  GOLD_PERPS_MARKET_PROGRAM_ID,
+);
 
 export type ProgramsBundle = {
   provider: AnchorProvider;
-  fightOracle: Program<any>;
-  goldClobMarket: Program<any>;
+  fightOracle: Program<Idl>;
+  goldClobMarket: Program<Idl>;
 };
 
-function asAnchorWallet(wallet: WalletContextState): any {
+interface AnchorCompatibleWallet {
+  payer: Wallet["payer"];
+  publicKey: PublicKey;
+  signTransaction: <T extends Transaction | VersionedTransaction>(
+    tx: T,
+  ) => Promise<T>;
+  signAllTransactions: <T extends Array<Transaction | VersionedTransaction>>(
+    txs: T,
+  ) => Promise<T>;
+}
+
+function asAnchorWallet(wallet: WalletContextState): AnchorCompatibleWallet {
   if (
     !wallet.publicKey ||
     !wallet.signTransaction ||
@@ -87,22 +119,60 @@ function asAnchorWallet(wallet: WalletContextState): any {
     throw new Error("Wallet does not support required signing methods");
   }
 
+  const { publicKey, signTransaction, signAllTransactions } = wallet;
   return {
-    payer: null,
-    publicKey: wallet.publicKey,
-    signTransaction: wallet.signTransaction,
-    signAllTransactions: wallet.signAllTransactions,
+    payer: undefined as unknown as Wallet["payer"],
+    publicKey,
+    signTransaction: async <T extends Transaction | VersionedTransaction>(
+      tx: T,
+    ): Promise<T> => {
+      return (await signTransaction(tx)) as T;
+    },
+    signAllTransactions: async <
+      T extends Array<Transaction | VersionedTransaction>,
+    >(
+      txs: T,
+    ): Promise<T> => {
+      return (await signAllTransactions(txs)) as T;
+    },
   };
 }
 
-function readonlyAnchorWallet(): any {
+function readonlyAnchorWallet(): AnchorCompatibleWallet {
   const readonlyPk = new PublicKey("11111111111111111111111111111111");
   return {
-    payer: null,
+    payer: undefined as unknown as Wallet["payer"],
     publicKey: readonlyPk,
-    signTransaction: async <T>(tx: T): Promise<T> => tx,
-    signAllTransactions: async <T>(txs: T): Promise<T> => txs,
+    signTransaction: async <T extends Transaction | VersionedTransaction>(
+      tx: T,
+    ): Promise<T> => tx,
+    signAllTransactions: async <
+      T extends Array<Transaction | VersionedTransaction>,
+    >(
+      txs: T,
+    ): Promise<T> => txs,
   };
+}
+
+export function createAnchorWallet(
+  wallet: WalletContextState,
+): AnchorCompatibleWallet {
+  return asAnchorWallet(wallet);
+}
+
+export function createReadonlyAnchorWallet(): AnchorCompatibleWallet {
+  return readonlyAnchorWallet();
+}
+
+export function createGoldPerpsProgram(
+  connection: Connection,
+  wallet: WalletContextState,
+): Program<Idl> {
+  const provider = new AnchorProvider(connection, createAnchorWallet(wallet), {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  });
+  return new Program(GOLD_PERPS_MARKET_IDL, provider);
 }
 
 export function createPrograms(

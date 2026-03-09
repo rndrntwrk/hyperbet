@@ -369,6 +369,28 @@ export async function reportDuelResult(
   return duelState;
 }
 
+export async function cancelDuel(
+  program: Program<FightOracle>,
+  reporter: Keypair,
+  duelKey: readonly number[],
+  metadataUri = "https://hyperbet.gg/duels/cancelled",
+): Promise<PublicKey> {
+  const oracleConfig = deriveOracleConfigPda(program.programId);
+  const duelState = deriveDuelStatePda(program.programId, duelKey);
+
+  await program.methods
+    .cancelDuel([...duelKey], metadataUri)
+    .accountsPartial({
+      reporter: reporter.publicKey,
+      oracleConfig,
+      duelState,
+    })
+    .signers([reporter])
+    .rpc();
+
+  return duelState;
+}
+
 export async function initializeCanonicalMarket(
   program: Program<GoldClobMarket>,
   operator: Keypair,

@@ -1,11 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 
-import {
-  type BettingAppEnvironment,
-  type BettingEvmNetwork,
-  resolveBettingEvmDefaults,
-  resolveBettingSolanaDeployment,
-} from "../../../deployments";
+import { resolveBettingSolanaDeployment } from "../../../deployments";
 
 export type SolanaCluster = "localnet" | "devnet" | "testnet" | "mainnet-beta";
 
@@ -130,25 +125,6 @@ function resolveRuntimeEnvironment(buildEnv: Environment): Environment {
 
 export const RUNTIME_ENV: Environment = resolveRuntimeEnvironment(ACTIVE_ENV);
 
-function asDeploymentEnvironment(
-  environment: Environment,
-): BettingAppEnvironment {
-  return environment;
-}
-
-function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
-  switch (network) {
-    case "bsc":
-      return "https://bsc-dataseed.binance.org";
-    case "bscTestnet":
-      return "https://data-seed-prebsc-1-s1.binance.org:8545";
-    case "base":
-      return "https://mainnet.base.org";
-    case "baseSepolia":
-      return "https://sepolia.base.org";
-  }
-}
-
 function buildSolanaProgramConfig(
   environment: Environment,
 ): Pick<
@@ -169,34 +145,6 @@ function buildSolanaProgramConfig(
   };
 }
 
-function buildEvmConfig(
-  environment: Environment,
-): Pick<
-  EnvConfig,
-  | "bscRpcUrl"
-  | "bscChainId"
-  | "bscGoldClobAddress"
-  | "bscGoldTokenAddress"
-  | "baseRpcUrl"
-  | "baseChainId"
-  | "baseGoldClobAddress"
-  | "baseGoldTokenAddress"
-> {
-  const defaults = resolveBettingEvmDefaults(
-    asDeploymentEnvironment(environment),
-  );
-  return {
-    bscRpcUrl: defaultRpcUrlForEvmNetwork(defaults.bsc.networkKey),
-    bscChainId: defaults.bsc.chainId,
-    bscGoldClobAddress: defaults.bsc.goldClobAddress,
-    bscGoldTokenAddress: defaults.bsc.goldTokenAddress,
-    baseRpcUrl: defaultRpcUrlForEvmNetwork(defaults.base.networkKey),
-    baseChainId: defaults.base.chainId,
-    baseGoldClobAddress: defaults.base.goldClobAddress,
-    baseGoldTokenAddress: defaults.base.goldTokenAddress,
-  };
-}
-
 export interface EnvConfig {
   cluster: SolanaCluster;
   rpcUrl: string;
@@ -209,7 +157,7 @@ export interface EnvConfig {
   betWindowSeconds: number;
   newRoundBetWindowSeconds: number;
   autoSeedDelaySeconds: number;
-  marketMakerSeedGold: number;
+  marketMakerSeedSol: number;
   betFeeBps: number;
   binaryMarketMakerWallet?: string;
   binaryTradeTreasuryWallet?: string;
@@ -226,18 +174,6 @@ export interface EnvConfig {
   headlessWalletSecretKey: string;
   headlessWalletsJson: string;
   jupiterBaseUrl: string;
-
-  // EVM
-  bscRpcUrl: string;
-  bscChainId: number;
-  bscGoldClobAddress: string;
-  bscGoldTokenAddress: string;
-  baseRpcUrl: string;
-  baseChainId: number;
-  baseGoldClobAddress: string;
-  baseGoldTokenAddress: string;
-
-  walletConnectProjectId: string;
 }
 
 const DEFAULT_STREAM_URL = "https://www.twitch.tv/hyperscapeai";
@@ -249,7 +185,7 @@ const baseConfig: Partial<EnvConfig> = {
   betWindowSeconds: 300,
   newRoundBetWindowSeconds: 300,
   autoSeedDelaySeconds: 10,
-  marketMakerSeedGold: 1,
+  marketMakerSeedSol: 1,
   betFeeBps: 100,
   binaryMarketMakerWallet: "",
   binaryTradeTreasuryWallet: "",
@@ -265,17 +201,12 @@ const baseConfig: Partial<EnvConfig> = {
   headlessWalletSecretKey:
     import.meta.env.VITE_HEADLESS_WALLET_SECRET_KEY || "",
   headlessWalletsJson: import.meta.env.VITE_HEADLESS_WALLETS || "",
-
-  walletConnectProjectId: (
-    import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || ""
-  ).trim(),
 };
 
 export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   devnet: {
     ...baseConfig,
     ...buildSolanaProgramConfig("devnet"),
-    ...buildEvmConfig("devnet"),
     cluster: "devnet",
     rpcUrl: "https://api.devnet.solana.com",
     wsUrl: "wss://api.devnet.solana.com/",
@@ -286,7 +217,6 @@ export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   testnet: {
     ...baseConfig,
     ...buildSolanaProgramConfig("testnet"),
-    ...buildEvmConfig("testnet"),
     cluster: "testnet",
     rpcUrl: "https://api.testnet.solana.com",
     wsUrl: "wss://api.testnet.solana.com/",
@@ -297,7 +227,6 @@ export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   localnet: {
     ...baseConfig,
     ...buildSolanaProgramConfig("localnet"),
-    ...buildEvmConfig("localnet"),
     cluster: "localnet",
     rpcUrl: "http://127.0.0.1:8899",
     wsUrl: "ws://127.0.0.1:8900",
@@ -309,7 +238,6 @@ export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   e2e: {
     ...baseConfig,
     ...buildSolanaProgramConfig("localnet"),
-    ...buildEvmConfig("e2e"),
     cluster: "localnet",
     rpcUrl: "http://127.0.0.1:8899",
     wsUrl: "ws://127.0.0.1:8900",
@@ -324,7 +252,6 @@ export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   "stream-ui": {
     ...baseConfig,
     ...buildSolanaProgramConfig("devnet"),
-    ...buildEvmConfig("stream-ui"),
     cluster: "devnet",
     rpcUrl: "https://api.devnet.solana.com",
     fightOracleProgramId: "11111111111111111111111111111111",
@@ -338,7 +265,6 @@ export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   "mainnet-beta": {
     ...baseConfig,
     ...buildSolanaProgramConfig("mainnet-beta"),
-    ...buildEvmConfig("mainnet-beta"),
     cluster: "mainnet-beta",
     rpcUrl: "https://api.mainnet-beta.solana.com",
     wsUrl: "wss://api.mainnet-beta.solana.com/",
@@ -410,9 +336,12 @@ export const CONFIG: EnvConfig = {
     "VITE_AUTO_SEED_DELAY_SECONDS",
     baseEnvConfig.autoSeedDelaySeconds,
   ),
-  marketMakerSeedGold: readEnvNumber(
-    "VITE_MARKET_MAKER_SEED_GOLD",
-    baseEnvConfig.marketMakerSeedGold,
+  marketMakerSeedSol: readEnvNumber(
+    "VITE_MARKET_MAKER_SEED_SOL",
+    readEnvNumber(
+      "VITE_MARKET_MAKER_SEED_GOLD",
+      baseEnvConfig.marketMakerSeedSol,
+    ),
   ),
   betFeeBps: readEnvNumber("VITE_BET_FEE_BPS", baseEnvConfig.betFeeBps),
   binaryMarketMakerWallet:
@@ -454,25 +383,6 @@ export const CONFIG: EnvConfig = {
     readEnvString("VITE_HEADLESS_WALLETS") ?? baseEnvConfig.headlessWalletsJson,
   jupiterBaseUrl:
     readEnvString("VITE_JUPITER_BASE_URL") ?? baseEnvConfig.jupiterBaseUrl,
-  bscRpcUrl: readEnvString("VITE_BSC_RPC_URL") ?? baseEnvConfig.bscRpcUrl,
-  bscChainId: readEnvNumber("VITE_BSC_CHAIN_ID", baseEnvConfig.bscChainId),
-  bscGoldClobAddress:
-    readEnvString("VITE_BSC_GOLD_CLOB_ADDRESS") ??
-    baseEnvConfig.bscGoldClobAddress,
-  bscGoldTokenAddress:
-    readEnvString("VITE_BSC_GOLD_TOKEN_ADDRESS") ??
-    baseEnvConfig.bscGoldTokenAddress,
-  baseRpcUrl: readEnvString("VITE_BASE_RPC_URL") ?? baseEnvConfig.baseRpcUrl,
-  baseChainId: readEnvNumber("VITE_BASE_CHAIN_ID", baseEnvConfig.baseChainId),
-  baseGoldClobAddress:
-    readEnvString("VITE_BASE_GOLD_CLOB_ADDRESS") ??
-    baseEnvConfig.baseGoldClobAddress,
-  baseGoldTokenAddress:
-    readEnvString("VITE_BASE_GOLD_TOKEN_ADDRESS") ??
-    baseEnvConfig.baseGoldTokenAddress,
-  walletConnectProjectId:
-    readEnvString("VITE_WALLETCONNECT_PROJECT_ID") ??
-    baseEnvConfig.walletConnectProjectId,
 };
 
 // Legacy Exports mapping to CONFIG
@@ -492,7 +402,7 @@ export const DEFAULT_BET_WINDOW_SECONDS = CONFIG.betWindowSeconds;
 export const DEFAULT_NEW_ROUND_BET_WINDOW_SECONDS =
   CONFIG.newRoundBetWindowSeconds;
 export const DEFAULT_AUTO_SEED_DELAY_SECONDS = CONFIG.autoSeedDelaySeconds;
-export const DEFAULT_SEED_GOLD_AMOUNT = CONFIG.marketMakerSeedGold;
+export const DEFAULT_SEED_SOL_AMOUNT = CONFIG.marketMakerSeedSol;
 export const DEFAULT_BET_FEE_BPS = CONFIG.betFeeBps;
 export const GOLD_DECIMALS = CONFIG.goldDecimals;
 export const DEFAULT_REFRESH_INTERVAL_MS = CONFIG.refreshIntervalMs;
@@ -512,10 +422,6 @@ const USE_GAME_RPC_PROXY =
   CONFIG.cluster === "mainnet-beta"
     ? true
     : readEnvBoolean("VITE_USE_GAME_RPC_PROXY", false);
-const USE_GAME_EVM_RPC_PROXY =
-  CONFIG.cluster === "mainnet-beta"
-    ? true
-    : readEnvBoolean("VITE_USE_GAME_EVM_RPC_PROXY", false);
 const LOCAL_SOLANA_RPC_PROXY_PREFIX = "/__solana";
 
 function isLoopbackRpcUrl(url: string): boolean {
@@ -605,28 +511,3 @@ export function getWsUrl(): string | undefined {
   // Public builds proxy HTTP RPC through the keeper; websocket stays direct.
   return undefined;
 }
-
-// ============================================================================
-// EVM Chain Configuration
-// ============================================================================
-
-function shouldUseGameEvmRpcProxy(): boolean {
-  return USE_GAME_EVM_RPC_PROXY && CONFIG.cluster !== "localnet";
-}
-
-export function getEvmRpcUrl(chain: "bsc" | "base"): string {
-  if (shouldUseGameEvmRpcProxy()) {
-    return `${GAME_API_URL}/api/proxy/evm/rpc?chain=${encodeURIComponent(chain)}`;
-  }
-  return chain === "bsc" ? CONFIG.bscRpcUrl : CONFIG.baseRpcUrl;
-}
-
-export const BSC_RPC_URL: string = getEvmRpcUrl("bsc");
-export const BSC_CHAIN_ID: number = CONFIG.bscChainId;
-export const BSC_GOLD_CLOB_ADDRESS: string = CONFIG.bscGoldClobAddress;
-export const BSC_GOLD_TOKEN_ADDRESS: string = CONFIG.bscGoldTokenAddress;
-
-export const BASE_RPC_URL: string = getEvmRpcUrl("base");
-export const BASE_CHAIN_ID: number = CONFIG.baseChainId;
-export const BASE_GOLD_CLOB_ADDRESS: string = CONFIG.baseGoldClobAddress;
-export const BASE_GOLD_TOKEN_ADDRESS: string = CONFIG.baseGoldTokenAddress;

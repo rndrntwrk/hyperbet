@@ -352,10 +352,6 @@ body {
   position: relative;
 }
 
-.betting-dock-inner.is-evm {
-  overflow-y: auto;
-}
-
 .betting-dock-header {
   display: flex;
   align-items: center;
@@ -603,7 +599,7 @@ body {
 }
 
 .sol-connect-btn,
-.evm-connect-btn {
+.wallet-connect-btn {
   height: 34px;
   border-radius: var(--hm-radius-sm, 2px);
   border: 1px solid var(--hm-stone-mid, #3d4149);
@@ -629,7 +625,7 @@ body {
 }
 
 .sol-connect-btn:hover,
-.evm-connect-btn:hover {
+.wallet-connect-btn:hover {
   border-color: var(--hm-gold-border-light);
   color: var(--hm-accent-gold);
   background: linear-gradient(
@@ -640,7 +636,7 @@ body {
 }
 
 .sol-connect-btn.is-linked,
-.evm-connect-btn.is-linked {
+.wallet-connect-btn.is-linked {
   border-color: var(--hm-gold-border-subtle);
   background: var(--hm-gold-glow-subtle);
   color: var(--hm-accent-gold);
@@ -1016,7 +1012,7 @@ select:focus-visible {
     min-height: 48px;
   }
 
-  .evm-connect-btn {
+  .wallet-connect-btn {
     height: 36px;
     font-size: 11px;
     max-width: calc(100vw - 32px);
@@ -4756,7 +4752,7 @@ select:focus-visible {
   border-color: var(--hm-gold-border-subtle);
 }
 
-/* Compact wallet button — SOL and EVM side by side */
+/* Compact wallet button */
 .hm-header-mob-wallet-btn {
   height: 30px;
   padding: 0 9px;
@@ -5176,7 +5172,7 @@ select:focus-visible {
     font-size: 9px;
   }
 
-  /* Wallet buttons: compact but readable, show full "Connect SOL" / "Connect EVM" */
+  /* Wallet buttons: compact but readable on mobile */
   .hm-header-mob-wallet-btn {
     height: 28px;
     padding: 0 7px;

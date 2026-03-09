@@ -29,17 +29,6 @@ export function StreamUIApp() {
   };
 
   const phase = mock.streamState.cycle.phase;
-  const phaseLabel =
-    phase === "FIGHTING"
-      ? "LIVE"
-      : phase === "RESOLUTION"
-        ? "RESOLVED"
-        : phase === "COUNTDOWN"
-          ? "STARTING"
-          : phase === "ANNOUNCEMENT"
-            ? "NEXT MATCH"
-            : "WAITING";
-
   const countdownText =
     mock.streamState.cycle.timeRemaining > 0
       ? `${Math.floor(mock.streamState.cycle.timeRemaining / 60)
@@ -247,7 +236,7 @@ export function StreamUIApp() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button
                 type="button"
-                className="evm-connect-btn"
+                className="wallet-connect-btn"
                 style={{ opacity: 0.5, cursor: "default" }}
               >
                 Mock Wallet
@@ -347,7 +336,6 @@ export function StreamUIApp() {
                 programsReady={true}
                 agent1Name={mock.matchAgent1Name}
                 agent2Name={mock.matchAgent2Name}
-                isEvm={false}
                 chartData={mock.chartData}
                 bids={mock.bids}
                 asks={mock.asks}

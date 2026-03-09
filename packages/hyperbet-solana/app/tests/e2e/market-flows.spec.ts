@@ -2,24 +2,61 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BorshAccountsCoder, type Idl } from "@coral-xyz/anchor";
+import BN from "bn.js";
+import {
+  AnchorProvider,
+  BorshAccountsCoder,
+  Program,
+  Wallet,
+  type Idl,
+} from "@coral-xyz/anchor";
 import { expect, test, type Page } from "@playwright/test";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { createPublicClient, http, type Address, type Hash } from "viem";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js";
 
-import { GOLD_CLOB_ABI } from "../../src/lib/goldClobAbi";
+import {
+  SIDE_ASK,
+  SIDE_BID,
+  deriveOrderPda,
+  derivePriceLevelPda,
+  deriveUserBalancePda,
+} from "../../../anchor/tests/clob-test-helpers";
 
 type E2eState = {
   solanaRpcUrl?: string;
+  bootstrapWalletPath?: string;
   clobUserBalance?: string;
+  clobConfig?: string;
+  clobMarketState?: string;
+  clobDuelState?: string;
+  clobTreasury?: string;
+  clobMarketMaker?: string;
+  clobVault?: string;
+  currentDuelId?: string;
   solanaTraderPublicKey?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
-  evmRpcUrl?: string;
-  evmChainId?: number;
-  evmHeadlessAddress?: string;
-  evmGoldClobAddress?: string;
-  evmMatchId?: number;
+};
+
+type UserBalanceAccount = {
+  aShares?: unknown;
+  bShares?: unknown;
+};
+
+type MarketStateAccount = {
+  nextOrderId?: unknown;
+  bestBid?: unknown;
+  bestAsk?: unknown;
+};
+
+type AccountNamespaceFetcher = {
+  fetch: (pubkey: PublicKey) => Promise<Record<string, unknown>>;
 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,11 +68,7 @@ const goldClobIdl = JSON.parse(
 const goldPerpsIdl = JSON.parse(
   fs.readFileSync(path.join(anchorIdlDir, "gold_perps_market.json"), "utf8"),
 ) as Idl;
-const clobCoder = new BorshAccountsCoder(goldClobIdl);
 const perpsCoder = new BorshAccountsCoder(goldPerpsIdl);
-const clobProgramId = new PublicKey(
-  (goldClobIdl as Idl & { address: string }).address,
-);
 const perpsProgramId = new PublicKey(
   (goldPerpsIdl as Idl & { address: string }).address,
 );
@@ -49,6 +82,9 @@ function encodeMarketId(marketId: number): Buffer {
   bytes.writeBigUInt64LE(BigInt(marketId), 0);
   return bytes;
 }
+
+type SignableTx = Transaction | VersionedTransaction;
+type AnchorLikeWallet = Wallet & { payer: Keypair };
 
 function derivePerpsPositionPda(owner: PublicKey, marketId: number): PublicKey {
   return PublicKey.findProgramAddressSync(
@@ -66,21 +102,30 @@ function bnLikeToBigInt(value: unknown): bigint {
   return 0n;
 }
 
+function toWallet(keypair: Keypair): AnchorLikeWallet {
+  const sign = <T extends SignableTx>(tx: T): T => {
+    if (tx instanceof VersionedTransaction) tx.sign([keypair]);
+    else tx.partialSign(keypair);
+    return tx;
+  };
+
+  return {
+    payer: keypair,
+    publicKey: keypair.publicKey,
+    signTransaction: async <T extends SignableTx>(tx: T): Promise<T> =>
+      sign(tx),
+    signAllTransactions: async <T extends SignableTx[]>(txs: T): Promise<T> => {
+      txs.forEach((tx) => sign(tx));
+      return txs;
+    },
+  };
+}
+
 async function readText(page: Page, testId: string): Promise<string> {
   const locator = page.getByTestId(testId).first();
   const count = await locator.count().catch(() => 0);
   if (count === 0) return "";
   return ((await locator.textContent().catch(() => "")) || "").trim();
-}
-
-async function readTxSignature(page: Page, testId: string): Promise<string> {
-  const text = await readText(page, testId);
-  if (!text) return "";
-  const delimiterIndex = text.indexOf(":");
-  if (delimiterIndex >= 0) {
-    return text.slice(delimiterIndex + 1).trim();
-  }
-  return text;
 }
 
 async function gotoApp(page: Page): Promise<void> {
@@ -91,10 +136,7 @@ async function gotoApp(page: Page): Promise<void> {
         .poll(
           async () => {
             const bodyText = (
-              (await page
-                .locator("body")
-                .textContent()
-                .catch(() => "")) || ""
+              (await page.locator("body").textContent().catch(() => "")) || ""
             )
               .trim()
               .toUpperCase();
@@ -136,60 +178,6 @@ async function waitForNewText(
         }
         matched = next;
         return next;
-      },
-      {
-        timeout: timeoutMs,
-        intervals: [1_000, 2_000, 5_000],
-      },
-    )
-    .not.toBe("");
-  return matched;
-}
-
-async function waitForNewEvmTxText(
-  page: Page,
-  txTestId: string,
-  previousValue: string,
-  label: string,
-  timeoutMs = 60_000,
-): Promise<string> {
-  const startedAt = Date.now();
-  let lastStatus = "";
-  let lastTx = "";
-
-  while (Date.now() - startedAt < timeoutMs) {
-    lastTx = await readText(page, txTestId);
-    lastStatus = await readText(page, "evm-status");
-    console.log(
-      `[e2e][evm] ${label} status=${lastStatus || "-"} tx=${lastTx || "-"}`,
-    );
-    if (lastTx && lastTx !== "-" && lastTx !== previousValue) {
-      return lastTx;
-    }
-    await page.waitForTimeout(1_000);
-  }
-
-  throw new Error(
-    `[e2e][evm] Timed out waiting for ${label}. status=${lastStatus || "-"} tx=${lastTx || "-"}`,
-  );
-}
-
-async function waitForNewTxSignature(
-  page: Page,
-  testId: string,
-  previousSignature = "",
-  timeoutMs = 180_000,
-): Promise<string> {
-  let matched = "";
-  await expect
-    .poll(
-      async () => {
-        const next = await readTxSignature(page, testId);
-        if (next && next !== "-" && next !== previousSignature) {
-          matched = next;
-          return next;
-        }
-        return "";
       },
       {
         timeout: timeoutMs,
@@ -254,148 +242,14 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   await expect.poll(hasConnectedSolanaWallet, { timeout: 60_000 }).toBe(true);
 }
 
-async function selectChain(
-  page: Page,
-  chain: "solana" | "bsc" | "base",
-): Promise<void> {
-  const normalizedChain = chain.toLowerCase();
-  const debugSelector = page.getByTestId("e2e-chain-select").first();
-  const primarySelector = page.locator("#chain-selector").first();
-
-  let selectorReady = false;
-  for (let attempt = 0; attempt < 3 && !selectorReady; attempt += 1) {
-    await page.waitForLoadState("domcontentloaded");
-    try {
-      await expect
-        .poll(
-          async () => {
-            if (await debugSelector.isVisible().catch(() => false))
-              return "debug";
-            if (await primarySelector.isVisible().catch(() => false))
-              return "primary";
-            return "";
-          },
-          {
-            timeout: 20_000,
-            intervals: [500, 1_000, 2_000, 5_000],
-          },
-        )
-        .not.toBe("");
-      selectorReady = true;
-    } catch (error) {
-      if (attempt === 2) throw error;
-      await page.reload({ waitUntil: "domcontentloaded" });
-    }
-  }
-
-  if (await debugSelector.isVisible().catch(() => false)) {
-    await debugSelector.selectOption(normalizedChain);
-    await expect(page.getByTestId("e2e-active-chain")).toHaveText(
-      normalizedChain,
-    );
-    return;
-  }
-
-  if (await primarySelector.isVisible().catch(() => false)) {
-    await primarySelector.selectOption(normalizedChain);
-    await expect(primarySelector).toHaveValue(normalizedChain);
-    return;
-  }
-
-  const fallbackComboboxes = page.getByRole("combobox");
-  const comboboxCount = await fallbackComboboxes.count();
-  for (let index = 0; index < comboboxCount; index += 1) {
-    const selector = fallbackComboboxes.nth(index);
-    if (!(await selector.isVisible().catch(() => false))) continue;
-
-    const options = await selector
-      .locator("option")
-      .evaluateAll((nodes) =>
-        nodes.map((node) => ({
-          value: node.getAttribute("value") || "",
-          label: (node.textContent || "").trim().toLowerCase(),
-        })),
-      )
-      .catch(() => []);
-    const matchingOption = options.find((option) =>
-      `${option.value} ${option.label}`.includes(
-        normalizedChain === "solana" ? "sol" : normalizedChain,
-      ),
-    );
-    if (!matchingOption) continue;
-
-    await selector.selectOption(matchingOption.value || normalizedChain);
-    await expect
-      .poll(async () => {
-        const value = (
-          await selector.inputValue().catch(() => "")
-        ).toLowerCase();
-        const selectedLabel = (
-          (await selector
-            .locator("option:checked")
-            .textContent()
-            .catch(() => "")) || ""
-        ).toLowerCase();
-        return `${value} ${selectedLabel}`;
-      })
-      .toContain(normalizedChain === "solana" ? "sol" : normalizedChain);
-    return;
-  }
-
-  throw new Error(`Unable to locate a visible chain selector for ${chain}`);
-}
-
-async function openSolanaAdminPanel(page: Page): Promise<void> {
-  const adminToggle = page.getByTestId("solana-clob-admin-toggle");
-  if (!(await adminToggle.isVisible().catch(() => false))) return;
-  if ((await adminToggle.getAttribute("aria-expanded")) !== "true") {
-    await adminToggle.click();
-  }
-  await expect(page.getByTestId("solana-clob-admin-panel")).toBeVisible();
-}
-
-async function expectSolanaTxSuccess(
-  connection: Connection,
-  signature: string,
-  label: string,
-): Promise<void> {
-  expect(signature, `${label} signature missing`).not.toBe("");
-  expect(signature, `${label} signature missing`).not.toBe("-");
-
-  const readStatus = async () => {
-    try {
-      const statuses = await connection.getSignatureStatuses([signature], {
-        searchTransactionHistory: true,
-      });
-      return statuses.value[0] ?? null;
-    } catch {
-      return null;
-    }
-  };
-
-  await expect
-    .poll(
-      async () => {
-        const status = await readStatus();
-        if (!status) return "missing";
-        if (status.err) return "failed";
-        return status.confirmationStatus || "confirmed";
-      },
-      {
-        timeout: 180_000,
-        intervals: [1_000, 2_000, 5_000],
-      },
-    )
-    .not.toBe("missing");
-
-  const status = await readStatus();
-  expect(status?.err ?? null, `${label} failed on-chain`).toBeNull();
+async function selectChain(_page: Page, _chain: "solana"): Promise<void> {
+  // Solana is the only supported runtime for this package.
 }
 
 async function fetchDecodedAccount<T>(
   connection: Connection,
   coder: BorshAccountsCoder,
-  accountName: "UserBalance" | "PositionState",
+  accountName: "UserBalance" | "PositionState" | "MarketState",
   address: PublicKey,
 ): Promise<T | null> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -410,52 +264,114 @@ async function fetchDecodedAccount<T>(
   return null;
 }
 
-async function waitForEvmReceipt(
-  publicClient: ReturnType<typeof createPublicClient>,
-  hash: Hash,
+async function seedClobLiquidity(
+  connection: Connection,
+  state: E2eState,
+  side: number,
 ): Promise<void> {
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  expect(receipt.status).toBe("success");
+  const walletPath = state.bootstrapWalletPath?.trim() || "";
+  if (!walletPath) throw new Error("Missing bootstrapWalletPath in e2e state");
+
+  const secret = JSON.parse(fs.readFileSync(walletPath, "utf8")) as number[];
+  const authority = Keypair.fromSecretKey(Uint8Array.from(secret));
+  const provider = new AnchorProvider(connection, toWallet(authority), {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  });
+  const clobProgram = new Program(goldClobIdl, provider);
+  const marketState = new PublicKey(state.clobMarketState || "");
+  const clobAccounts = clobProgram.account as Record<
+    string,
+    AccountNamespaceFetcher
+  >;
+  const marketAccount = (await clobAccounts.marketState.fetch(
+    marketState,
+  )) as MarketStateAccount;
+  const bestBid = Number(marketAccount.bestBid ?? 0);
+  const bestAsk = Number(marketAccount.bestAsk ?? 1000);
+  if (side === SIDE_ASK && bestAsk > 0 && bestAsk < 1000) {
+    return;
+  }
+  if (side === SIDE_BID && bestBid > 0 && bestBid < 1000) {
+    return;
+  }
+  const nextOrderId = bnLikeToBigInt(marketAccount?.nextOrderId);
+  if (nextOrderId <= 0n) {
+    throw new Error("Missing next order id for seeded CLOB market");
+  }
+
+  await clobProgram.methods
+    .placeOrder(new BN(nextOrderId.toString()), side, 500, new BN("1000000000"))
+    .accountsPartial({
+      marketState,
+      duelState: new PublicKey(state.clobDuelState || ""),
+      userBalance: deriveUserBalancePda(
+        clobProgram.programId,
+        marketState,
+        authority.publicKey,
+      ),
+      newOrder: deriveOrderPda(clobProgram.programId, marketState, nextOrderId),
+      restingLevel: derivePriceLevelPda(
+        clobProgram.programId,
+        marketState,
+        side,
+        500,
+      ),
+      config: new PublicKey(state.clobConfig || ""),
+      treasury: new PublicKey(state.clobTreasury || ""),
+      marketMaker: new PublicKey(state.clobMarketMaker || ""),
+      vault: new PublicKey(state.clobVault || ""),
+      user: authority.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([authority])
+    .rpc();
 }
 
-async function readEvmPosition(
-  publicClient: ReturnType<typeof createPublicClient>,
-  contractAddress: Address,
-  matchId: bigint,
-  userAddress: Address,
-): Promise<[bigint, bigint]> {
-  return (await publicClient.readContract({
-    address: contractAddress,
-    abi: GOLD_CLOB_ABI,
-    functionName: "positions",
-    args: [matchId, userAddress],
-  })) as [bigint, bigint];
+async function loadMarketBalances(
+  connection: Connection,
+  state: E2eState,
+): Promise<
+  Array<{
+    pubkey: string;
+    user: string;
+    aShares: string;
+    bShares: string;
+  }>
+> {
+  const walletPath = state.bootstrapWalletPath?.trim() || "";
+  if (!walletPath) return [];
+  const secret = JSON.parse(fs.readFileSync(walletPath, "utf8")) as number[];
+  const authority = Keypair.fromSecretKey(Uint8Array.from(secret));
+  const provider = new AnchorProvider(connection, toWallet(authority), {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  });
+  const clobProgram = new Program(goldClobIdl, provider);
+  const marketState = new PublicKey(state.clobMarketState || "");
+  const balances = await clobProgram.account.userBalance.all();
+  return balances
+    .filter((entry) => entry.account.marketState.equals(marketState))
+    .map((entry) => ({
+      pubkey: entry.publicKey.toBase58(),
+      user: entry.account.user.toBase58(),
+      aShares: bnLikeToBigInt(entry.account.aShares).toString(),
+      bShares: bnLikeToBigInt(entry.account.bShares).toString(),
+    }));
 }
 
-async function waitForSolanaUiPosition(
-  page: Page,
-  side: "YES" | "NO",
-): Promise<void> {
-  const pattern =
-    side === "YES"
-      ? /Position YES\s+([0-9]+(?:\.[0-9]+)?)/i
-      : /\|\s*NO\s+([0-9]+(?:\.[0-9]+)?)/i;
-
-  await expect
-    .poll(
-      async () => {
-        const panelText =
-          (await page.getByTestId("solana-clob-admin-panel").textContent()) ||
-          "";
-        const match = panelText.match(pattern);
-        return match ? Number(match[1]) : 0;
-      },
-      {
-        timeout: 60_000,
-        intervals: [1_000, 2_000, 5_000],
-      },
-    )
-    .toBeGreaterThan(0);
+function createReadonlyClobProgram(
+  connection: Connection,
+  state: E2eState,
+): Program<Idl> {
+  const walletPath = state.bootstrapWalletPath?.trim() || "";
+  const secret = JSON.parse(fs.readFileSync(walletPath, "utf8")) as number[];
+  const authority = Keypair.fromSecretKey(Uint8Array.from(secret));
+  const provider = new AnchorProvider(connection, toWallet(authority), {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  });
+  return new Program(goldClobIdl, provider);
 }
 
 async function submitModelsTrade(
@@ -510,6 +426,8 @@ test.describe("market flows", () => {
       state.solanaRpcUrl || "http://127.0.0.1:8899",
       "confirmed",
     );
+    const userBalanceAddress = new PublicKey(state.clobUserBalance || "");
+    const clobProgram = createReadonlyClobProgram(connection, state);
 
     await gotoApp(page);
     await selectChain(page, "solana");
@@ -517,231 +435,110 @@ test.describe("market flows", () => {
     if (await expandButton.isVisible().catch(() => false)) {
       await expandButton.click();
     }
-
-    const clobPanel = page.getByTestId("solana-clob-panel");
-    await expect(clobPanel).toBeVisible({ timeout: 60_000 });
-    await openSolanaAdminPanel(page);
     await ensureWalletConnected(page);
 
-    await clobPanel.getByTestId("prediction-amount-input").fill("1");
-    await clobPanel.getByTestId("solana-clob-price-input").fill("600");
-
-    const previousYesTx = await readTxSignature(
-      page,
-      "solana-clob-place-order-tx",
-    );
-    await clobPanel.getByTestId("prediction-select-yes").click();
-    const buyYesButton = clobPanel.getByRole("button", { name: /buy yes/i });
-    await buyYesButton.click({ force: true });
-    await page.waitForTimeout(1_500);
-    const immediateYesTx = await readTxSignature(
-      page,
-      "solana-clob-place-order-tx",
-    );
-    if (
-      !immediateYesTx ||
-      immediateYesTx === "-" ||
-      immediateYesTx === previousYesTx
-    ) {
-      await buyYesButton.click({ force: true });
-    }
-    await openSolanaAdminPanel(page);
-
-    const yesTx = await waitForNewTxSignature(
-      page,
-      "solana-clob-place-order-tx",
-      previousYesTx,
-    );
-    await expectSolanaTxSuccess(connection, yesTx, "Solana YES order");
-
-    await waitForSolanaUiPosition(page, "YES");
-
-    await clobPanel.getByTestId("prediction-tab-sell").click();
-    await clobPanel.getByTestId("prediction-select-no").click();
-    await clobPanel.getByTestId("solana-clob-price-input").fill("400");
-    const previousNoTx = await readTxSignature(
-      page,
-      "solana-clob-place-order-tx",
-    );
-    const sellNoButton = clobPanel.getByTestId("solana-clob-sell-submit");
-    await sellNoButton.click({ force: true });
-    await page.waitForTimeout(1_500);
-    const immediateNoTx = await readTxSignature(
-      page,
-      "solana-clob-place-order-tx",
-    );
-    if (
-      !immediateNoTx ||
-      immediateNoTx === "-" ||
-      immediateNoTx === previousNoTx
-    ) {
-      await sellNoButton.click({ force: true });
-    }
-    await openSolanaAdminPanel(page);
-
-    const noTx = await waitForNewTxSignature(
-      page,
-      "solana-clob-place-order-tx",
-      previousNoTx,
-    );
-    await expectSolanaTxSuccess(connection, noTx, "Solana NO order");
-
-    await waitForSolanaUiPosition(page, "NO");
-  });
-
-  test("evm predictions place YES and NO orders, resolve, and claim", async ({
-    page,
-  }) => {
-    const state = loadState();
-    const rpcUrl = state.evmRpcUrl || "http://127.0.0.1:8545";
-    const chainId = Number(state.evmChainId || 97);
-    const userAddress = state.evmHeadlessAddress as Address;
-    const contractAddress = state.evmGoldClobAddress as Address;
-    const matchId = BigInt(state.evmMatchId || 1);
-    const publicClient = createPublicClient({
-      chain: {
-        id: chainId,
-        name: "e2e-local-evm",
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: {
-          default: { http: [rpcUrl] },
-          public: { http: [rpcUrl] },
-        },
-      },
-      transport: http(rpcUrl),
-    });
-
-    await gotoApp(page);
-    await selectChain(page, "bsc");
-
-    const evmPanel = page.getByTestId("evm-panel").first();
-    await expect(evmPanel).toBeVisible({ timeout: 60_000 });
-    await expect(evmPanel.getByTestId("evm-place-order")).toBeEnabled({
-      timeout: 60_000,
-    });
-
-    await evmPanel.getByTestId("evm-amount-input").fill("1");
-
-    console.log("[e2e][evm] placing YES order");
-    const previousYesTx = await readText(page, "evm-last-order-tx");
-    await evmPanel.getByTestId("evm-pick-yes").click();
-    await evmPanel.getByTestId("evm-place-order").click();
-    const yesTx = await waitForNewEvmTxText(
-      page,
-      "evm-last-order-tx",
-      previousYesTx,
-      "YES order",
-    );
-    await waitForEvmReceipt(publicClient, yesTx as Hash);
-
-    await expect
-      .poll(async () => {
-        const result = await readEvmPosition(
-          publicClient,
-          contractAddress,
-          matchId,
-          userAddress,
-        );
-        return result[0];
-      })
-      .toBeGreaterThan(0n);
-
-    console.log("[e2e][evm] placing NO order");
-    const previousNoTx = await readText(page, "evm-last-order-tx");
-    await evmPanel.getByTestId("evm-pick-no").click();
-    await evmPanel.getByTestId("evm-place-order").click();
-    const noTx = await waitForNewEvmTxText(
-      page,
-      "evm-last-order-tx",
-      previousNoTx,
-      "NO order",
-    );
-    await waitForEvmReceipt(publicClient, noTx as Hash);
-
-    await expect
-      .poll(async () => {
-        const result = await readEvmPosition(
-          publicClient,
-          contractAddress,
-          matchId,
-          userAddress,
-        );
-        return result[1];
-      })
-      .toBeGreaterThan(0n);
-
-    console.log("[e2e][evm] resolving YES winner");
-    const previousResolveTx = await readText(page, "evm-last-resolve-tx");
-    await evmPanel.getByTestId("evm-resolve-match").click();
-    const resolveTx = await waitForNewEvmTxText(
-      page,
-      "evm-last-resolve-tx",
-      previousResolveTx,
-      "resolve",
-    );
-    await waitForEvmReceipt(publicClient, resolveTx as Hash);
-
-    const previousClaimTx = await readText(page, "evm-last-claim-tx");
-    let claimTx = "";
-    console.log("[e2e][evm] waiting for auto-claim or zeroed YES position");
-    const autoClaimDeadline = Date.now() + 15_000;
-    let claimedPosition = await readEvmPosition(
-      publicClient,
-      contractAddress,
-      matchId,
-      userAddress,
-    );
-    while (Date.now() < autoClaimDeadline && claimedPosition[0] > 0n) {
-      await page.waitForTimeout(1_000);
-      claimedPosition = await readEvmPosition(
-        publicClient,
-        contractAddress,
-        matchId,
-        userAddress,
+    if (state.currentDuelId) {
+      await expect(page.getByTestId("current-match-id")).toContainText(
+        state.currentDuelId,
+        { timeout: 60_000 },
       );
     }
 
-    claimTx = await readText(page, "evm-last-claim-tx");
-    if (
-      claimedPosition[0] === 0n &&
-      claimTx &&
-      claimTx !== "-" &&
-      claimTx !== previousClaimTx
-    ) {
-      console.log("[e2e][evm] observed auto-claim transaction");
-      await waitForEvmReceipt(publicClient, claimTx as Hash);
-    } else {
-      const maybeClaimed = await readEvmPosition(
-        publicClient,
-        contractAddress,
-        matchId,
-        userAddress,
-      );
-      if (maybeClaimed[0] > 0n) {
-        console.log("[e2e][evm] auto-claim not observed, claiming manually");
-        await evmPanel.getByTestId("evm-refresh-market").click();
-        await expect(evmPanel.getByTestId("evm-claim-payout")).toBeEnabled({
-          timeout: 20_000,
-        });
-        await evmPanel.getByTestId("evm-claim-payout").click();
-        claimTx = await waitForNewEvmTxText(
-          page,
-          "evm-last-claim-tx",
-          previousClaimTx,
-          "manual claim",
-        );
-        await waitForEvmReceipt(publicClient, claimTx as Hash);
-      }
+    await seedClobLiquidity(connection, state, SIDE_ASK);
+    await page.getByTestId("refresh-market").click();
+
+    const beforeBalance = (await clobProgram.account.userBalance.fetchNullable(
+      userBalanceAddress,
+    )) as UserBalanceAccount | null;
+    const beforeYes = bnLikeToBigInt(beforeBalance?.aShares);
+    const beforeNo = bnLikeToBigInt(beforeBalance?.bShares);
+
+    await page.getByTestId("prediction-amount-input").fill("1");
+    await page.getByTestId("prediction-select-yes").click({ force: true });
+    await page.getByTestId("prediction-submit").click({ force: true });
+
+    const yesStatus = await page
+      .getByTestId("solana-clob-status")
+      .textContent()
+      .catch(() => "");
+    if ((yesStatus || "").includes("Order failed:")) {
+      throw new Error((yesStatus || "").trim());
     }
 
-    const finalPosition = await readEvmPosition(
-      publicClient,
-      contractAddress,
-      matchId,
-      userAddress,
-    );
-    expect(finalPosition[0]).toBe(0n);
-    expect(finalPosition[1]).toBeGreaterThan(0n);
+    try {
+      await expect
+        .poll(
+          async () => {
+            const currentStatus = await readText(page, "solana-clob-status");
+            if (/Order failed:/i.test(currentStatus)) {
+              throw new Error(currentStatus);
+            }
+            const balance = (await clobProgram.account.userBalance.fetchNullable(
+              userBalanceAddress,
+            )) as UserBalanceAccount | null;
+            return Number(bnLikeToBigInt(balance?.aShares) - beforeYes);
+          },
+          {
+            timeout: 120_000,
+            intervals: [1_000, 2_000, 5_000],
+          },
+        )
+        .toBeGreaterThan(0);
+    } catch (error) {
+      const currentStatus = await readText(page, "solana-clob-status");
+      const marketBalances = await loadMarketBalances(connection, state);
+      throw new Error(
+        [
+          error instanceof Error ? error.message : String(error),
+          `status=${currentStatus || "<empty>"}`,
+          `marketBalances=${JSON.stringify(marketBalances)}`,
+        ].join("\n"),
+      );
+    }
+
+    await seedClobLiquidity(connection, state, SIDE_BID);
+    await page.getByTestId("refresh-market").click();
+    await page.getByTestId("prediction-select-no").click({ force: true });
+    await page.getByTestId("prediction-submit").click({ force: true });
+
+    const noStatus = await page
+      .getByTestId("solana-clob-status")
+      .textContent()
+      .catch(() => "");
+    if ((noStatus || "").includes("Order failed:")) {
+      throw new Error((noStatus || "").trim());
+    }
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            const currentStatus = await readText(page, "solana-clob-status");
+            if (/Order failed:/i.test(currentStatus)) {
+              throw new Error(currentStatus);
+            }
+            const balance = (await clobProgram.account.userBalance.fetchNullable(
+              userBalanceAddress,
+            )) as UserBalanceAccount | null;
+            return Number(bnLikeToBigInt(balance?.bShares) - beforeNo);
+          },
+          {
+            timeout: 120_000,
+            intervals: [1_000, 2_000, 5_000],
+          },
+        )
+        .toBeGreaterThan(0);
+    } catch (error) {
+      const currentStatus = await readText(page, "solana-clob-status");
+      const marketBalances = await loadMarketBalances(connection, state);
+      throw new Error(
+        [
+          error instanceof Error ? error.message : String(error),
+          `status=${currentStatus || "<empty>"}`,
+          `marketBalances=${JSON.stringify(marketBalances)}`,
+        ].join("\n"),
+      );
+    }
   });
 
   test("solana perps open and close LONG and SHORT positions on-chain", async ({
@@ -777,7 +574,6 @@ test.describe("market flows", () => {
     await expect(page.getByTestId("models-market-open-long")).toBeEnabled({
       timeout: 60_000,
     });
-    console.log("[e2e][perps] opening long");
     const longStatus = await submitModelsTrade(page, "models-market-open-long");
     expect(longStatus).toMatch(/opened/i);
 
@@ -793,7 +589,6 @@ test.describe("market flows", () => {
     await expect(page.getByTestId("models-market-close-position")).toBeVisible({
       timeout: 60_000,
     });
-    console.log("[e2e][perps] closing long");
     const closeLongStatus = await submitModelsTrade(
       page,
       "models-market-close-position",
@@ -809,7 +604,6 @@ test.describe("market flows", () => {
       })
       .toBe(0);
 
-    console.log("[e2e][perps] opening short");
     const shortStatus = await submitModelsTrade(
       page,
       "models-market-open-short",
@@ -828,7 +622,6 @@ test.describe("market flows", () => {
     await expect(page.getByTestId("models-market-close-position")).toBeVisible({
       timeout: 60_000,
     });
-    console.log("[e2e][perps] closing short");
     const closeShortStatus = await submitModelsTrade(
       page,
       "models-market-close-position",

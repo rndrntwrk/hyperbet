@@ -8,8 +8,7 @@ interface PointsDisplayProps {
 
 interface PointsData {
   wallet: string;
-  pointsScope?: "WALLET" | "LINKED";
-  identityWalletCount?: number;
+  pointsScope?: "WALLET";
   totalPoints: number;
   selfPoints: number;
   winPoints: number;
@@ -69,7 +68,7 @@ export function PointsDisplay({
 
       const [pointsRes, rankRes, multiplierRes] = await Promise.all([
         fetch(
-          `${GAME_API_URL}/api/arena/points/${walletAddress}?scope=linked`,
+          `${GAME_API_URL}/api/arena/points/${walletAddress}?scope=wallet`,
           { cache: "no-store" },
         ),
         fetch(`${GAME_API_URL}/api/arena/points/rank/${walletAddress}`, {

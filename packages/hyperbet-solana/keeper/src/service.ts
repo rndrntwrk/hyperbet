@@ -1,11 +1,25 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Buffer } from "buffer";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { type Idl, type Program } from "@coral-xyz/anchor";
+import {
+  type Connection,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js";
 
-import { createPublicClient, http, type Address } from "viem";
-
-import { createPrograms, findMarketPda, readKeypair } from "./common";
+import {
+  createPrograms,
+  FIGHT_ORACLE_PROGRAM_ID,
+  findMarketPda,
+  getSenderUrl,
+  GOLD_CLOB_MARKET_PROGRAM_ID,
+  GOLD_PERPS_MARKET_PROGRAM_ID,
+  readKeypair,
+} from "./common";
 import {
   deleteIdentityMembers,
   loadAll,
@@ -23,6 +37,7 @@ import {
   saveInvitedWallet,
   saveReferralFees,
 } from "./db";
+import { buildKeeperBotChildEnv } from "./keeperBot";
 import { modelMarketIdFromCharacterId } from "./modelMarkets";
 import {
   isLegacyDerivedPointsWalletKey,
@@ -31,8 +46,8 @@ import {
 
 type StreamState = {
   type: "STREAMING_STATE_UPDATE";
-  cycle: Record<string, any>;
-  leaderboard: any[];
+  cycle: Record<string, unknown>;
+  leaderboard: unknown[];
   cameraTarget: string | null;
   seq: number;
   emittedAt: number;
@@ -41,7 +56,7 @@ type StreamState = {
 type BetRecord = {
   id: string;
   bettorWallet: string;
-  chain: "SOLANA" | "BSC" | "BASE";
+  chain: "SOLANA";
   sourceAsset: string;
   sourceAmount: number;
   goldAmount: number;
@@ -86,7 +101,7 @@ type ParserState = {
   enabled: boolean;
   lastSuccessAt: number | null;
   lastError: string | null;
-  snapshot: Record<string, any> | null;
+  snapshot: Record<string, unknown> | null;
 };
 
 type RateBucket = {
@@ -138,37 +153,11 @@ const BET_STORE_LIMIT = Math.max(
   Number(process.env.BET_STORE_LIMIT || 5000),
 );
 const SOLANA_RPC_PROXY_URL = process.env.SOLANA_RPC_URL?.trim() || "";
+const SOLANA_SENDER_PROXY_URL = getSenderUrl();
 const SOLANA_RPC_PROXY_MAX_BODY_BYTES = Math.max(
   1024,
   Number(process.env.SOLANA_RPC_PROXY_MAX_BODY_BYTES || 1_000_000),
 );
-const EVM_RPC_PROXY_MAX_BODY_BYTES = Math.max(
-  1024,
-  Number(process.env.EVM_RPC_PROXY_MAX_BODY_BYTES || 1_000_000),
-);
-
-const GOLD_CLOB_READ_ABI = [
-  {
-    type: "function",
-    name: "nextMatchId",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "matches",
-    stateMutability: "view",
-    inputs: [{ type: "uint256" }],
-    outputs: [
-      { type: "uint8" },
-      { type: "uint8" },
-      { type: "uint256" },
-      { type: "uint256" },
-    ],
-  },
-] as const;
-
 const defaultAgentA = {
   id: "agent-a",
   name: "Agent A",
@@ -240,8 +229,6 @@ const treasuryFeesFromReferralsByWallet: Map<string, number> =
 
 const parsers: {
   solana: ParserState;
-  bsc: ParserState;
-  base: ParserState;
 } = {
   solana: {
     enabled: false,
@@ -249,51 +236,7 @@ const parsers: {
     lastError: null,
     snapshot: null,
   },
-  bsc: { enabled: false, lastSuccessAt: null, lastError: null, snapshot: null },
-  base: {
-    enabled: false,
-    lastSuccessAt: null,
-    lastError: null,
-    snapshot: null,
-  },
 };
-
-const bscRpcUrl = (
-  process.env.BSC_RPC_URL ||
-  process.env.BSC_TESTNET_RPC ||
-  ""
-).trim();
-const bscContractAddress = (
-  process.env.BSC_GOLD_CLOB_ADDRESS ||
-  process.env.CLOB_CONTRACT_ADDRESS_BSC ||
-  ""
-).trim();
-const baseRpcUrl = (
-  process.env.BASE_RPC_URL ||
-  process.env.BASE_SEPOLIA_RPC ||
-  ""
-).trim();
-const baseContractAddress = (
-  process.env.BASE_GOLD_CLOB_ADDRESS ||
-  process.env.CLOB_CONTRACT_ADDRESS_BASE ||
-  ""
-).trim();
-
-const bscClient =
-  bscRpcUrl && bscContractAddress
-    ? createPublicClient({ transport: http(bscRpcUrl) })
-    : null;
-const baseClient =
-  baseRpcUrl && baseContractAddress
-    ? createPublicClient({ transport: http(baseRpcUrl) })
-    : null;
-const EVM_RPC_PROXY_TARGETS = {
-  bsc: bscRpcUrl,
-  base: baseRpcUrl,
-} as const;
-
-parsers.bsc.enabled = Boolean(bscClient);
-parsers.base.enabled = Boolean(baseClient);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -702,6 +645,80 @@ function applyCors(req: Request, headers: Headers): void {
   headers.set("access-control-max-age", "86400");
 }
 
+function normalizeOriginLike(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return value;
+  }
+}
+
+function isAllowedAppOrigin(origin: string | null): boolean {
+  const normalized = normalizeOriginLike(origin);
+  if (!normalized) return false;
+  return (
+    CORS_ORIGINS.includes(normalized) ||
+    normalized === "https://hyperbet.win" ||
+    normalized.endsWith(".hyperbet.win") ||
+    normalized === "https://hyperscape.bet" ||
+    normalized.endsWith(".hyperscape.bet") ||
+    normalized === "https://hyperscape.gg" ||
+    normalized.endsWith(".hyperscape.gg") ||
+    normalized === "https://hyperbet.pages.dev" ||
+    normalized.endsWith(".hyperbet.pages.dev") ||
+    normalized === "https://hyperscape.club" ||
+    normalized.endsWith(".hyperscape.club") ||
+    normalized === "https://hyperscape.pages.dev" ||
+    normalized.endsWith(".hyperscape.pages.dev") ||
+    normalized.includes("localhost") ||
+    normalized.includes("127.0.0.1")
+  );
+}
+
+function decodeSenderTransaction(transaction: string): Transaction | VersionedTransaction {
+  const raw = Buffer.from(transaction, "base64");
+  try {
+    return VersionedTransaction.deserialize(raw);
+  } catch {
+    return Transaction.from(raw);
+  }
+}
+
+function extractSenderProgramIds(
+  transaction: Transaction | VersionedTransaction,
+): string[] {
+  if (transaction instanceof VersionedTransaction) {
+    const accountKeys = transaction.message.staticAccountKeys;
+    return transaction.message.compiledInstructions.map(
+      (instruction) =>
+        accountKeys[instruction.programIdIndex]?.toBase58() ?? "",
+    );
+  }
+  return transaction.instructions.map((instruction) =>
+    instruction.programId.toBase58(),
+  );
+}
+
+function isWhitelistedSenderTransaction(
+  transaction: Transaction | VersionedTransaction,
+): boolean {
+  const allowedPrograms = new Set([
+    FIGHT_ORACLE_PROGRAM_ID.toBase58(),
+    GOLD_CLOB_MARKET_PROGRAM_ID.toBase58(),
+    GOLD_PERPS_MARKET_PROGRAM_ID.toBase58(),
+    SystemProgram.programId.toBase58(),
+  ]);
+  const programIds = extractSenderProgramIds(transaction);
+  const touchesHyperbetProgram = programIds.some(
+    (programId) =>
+      programId === FIGHT_ORACLE_PROGRAM_ID.toBase58() ||
+      programId === GOLD_CLOB_MARKET_PROGRAM_ID.toBase58() ||
+      programId === GOLD_PERPS_MARKET_PROGRAM_ID.toBase58(),
+  );
+  return touchesHyperbetProgram && programIds.every((programId) => allowedPrograms.has(programId));
+}
+
 function jsonResponse(
   req: Request,
   body: unknown,
@@ -886,16 +903,16 @@ function requireWriteAuth(
   return provided === fallbackKey;
 }
 
-function toStreamState(payload: any): StreamState | null {
+function toStreamState(payload: unknown): StreamState | null {
   if (!payload || typeof payload !== "object") return null;
 
-  const candidate = payload as Record<string, any>;
+  const candidate = payload as Record<string, unknown>;
   const cycle = candidate.cycle;
   if (!cycle || typeof cycle !== "object") return null;
 
   return {
     type: "STREAMING_STATE_UPDATE",
-    cycle: cycle as Record<string, any>,
+    cycle: cycle as Record<string, unknown>,
     leaderboard: Array.isArray(candidate.leaderboard)
       ? candidate.leaderboard
       : [],
@@ -1059,10 +1076,7 @@ function startKeeperBotIfEnabled(): void {
   if (!ENABLE_KEEPER_BOT) return;
   if (botSubprocess) return;
 
-  const childEnv = {
-    ...process.env,
-    GAME_URL: process.env.GAME_URL || `http://127.0.0.1:${PORT}`,
-  };
+  const childEnv = buildKeeperBotChildEnv(process.env, PORT);
 
   botSubprocess = Bun.spawn(["bun", "--bun", "src/bot.ts"], {
     cwd: keeperRoot,
@@ -1091,10 +1105,10 @@ const solanaKeyRef =
   "";
 
 let solanaCtx: {
-  connection: any;
-  fightProgram: any;
-  marketProgram: any;
-  marketProgramId: any;
+  connection: Connection;
+  fightProgram: Program<Idl>;
+  marketProgram: Program<Idl>;
+  marketProgramId: PublicKey;
 } | null = null;
 
 if (solanaKeyRef) {
@@ -1156,7 +1170,9 @@ async function pollSolanaSnapshot(): Promise<void> {
           ).toBase58()
         : null;
     const recentSignature =
-      recentSignatures.find((entry: any) => entry?.signature)?.signature ??
+      (
+        recentSignatures as Array<{ signature?: string } | null>
+      ).find((entry) => entry?.signature)?.signature ??
       null;
 
     parsers.solana.snapshot = {
@@ -1178,72 +1194,12 @@ async function pollSolanaSnapshot(): Promise<void> {
   }
 }
 
-async function pollEvmSnapshot(
-  label: "bsc" | "base",
-  client: ReturnType<typeof createPublicClient> | null,
-  contractAddress: string,
-): Promise<void> {
-  if (!client || !contractAddress) return;
-  const parser = parsers[label];
-
-  try {
-    const nextMatchId = (await client.readContract({
-      address: contractAddress as Address,
-      abi: GOLD_CLOB_READ_ABI,
-      functionName: "nextMatchId",
-      args: [],
-    })) as bigint;
-
-    const currentMatchId = nextMatchId > 0n ? nextMatchId - 1n : 0n;
-    const match = (await client.readContract({
-      address: contractAddress as Address,
-      abi: GOLD_CLOB_READ_ABI,
-      functionName: "matches",
-      args: [currentMatchId],
-    })) as any;
-
-    const status = Array.isArray(match)
-      ? Number(match[0] ?? 0)
-      : Number(match.status ?? 0);
-    const winner = Array.isArray(match)
-      ? Number(match[1] ?? 0)
-      : Number(match.winner ?? 0);
-    const yesPool = Array.isArray(match)
-      ? String(match[2] ?? 0n)
-      : String(match.yesPool ?? 0n);
-    const noPool = Array.isArray(match)
-      ? String(match[3] ?? 0n)
-      : String(match.noPool ?? 0n);
-
-    parser.snapshot = {
-      contractAddress,
-      nextMatchId: nextMatchId.toString(),
-      currentMatchId: currentMatchId.toString(),
-      currentMatch: {
-        status,
-        winner,
-        yesPool,
-        noPool,
-      },
-    };
-    parser.lastSuccessAt = Date.now();
-    parser.lastError = null;
-  } catch (error) {
-    parser.lastError =
-      error instanceof Error ? error.message : `${label} poll failed`;
-  }
-}
-
 let contractPollInFlight = false;
 async function pollContractParsers(): Promise<void> {
   if (contractPollInFlight) return;
   contractPollInFlight = true;
   try {
-    await Promise.all([
-      pollSolanaSnapshot(),
-      pollEvmSnapshot("bsc", bscClient, bscContractAddress),
-      pollEvmSnapshot("base", baseClient, baseContractAddress),
-    ]);
+    await pollSolanaSnapshot();
   } finally {
     contractPollInFlight = false;
   }
@@ -1269,7 +1225,7 @@ function getReferralOwner(
 function pointsForWalletResponse(
   wallet: string,
   scope: string | null,
-): Record<string, any> {
+): Record<string, unknown> {
   const wallets = identityWallets(wallet, scope);
   const aggregate = aggregatePoints(wallets);
   const multiplierDetail = multiplierDetailForWallets(wallets);
@@ -1319,7 +1275,7 @@ function leaderboardResponse(
   };
 }
 
-function rankResponse(wallet: string): Record<string, any> {
+function rankResponse(wallet: string): Record<string, unknown> {
   const normalized = rememberWalletCase(wallet);
   const canonical = ensureIdentity(normalized);
   const rows = leaderboardRows("linked", "alltime");
@@ -1339,7 +1295,7 @@ function historyResponse(
   limit: number,
   offset: number,
   eventType: string | null,
-): Record<string, any> {
+): Record<string, unknown> {
   const normalized = rememberWalletCase(wallet);
   const wallets = new Set(identityWallets(normalized, "linked"));
   const filtered = pointsEvents.filter((entry) => {
@@ -1373,7 +1329,7 @@ function historyResponse(
   };
 }
 
-function multiplierResponse(wallet: string): Record<string, any> {
+function multiplierResponse(wallet: string): Record<string, unknown> {
   const wallets = identityWallets(wallet, "linked");
   const detail = multiplierDetailForWallets(wallets);
   return {
@@ -1391,9 +1347,9 @@ async function handleBetRecord(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -1402,10 +1358,6 @@ async function handleBetRecord(req: Request): Promise<Response> {
   if (!walletRaw) {
     return jsonResponse(req, { error: "Missing bettorWallet" }, 400);
   }
-
-  const chain = String(payload.chain || "SOLANA").toUpperCase();
-  const chainValue: "SOLANA" | "BSC" | "BASE" =
-    chain === "BSC" ? "BSC" : chain === "BASE" ? "BASE" : "SOLANA";
 
   const sourceAmount = parseNumberInput(payload.sourceAmount, 0);
   const goldAmount = parseNumberInput(payload.goldAmount, sourceAmount);
@@ -1422,7 +1374,7 @@ async function handleBetRecord(req: Request): Promise<Response> {
   const record: BetRecord = {
     id: `${recordedAt}-${Math.random().toString(36).slice(2, 10)}`,
     bettorWallet: displayWallet(normalizedWallet),
-    chain: chainValue,
+    chain: "SOLANA",
     sourceAsset: String(payload.sourceAsset || "GOLD"),
     sourceAmount,
     goldAmount,
@@ -1516,9 +1468,9 @@ async function handleInviteRedeem(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -1611,9 +1563,9 @@ async function handleWalletLink(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -1660,7 +1612,7 @@ async function handleWalletLink(req: Request): Promise<Response> {
 function inviteSummary(
   walletRaw: string,
   platformView: string,
-): Record<string, any> {
+): Record<string, unknown> {
   const wallet = rememberWalletCase(walletRaw);
   const code = inviteCodeForWallet(wallet);
   const canonical = ensureIdentity(wallet);
@@ -1743,6 +1695,111 @@ async function handleSolanaRpcProxy(req: Request): Promise<Response> {
   }
 }
 
+async function handleSolanaSenderProxy(req: Request): Promise<Response> {
+  if (!SOLANA_SENDER_PROXY_URL) {
+    return jsonResponse(
+      req,
+      { error: "Helius Sender is not configured" },
+      503,
+    );
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return jsonResponse(req, { error: "Invalid JSON body" }, 400);
+  }
+
+  const transaction = typeof payload.transaction === "string"
+    ? payload.transaction.trim()
+    : "";
+  if (!transaction) {
+    return jsonResponse(req, { error: "transaction is required" }, 400);
+  }
+
+  const authorizedByKey = requireWriteAuth(req);
+  const trustedOrigin =
+    isAllowedAppOrigin(req.headers.get("origin")) ||
+    isAllowedAppOrigin(req.headers.get("referer"));
+
+  let decodedTransaction: Transaction | VersionedTransaction;
+  try {
+    decodedTransaction = decodeSenderTransaction(transaction);
+  } catch {
+    return jsonResponse(req, { error: "invalid transaction encoding" }, 400);
+  }
+
+  if (!isWhitelistedSenderTransaction(decodedTransaction)) {
+    return jsonResponse(
+      req,
+      { error: "sender proxy only accepts Hyperbet Solana transactions" },
+      403,
+    );
+  }
+
+  if (!authorizedByKey && !trustedOrigin) {
+    return jsonResponse(
+      req,
+      { error: "sender proxy requires a trusted Hyperbet origin" },
+      403,
+    );
+  }
+
+  try {
+    const upstream = await fetch(SOLANA_SENDER_PROXY_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `sender-${Date.now()}`,
+        method: "sendTransaction",
+        params: [
+          transaction,
+          {
+            encoding: "base64",
+            skipPreflight: true,
+            maxRetries: 0,
+          },
+        ],
+      }),
+      cache: "no-store",
+    });
+    const raw = (await upstream.json()) as Record<string, unknown>;
+    const error = raw.error;
+    if (!upstream.ok || error) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        typeof (error as Record<string, unknown>).message === "string"
+          ? ((error as Record<string, unknown>).message as string)
+          : `Sender proxy HTTP ${upstream.status}`;
+      return jsonResponse(req, { error: message }, upstream.status || 502);
+    }
+
+    const signature =
+      typeof raw.result === "string" ? raw.result : null;
+    if (!signature) {
+      return jsonResponse(req, { error: "Sender returned no signature" }, 502);
+    }
+
+    return jsonResponse(req, { signature }, 200);
+  } catch (error) {
+    return jsonResponse(
+      req,
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to proxy Solana Sender request",
+      },
+      502,
+    );
+  }
+}
+
 type JsonRpcBodyResult =
   | { ok: true; bodyText: string }
   | { ok: false; response: Response };
@@ -1803,59 +1860,6 @@ async function readJsonRpcBody(
   }
 
   return { ok: true, bodyText };
-}
-
-async function handleEvmRpcProxy(req: Request, url: URL): Promise<Response> {
-  const chain = url.searchParams.get("chain")?.trim().toLowerCase();
-  if (chain !== "bsc" && chain !== "base") {
-    return jsonResponse(req, { error: "Invalid EVM chain" }, 400);
-  }
-
-  const target = EVM_RPC_PROXY_TARGETS[chain];
-  if (!target) {
-    return jsonResponse(
-      req,
-      { error: `${chain.toUpperCase()} RPC is not configured` },
-      503,
-    );
-  }
-
-  const rpcBody = await readJsonRpcBody(req, EVM_RPC_PROXY_MAX_BODY_BYTES);
-  if (!rpcBody.ok) {
-    return rpcBody.response;
-  }
-
-  try {
-    const upstream = await fetch(target, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: rpcBody.bodyText,
-      cache: "no-store",
-    });
-    const payload = await upstream.text();
-    const headers = new Headers({
-      "content-type":
-        upstream.headers.get("content-type") ||
-        "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      ...securityHeaders(),
-    });
-    applyCors(req, headers);
-    return new Response(payload, { status: upstream.status, headers });
-  } catch (error) {
-    return jsonResponse(
-      req,
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to proxy EVM RPC request",
-      },
-      502,
-    );
-  }
 }
 
 async function handleBirdeyePrice(req: Request, url: URL): Promise<Response> {
@@ -1937,7 +1941,7 @@ async function handleItemManifest(
     // Fall back below.
   }
 
-  const fallback: any[] = [];
+  const fallback: unknown[] = [];
   manifestCache.set(fileName, fallback);
   return jsonResponse(req, fallback, 200, {
     "cache-control": "public, max-age=60, stale-while-revalidate=60",
@@ -1949,9 +1953,9 @@ async function handleStreamPublish(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized stream publish key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -2009,8 +2013,7 @@ const server = Bun.serve({
         parsers,
         proxies: {
           solanaRpc: Boolean(SOLANA_RPC_PROXY_URL),
-          bscRpc: Boolean(EVM_RPC_PROXY_TARGETS.bsc),
-          baseRpc: Boolean(EVM_RPC_PROXY_TARGETS.base),
+          solanaSender: Boolean(SOLANA_SENDER_PROXY_URL),
         },
         bot: {
           enabled: ENABLE_KEEPER_BOT,
@@ -2229,8 +2232,8 @@ const server = Bun.serve({
       return handleSolanaRpcProxy(req);
     }
 
-    if (req.method === "POST" && url.pathname === "/api/proxy/evm/rpc") {
-      return handleEvmRpcProxy(req, url);
+    if (req.method === "POST" && url.pathname === "/api/proxy/solana/sender") {
+      return handleSolanaSenderProxy(req);
     }
 
     if (req.method === "GET" && url.pathname === "/api/proxy/birdeye/price") {
