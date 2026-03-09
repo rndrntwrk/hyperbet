@@ -1246,11 +1246,11 @@ export type GoldClobMarket = {
             "type": "u64"
           },
           {
-            "name": "aStake",
+            "name": "aLockedLamports",
             "type": "u64"
           },
           {
-            "name": "bStake",
+            "name": "bLockedLamports",
             "type": "u64"
           }
         ]

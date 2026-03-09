@@ -1,4 +1,9 @@
-import { useMemo, type ComponentType, type PropsWithChildren } from "react";
+import {
+  useMemo,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import type { Adapter } from "@solana/wallet-adapter-base";
 import {
   ConnectionProvider,
@@ -8,7 +13,11 @@ import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
-import { WagmiProvider, type Config as WagmiConfig } from "wagmi";
+import { WagmiProvider } from "wagmi";
+
+// Derive the config type from WagmiProvider's props so that minor viem
+// version mismatches between packages don't cause deep structural errors.
+type WagmiConfig = ComponentProps<typeof WagmiProvider>["config"];
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 import "@rainbow-me/rainbowkit/styles.css";
@@ -18,11 +27,11 @@ type HeadlessWalletDescriptor = {
   autoConnect: boolean;
 };
 
-type CreateHyperbetAppRootOptions = {
+export type CreateHyperbetAppRootOptions = {
   getRpcUrl: () => string;
-  getWsUrl: () => string;
+  getWsUrl: () => string | undefined;
   createHeadlessWalletsFromEnv: () => HeadlessWalletDescriptor[];
-  ChainProvider: ComponentType<PropsWithChildren>;
+  ChainProvider: ComponentType<{ children: ReactNode }>;
   wagmiConfig: WagmiConfig;
   App: ComponentType;
   StreamUIApp: ComponentType;

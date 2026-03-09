@@ -2,7 +2,7 @@
   "solana": {
     "localnet": {
       "cluster": "localnet",
-      "fightOracleProgramId": "6Tx7s2UG4maFWakRFVi4GeecXJYyBXQF8f2vJdQShSpV",
+      "fightOracleProgramId": "6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD",
       "goldClobMarketProgramId": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi",
       "goldPerpsMarketProgramId": "HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik",
       "goldMint": "DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump",
@@ -10,7 +10,7 @@
     },
     "devnet": {
       "cluster": "devnet",
-      "fightOracleProgramId": "6Tx7s2UG4maFWakRFVi4GeecXJYyBXQF8f2vJdQShSpV",
+      "fightOracleProgramId": "6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD",
       "goldClobMarketProgramId": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi",
       "goldPerpsMarketProgramId": "HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik",
       "goldMint": "DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump",
@@ -18,7 +18,7 @@
     },
     "testnet": {
       "cluster": "testnet",
-      "fightOracleProgramId": "6Tx7s2UG4maFWakRFVi4GeecXJYyBXQF8f2vJdQShSpV",
+      "fightOracleProgramId": "6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD",
       "goldClobMarketProgramId": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi",
       "goldPerpsMarketProgramId": "HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik",
       "goldMint": "",
@@ -26,7 +26,7 @@
     },
     "mainnet-beta": {
       "cluster": "mainnet-beta",
-      "fightOracleProgramId": "6Tx7s2UG4maFWakRFVi4GeecXJYyBXQF8f2vJdQShSpV",
+      "fightOracleProgramId": "6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD",
       "goldClobMarketProgramId": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi",
       "goldPerpsMarketProgramId": "HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik",
       "goldMint": "DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump",
@@ -57,12 +57,12 @@
       "label": "BNB Smart Chain",
       "targetKind": "mainnet",
       "rpcEnvVar": "BSC_MAINNET_RPC",
-      "duelOracleAddress": "0x007571e57366981c4069cc722A3a5fa5272CA2c8",
-      "goldClobAddress": "",
-      "adminAddress": "",
-      "marketOperatorAddress": "",
-      "treasuryAddress": "",
-      "marketMakerAddress": "",
+      "duelOracleAddress": "0x8F582bc1D34Ca6dA12ac46B7c7Fdec02f2465961",
+      "goldClobAddress": "0x443C09B1E7bb7bA3392b02500772B185654A6F33",
+      "adminAddress": "0x7908b93DF1A91A5e1B83a4538107Db3c9131eED8",
+      "marketOperatorAddress": "0x7908b93DF1A91A5e1B83a4538107Db3c9131eED8",
+      "treasuryAddress": "0x0262dC245f38d614d508D8BD680c69E3B6D26F4c",
+      "marketMakerAddress": "0x1B6C8799998f0a55CA69E6b2886C489861045cFd",
       "deploymentVersion": "v2",
       "goldTokenAddress": ""
     },
@@ -89,12 +89,12 @@
       "label": "Base",
       "targetKind": "mainnet",
       "rpcEnvVar": "BASE_MAINNET_RPC",
-      "duelOracleAddress": "0x6fabf21b0589C8E591bff87729bBF4A429acc3Fc",
-      "goldClobAddress": "",
-      "adminAddress": "",
-      "marketOperatorAddress": "",
-      "treasuryAddress": "",
-      "marketMakerAddress": "",
+      "duelOracleAddress": "0x63BF7f48A2795832C2b5f78172A1C6BE655F3a72",
+      "goldClobAddress": "0xb8c66D6895Bafd1B0027F2c0865865043064437C",
+      "adminAddress": "0x7908b93DF1A91A5e1B83a4538107Db3c9131eED8",
+      "marketOperatorAddress": "0x7908b93DF1A91A5e1B83a4538107Db3c9131eED8",
+      "treasuryAddress": "0x0262dC245f38d614d508D8BD680c69E3B6D26F4c",
+      "marketMakerAddress": "0x1B6C8799998f0a55CA69E6b2886C489861045cFd",
       "deploymentVersion": "v2",
       "goldTokenAddress": ""
     }

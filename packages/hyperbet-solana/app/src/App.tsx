@@ -737,9 +737,9 @@ export function App() {
     );
     const closeTs = normalizeTimestamp(
       liveCycle.betCloseTime ??
-        liveCycle.fightStartTime ??
-        liveCycle.duelEndTime ??
-        Math.floor(Date.now() / 1000),
+      liveCycle.fightStartTime ??
+      liveCycle.duelEndTime ??
+      Math.floor(Date.now() / 1000),
     );
     const resolvedTs =
       liveCycle.phase === "RESOLUTION" && liveCycle.duelEndTime
@@ -875,17 +875,17 @@ export function App() {
   const streamPhaseText = liveCycle?.phase ?? null;
   const marketStatusText = isEvmChain
     ? getMarketStatusLabel(
-        streamPhaseText ?? currentMatch?.status ?? copy.phaseLive,
-        copy,
-      )
+      streamPhaseText ?? currentMatch?.status ?? copy.phaseLive,
+      copy,
+    )
     : getMarketStatusLabel(solanaClobSnapshot.marketStatus, copy);
   const countdownText = isEvmChain
     ? liveCycle
       ? formatCountdown(normalizeRemainingSeconds(liveCycle.timeRemaining))
       : ""
     : formatCountdown(
-        currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
-      );
+      currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
+    );
 
   // Sidebar bet state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1111,7 +1111,7 @@ export function App() {
                           ? "BASE"
                           : activeChain === "avax"
                             ? "AVAX"
-                          : null
+                            : null
                     }
                   />
                 </Suspense>
@@ -1803,9 +1803,6 @@ export function App() {
                     [
                       ["trades", copy.trades],
                       ["orders", copy.orderBook],
-                      ["news", copy.matchLog],
-                      ["holders", copy.agents],
-                      ["topTraders", copy.leaderboard],
                       ["positions", copy.positions],
                     ] as const
                   ).map(([key, label]) => (
@@ -1952,194 +1949,6 @@ export function App() {
                   </div>
                 )}
 
-                {hmBottomTab === "topTraders" && (
-                  <div
-                    className="hm-trades-panel"
-                    role="tabpanel"
-                    data-testid="duels-bottom-panel-topTraders"
-                  >
-                    <div className="hm-trades-table-wrap">
-                      <table className="hm-trades-table" role="grid">
-                        <thead>
-                          <tr>
-                            <th>{copy.rank}</th>
-                            <th>{copy.agent}</th>
-                            <th>{copy.provider}</th>
-                            <th>{copy.wins}</th>
-                            <th>{copy.losses}</th>
-                            <th>{copy.winRate}</th>
-                            <th>{copy.streak}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {effLeaderboard.map((entry) => (
-                            <tr key={entry.name}>
-                              <td className="hm-td-mono">#{entry.rank}</td>
-                              <td>
-                                <strong>{entry.name}</strong>
-                              </td>
-                              <td className="hm-td-dim">{entry.provider}</td>
-                              <td
-                                className="hm-td-mono"
-                                style={{ color: "#22c55e" }}
-                              >
-                                {entry.wins}
-                              </td>
-                              <td
-                                className="hm-td-mono"
-                                style={{ color: "#ef4444" }}
-                              >
-                                {entry.losses}
-                              </td>
-                              <td className="hm-td-mono">
-                                {entry.winRate.toFixed(1)}%
-                              </td>
-                              <td className="hm-td-mono">
-                                {entry.currentStreak > 0
-                                  ? copy.streakValue(entry.currentStreak)
-                                  : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {hmBottomTab === "holders" && (
-                  <div
-                    className="hm-trades-panel"
-                    role="tabpanel"
-                    data-testid="duels-bottom-panel-holders"
-                  >
-                    <div className="hm-agents-detail">
-                      {[effA1, effA2].map((agent) => {
-                        const hpPct =
-                          agent.maxHp > 0
-                            ? Math.max(
-                                0,
-                                Math.min(100, (agent.hp / agent.maxHp) * 100),
-                              )
-                            : 0;
-                        const hpColor =
-                          agent.hp < 25
-                            ? "#ef4444"
-                            : agent.hp < 60
-                              ? "#f59e0b"
-                              : "#22c55e";
-                        return (
-                          <div key={agent.id} className="hm-agent-card">
-                            <div className="hm-agent-card-header">
-                              <strong>{agent.name}</strong>
-                              <span className="hm-agent-meta">
-                                {agent.provider}
-                                {agent.model ? ` · ${agent.model}` : ""}
-                                {agent.combatLevel
-                                  ? copy.level(agent.combatLevel)
-                                  : ""}
-                              </span>
-                            </div>
-                            {/* HP bar — always visible, quick health read */}
-                            <div className="hm-agent-hp-bar-wrap">
-                              <div
-                                className="hm-agent-hp-bar"
-                                style={{
-                                  width: `${hpPct}%`,
-                                  background: hpColor,
-                                }}
-                              />
-                            </div>
-                            <div className="hm-agent-stats-grid">
-                              <div className="hm-agent-stat">
-                                <span className="hm-agent-stat-label">{copy.hp}</span>
-                                <span
-                                  className={`hm-agent-stat-value ${agent.hp < 30 ? "hm-stat-value--negative" : "hm-stat-value--positive"}`}
-                                >
-                                  {agent.hp}/{agent.maxHp}
-                                </span>
-                              </div>
-                              <div className="hm-agent-stat">
-                                <span className="hm-agent-stat-label">{copy.wl}</span>
-                                <span className="hm-agent-stat-value">
-                                  {copy.record(agent.wins, agent.losses)}
-                                </span>
-                              </div>
-                              <div className="hm-agent-stat">
-                                <span className="hm-agent-stat-label">{copy.dmg}</span>
-                                <span className="hm-agent-stat-value">
-                                  {agent.damageDealtThisFight}
-                                </span>
-                              </div>
-                            </div>
-                            {agent.monologues &&
-                              agent.monologues.length > 0 && (
-                                <div className="hm-agent-monologues">
-                                  {agent.monologues
-                                    .slice(0, isMobile ? 1 : 3)
-                                    .map((m) => (
-                                      <div
-                                        key={m.id}
-                                        className={`hm-monologue hm-monologue--${m.type}`}
-                                      >
-                                        <span className="hm-monologue-type">
-                                          {m.type === "action"
-                                            ? copy.action
-                                            : copy.thought}
-                                        </span>
-                                        <span>{m.content}</span>
-                                      </div>
-                                    ))}
-                                </div>
-                              )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {hmBottomTab === "news" && (
-                  <div
-                    className="hm-trades-panel"
-                    role="tabpanel"
-                    data-testid="duels-bottom-panel-news"
-                  >
-                    <div className="hm-match-log">
-                      <div className="hm-log-entry">
-                        <span className="hm-log-phase">{effCycle.phase}</span>
-                        <span
-                          className="hm-log-text"
-                          style={{ color: effStatusColor }}
-                        >
-                          {effStatus}
-                        </span>
-                      </div>
-                      {effCycle.winnerName && (
-                        <div className="hm-log-entry hm-log-entry--winner">
-                          <span className="hm-log-phase">{copy.result}</span>
-                          <span className="hm-log-text">
-                            {copy.winner(
-                              effCycle.winnerName,
-                              effCycle.winReason,
-                            )}
-                          </span>
-                        </div>
-                      )}
-                      {[...effA1.monologues, ...effA2.monologues]
-                        .sort((a, b) => b.timestamp - a.timestamp)
-                        .slice(0, 10)
-                        .map((m) => (
-                          <div key={m.id} className="hm-log-entry">
-                            <span className="hm-log-phase">
-                              {m.type.toUpperCase()}
-                            </span>
-                            <span className="hm-log-text">{m.content}</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
 
                 {hmBottomTab === "positions" && (
                   <div
@@ -2187,33 +1996,7 @@ export function App() {
                   </button>
                 </div>
               </div>
-              <div className="hm-matchup">
-                <div className="hm-matchup-agent">
-                  <span className="hm-matchup-name" title={effA1.name}>
-                    {effA1.name}
-                  </span>
-                  <span className="hm-matchup-record">
-                    {copy.record(effA1.wins, effA1.losses)}
-                    {effA1.combatLevel ? copy.level(effA1.combatLevel) : ""}
-                  </span>
-                  <span className="hm-matchup-odds hm-matchup-odds--yes">
-                    {effYesPercent}%
-                  </span>
-                </div>
-                <span className="hm-matchup-vs">VS</span>
-                <div className="hm-matchup-agent hm-matchup-agent--right">
-                  <span className="hm-matchup-name" title={effA2.name}>
-                    {effA2.name}
-                  </span>
-                  <span className="hm-matchup-record">
-                    {copy.record(effA2.wins, effA2.losses)}
-                    {effA2.combatLevel ? copy.level(effA2.combatLevel) : ""}
-                  </span>
-                  <span className="hm-matchup-odds hm-matchup-odds--no">
-                    {effNoPercent}%
-                  </span>
-                </div>
-              </div>
+
 
               {/* Market type tabs + betting panels */}
               <div className="hm-market-panel-wrap">

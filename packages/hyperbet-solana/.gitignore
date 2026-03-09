@@ -22,3 +22,5 @@ anchor/test-ledger
 .DS_Store
 anchor/.tmp-ledger
 anchor/.tmp-*
+keys/
+wallets.generated.json

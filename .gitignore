@@ -30,3 +30,5 @@ packages/evm-contracts/out
 packages/evm-contracts/artifacts
 packages/evm-contracts/typechain-types
 packages/evm-contracts/deployments
+keys/
+wallets.generated.json

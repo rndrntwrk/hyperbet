@@ -7,11 +7,21 @@ dotenv.config();
 const DEFAULT_CLOB_ADDRESS = "0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E";
 const DEFAULT_SOLANA_PROGRAM_ID =
   process.env.SOLANA_VERIFY_PROGRAM_ID ||
-  "9NdidShnVzy1fc1WHWJTvyuXmH47ynfNGA6QFdyfAuSU";
+  process.env.SOLANA_ARENA_MARKET_PROGRAM_ID ||
+  "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi";
 const DEFAULT_SOLANA_RPC_URL =
-  process.env.SOLANA_VERIFY_RPC_URL || "https://api.mainnet-beta.solana.com";
+  process.env.SOLANA_VERIFY_RPC_URL ||
+  process.env.SOLANA_RPC_URL ||
+  "https://api.mainnet-beta.solana.com";
 
-const EVM_CLOB_ABI = ["function nextMatchId() view returns (uint256)"];
+const BSC_EXPECTED_CHAIN_ID = BigInt(
+  process.env.BSC_EXPECTED_CHAIN_ID || "56",
+);
+const BASE_EXPECTED_CHAIN_ID = BigInt(
+  process.env.BASE_EXPECTED_CHAIN_ID || "8453",
+);
+
+const EVM_CLOB_ABI = ["function feeBps() view returns (uint256)"];
 
 type CheckResult = {
   chain: "bsc" | "base" | "solana";
@@ -59,11 +69,11 @@ const verifyEvmChain = async (params: {
       EVM_CLOB_ABI,
       provider,
     );
-    const nextMatchId = (await clob.nextMatchId()) as bigint;
+    const feeBps = (await clob.feeBps()) as bigint;
     return {
       chain: params.chain,
       ok: true,
-      details: `chainId=${network.chainId.toString()} clob=${params.clobAddress} nextMatchId=${nextMatchId.toString()}`,
+      details: `chainId=${network.chainId.toString()} clob=${params.clobAddress} feeBps=${feeBps.toString()}`,
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -103,9 +113,8 @@ const verifySolanaChain = async (params: {
     return {
       chain: "solana",
       ok: true,
-      details: `rpc=${params.rpcUrl} program=${programId.toBase58()} configPda=${
-        configInfo ? "present" : "missing"
-      } core=${coreVersion}`,
+      details: `rpc=${params.rpcUrl} program=${programId.toBase58()} configPda=${configInfo ? "present" : "missing"
+        } core=${coreVersion}`,
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -125,7 +134,7 @@ const run = async () => {
         process.env.EVM_BSC_RPC_URL ||
         process.env.BSC_TESTNET_RPC ||
         "https://data-seed-prebsc-1-s1.binance.org:8545",
-      expectedChainId: 97n,
+      expectedChainId: BSC_EXPECTED_CHAIN_ID,
       clobAddress: normalizeAddress(
         process.env.CLOB_CONTRACT_ADDRESS_BSC || DEFAULT_CLOB_ADDRESS,
       ),
@@ -136,7 +145,7 @@ const run = async () => {
         process.env.EVM_BASE_RPC_URL ||
         process.env.BASE_SEPOLIA_RPC ||
         "https://sepolia.base.org",
-      expectedChainId: 84532n,
+      expectedChainId: BASE_EXPECTED_CHAIN_ID,
       clobAddress: normalizeAddress(
         process.env.CLOB_CONTRACT_ADDRESS_BASE || DEFAULT_CLOB_ADDRESS,
       ),
