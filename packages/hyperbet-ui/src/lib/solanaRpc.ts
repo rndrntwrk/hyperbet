@@ -6,6 +6,34 @@ import type {
   VersionedTransaction,
 } from "@solana/web3.js";
 
+// Helius Sender endpoint for dual-routing (SWQoS + Jito).
+// Requires a Jito tip of at least HELIUS_SENDER_MIN_TIP_LAMPORTS in the tx.
+const HELIUS_SENDER_URL = "https://sender.helius-rpc.com/fast";
+// Minimum Jito tip required by Helius Sender dual-routing mode (0.0002 SOL).
+export const HELIUS_SENDER_MIN_TIP_LAMPORTS = 200_000;
+
+// Tip accounts — pick one at random per transaction.
+const HELIUS_JITO_TIP_ACCOUNTS = [
+  "4ACfpUFoaSD9bfPdeu6DBt89gB6ENTeHBXCAi87NhDEE",
+  "D2L6yPZ2FmmmTKPgzaMKdhu6EWZcTpLy1Vhx8uvZe7NZ",
+  "9bnz4RShgq1hAnLnZbP8kbgBg1kEmcJBYQq3gQbmnSta",
+  "5VY91ws6B2hMmBFRsXkoAAdsPHBJwRfBht4DXox3xkwn",
+  "2nyhqdwKcJZR2vcqCyrYsaPVdAnFoJjiksCXJ7hfEYgD",
+  "2q5pghRs6arqVjRvT5gfgWfWcHWmw1ZuCzphgd5KfWGJ",
+  "wyvPkWjVZz1M8fHQnMMCDTQDbkManefNNhweYk5WkcF",
+  "3KCKozbAaF75qEU33jtzozcJ29yJuaLJTy2jFdzUY8bT",
+  "4vieeGHPYPG2MmyPRcYjdiDmmhN3ww7hsFNap8pVN3Ey",
+  "4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or",
+] as const;
+
+export function randomJitoTipAccount(): string {
+  return (
+    HELIUS_JITO_TIP_ACCOUNTS[
+      Math.floor(Math.random() * HELIUS_JITO_TIP_ACCOUNTS.length)
+    ] ?? HELIUS_JITO_TIP_ACCOUNTS[0]
+  );
+}
+
 interface JsonRpcFailure {
   error: {
     code: number;
@@ -190,4 +218,83 @@ export async function confirmSignatureViaRpc(
     });
   }
   throw new Error(`Transaction ${signature} was not confirmed in time`);
+}
+
+/**
+ * Send a serialized transaction via Helius Sender (dual-routing: SWQoS + Jito).
+ * The transaction MUST include a Jito tip transfer of at least
+ * HELIUS_SENDER_MIN_TIP_LAMPORTS to a tip account (see randomJitoTipAccount).
+ *
+ * Returns the base-58 transaction signature on success.
+ * Throws on HTTP error or RPC-level failure.
+ */
+export async function sendViaHeliusSender(
+  wireTransactionBase64: string,
+): Promise<string> {
+  const response = await fetch(HELIUS_SENDER_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `sender-${Date.now()}`,
+      method: "sendTransaction",
+      params: [
+        wireTransactionBase64,
+        {
+          encoding: "base64",
+          skipPreflight: true,
+          maxRetries: 0,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Helius Sender HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as
+    | { result: string }
+    | { error: { message: string } };
+
+  if ("error" in payload) {
+    throw new Error(`Helius Sender: ${payload.error.message}`);
+  }
+
+  return payload.result;
+}
+
+/**
+ * Fetch a dynamic priority fee estimate from Helius.
+ * Falls back to a conservative default on any error.
+ */
+export async function fetchPriorityFeeEstimate(
+  rpcEndpoint: string,
+  accountKeys: string[] = [],
+): Promise<number> {
+  const FALLBACK_FEE = 50_000;
+  try {
+    const result = await callJsonRpc<{ priorityFeeEstimate?: number }>(
+      rpcEndpoint,
+      "getPriorityFeeEstimate",
+      [{ accountKeys, options: { priorityLevel: "High" } }],
+    );
+    const fee = result?.priorityFeeEstimate;
+    if (typeof fee === "number" && fee > 0) return Math.ceil(fee);
+    return FALLBACK_FEE;
+  } catch {
+    return FALLBACK_FEE;
+  }
+}
+
+/**
+ * Warm the Helius Sender connection to avoid cold-start latency.
+ * Call once on app mount and every 30s thereafter.
+ */
+export function startHeliusSenderWarmup(): () => void {
+  const ping = () =>
+    fetch("https://sender.helius-rpc.com/ping").catch(() => undefined);
+  ping();
+  const interval = setInterval(ping, 30_000);
+  return () => clearInterval(interval);
 }
