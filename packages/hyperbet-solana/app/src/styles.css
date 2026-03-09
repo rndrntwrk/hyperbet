@@ -352,10 +352,6 @@ body {
   position: relative;
 }
 
-.betting-dock-inner.is-evm {
-  overflow-y: auto;
-}
-
 .betting-dock-header {
   display: flex;
   align-items: center;
@@ -603,7 +599,7 @@ body {
 }
 
 .sol-connect-btn,
-.evm-connect-btn {
+.wallet-connect-btn {
   height: 34px;
   border-radius: var(--hm-radius-sm, 2px);
   border: 1px solid var(--hm-stone-mid, #3d4149);
@@ -629,7 +625,7 @@ body {
 }
 
 .sol-connect-btn:hover,
-.evm-connect-btn:hover {
+.wallet-connect-btn:hover {
   border-color: var(--hm-gold-border-light);
   color: var(--hm-accent-gold);
   background: linear-gradient(
@@ -640,22 +636,27 @@ body {
 }
 
 .sol-connect-btn.is-linked,
-.evm-connect-btn.is-linked {
+.wallet-connect-btn.is-linked {
   border-color: var(--hm-gold-border-subtle);
   background: var(--hm-gold-glow-subtle);
   color: var(--hm-accent-gold);
 }
 
 /* ============================================================
-   Wallet Adapter Overrides
+   Wallet Modal
    ============================================================ */
-.wallet-adapter-button {
+.wallet-button {
+  appearance: none !important;
   background: linear-gradient(
     180deg,
     var(--hm-stone-dark) 0%,
     var(--hm-surface) 100%
   ) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   color: var(--hm-text-dim) !important;
+  cursor: pointer !important;
   font-family: "Inter", system-ui, sans-serif !important;
   border: 1px solid var(--hm-stone-mid) !important;
   border-radius: 2px !important;
@@ -677,7 +678,7 @@ body {
     0 2px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
-.wallet-adapter-button:not([disabled]):hover {
+.wallet-button:not([disabled]):hover {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
   box-shadow:
@@ -692,7 +693,7 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
-.wallet-adapter-dropdown-list {
+.wallet-dropdown-list {
   background: rgba(18, 20, 26, 0.98) !important;
   backdrop-filter: blur(32px) saturate(1.4) !important;
   -webkit-backdrop-filter: blur(32px) saturate(1.4) !important;
@@ -703,29 +704,38 @@ select:focus-visible {
     inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 
-.wallet-adapter-dropdown-list-item {
+.wallet-dropdown-list-item {
   font-family: "Inter", system-ui, sans-serif !important;
   color: #fff !important;
 }
 
-.wallet-adapter-dropdown-list-item:hover {
+.wallet-dropdown-list-item:hover {
   background: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Wallet Modal Overrides */
-.wallet-adapter-modal-overlay {
+.wallet-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 24px !important;
   background: rgba(0, 0, 0, 0.65) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
 }
 
-.wallet-adapter-modal-container {
+.wallet-modal-container {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  width: min(420px, calc(100vw - 32px)) !important;
 }
 
-.wallet-adapter-modal-wrapper {
+.wallet-modal-wrapper {
+  position: relative !important;
   background: linear-gradient(
     180deg,
     rgba(20, 22, 30, 0.98) 0%,
@@ -744,7 +754,7 @@ select:focus-visible {
   width: 100% !important;
 }
 
-.wallet-adapter-modal-title {
+.wallet-modal-title {
   font-family: "Teko", sans-serif !important;
   font-weight: 700 !important;
   font-size: 22px !important;
@@ -757,7 +767,8 @@ select:focus-visible {
   line-height: 1.2 !important;
 }
 
-.wallet-adapter-modal-button-close {
+.wallet-modal-button-close {
+  position: absolute !important;
   background: rgba(255, 255, 255, 0.06) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 8px !important;
@@ -770,22 +781,24 @@ select:focus-visible {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  cursor: pointer !important;
 }
 
-.wallet-adapter-modal-button-close:hover {
+.wallet-modal-button-close:hover {
   background: rgba(255, 255, 255, 0.12) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-.wallet-adapter-modal-button-close svg {
+.wallet-modal-button-close svg {
   fill: rgba(255, 255, 255, 0.55) !important;
   width: 12px !important;
   height: 12px !important;
 }
 
-.wallet-adapter-modal-list {
+.wallet-modal-list {
   margin: 0 !important;
   padding: 0 !important;
+  list-style: none !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
@@ -793,7 +806,7 @@ select:focus-visible {
   width: 100% !important;
 }
 
-.wallet-adapter-modal-list .wallet-adapter-button {
+.wallet-modal-list .wallet-button {
   background: rgba(255, 255, 255, 0.04) !important;
   justify-content: flex-start !important;
   width: 100% !important;
@@ -812,35 +825,44 @@ select:focus-visible {
   gap: 12px !important;
 }
 
-.wallet-adapter-modal-list .wallet-adapter-button:hover {
+.wallet-modal-list .wallet-button:disabled {
+  cursor: default !important;
+  opacity: 0.6 !important;
+}
+
+.wallet-modal-list .wallet-button:hover {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.16) !important;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
-.wallet-adapter-modal-list .wallet-adapter-button-end-icon,
-.wallet-adapter-modal-list .wallet-adapter-button-start-icon {
+.wallet-modal-list .wallet-button-end-icon,
+.wallet-modal-list .wallet-button-start-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
   width: 26px !important;
   height: 26px !important;
 }
 
-.wallet-adapter-modal-list .wallet-adapter-button-end-icon img,
-.wallet-adapter-modal-list .wallet-adapter-button-start-icon img {
+.wallet-modal-list .wallet-button-end-icon img,
+.wallet-modal-list .wallet-button-start-icon img {
   width: 26px !important;
   height: 26px !important;
   border-radius: 6px !important;
 }
 
-.wallet-adapter-modal-list .wallet-adapter-button span {
-  font-size: 10px !important;
-  color: rgba(255, 255, 255, 0.3) !important;
+.wallet-modal-list .wallet-button-label {
+  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.88) !important;
   font-family: "Inter", system-ui, sans-serif !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.3px !important;
-  margin-left: auto !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.1px !important;
+  text-transform: none !important;
 }
 
-.wallet-adapter-modal-list-more {
+.wallet-modal-list-more {
   background: none !important;
   color: rgba(242, 208, 138, 0.65) !important;
   font-family: "Inter", system-ui, sans-serif !important;
@@ -852,21 +874,21 @@ select:focus-visible {
   transition: color 0.15s ease !important;
 }
 
-.wallet-adapter-modal-list-more:hover {
+.wallet-modal-list-more:hover {
   color: #f2d08a !important;
 }
 
-.wallet-adapter-modal-list-more svg {
+.wallet-modal-list-more svg {
   fill: rgba(242, 208, 138, 0.65) !important;
   width: 10px !important;
   height: 10px !important;
 }
 
-.wallet-adapter-modal-middle {
+.wallet-modal-middle {
   display: none !important;
 }
 
-.wallet-adapter-modal-middle-button {
+.wallet-modal-middle-button {
   display: none !important;
 }
 
@@ -1016,13 +1038,13 @@ select:focus-visible {
     min-height: 48px;
   }
 
-  .evm-connect-btn {
+  .wallet-connect-btn {
     height: 36px;
     font-size: 11px;
     max-width: calc(100vw - 32px);
   }
 
-  .wallet-adapter-button {
+  .wallet-button {
     height: 36px !important;
     font-size: 11px !important;
     padding: 0 10px !important;
@@ -4756,7 +4778,7 @@ select:focus-visible {
   border-color: var(--hm-gold-border-subtle);
 }
 
-/* Compact wallet button — SOL and EVM side by side */
+/* Compact wallet button */
 .hm-header-mob-wallet-btn {
   height: 30px;
   padding: 0 9px;
@@ -5134,8 +5156,8 @@ select:focus-visible {
     text-overflow: ellipsis;
   }
 
-  /* Wallet adapter button compact */
-  .wallet-adapter-button {
+  /* Wallet button compact */
+  .wallet-button {
     height: 36px !important;
     font-size: 11px !important;
     padding: 0 10px !important;
@@ -5176,7 +5198,7 @@ select:focus-visible {
     font-size: 9px;
   }
 
-  /* Wallet buttons: compact but readable, show full "Connect SOL" / "Connect EVM" */
+  /* Wallet buttons: compact but readable on mobile */
   .hm-header-mob-wallet-btn {
     height: 28px;
     padding: 0 7px;

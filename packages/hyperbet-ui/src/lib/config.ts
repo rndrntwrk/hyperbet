@@ -5,7 +5,7 @@ import {
   type BettingEvmNetwork,
   resolveBettingEvmDefaults,
   resolveBettingSolanaDeployment,
-} from "../../../hyperbet-solana/deployments";
+} from "../../../hyperbet-bsc/deployments";
 
 export type SolanaCluster = "localnet" | "devnet" | "testnet" | "mainnet-beta";
 
@@ -147,6 +147,7 @@ function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
     case "baseSepolia":
       return "https://sepolia.base.org";
   }
+  return "https://bsc-dataseed.binance.org";
 }
 
 function defaultAvaxRpcUrlForEnvironment(environment: Environment): string {

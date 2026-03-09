@@ -12,10 +12,6 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "paths": {
-      "@hyperbet/ui": ["../../hyperbet-ui/src/index.ts"],
-      "@hyperbet/ui/*": ["../../hyperbet-ui/src/*"]
-    },
     "types": ["vite/client"]
   },
   "include": ["src", "vite.config.ts"]

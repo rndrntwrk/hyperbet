@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { createHash } from "node:crypto";
-
 import BN from "bn.js";
+import { type Program } from "@coral-xyz/anchor";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import type { FightOracle } from "./idl/fight_oracle";
 
 import {
   createPrograms,
@@ -14,6 +13,7 @@ import {
   readKeypair,
   requireEnv,
 } from "./common";
+import { buildResultHash } from "./resultHash";
 
 const args = await yargs(hideBin(process.argv))
   .option("duel-key", {
@@ -47,13 +47,17 @@ const args = await yargs(hideBin(process.argv))
 
 const oracleAuthority = readKeypair(requireEnv("ORACLE_AUTHORITY_KEYPAIR"));
 const { fightOracle } = createPrograms(oracleAuthority);
-const oracleProgram: any = fightOracle;
+const oracleProgram: Program<FightOracle> = fightOracle;
+const oracleAccounts = oracleProgram.account as Record<
+  string,
+  { fetch: (pubkey: unknown) => Promise<Record<string, unknown>> }
+>;
 
 const duelKey = duelKeyHexToBytes(args["duel-key"]);
 const duelPda = findDuelStatePda(fightOracle.programId, duelKey);
 const oracleConfigPda = findOracleConfigPda(fightOracle.programId);
 
-const duelState = await oracleProgram.account.duelState.fetch(duelPda);
+const duelState = await oracleAccounts["duelState"].fetch(duelPda);
 const nowTs = Math.floor(Date.now() / 1000);
 
 let postResultSig: string | null = null;
@@ -67,34 +71,30 @@ if (!enumIs(duelState.status, "resolved")) {
     throw new Error("replay-hash must be a 32-byte hex string");
   }
 
-  const resultHash = Array.from(
-    createHash("sha256")
-      .update(
-        JSON.stringify({
-          duelKey: args["duel-key"].trim().toLowerCase(),
-          winner: args.winner,
-          seed: args.seed,
-          replayHashHex,
-        }),
-      )
-      .digest(),
+  const resultHash = buildResultHash(
+    args["duel-key"],
+    args.winner === "a" ? "A" : "B",
+    args.seed,
+    replayHashHex,
   );
 
   postResultSig = await oracleProgram.methods
     .reportResult(
       Array.from(duelKey),
-      args.winner === "a" ? ({ a: {} } as any) : ({ b: {} } as any),
+      args.winner === "a" ? { a: {} } : { b: {} },
       new BN(args.seed),
       Array.from(Buffer.from(replayHashHex, "hex")),
       resultHash,
       new BN(nowTs),
       args.metadata,
     )
-    .accounts({
-      reporter: oracleAuthority.publicKey,
-      oracleConfig: oracleConfigPda,
-      duelState: duelPda,
-    })
+    .accounts(
+      {
+        reporter: oracleAuthority.publicKey,
+        oracleConfig: oracleConfigPda,
+        duelState: duelPda,
+      } as never,
+    )
     .rpc();
 }
 

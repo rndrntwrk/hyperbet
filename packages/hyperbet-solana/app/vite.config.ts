@@ -46,8 +46,6 @@ function assertPublicBuildSecrets(
 
   const publicRpcVars = [
     "VITE_SOLANA_RPC_URL",
-    "VITE_BSC_RPC_URL",
-    "VITE_BASE_RPC_URL",
   ] as const;
   for (const name of publicRpcVars) {
     if (looksLikePublicSecretUrl(env[name]?.trim())) {
@@ -72,10 +70,9 @@ function assertPublicBuildSecrets(
 
 export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, __dirname, "");
-  const isE2eMode = mode === "e2e";
   assertPublicBuildSecrets(mode, env);
   const plugins: any[] = [react()];
-  const aliasMap: Record<string, string> = {};
+  const alias: Record<string, string> = {};
   const require = createRequire(import.meta.url);
   const nodePolyfillsRoot = path.dirname(
     path.dirname(require.resolve("vite-plugin-node-polyfills")),
@@ -85,33 +82,26 @@ export default defineConfig(async ({ mode }) => {
   // directly. Resolve them from the installed package root so the build remains
   // stable whether Bun installs them locally or hoists them in CI, while still
   // pointing Vite dev/build at the ESM shim files.
-  aliasMap["vite-plugin-node-polyfills/shims/global"] = path.join(
+  alias["vite-plugin-node-polyfills/shims/global"] = path.join(
     nodePolyfillsRoot,
     "shims",
     "global",
     "dist",
     "index.js",
   );
-  aliasMap["vite-plugin-node-polyfills/shims/process"] = path.join(
+  alias["vite-plugin-node-polyfills/shims/process"] = path.join(
     nodePolyfillsRoot,
     "shims",
     "process",
     "dist",
     "index.js",
   );
-  aliasMap["vite-plugin-node-polyfills/shims/buffer"] = path.join(
+  alias["vite-plugin-node-polyfills/shims/buffer"] = path.join(
     nodePolyfillsRoot,
     "shims",
     "buffer",
     "dist",
     "index.js",
-  );
-  aliasMap["@hyperbet/ui"] = path.resolve(
-    __dirname,
-    "..",
-    "..",
-    "hyperbet-ui",
-    "src",
   );
 
   const curvesMainPath = require.resolve("@noble/curves");
@@ -129,19 +119,8 @@ export default defineConfig(async ({ mode }) => {
   }
 
   // Fix for @noble/curves import resolution inside the turbo monorepo
-  aliasMap["@noble/curves/ed25519"] = ed25519Path;
-  aliasMap["@noble/curves/secp256k1"] = secp256k1Path;
-  const alias = Object.entries(aliasMap).map(([find, replacement]) => ({
-    find,
-    replacement,
-  }));
-  plugins.push({
-    name: "resolve-node-polyfill-shims",
-    enforce: "pre",
-    resolveId(source: string) {
-      return aliasMap[source] ?? null;
-    },
-  });
+  alias["@noble/curves/ed25519"] = ed25519Path;
+  alias["@noble/curves/secp256k1"] = secp256k1Path;
 
   const polyfills = nodePolyfills({
     include: ["buffer", "process"],
@@ -337,20 +316,6 @@ export default defineConfig(async ({ mode }) => {
       host: true,
       port: 4179,
       proxy: solanaProxyConfig,
-      watch: {
-        ignored: [
-          "**/test-results/**",
-          "**/tests/e2e/playwright-report/**",
-          "**/.e2e-*.log",
-          "**/.env.e2e",
-          ...(isE2eMode
-            ? [
-                "**/packages/hyperbet-ui/src/**",
-                "**/packages/hyperbet-*/deployments/**",
-              ]
-            : []),
-        ],
-      },
     },
     preview: {
       host: true,
@@ -363,26 +328,17 @@ export default defineConfig(async ({ mode }) => {
         "react-dom",
         "react/jsx-runtime",
         "react/jsx-dev-runtime",
-        "@solana/wallet-adapter-base",
-        "@solana/wallet-adapter-react",
-        "@solana/wallet-adapter-react-ui",
-        "@solana/wallet-adapter-phantom",
+        "@solana/client",
+        "@solana/react-hooks",
+        "@solana/kit",
+        "@solana/connector",
         "@solana/web3.js",
-        "wagmi",
-        "@wagmi/core",
-        "@rainbow-me/rainbowkit",
-        "@tanstack/react-query",
-        "viem",
+        "@wallet-standard/app",
+        "@wallet-standard/features",
       ],
     },
     optimizeDeps: {
-      include: [
-        "buffer",
-        "process",
-        "vite-plugin-node-polyfills/shims/buffer",
-        "vite-plugin-node-polyfills/shims/global",
-        "vite-plugin-node-polyfills/shims/process",
-      ],
+      include: ["fetch-retry"],
     },
     build: {
       outDir: "dist",

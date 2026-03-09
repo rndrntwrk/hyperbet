@@ -1,11 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { patchPlaywrightMacGpuProbe } from "./playwright-mac-gpu-probe-patch";
-
-patchPlaywrightMacGpuProbe();
-
 const IS_LINUX = process.platform === "linux";
-const PW_HEADLESS = (process.env.PW_HEADLESS ?? "1") !== "0";
+const HAS_DISPLAY = Boolean(process.env.DISPLAY);
+const USE_HEADED_BROWSER = process.env.PW_HEADLESS === "false" && HAS_DISPLAY;
 const DEFAULT_LINUX_WEBGPU_ARGS = [
   "--enable-unsafe-webgpu",
   "--ozone-platform=x11",
@@ -16,14 +13,12 @@ const EXTRA_WEBGPU_ARGS = (process.env.PW_WEBGPU_ARGS ?? "")
   .split(" ")
   .map((arg) => arg.trim())
   .filter(Boolean);
-const WEBGPU_LAUNCH_ARGS = [
-  ...(IS_LINUX ? DEFAULT_LINUX_WEBGPU_ARGS : []),
-  ...EXTRA_WEBGPU_ARGS,
-];
-const DESKTOP_CHROMIUM = {
-  viewport: { width: 1280, height: 720 },
-  screen: { width: 1280, height: 720 },
-};
+const WEBGPU_LAUNCH_ARGS = USE_HEADED_BROWSER
+  ? [
+      ...(IS_LINUX ? DEFAULT_LINUX_WEBGPU_ARGS : []),
+      ...EXTRA_WEBGPU_ARGS,
+    ]
+  : EXTRA_WEBGPU_ARGS;
 
 // Playwright sets FORCE_COLOR; if NO_COLOR is also present it emits noisy startup warnings.
 delete process.env.NO_COLOR;
@@ -53,15 +48,15 @@ export default defineConfig({
     video: "retain-on-failure",
     actionTimeout: 30_000,
     navigationTimeout: 60_000,
-    headless: PW_HEADLESS,
-    launchOptions: !PW_HEADLESS && WEBGPU_LAUNCH_ARGS.length
+    headless: !USE_HEADED_BROWSER,
+    launchOptions: WEBGPU_LAUNCH_ARGS.length
       ? { args: WEBGPU_LAUNCH_ARGS }
       : undefined,
   },
   projects: [
     {
       name: "chromium",
-      use: PW_HEADLESS ? DESKTOP_CHROMIUM : { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
 });

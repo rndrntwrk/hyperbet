@@ -4,12 +4,10 @@ import { fileURLToPath } from "node:url";
 
 type E2eState = {
   solanaTraderPublicKey?: string;
-  evmHeadlessAddress?: string;
   perpsCharacterId?: string;
   perpsModelName?: string;
-  currentMatchId?: number;
+  currentDuelId?: string;
   currentDuelKeyHex?: string;
-  currentBetWindowSeconds?: number;
 };
 
 async function readState(): Promise<E2eState> {
@@ -48,43 +46,28 @@ async function main(): Promise<void> {
     state.solanaTraderPublicKey,
     "solanaTraderPublicKey",
   );
-  const linkedWallet = requireString(
-    state.evmHeadlessAddress,
-    "evmHeadlessAddress",
-  );
   const perpsCharacterId = requireString(
     state.perpsCharacterId,
     "perpsCharacterId",
   );
-  const perpsModelName = state.perpsModelName?.trim() || "E2E Model Alpha";
-  const duelKeyHex = requireString(state.currentDuelKeyHex, "currentDuelKeyHex");
-  const duelId = String(state.currentMatchId || Date.now());
-  const currentBetWindowSeconds = Math.max(
-    30,
-    Number(state.currentBetWindowSeconds || 45),
+  const currentDuelId = requireString(state.currentDuelId, "currentDuelId");
+  const currentDuelKeyHex = requireString(
+    state.currentDuelKeyHex,
+    "currentDuelKeyHex",
   );
-  const uplineWallet = "0x1000000000000000000000000000000000000001";
-  const leaderboardWallet = "0x1000000000000000000000000000000000000002";
-  const inviteeWallet = "0x1000000000000000000000000000000000000003";
+  const perpsModelName = state.perpsModelName?.trim() || "E2E Model Alpha";
+  const uplineWallet = "SeedReferrer11111111111111111111111111111111";
+  const leaderboardWallet = "SeedLeader1111111111111111111111111111111";
+  const inviteeWallet = "SeedInvitee111111111111111111111111111111";
 
   const uplineInvite = await requestJson<{ inviteCode: string }>(
-    `${gameApiUrl}/api/arena/invite/${encodeURIComponent(uplineWallet)}?platform=evm`,
+    `${gameApiUrl}/api/arena/invite/${encodeURIComponent(uplineWallet)}?platform=solana`,
   );
   await requestJson(`${gameApiUrl}/api/arena/invite/redeem`, {
     method: "POST",
     body: JSON.stringify({
       wallet: primaryWallet,
       inviteCode: uplineInvite.inviteCode,
-    }),
-  });
-
-  await requestJson(`${gameApiUrl}/api/arena/wallet-link`, {
-    method: "POST",
-    body: JSON.stringify({
-      wallet: primaryWallet,
-      walletPlatform: "SOLANA",
-      linkedWallet,
-      linkedWalletPlatform: "BSC",
     }),
   });
 
@@ -116,20 +99,6 @@ async function main(): Promise<void> {
   await requestJson(`${gameApiUrl}/api/arena/bet/record-external`, {
     method: "POST",
     body: JSON.stringify({
-      bettorWallet: linkedWallet,
-      chain: "BSC",
-      sourceAsset: "GOLD",
-      sourceAmount: 80,
-      goldAmount: 80,
-      feeBps: 200,
-      txSignature: "seed-linked-bet",
-      externalBetRef: "seed-linked-bet",
-    }),
-  });
-
-  await requestJson(`${gameApiUrl}/api/arena/bet/record-external`, {
-    method: "POST",
-    body: JSON.stringify({
       bettorWallet: inviteeWallet,
       chain: "SOLANA",
       sourceAsset: "GOLD",
@@ -146,7 +115,7 @@ async function main(): Promise<void> {
     method: "POST",
     body: JSON.stringify({
       bettorWallet: leaderboardWallet,
-      chain: "BASE",
+      chain: "SOLANA",
       sourceAsset: "GOLD",
       sourceAmount: 500,
       goldAmount: 500,
@@ -163,23 +132,17 @@ async function main(): Promise<void> {
       body: JSON.stringify({
         cycle: {
           cycleId: "e2e-cycle-active",
+          duelId: currentDuelId,
+          duelKeyHex: currentDuelKeyHex,
           phase: "FIGHTING",
-          duelId,
-          duelKeyHex,
           cycleStartTime: Date.now() - 90_000,
           phaseStartTime: Date.now() - 30_000,
           phaseEndTime: Date.now() + 30_000,
-          betOpenTime: Date.now() - 15_000,
-          betCloseTime: Date.now() + currentBetWindowSeconds * 1_000,
-          fightStartTime: Date.now() + 60_000,
-          duelEndTime: null,
           countdown: 30,
           timeRemaining: 30_000,
           winnerId: null,
           winnerName: null,
           winReason: null,
-          seed: null,
-          replayHash: null,
           agent1: {
             id: perpsCharacterId,
             name: perpsModelName,
@@ -280,7 +243,7 @@ async function main(): Promise<void> {
   );
 
   const points = await requestJson<{ totalPoints: number }>(
-    `${gameApiUrl}/api/arena/points/${encodeURIComponent(primaryWallet)}?scope=linked`,
+    `${gameApiUrl}/api/arena/points/${encodeURIComponent(primaryWallet)}?scope=wallet`,
     { method: "GET" },
   );
 
@@ -289,13 +252,10 @@ async function main(): Promise<void> {
       {
         gameApiUrl,
         primaryWallet,
-        linkedWallet,
-        duelId,
-        duelKeyHex,
         uplineInviteCode: uplineInvite.inviteCode,
         primaryInviteCode: primaryInvite.inviteCode,
         publishedSeq: publishedState.seq,
-        primaryLinkedPoints: points.totalPoints,
+        primaryWalletPoints: points.totalPoints,
       },
       null,
       2,

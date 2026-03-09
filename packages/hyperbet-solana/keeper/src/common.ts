@@ -1,10 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import BN from "bn.js";
-import { AnchorProvider, Idl, Program, Wallet } from "@coral-xyz/anchor";
+import {
+  AnchorProvider,
+  type Idl,
+  Program,
+  Wallet,
+} from "@coral-xyz/anchor";
 import {
   Connection,
   Keypair,
@@ -17,8 +21,11 @@ import dotenv from "dotenv";
 
 import { resolveBettingSolanaDeployment } from "../../deployments";
 import fightOracleIdl from "./idl/fight_oracle.json";
+import type { FightOracle } from "./idl/fight_oracle";
 import goldClobMarketIdl from "./idl/gold_clob_market.json";
+import type { GoldClobMarket } from "./idl/gold_clob_market";
 import goldPerpsMarketIdl from "./idl/gold_perps_market.json";
+import type { GoldPerpsMarket } from "./idl/gold_perps_market";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const keeperRoot = path.resolve(__dirname, "..");
@@ -92,6 +99,14 @@ export function getRpcUrl(): string {
   }
 
   return "https://api.mainnet-beta.solana.com";
+}
+
+export function getSenderUrl(): string | null {
+  const heliusApiKey = process.env.HELIUS_API_KEY;
+  if (heliusApiKey) {
+    return `https://sender.helius-rpc.com/fast?api-key=${heliusApiKey}`;
+  }
+  return null;
 }
 
 export function readKeypair(keypairRef: string): Keypair {
@@ -181,25 +196,27 @@ export const GOLD_BINARY_MARKET_PROGRAM_ID = new PublicKey(
 const FIGHT_ORACLE_IDL = ensureIdlAddress(
   fightOracleIdl,
   FIGHT_ORACLE_PROGRAM_ID,
-);
+ ) as FightOracle;
 const GOLD_CLOB_MARKET_IDL = ensureIdlAddress(
   goldClobMarketIdl,
   GOLD_CLOB_MARKET_PROGRAM_ID,
-);
+ ) as GoldClobMarket;
 const GOLD_PERPS_MARKET_IDL = ensureIdlAddress(
   goldPerpsMarketIdl,
   GOLD_PERPS_MARKET_PROGRAM_ID,
-);
+ ) as GoldPerpsMarket;
 
-export function createPrograms(signer: Keypair): {
+export type KeeperPrograms = {
   connection: Connection;
   provider: AnchorProvider;
-  fightOracle: Program<any>;
-  goldClobMarket: Program<any>;
-  goldPerpsMarket: Program<any>;
+  fightOracle: Program<FightOracle>;
+  goldClobMarket: Program<GoldClobMarket>;
+  goldPerpsMarket: Program<GoldPerpsMarket>;
   /** @deprecated Binary market removed. Returns null. */
   goldBinaryMarket: null;
-} {
+};
+
+export function createPrograms(signer: Keypair): KeeperPrograms {
   const connection = new Connection(getRpcUrl(), {
     commitment: "confirmed",
   });
@@ -209,9 +226,18 @@ export function createPrograms(signer: Keypair): {
     preflightCommitment: "confirmed",
   });
 
-  const fightOracle = new Program(FIGHT_ORACLE_IDL, provider);
-  const goldClobMarket = new Program(GOLD_CLOB_MARKET_IDL, provider);
-  const goldPerpsMarket = new Program(GOLD_PERPS_MARKET_IDL, provider);
+  const fightOracle = new Program(
+    FIGHT_ORACLE_IDL,
+    provider,
+  ) as Program<FightOracle>;
+  const goldClobMarket = new Program(
+    GOLD_CLOB_MARKET_IDL,
+    provider,
+  ) as Program<GoldClobMarket>;
+  const goldPerpsMarket = new Program(
+    GOLD_PERPS_MARKET_IDL,
+    provider,
+  ) as Program<GoldPerpsMarket>;
 
   return {
     connection,

@@ -1,11 +1,27 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Buffer } from "buffer";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { type Program } from "@coral-xyz/anchor";
+import {
+  type Connection,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js";
 
-import { createPublicClient, http, type Address } from "viem";
-
-import { createPrograms, findMarketPda, readKeypair } from "./common";
+import {
+  createPrograms,
+  FIGHT_ORACLE_PROGRAM_ID,
+  findMarketPda,
+  getSenderUrl,
+  GOLD_CLOB_MARKET_PROGRAM_ID,
+  GOLD_PERPS_MARKET_PROGRAM_ID,
+  readKeypair,
+} from "./common";
+import type { FightOracle } from "./idl/fight_oracle";
+import type { GoldClobMarket } from "./idl/gold_clob_market";
 import {
   deleteIdentityMembers,
   loadAll,
@@ -23,6 +39,7 @@ import {
   saveInvitedWallet,
   saveReferralFees,
 } from "./db";
+import { buildKeeperBotChildEnv } from "./keeperBot";
 import { modelMarketIdFromCharacterId } from "./modelMarkets";
 import {
   isLegacyDerivedPointsWalletKey,
@@ -31,8 +48,8 @@ import {
 
 type StreamState = {
   type: "STREAMING_STATE_UPDATE";
-  cycle: Record<string, any>;
-  leaderboard: any[];
+  cycle: Record<string, unknown>;
+  leaderboard: unknown[];
   cameraTarget: string | null;
   seq: number;
   emittedAt: number;
@@ -41,7 +58,7 @@ type StreamState = {
 type BetRecord = {
   id: string;
   bettorWallet: string;
-  chain: "SOLANA" | "BSC" | "BASE";
+  chain: "SOLANA";
   sourceAsset: string;
   sourceAmount: number;
   goldAmount: number;
@@ -86,23 +103,12 @@ type ParserState = {
   enabled: boolean;
   lastSuccessAt: number | null;
   lastError: string | null;
-  snapshot: Record<string, any> | null;
+  snapshot: Record<string, unknown> | null;
 };
 
 type RateBucket = {
   tokens: number;
   lastRefillMs: number;
-};
-
-type JsonRpcRequestPayload = Record<string, unknown> & {
-  method: string;
-};
-
-type ProxyCacheEntry = {
-  status: number;
-  bodyText: string;
-  contentType: string;
-  expiresAt: number;
 };
 
 const encoder = new TextEncoder();
@@ -168,69 +174,11 @@ const BET_STORE_LIMIT = Math.max(
   Number(process.env.BET_STORE_LIMIT || 5000),
 );
 const SOLANA_RPC_PROXY_URL = process.env.SOLANA_RPC_URL?.trim() || "";
+const SOLANA_SENDER_PROXY_URL = getSenderUrl();
 const SOLANA_RPC_PROXY_MAX_BODY_BYTES = Math.max(
   1024,
   Number(process.env.SOLANA_RPC_PROXY_MAX_BODY_BYTES || 1_000_000),
 );
-const EVM_RPC_PROXY_MAX_BODY_BYTES = Math.max(
-  1024,
-  Number(process.env.EVM_RPC_PROXY_MAX_BODY_BYTES || 1_000_000),
-);
-const RPC_PROXY_CACHE_MAX_ENTRIES = Math.max(
-  32,
-  Number(process.env.RPC_PROXY_CACHE_MAX_ENTRIES || 512),
-);
-const RPC_PROXY_CACHE_MAX_PAYLOAD_BYTES = Math.max(
-  1024,
-  Number(process.env.RPC_PROXY_CACHE_MAX_PAYLOAD_BYTES || 512_000),
-);
-const BIRDEYE_PRICE_CACHE_TTL_MS = Math.max(
-  1_000,
-  Number(process.env.BIRDEYE_PRICE_CACHE_TTL_MS || 5_000),
-);
-const READ_RATE_LIMIT_PER_MINUTE = readPositiveEnvInteger(
-  "READ_RATE_LIMIT_PER_MINUTE",
-  IS_PRODUCTION ? 360 : 2_400,
-  1,
-);
-const READ_RATE_LIMIT_BURST = readPositiveEnvInteger(
-  "READ_RATE_LIMIT_BURST",
-  IS_PRODUCTION ? 180 : 1_200,
-  1,
-);
-const WRITE_RATE_LIMIT_PER_MINUTE = readPositiveEnvInteger(
-  "WRITE_RATE_LIMIT_PER_MINUTE",
-  IS_PRODUCTION ? 120 : 600,
-  1,
-);
-const WRITE_RATE_LIMIT_BURST = readPositiveEnvInteger(
-  "WRITE_RATE_LIMIT_BURST",
-  IS_PRODUCTION ? 60 : 300,
-  1,
-);
-const DISABLE_RATE_LIMIT = readEnvBoolean("DISABLE_RATE_LIMIT", false);
-
-const GOLD_CLOB_READ_ABI = [
-  {
-    type: "function",
-    name: "nextMatchId",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "matches",
-    stateMutability: "view",
-    inputs: [{ type: "uint256" }],
-    outputs: [
-      { type: "uint8" },
-      { type: "uint8" },
-      { type: "uint256" },
-      { type: "uint256" },
-    ],
-  },
-] as const;
 
 const defaultAgentA = {
   id: "agent-a",
@@ -277,8 +225,6 @@ let streamSourceBackoffUntil = 0;
 const sseClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const manifestCache = new Map<string, unknown>();
 const rateBuckets = new Map<string, RateBucket>();
-const proxyResponseCache = new Map<string, ProxyCacheEntry>();
-const proxyResponseInFlight = new Map<string, Promise<ProxyCacheEntry>>();
 
 // ── Persistent state (hydrated from SQLite on startup, written through on change)
 const _db = loadAll(BET_STORE_LIMIT);
@@ -305,8 +251,6 @@ const treasuryFeesFromReferralsByWallet: Map<string, number> =
 
 const parsers: {
   solana: ParserState;
-  bsc: ParserState;
-  base: ParserState;
 } = {
   solana: {
     enabled: false,
@@ -314,91 +258,7 @@ const parsers: {
     lastError: null,
     snapshot: null,
   },
-  bsc: { enabled: false, lastSuccessAt: null, lastError: null, snapshot: null },
-  base: {
-    enabled: false,
-    lastSuccessAt: null,
-    lastError: null,
-    snapshot: null,
-  },
 };
-
-const bscRpcUrl = (
-  process.env.BSC_RPC_URL ||
-  process.env.BSC_TESTNET_RPC ||
-  ""
-).trim();
-const bscContractAddress = (
-  process.env.BSC_GOLD_CLOB_ADDRESS ||
-  process.env.CLOB_CONTRACT_ADDRESS_BSC ||
-  ""
-).trim();
-const baseRpcUrl = (
-  process.env.BASE_RPC_URL ||
-  process.env.BASE_SEPOLIA_RPC ||
-  ""
-).trim();
-const avaxRpcUrl = (process.env.AVAX_RPC_URL || "").trim();
-const baseContractAddress = (
-  process.env.BASE_GOLD_CLOB_ADDRESS ||
-  process.env.CLOB_CONTRACT_ADDRESS_BASE ||
-  ""
-).trim();
-
-const bscClient =
-  bscRpcUrl && bscContractAddress
-    ? createPublicClient({ transport: http(bscRpcUrl) })
-    : null;
-const baseClient =
-  baseRpcUrl && baseContractAddress
-    ? createPublicClient({ transport: http(baseRpcUrl) })
-    : null;
-const EVM_RPC_PROXY_TARGETS = {
-  bsc: bscRpcUrl,
-  base: baseRpcUrl,
-  avax: avaxRpcUrl,
-} as const;
-type SupportedEvmRpcChain = keyof typeof EVM_RPC_PROXY_TARGETS;
-
-const SOLANA_RPC_CACHE_TTL_MS: Record<string, number> = {
-  getAccountInfo: 750,
-  getBalance: 750,
-  getBlockHeight: 250,
-  getBlockTime: 5_000,
-  getEpochInfo: 5_000,
-  getEpochSchedule: 300_000,
-  getFeeForMessage: 750,
-  getGenesisHash: 300_000,
-  getHealth: 1_000,
-  getIdentity: 300_000,
-  getLatestBlockhash: 250,
-  getMinimumBalanceForRentExemption: 300_000,
-  getMultipleAccounts: 750,
-  getProgramAccounts: 750,
-  getRecentPrioritizationFees: 500,
-  getSlot: 250,
-  getSupply: 5_000,
-  getTokenAccountBalance: 750,
-  getTokenLargestAccounts: 5_000,
-  getTokenSupply: 5_000,
-  getVersion: 300_000,
-};
-
-const EVM_RPC_CACHE_TTL_MS: Record<string, number> = {
-  eth_blockNumber: 250,
-  eth_call: 750,
-  eth_chainId: 300_000,
-  eth_getBalance: 750,
-  eth_getBlockByNumber: 750,
-  eth_getCode: 60_000,
-  eth_getLogs: 750,
-  eth_getStorageAt: 5_000,
-  net_version: 300_000,
-  web3_clientVersion: 300_000,
-};
-
-parsers.bsc.enabled = Boolean(bscClient);
-parsers.base.enabled = Boolean(baseClient);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -807,6 +667,81 @@ function applyCors(req: Request, headers: Headers): void {
   headers.set("access-control-max-age", "86400");
 }
 
+function normalizeOriginLike(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return value;
+  }
+}
+
+function isAllowedAppOrigin(origin: string | null): boolean {
+  const normalized = normalizeOriginLike(origin);
+  if (!normalized) return false;
+  return (
+    CORS_ORIGINS.includes(normalized) ||
+    normalized === "https://hyperbet.win" ||
+    normalized.endsWith(".hyperbet.win") ||
+    normalized === "https://hyperscape.bet" ||
+    normalized.endsWith(".hyperscape.bet") ||
+    normalized === "https://hyperscape.gg" ||
+    normalized.endsWith(".hyperscape.gg") ||
+    normalized === "https://hyperbet.pages.dev" ||
+    normalized.endsWith(".hyperbet.pages.dev") ||
+    normalized === "https://hyperscape.club" ||
+    normalized.endsWith(".hyperscape.club") ||
+    normalized === "https://hyperscape.pages.dev" ||
+    normalized.endsWith(".hyperscape.pages.dev") ||
+    normalized.includes("localhost") ||
+    normalized.includes("127.0.0.1")
+  );
+}
+
+function decodeSenderTransaction(transaction: string): Transaction | VersionedTransaction {
+  const raw = Buffer.from(transaction, "base64");
+  try {
+    return VersionedTransaction.deserialize(raw);
+  } catch {
+    return Transaction.from(raw);
+  }
+}
+
+function extractSenderProgramIds(
+  transaction: Transaction | VersionedTransaction,
+): string[] {
+  if (transaction instanceof VersionedTransaction) {
+    const accountKeys = transaction.message.staticAccountKeys;
+    return transaction.message.compiledInstructions.map(
+      (instruction: { programIdIndex: number }) =>
+        accountKeys[instruction.programIdIndex]?.toBase58() ?? "",
+    );
+  }
+  return transaction.instructions.map(
+    (instruction: { programId: PublicKey }) =>
+      instruction.programId.toBase58(),
+  );
+}
+
+function isWhitelistedSenderTransaction(
+  transaction: Transaction | VersionedTransaction,
+): boolean {
+  const allowedPrograms = new Set([
+    FIGHT_ORACLE_PROGRAM_ID.toBase58(),
+    GOLD_CLOB_MARKET_PROGRAM_ID.toBase58(),
+    GOLD_PERPS_MARKET_PROGRAM_ID.toBase58(),
+    SystemProgram.programId.toBase58(),
+  ]);
+  const programIds = extractSenderProgramIds(transaction);
+  const touchesHyperbetProgram = programIds.some(
+    (programId) =>
+      programId === FIGHT_ORACLE_PROGRAM_ID.toBase58() ||
+      programId === GOLD_CLOB_MARKET_PROGRAM_ID.toBase58() ||
+      programId === GOLD_PERPS_MARKET_PROGRAM_ID.toBase58(),
+  );
+  return touchesHyperbetProgram && programIds.every((programId) => allowedPrograms.has(programId));
+}
+
 function jsonResponse(
   req: Request,
   body: unknown,
@@ -846,142 +781,6 @@ function parseBoundedInteger(
   const parsed = Number(rawValue);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.floor(parsed)));
-}
-
-function buildProxyCacheKey(namespace: string, rawKey: string): string {
-  return createHash("sha256")
-    .update(namespace)
-    .update("\n")
-    .update(rawKey)
-    .digest("hex");
-}
-
-function resolveJsonRpcCacheTtlMs(
-  requests: readonly JsonRpcRequestPayload[],
-  ttlByMethod: Record<string, number>,
-): number {
-  let ttlMs: number | null = null;
-  for (const request of requests) {
-    const methodTtlMs = ttlByMethod[request.method];
-    if (!methodTtlMs || methodTtlMs <= 0) {
-      return 0;
-    }
-    ttlMs = ttlMs === null ? methodTtlMs : Math.min(ttlMs, methodTtlMs);
-  }
-  return ttlMs ?? 0;
-}
-
-function getProxyCacheEntry(key: string): ProxyCacheEntry | null {
-  const cached = proxyResponseCache.get(key);
-  if (!cached) return null;
-  if (cached.expiresAt <= Date.now()) {
-    proxyResponseCache.delete(key);
-    return null;
-  }
-  proxyResponseCache.delete(key);
-  proxyResponseCache.set(key, cached);
-  return cached;
-}
-
-function pruneProxyResponseCache(): void {
-  const now = Date.now();
-  for (const [key, entry] of proxyResponseCache) {
-    if (entry.expiresAt <= now) {
-      proxyResponseCache.delete(key);
-    }
-  }
-  while (proxyResponseCache.size > RPC_PROXY_CACHE_MAX_ENTRIES) {
-    const oldestKey = proxyResponseCache.keys().next();
-    if (oldestKey.done) break;
-    proxyResponseCache.delete(oldestKey.value);
-  }
-}
-
-function setProxyCacheEntry(key: string, entry: ProxyCacheEntry): void {
-  if (entry.bodyText.length > RPC_PROXY_CACHE_MAX_PAYLOAD_BYTES) {
-    return;
-  }
-  proxyResponseCache.delete(key);
-  proxyResponseCache.set(key, entry);
-  pruneProxyResponseCache();
-}
-
-async function fetchProxyResponseWithCache(
-  key: string,
-  ttlMs: number,
-  load: () => Promise<Omit<ProxyCacheEntry, "expiresAt">>,
-): Promise<{ entry: ProxyCacheEntry; cacheStatus: "HIT" | "MISS" | "BYPASS" }> {
-  if (ttlMs <= 0) {
-    const loaded = await load();
-    return {
-      entry: { ...loaded, expiresAt: 0 },
-      cacheStatus: "BYPASS",
-    };
-  }
-
-  const cached = getProxyCacheEntry(key);
-  if (cached) {
-    return { entry: cached, cacheStatus: "HIT" };
-  }
-
-  const inFlight = proxyResponseInFlight.get(key);
-  if (inFlight) {
-    return { entry: await inFlight, cacheStatus: "HIT" };
-  }
-
-  const startedAt = Date.now();
-  const loadPromise = (async () => {
-    const loaded = await load();
-    const entry: ProxyCacheEntry = {
-      ...loaded,
-      expiresAt: startedAt + ttlMs,
-    };
-    if (loaded.status >= 200 && loaded.status < 300) {
-      setProxyCacheEntry(key, entry);
-    }
-    return entry;
-  })();
-
-  proxyResponseInFlight.set(key, loadPromise);
-  try {
-    return { entry: await loadPromise, cacheStatus: "MISS" };
-  } finally {
-    proxyResponseInFlight.delete(key);
-  }
-}
-
-async function fetchUpstreamText(
-  target: string,
-  init: RequestInit,
-): Promise<Omit<ProxyCacheEntry, "expiresAt">> {
-  const upstream = await fetch(target, init);
-  return {
-    status: upstream.status,
-    bodyText: await upstream.text(),
-    contentType:
-      upstream.headers.get("content-type") || "application/json; charset=utf-8",
-  };
-}
-
-function proxyTextResponse(
-  req: Request,
-  entry: Pick<ProxyCacheEntry, "status" | "bodyText" | "contentType">,
-  cacheStatus: "HIT" | "MISS" | "BYPASS",
-): Response {
-  const headers = new Headers({
-    "content-type": entry.contentType || "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "x-hyperbet-proxy-cache": cacheStatus,
-    ...securityHeaders(),
-  });
-  applyCors(req, headers);
-  return new Response(entry.bodyText, { status: entry.status, headers });
-}
-
-function isSupportedEvmRpcChain(
-  value: string,
-): value is SupportedEvmRpcChain {
-  return Object.hasOwn(EVM_RPC_PROXY_TARGETS, value);
 }
 
 function handlePerpsOracleHistory(req: Request, url: URL): Response {
@@ -1176,22 +975,22 @@ function requireWriteAuth(
   return provided === fallbackKey;
 }
 
-function toStreamState(payload: any): StreamState | null {
+function toStreamState(payload: unknown): StreamState | null {
   if (!payload || typeof payload !== "object") return null;
 
-  const candidate = payload as Record<string, any>;
+  const candidate = payload as Record<string, unknown>;
   const cycle = candidate.cycle;
   if (!cycle || typeof cycle !== "object") return null;
 
   return {
     type: "STREAMING_STATE_UPDATE",
-    cycle: cycle as Record<string, any>,
+    cycle: cycle as Record<string, unknown>,
     leaderboard: Array.isArray(candidate.leaderboard)
       ? candidate.leaderboard
       : [],
     cameraTarget:
       typeof candidate.cameraTarget === "string" ||
-      candidate.cameraTarget === null
+        candidate.cameraTarget === null
         ? candidate.cameraTarget
         : null,
     seq:
@@ -1200,7 +999,7 @@ function toStreamState(payload: any): StreamState | null {
         : streamSeq + 1,
     emittedAt:
       typeof candidate.emittedAt === "number" &&
-      Number.isFinite(candidate.emittedAt)
+        Number.isFinite(candidate.emittedAt)
         ? candidate.emittedAt
         : Date.now(),
   };
@@ -1349,10 +1148,7 @@ function startKeeperBotIfEnabled(): void {
   if (!ENABLE_KEEPER_BOT) return;
   if (botSubprocess) return;
 
-  const childEnv = {
-    ...process.env,
-    GAME_URL: process.env.GAME_URL || `http://127.0.0.1:${PORT}`,
-  };
+  const childEnv = buildKeeperBotChildEnv(process.env, PORT);
 
   botSubprocess = Bun.spawn(["bun", "--bun", "src/bot.ts"], {
     cwd: keeperRoot,
@@ -1381,10 +1177,10 @@ const solanaKeyRef =
   "";
 
 let solanaCtx: {
-  connection: any;
-  fightProgram: any;
-  marketProgram: any;
-  marketProgramId: any;
+  connection: Connection;
+  fightProgram: Program<FightOracle>;
+  marketProgram: Program<GoldClobMarket>;
+  marketProgramId: PublicKey;
 } | null = null;
 
 if (solanaKeyRef) {
@@ -1441,12 +1237,14 @@ async function pollSolanaSnapshot(): Promise<void> {
     const derivedMarketPda =
       fightAccounts[0]?.pubkey != null
         ? findMarketPda(
-            solanaCtx.marketProgramId,
-            fightAccounts[0]!.pubkey,
-          ).toBase58()
+          solanaCtx.marketProgramId,
+          fightAccounts[0]!.pubkey,
+        ).toBase58()
         : null;
     const recentSignature =
-      recentSignatures.find((entry: any) => entry?.signature)?.signature ??
+      (
+        recentSignatures as Array<{ signature?: string } | null>
+      ).find((entry) => entry?.signature)?.signature ??
       null;
 
     parsers.solana.snapshot = {
@@ -1468,72 +1266,12 @@ async function pollSolanaSnapshot(): Promise<void> {
   }
 }
 
-async function pollEvmSnapshot(
-  label: "bsc" | "base",
-  client: ReturnType<typeof createPublicClient> | null,
-  contractAddress: string,
-): Promise<void> {
-  if (!client || !contractAddress) return;
-  const parser = parsers[label];
-
-  try {
-    const nextMatchId = (await client.readContract({
-      address: contractAddress as Address,
-      abi: GOLD_CLOB_READ_ABI,
-      functionName: "nextMatchId",
-      args: [],
-    })) as bigint;
-
-    const currentMatchId = nextMatchId > 0n ? nextMatchId - 1n : 0n;
-    const match = (await client.readContract({
-      address: contractAddress as Address,
-      abi: GOLD_CLOB_READ_ABI,
-      functionName: "matches",
-      args: [currentMatchId],
-    })) as any;
-
-    const status = Array.isArray(match)
-      ? Number(match[0] ?? 0)
-      : Number(match.status ?? 0);
-    const winner = Array.isArray(match)
-      ? Number(match[1] ?? 0)
-      : Number(match.winner ?? 0);
-    const yesPool = Array.isArray(match)
-      ? String(match[2] ?? 0n)
-      : String(match.yesPool ?? 0n);
-    const noPool = Array.isArray(match)
-      ? String(match[3] ?? 0n)
-      : String(match.noPool ?? 0n);
-
-    parser.snapshot = {
-      contractAddress,
-      nextMatchId: nextMatchId.toString(),
-      currentMatchId: currentMatchId.toString(),
-      currentMatch: {
-        status,
-        winner,
-        yesPool,
-        noPool,
-      },
-    };
-    parser.lastSuccessAt = Date.now();
-    parser.lastError = null;
-  } catch (error) {
-    parser.lastError =
-      error instanceof Error ? error.message : `${label} poll failed`;
-  }
-}
-
 let contractPollInFlight = false;
 async function pollContractParsers(): Promise<void> {
   if (contractPollInFlight) return;
   contractPollInFlight = true;
   try {
-    await Promise.all([
-      pollSolanaSnapshot(),
-      pollEvmSnapshot("bsc", bscClient, bscContractAddress),
-      pollEvmSnapshot("base", baseClient, baseContractAddress),
-    ]);
+    await pollSolanaSnapshot();
   } finally {
     contractPollInFlight = false;
   }
@@ -1559,7 +1297,7 @@ function getReferralOwner(
 function pointsForWalletResponse(
   wallet: string,
   scope: string | null,
-): Record<string, any> {
+): Record<string, unknown> {
   const wallets = identityWallets(wallet, scope);
   const aggregate = aggregatePoints(wallets);
   const multiplierDetail = multiplierDetailForWallets(wallets);
@@ -1583,9 +1321,9 @@ function pointsForWalletResponse(
     ).size,
     referredBy: referredBy
       ? {
-          wallet: displayWallet(referredBy.wallet),
-          code: referredBy.code,
-        }
+        wallet: displayWallet(referredBy.wallet),
+        code: referredBy.code,
+      }
       : null,
   };
 }
@@ -1609,7 +1347,7 @@ function leaderboardResponse(
   };
 }
 
-function rankResponse(wallet: string): Record<string, any> {
+function rankResponse(wallet: string): Record<string, unknown> {
   const normalized = rememberWalletCase(wallet);
   const canonical = ensureIdentity(normalized);
   const rows = leaderboardRows("linked", "alltime");
@@ -1629,7 +1367,7 @@ function historyResponse(
   limit: number,
   offset: number,
   eventType: string | null,
-): Record<string, any> {
+): Record<string, unknown> {
   const normalized = rememberWalletCase(wallet);
   const wallets = new Set(identityWallets(normalized, "linked"));
   const filtered = pointsEvents.filter((entry) => {
@@ -1663,7 +1401,7 @@ function historyResponse(
   };
 }
 
-function multiplierResponse(wallet: string): Record<string, any> {
+function multiplierResponse(wallet: string): Record<string, unknown> {
   const wallets = identityWallets(wallet, "linked");
   const detail = multiplierDetailForWallets(wallets);
   return {
@@ -1681,9 +1419,9 @@ async function handleBetRecord(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -1692,10 +1430,6 @@ async function handleBetRecord(req: Request): Promise<Response> {
   if (!walletRaw) {
     return jsonResponse(req, { error: "Missing bettorWallet" }, 400);
   }
-
-  const chain = String(payload.chain || "SOLANA").toUpperCase();
-  const chainValue: "SOLANA" | "BSC" | "BASE" =
-    chain === "BSC" ? "BSC" : chain === "BASE" ? "BASE" : "SOLANA";
 
   const sourceAmount = parseNumberInput(payload.sourceAmount, 0);
   const goldAmount = parseNumberInput(payload.goldAmount, sourceAmount);
@@ -1712,7 +1446,7 @@ async function handleBetRecord(req: Request): Promise<Response> {
   const record: BetRecord = {
     id: `${recordedAt}-${Math.random().toString(36).slice(2, 10)}`,
     bettorWallet: displayWallet(normalizedWallet),
-    chain: chainValue,
+    chain: "SOLANA",
     sourceAsset: String(payload.sourceAsset || "GOLD"),
     sourceAmount,
     goldAmount,
@@ -1806,9 +1540,9 @@ async function handleInviteRedeem(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -1901,9 +1635,9 @@ async function handleWalletLink(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -1950,7 +1684,7 @@ async function handleWalletLink(req: Request): Promise<Response> {
 function inviteSummary(
   walletRaw: string,
   platformView: string,
-): Record<string, any> {
+): Record<string, unknown> {
   const wallet = rememberWalletCase(walletRaw);
   const code = inviteCodeForWallet(wallet);
   const canonical = ensureIdentity(wallet);
@@ -2001,28 +1735,24 @@ async function handleSolanaRpcProxy(req: Request): Promise<Response> {
   }
 
   try {
-    const ttlMs = resolveJsonRpcCacheTtlMs(
-      rpcBody.requests,
-      SOLANA_RPC_CACHE_TTL_MS,
-    );
-    const cacheKey = buildProxyCacheKey(
-      "solana-rpc",
-      `${SOLANA_RPC_PROXY_URL}\n${rpcBody.bodyText}`,
-    );
-    const { entry, cacheStatus } = await fetchProxyResponseWithCache(
-      cacheKey,
-      ttlMs,
-      () =>
-        fetchUpstreamText(SOLANA_RPC_PROXY_URL, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: rpcBody.bodyText,
-          cache: "no-store",
-        }),
-    );
-    return proxyTextResponse(req, entry, cacheStatus);
+    const upstream = await fetch(SOLANA_RPC_PROXY_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: rpcBody.bodyText,
+      cache: "no-store",
+    });
+    const payload = await upstream.text();
+    const headers = new Headers({
+      "content-type":
+        upstream.headers.get("content-type") ||
+        "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...securityHeaders(),
+    });
+    applyCors(req, headers);
+    return new Response(payload, { status: upstream.status, headers });
   } catch (error) {
     return jsonResponse(
       req,
@@ -2037,8 +1767,113 @@ async function handleSolanaRpcProxy(req: Request): Promise<Response> {
   }
 }
 
+async function handleSolanaSenderProxy(req: Request): Promise<Response> {
+  if (!SOLANA_SENDER_PROXY_URL) {
+    return jsonResponse(
+      req,
+      { error: "Helius Sender is not configured" },
+      503,
+    );
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return jsonResponse(req, { error: "Invalid JSON body" }, 400);
+  }
+
+  const transaction = typeof payload.transaction === "string"
+    ? payload.transaction.trim()
+    : "";
+  if (!transaction) {
+    return jsonResponse(req, { error: "transaction is required" }, 400);
+  }
+
+  const authorizedByKey = requireWriteAuth(req);
+  const trustedOrigin =
+    isAllowedAppOrigin(req.headers.get("origin")) ||
+    isAllowedAppOrigin(req.headers.get("referer"));
+
+  let decodedTransaction: Transaction | VersionedTransaction;
+  try {
+    decodedTransaction = decodeSenderTransaction(transaction);
+  } catch {
+    return jsonResponse(req, { error: "invalid transaction encoding" }, 400);
+  }
+
+  if (!isWhitelistedSenderTransaction(decodedTransaction)) {
+    return jsonResponse(
+      req,
+      { error: "sender proxy only accepts Hyperbet Solana transactions" },
+      403,
+    );
+  }
+
+  if (!authorizedByKey && !trustedOrigin) {
+    return jsonResponse(
+      req,
+      { error: "sender proxy requires a trusted Hyperbet origin" },
+      403,
+    );
+  }
+
+  try {
+    const upstream = await fetch(SOLANA_SENDER_PROXY_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `sender-${Date.now()}`,
+        method: "sendTransaction",
+        params: [
+          transaction,
+          {
+            encoding: "base64",
+            skipPreflight: true,
+            maxRetries: 0,
+          },
+        ],
+      }),
+      cache: "no-store",
+    });
+    const raw = (await upstream.json()) as Record<string, unknown>;
+    const error = raw.error;
+    if (!upstream.ok || error) {
+      const message =
+        typeof error === "object" &&
+          error !== null &&
+          typeof (error as Record<string, unknown>).message === "string"
+          ? ((error as Record<string, unknown>).message as string)
+          : `Sender proxy HTTP ${upstream.status}`;
+      return jsonResponse(req, { error: message }, upstream.status || 502);
+    }
+
+    const signature =
+      typeof raw.result === "string" ? raw.result : null;
+    if (!signature) {
+      return jsonResponse(req, { error: "Sender returned no signature" }, 502);
+    }
+
+    return jsonResponse(req, { signature }, 200);
+  } catch (error) {
+    return jsonResponse(
+      req,
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to proxy Solana Sender request",
+      },
+      502,
+    );
+  }
+}
+
 type JsonRpcBodyResult =
-  | { ok: true; bodyText: string; requests: JsonRpcRequestPayload[] }
+  | { ok: true; bodyText: string }
   | { ok: false; response: Response };
 
 async function readJsonRpcBody(
@@ -2083,9 +1918,7 @@ async function readJsonRpcBody(
     };
   }
 
-  const requests = (
-    Array.isArray(parsedBody) ? parsedBody : [parsedBody]
-  ) as JsonRpcRequestPayload[];
+  const requests = Array.isArray(parsedBody) ? parsedBody : [parsedBody];
   const hasInvalidRequest = requests.some((entry) => {
     if (!entry || typeof entry !== "object") return true;
     const method = (entry as Record<string, unknown>).method;
@@ -2098,72 +1931,7 @@ async function readJsonRpcBody(
     };
   }
 
-  return {
-    ok: true,
-    bodyText,
-    requests: requests.map((entry) => ({
-      ...entry,
-      method: entry.method.trim(),
-    })),
-  };
-}
-
-async function handleEvmRpcProxy(req: Request, url: URL): Promise<Response> {
-  const chainRaw = url.searchParams.get("chain")?.trim().toLowerCase();
-  if (!chainRaw || !isSupportedEvmRpcChain(chainRaw)) {
-    return jsonResponse(req, { error: "Invalid EVM chain" }, 400);
-  }
-  const chain = chainRaw;
-
-  const target = EVM_RPC_PROXY_TARGETS[chain];
-  if (!target) {
-    return jsonResponse(
-      req,
-      { error: `${chain.toUpperCase()} RPC is not configured` },
-      503,
-    );
-  }
-
-  const rpcBody = await readJsonRpcBody(req, EVM_RPC_PROXY_MAX_BODY_BYTES);
-  if (!rpcBody.ok) {
-    return rpcBody.response;
-  }
-
-  try {
-    const ttlMs = resolveJsonRpcCacheTtlMs(
-      rpcBody.requests,
-      EVM_RPC_CACHE_TTL_MS,
-    );
-    const cacheKey = buildProxyCacheKey(
-      `evm-rpc:${chain}`,
-      `${target}\n${rpcBody.bodyText}`,
-    );
-    const { entry, cacheStatus } = await fetchProxyResponseWithCache(
-      cacheKey,
-      ttlMs,
-      () =>
-        fetchUpstreamText(target, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: rpcBody.bodyText,
-          cache: "no-store",
-        }),
-    );
-    return proxyTextResponse(req, entry, cacheStatus);
-  } catch (error) {
-    return jsonResponse(
-      req,
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to proxy EVM RPC request",
-      },
-      502,
-    );
-  }
+  return { ok: true, bodyText };
 }
 
 async function handleBirdeyePrice(req: Request, url: URL): Promise<Response> {
@@ -2180,20 +1948,16 @@ async function handleBirdeyePrice(req: Request, url: URL): Promise<Response> {
   }
 
   try {
-    const target = `${BIRDEYE_API_BASE}/defi/price?address=${encodeURIComponent(address)}`;
-    const cacheKey = buildProxyCacheKey("birdeye-price", address);
-    const { entry, cacheStatus } = await fetchProxyResponseWithCache(
-      cacheKey,
-      BIRDEYE_PRICE_CACHE_TTL_MS,
-      () =>
-        fetchUpstreamText(target, {
-          headers: {
-            "x-api-key": BIRDEYE_API_KEY,
-          },
-          cache: "no-store",
-        }),
+    const upstream = await fetch(
+      `${BIRDEYE_API_BASE}/defi/price?address=${encodeURIComponent(address)}`,
+      {
+        headers: {
+          "x-api-key": BIRDEYE_API_KEY,
+        },
+      },
     );
-    return proxyTextResponse(req, entry, cacheStatus);
+    const payload = await upstream.json();
+    return jsonResponse(req, payload, upstream.status);
   } catch (error) {
     return jsonResponse(
       req,
@@ -2249,7 +2013,7 @@ async function handleItemManifest(
     // Fall back below.
   }
 
-  const fallback: any[] = [];
+  const fallback: unknown[] = [];
   manifestCache.set(fileName, fallback);
   return jsonResponse(req, fallback, 200, {
     "cache-control": "public, max-age=60, stale-while-revalidate=60",
@@ -2261,9 +2025,9 @@ async function handleStreamPublish(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized stream publish key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -2321,8 +2085,7 @@ const server = Bun.serve({
         parsers,
         proxies: {
           solanaRpc: Boolean(SOLANA_RPC_PROXY_URL),
-          bscRpc: Boolean(EVM_RPC_PROXY_TARGETS.bsc),
-          baseRpc: Boolean(EVM_RPC_PROXY_TARGETS.base),
+          solanaSender: Boolean(SOLANA_SENDER_PROXY_URL),
         },
         bot: {
           enabled: ENABLE_KEEPER_BOT,
@@ -2541,8 +2304,8 @@ const server = Bun.serve({
       return handleSolanaRpcProxy(req);
     }
 
-    if (req.method === "POST" && url.pathname === "/api/proxy/evm/rpc") {
-      return handleEvmRpcProxy(req, url);
+    if (req.method === "POST" && url.pathname === "/api/proxy/solana/sender") {
+      return handleSolanaSenderProxy(req);
     }
 
     if (req.method === "GET" && url.pathname === "/api/proxy/birdeye/price") {
