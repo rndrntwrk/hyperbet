@@ -328,6 +328,13 @@ export default defineConfig(async ({ mode }) => {
         "react-dom",
         "react/jsx-runtime",
         "react/jsx-dev-runtime",
+        "@solana/client",
+        "@solana/react-hooks",
+        "@solana/kit",
+        "@solana/connector",
+        "@solana/web3.js",
+        "@wallet-standard/app",
+        "@wallet-standard/features",
       ],
     },
     optimizeDeps: {

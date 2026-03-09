@@ -8,12 +8,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import { toAddress } from "@solana/client";
+import { useSolanaClient } from "@solana/react-hooks";
 
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
+  CONFIG,
   GAME_API_URL,
   GOLD_DECIMALS,
   UI_SYNC_DELAY_MS,
@@ -25,16 +25,21 @@ import {
   captureInviteCodeFromLocation,
   getStoredInviteCode,
 } from "./lib/invite";
+import { useAppConnection, useAppWallet, useAppWalletModal } from "./lib/appWallet";
 import { StreamPlayer } from "./components/StreamPlayer";
 import { ChainSelector } from "./components/ChainSelector";
 import { PointsDisplay } from "./components/PointsDisplay";
 import type { SolanaClobMarketSnapshot } from "./components/SolanaClobPanel";
+import { getDuelStateDecoder } from "./generated/fight-oracle/accounts";
 import {
-  FIGHT_ORACLE_PROGRAM_ID,
-  GOLD_CLOB_MARKET_PROGRAM_ID,
-  createReadonlyPrograms,
-} from "./lib/programs";
-import { isHeadlessWalletEnabled } from "./lib/headlessWallet";
+  FightOracleAccount,
+  identifyFightOracleAccount,
+  FIGHT_ORACLE_PROGRAM_ADDRESS,
+} from "./generated/fight-oracle/programs";
+import {
+  GOLD_CLOB_MARKET_PROGRAM_ADDRESS,
+} from "./generated/gold-clob-market/programs";
+import { FIGHT_ORACLE_PROGRAM_ID } from "./lib/programIds";
 import { useStreamingState } from "./spectator/useStreamingState";
 import { useDuelContext } from "./spectator/useDuelContext";
 import { useResizePanel, useIsMobile } from "./lib/useResizePanel";
@@ -74,7 +79,6 @@ type BetSide = "YES" | "NO";
 
 type DiscoveredMatch = {
   matchId: number;
-  matchPda: PublicKey;
   status: "open" | "resolved" | "unknown";
   openTs: number;
   closeTs: number;
@@ -203,9 +207,10 @@ function PanelFallback({
 }
 
 export function App() {
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const { setVisible: setSolModalVisible } = useWalletModal();
+  const { connection } = useAppConnection();
+  const client = useSolanaClient();
+  const wallet = useAppWallet();
+  const { setVisible: setSolModalVisible } = useAppWalletModal();
   const isE2eMode = import.meta.env.MODE === "e2e";
   const isE2eDebugMode =
     isE2eMode && new URLSearchParams(window.location.search).has("debug");
@@ -353,11 +358,6 @@ export function App() {
     };
   }, [isE2eDebugMode]);
 
-  const readonlyPrograms = useMemo(
-    () => createReadonlyPrograms(connection),
-    [connection],
-  );
-
   const fixedMatchId = getFixedMatchId();
 
   const programsReady =
@@ -388,14 +388,24 @@ export function App() {
     void (async () => {
       try {
         const [oracleInfo, marketInfo] = await Promise.all([
-          connection.getAccountInfo(FIGHT_ORACLE_PROGRAM_ID, "confirmed"),
-          connection.getAccountInfo(GOLD_CLOB_MARKET_PROGRAM_ID, "confirmed"),
+          client.actions.fetchAccount(
+            toAddress(
+              CONFIG.fightOracleProgramId || FIGHT_ORACLE_PROGRAM_ADDRESS,
+            ),
+            "confirmed",
+          ),
+          client.actions.fetchAccount(
+            toAddress(
+              CONFIG.goldClobMarketProgramId || GOLD_CLOB_MARKET_PROGRAM_ADDRESS,
+            ),
+            "confirmed",
+          ),
         ]);
         if (cancelled) return;
         setProgramDeployment({
           checked: true,
-          oracle: Boolean(oracleInfo?.executable),
-          market: Boolean(marketInfo?.executable),
+          oracle: Boolean(oracleInfo.executable),
+          market: Boolean(marketInfo.executable),
         });
       } catch {
         if (cancelled) return;
@@ -405,42 +415,13 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [connection, shouldPollChainData]);
+  }, [client.actions, shouldPollChainData]);
 
   useEffect(() => {
     if (!programDeployment.checked) return;
     if (programsReady) return;
     setStatus(missingProgramMessage);
   }, [programDeployment.checked, programsReady, missingProgramMessage]);
-
-  useEffect(() => {
-    if (!isHeadlessWalletEnabled()) return;
-
-    const candidate = wallet.wallets.find((entry) => {
-      const name = entry.adapter.name.toLowerCase();
-      return name.includes("headless") || name.includes("e2e wallet");
-    });
-    if (!candidate) return;
-
-    const selected = wallet.wallet?.adapter?.name?.toLowerCase?.() ?? "";
-    const hasHeadlessSelected =
-      selected.includes("headless") || selected.includes("e2e wallet");
-
-    if (!hasHeadlessSelected) {
-      wallet.select(candidate.adapter.name);
-      return;
-    }
-
-    if (wallet.connected || wallet.connecting) return;
-    void wallet.connect();
-  }, [
-    wallet.wallet,
-    wallet.wallets,
-    wallet.connected,
-    wallet.connecting,
-    wallet.select,
-    wallet.connect,
-  ]);
 
   useEffect(() => {
     if (!shouldPollChainData) return;
@@ -456,24 +437,23 @@ export function App() {
 
     void (async () => {
       try {
-        const fightProgram = readonlyPrograms.fightOracle;
-        const fightAccounts = fightProgram.account as Record<
-          string,
-          {
-            all: () => Promise<
-              Array<{ publicKey: PublicKey; account: Record<string, unknown> }>
-            >;
-          }
-        >;
-        const allMatchesRaw = await fightAccounts["duelState"].all();
-        const matches = (
-          allMatchesRaw as Array<{
-            publicKey: PublicKey;
-            account: Record<string, unknown>;
-          }>
-        )
+        const allDuelAccounts = await connection.getProgramAccounts(
+          FIGHT_ORACLE_PROGRAM_ID,
+          "confirmed",
+        );
+        const matches = allDuelAccounts
+          .filter((entry) => {
+            try {
+              return (
+                identifyFightOracleAccount(entry.account.data) ===
+                FightOracleAccount.DuelState
+              );
+            } catch {
+              return false;
+            }
+          })
           .map<DiscoveredMatch>((entry) => {
-            const account = entry.account;
+            const account = getDuelStateDecoder().decode(entry.account.data);
             const status = enumIs(account.status, "bettingOpen") ||
               enumIs(account.status, "locked")
               ? "open"
@@ -504,7 +484,6 @@ export function App() {
 
             return {
               matchId,
-              matchPda: entry.publicKey as PublicKey,
               status,
               openTs,
               closeTs,
@@ -559,7 +538,7 @@ export function App() {
     };
   }, [
     shouldPollChainData,
-    readonlyPrograms,
+    connection,
     refreshNonce,
     fixedMatchId,
     UI_SYNC_DELAY_MS,

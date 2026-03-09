@@ -1,30 +1,28 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
-import {
-  BaseSignInMessageSignerWalletAdapter,
-  WalletName,
-  WalletNotConnectedError,
-  WalletReadyState,
-  isVersionedTransaction,
-} from "@solana/wallet-adapter-base";
-import type {
-  SolanaSignInInput,
-  SolanaSignInOutput,
-} from "@solana/wallet-standard-features";
-import { createSignInMessage } from "@solana/wallet-standard-util";
-import type {
-  Transaction,
-  TransactionVersion,
-  VersionedTransaction,
-} from "@solana/web3.js";
+import type { WalletConnector, WalletSession } from "@solana/client";
+import type { Address } from "@solana/kit";
+import type { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { Keypair } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import { CONFIG } from "./config";
 
 import bs58 from "bs58";
+
+import { CONFIG } from "./config";
 
 const DEFAULT_HEADLESS_WALLET_NAME = "Headless Test Wallet";
 const HEADLESS_ICON =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' rx='8' fill='%230d58a6'/%3E%3Cpath d='M10 20h20M10 14h20M10 26h20' stroke='white' stroke-width='2'/%3E%3C/svg%3E";
+
+type HeadlessWalletEntry = {
+  name?: string;
+  secretKey: string;
+  autoConnect?: boolean;
+};
+
+export type HeadlessWalletDescriptor = {
+  autoConnect: boolean;
+  connector: WalletConnector;
+};
 
 function validateSecretKeyBytes(bytes: Uint8Array): Uint8Array {
   if (bytes.length !== 32 && bytes.length !== 64) {
@@ -98,17 +96,6 @@ function parseSecretKey(secret: string): Uint8Array {
   );
 }
 
-type HeadlessWalletEntry = {
-  name?: string;
-  secretKey: string;
-  autoConnect?: boolean;
-};
-
-export type HeadlessWalletDescriptor = {
-  adapter: HeadlessKeypairWalletAdapter;
-  autoConnect: boolean;
-};
-
 function parseHeadlessWalletEntries(): HeadlessWalletEntry[] {
   const fromJson = CONFIG.headlessWalletsJson.trim();
   if (!fromJson) {
@@ -171,95 +158,77 @@ function parseHeadlessWalletEntries(): HeadlessWalletEntry[] {
   }
 }
 
-export class HeadlessKeypairWalletAdapter extends BaseSignInMessageSignerWalletAdapter {
-  name: WalletName<string>;
-  url = "https://solana.com";
-  icon = HEADLESS_ICON;
-  supportedTransactionVersions: ReadonlySet<TransactionVersion> = new Set([
-    "legacy",
-    0,
-  ]);
+function createHeadlessSession(
+  connectorId: string,
+  connectorName: string,
+  keypair: Keypair,
+  onDisconnect: () => Promise<void>,
+): WalletSession {
+  return {
+    account: {
+      address: keypair.publicKey.toBase58() as Address,
+      label: connectorName,
+      publicKey: keypair.publicKey.toBytes(),
+    },
+    connector: {
+      canAutoConnect: true,
+      icon: HEADLESS_ICON,
+      id: connectorId,
+      kind: "headless",
+      name: connectorName,
+      ready: true,
+    },
+    disconnect: onDisconnect,
+    signMessage: async (message: Uint8Array) =>
+      ed25519.sign(message, keypair.secretKey.slice(0, 32)),
+    signTransaction: async (transaction) => {
+      const web3Transaction = transaction as unknown as
+        | Transaction
+        | VersionedTransaction;
+      if ("version" in web3Transaction) {
+        web3Transaction.sign([keypair]);
+      } else {
+        web3Transaction.partialSign(keypair);
+      }
+      return transaction;
+    },
+  };
+}
 
-  private readonly fixedKeypair: Keypair;
-  private activeKeypair: Keypair | null = null;
+function createHeadlessConnector(
+  secretKey: Uint8Array,
+  name: string,
+  index: number,
+): WalletConnector {
+  const fixedKeypair = keypairFromSecret(secretKey);
+  let activeSession: WalletSession | null = null;
+  const id = `headless:${index}:${fixedKeypair.publicKey.toBase58()}`;
 
-  constructor(secretKey: Uint8Array, name = DEFAULT_HEADLESS_WALLET_NAME) {
-    super();
-    this.fixedKeypair = keypairFromSecret(secretKey);
-    this.name = name as WalletName<string>;
-  }
+  const disconnect = async () => {
+    activeSession = null;
+  };
 
-  get connecting(): boolean {
-    return false;
-  }
-
-  get publicKey() {
-    return this.activeKeypair?.publicKey ?? null;
-  }
-
-  get readyState() {
-    return WalletReadyState.Loadable;
-  }
-
-  async connect(): Promise<void> {
-    this.activeKeypair = Keypair.fromSecretKey(this.fixedKeypair.secretKey);
-    this.emit("connect", this.activeKeypair.publicKey);
-  }
-
-  async disconnect(): Promise<void> {
-    this.activeKeypair = null;
-    this.emit("disconnect");
-  }
-
-  async signTransaction<T extends Transaction | VersionedTransaction>(
-    transaction: T,
-  ): Promise<T> {
-    if (!this.activeKeypair) throw new WalletNotConnectedError();
-
-    if (isVersionedTransaction(transaction)) {
-      transaction.sign([this.activeKeypair]);
-    } else {
-      transaction.partialSign(this.activeKeypair);
-    }
-
-    return transaction;
-  }
-
-  async signMessage(message: Uint8Array): Promise<Uint8Array> {
-    if (!this.activeKeypair) throw new WalletNotConnectedError();
-    return ed25519.sign(message, this.activeKeypair.secretKey.slice(0, 32));
-  }
-
-  async signIn(input: SolanaSignInInput = {}): Promise<SolanaSignInOutput> {
-    const keypair = (this.activeKeypair ||= Keypair.fromSecretKey(
-      this.fixedKeypair.secretKey,
-    ));
-
-    const domain = input.domain || window.location.host;
-    const address = input.address || keypair.publicKey.toBase58();
-    const signedMessage = createSignInMessage({
-      ...input,
-      domain,
-      address,
-    });
-    const signature = ed25519.sign(
-      signedMessage,
-      keypair.secretKey.slice(0, 32),
-    );
-
-    this.emit("connect", keypair.publicKey);
-
-    return {
-      account: {
-        address,
-        publicKey: keypair.publicKey.toBytes(),
-        chains: [],
-        features: [],
-      },
-      signedMessage,
-      signature,
-    };
-  }
+  return {
+    canAutoConnect: true,
+    connect: async () => {
+      activeSession =
+        activeSession ??
+        createHeadlessSession(
+          id,
+          name,
+          Keypair.fromSecretKey(fixedKeypair.secretKey),
+          disconnect,
+        );
+      return activeSession;
+    },
+    disconnect,
+    icon: HEADLESS_ICON,
+    id,
+    isSupported: () => true,
+    kind: "headless",
+    name,
+    ready: true,
+  };
 }
 
 export function getHeadlessWalletName(): string {
@@ -276,12 +245,7 @@ export function shouldAutoConnectHeadlessWallet(): boolean {
   );
 }
 
-export function createHeadlessWalletFromEnv(): HeadlessKeypairWalletAdapter | null {
-  const first = createHeadlessWalletsFromEnv()[0];
-  return first?.adapter ?? null;
-}
-
-export function createHeadlessWalletsFromEnv(): HeadlessWalletDescriptor[] {
+export function createHeadlessWalletConnectorsFromEnv(): HeadlessWalletDescriptor[] {
   const entries = parseHeadlessWalletEntries();
   if (entries.length === 0) return [];
 
@@ -292,8 +256,8 @@ export function createHeadlessWalletsFromEnv(): HeadlessWalletDescriptor[] {
         const name =
           entry.name?.trim() || `${DEFAULT_HEADLESS_WALLET_NAME} ${index + 1}`;
         return {
-          adapter: new HeadlessKeypairWalletAdapter(secret, name),
           autoConnect: Boolean(entry.autoConnect),
+          connector: createHeadlessConnector(secret, name, index),
         } as HeadlessWalletDescriptor;
       } catch (error) {
         console.error(

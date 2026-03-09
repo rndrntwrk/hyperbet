@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const anchorIdlDir = path.join(rootDir, "anchor", "target", "idl");
+const anchorTypesDir = path.join(rootDir, "anchor", "target", "types");
 const appIdlDir = path.join(rootDir, "app", "src", "idl");
 const keeperIdlDir = path.join(rootDir, "keeper", "src", "idl");
 
@@ -22,6 +23,14 @@ for (const programName of programNames) {
 
   cpSync(sourceFile, path.join(appIdlDir, `${programName}.json`));
   cpSync(sourceFile, path.join(keeperIdlDir, `${programName}.json`));
+
+  const sourceTypeFile = path.join(anchorTypesDir, `${programName}.ts`);
+  if (existsSync(sourceTypeFile)) {
+    cpSync(sourceTypeFile, path.join(appIdlDir, `${programName}.ts`));
+    cpSync(sourceTypeFile, path.join(keeperIdlDir, `${programName}.ts`));
+  }
 }
 
-console.log("[sync-anchor-artifacts] copied Anchor IDLs into app and keeper");
+console.log(
+  "[sync-anchor-artifacts] copied Anchor IDLs and generated types into app and keeper",
+);

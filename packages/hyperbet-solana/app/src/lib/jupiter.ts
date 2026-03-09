@@ -1,6 +1,6 @@
 import { CONFIG } from "./config";
-import { WalletContextState } from "@solana/wallet-adapter-react";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
+import type { AppWallet } from "./appWallet";
 
 const DEFAULT_JUPITER_BASE_URL = CONFIG.jupiterBaseUrl;
 
@@ -37,7 +37,7 @@ export async function getJupiterQuote(params: {
 
 export async function swapToGoldViaJupiter(params: {
   connection: Connection;
-  wallet: WalletContextState;
+  wallet: AppWallet;
   quote: QuoteResponse;
 }): Promise<string> {
   const { connection, wallet, quote } = params;

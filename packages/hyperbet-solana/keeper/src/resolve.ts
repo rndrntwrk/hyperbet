@@ -1,7 +1,8 @@
 import BN from "bn.js";
-import { type Idl, type Program } from "@coral-xyz/anchor";
+import { type Program } from "@coral-xyz/anchor";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import type { FightOracle } from "./idl/fight_oracle";
 
 import {
   createPrograms,
@@ -46,7 +47,7 @@ const args = await yargs(hideBin(process.argv))
 
 const oracleAuthority = readKeypair(requireEnv("ORACLE_AUTHORITY_KEYPAIR"));
 const { fightOracle } = createPrograms(oracleAuthority);
-const oracleProgram: Program<Idl> = fightOracle;
+const oracleProgram: Program<FightOracle> = fightOracle;
 const oracleAccounts = oracleProgram.account as Record<
   string,
   { fetch: (pubkey: unknown) => Promise<Record<string, unknown>> }
@@ -87,11 +88,13 @@ if (!enumIs(duelState.status, "resolved")) {
       new BN(nowTs),
       args.metadata,
     )
-    .accounts({
-      reporter: oracleAuthority.publicKey,
-      oracleConfig: oracleConfigPda,
-      duelState: duelPda,
-    })
+    .accounts(
+      {
+        reporter: oracleAuthority.publicKey,
+        oracleConfig: oracleConfigPda,
+        duelState: duelPda,
+      } as never,
+    )
     .rpc();
 }
 

@@ -1,8 +1,7 @@
 import React from "react";
-import * as anchor from "@coral-xyz/anchor";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
+import { createWalletTransactionSigner, toAddress } from "@solana/client";
+import { useSolanaClient } from "@solana/react-hooks";
+import { type Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import {
   Line,
   LineChart,
@@ -13,8 +12,11 @@ import {
   YAxis,
 } from "recharts";
 import { Toaster, toast } from "sonner";
-
-import goldPerpsIdl from "../idl/gold_perps_market.json";
+import {
+  useAppConnection,
+  useAppWallet,
+  useAppWalletModal,
+} from "../lib/appWallet";
 import { CONFIG, GAME_API_URL } from "../lib/config";
 import {
   buildOracleHistoryLabel,
@@ -28,19 +30,20 @@ import {
 } from "../lib/modelMarkets";
 import { findProgramAddressSync } from "../lib/programAddress";
 import {
-  createGoldPerpsProgram,
-  GOLD_PERPS_MARKET_PROGRAM_ID,
-} from "../lib/programs";
+  getConfigStateDecoder,
+  getMarketStateDecoder,
+  getPositionStateDecoder,
+  type ConfigState,
+  type MarketState,
+  type PositionState,
+} from "../generated/gold-perps-market/accounts";
+import { GOLD_PERPS_MARKET_PROGRAM_ADDRESS } from "../generated/gold-perps-market/programs";
 import {
-  buildPriorityFeeInstructions,
-  confirmSignatureViaRpc,
-  getLatestBlockhashViaRpc,
-  JITO_TIP_LAMPORTS,
-  randomJitoTipAccount,
-  sendRawTransactionViaRpc,
-} from "../lib/solanaRpc";
+  sendKitInstructions,
+} from "../lib/kitTransactions";
+import { getModifyPositionInstruction } from "../generated/gold-perps-market/instructions/modifyPosition";
 
-const PROGRAM_ID = GOLD_PERPS_MARKET_PROGRAM_ID;
+const PROGRAM_ID = new PublicKey(GOLD_PERPS_MARKET_PROGRAM_ADDRESS);
 const POLL_INTERVAL_MS = 5_000;
 const CHAIN_POLL_INTERVAL_MS = 6_000;
 const DEFAULT_SKEW_SCALE_SOL = 100;
@@ -69,41 +72,41 @@ interface ModelsMarketViewProps {
 }
 
 interface ConfigAccountState {
-  authority: PublicKey;
-  keeperAuthority: PublicKey;
-  defaultSkewScale: anchor.BN;
-  defaultFundingVelocity: anchor.BN;
-  maxOracleStalenessSeconds: anchor.BN;
-  maxLeverage: anchor.BN;
-  minMarginLamports: anchor.BN;
+  authority: string;
+  keeperAuthority: string;
+  defaultSkewScale: bigint;
+  defaultFundingVelocity: bigint;
+  maxOracleStalenessSeconds: bigint;
+  maxLeverage: bigint;
+  minMarginLamports: bigint;
   maintenanceMarginBps: number;
   liquidationFeeBps: number;
 }
 
 interface MarketAccountState {
   initialized: boolean;
-  marketId: number;
-  insuranceFund: anchor.BN;
-  skewScale: anchor.BN;
-  fundingVelocity: anchor.BN;
-  spotIndex: anchor.BN;
-  mu: anchor.BN;
-  sigma: anchor.BN;
-  oracleLastUpdated: anchor.BN;
-  lastFundingTime: anchor.BN;
-  totalLongOi: anchor.BN;
-  totalShortOi: anchor.BN;
-  currentFundingRate: anchor.BN;
+  marketId: bigint;
+  insuranceFund: bigint;
+  skewScale: bigint;
+  fundingVelocity: bigint;
+  spotIndex: bigint;
+  mu: bigint;
+  sigma: bigint;
+  oracleLastUpdated: bigint;
+  lastFundingTime: bigint;
+  totalLongOi: bigint;
+  totalShortOi: bigint;
+  currentFundingRate: bigint;
 }
 
 interface PositionAccountState {
   initialized: boolean;
-  owner: PublicKey;
-  marketId: number;
-  margin: anchor.BN;
-  size: anchor.BN;
-  entryPrice: anchor.BN;
-  lastFundingRate: anchor.BN;
+  owner: string;
+  marketId: bigint;
+  margin: bigint;
+  size: bigint;
+  entryPrice: bigint;
+  lastFundingRate: bigint;
 }
 
 interface MarketSnapshot {
@@ -144,9 +147,9 @@ function fromLamports(lamports: number): number {
   return lamports / LAMPORTS_PER_SOL;
 }
 
-function bnToNumber(value: anchor.BN | number): number {
+function bnToNumber(value: bigint | number): number {
   if (typeof value === "number") return value;
-  return value.toNumber();
+  return Number(value);
 }
 
 function formatCompactNumber(value: number, digits = 2): string {
@@ -187,12 +190,11 @@ function encodeMarketId(marketId: number): Buffer {
 }
 
 function decodeAccount<T>(
-  coder: anchor.BorshAccountsCoder,
-  accountName: "ConfigState" | "MarketState" | "PositionState",
+  decode: (data: Buffer) => T,
   data: Buffer,
 ): T | null {
   try {
-    return coder.decode(accountName, data) as unknown as T;
+    return decode(data);
   } catch {
     return null;
   }
@@ -281,9 +283,9 @@ function getTradeErrorMessage(error: unknown): string {
 }
 
 async function fetchMultipleAccounts(
-  connection: anchor.web3.Connection,
+  connection: Connection,
   addresses: readonly PublicKey[],
-): Promise<(anchor.web3.AccountInfo<Buffer> | null)[]> {
+): Promise<(Awaited<ReturnType<Connection["getMultipleAccountsInfo"]>>[number] | null)[]> {
   const chunks = chunkArray(addresses, MAX_BATCH_SIZE);
   const resolved = await Promise.all(
     chunks.map((chunk) =>
@@ -407,9 +409,10 @@ function applySignedOi(
 }
 
 export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const { setVisible: setWalletModalVisible } = useWalletModal();
+  const { connection } = useAppConnection();
+  const client = useSolanaClient();
+  const wallet = useAppWallet();
+  const { setVisible: setWalletModalVisible } = useAppWalletModal();
 
   const [data, setData] = React.useState<PerpsMarketsResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -636,9 +639,6 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
   React.useEffect(() => {
     let mounted = true;
-    const coder = new anchor.BorshAccountsCoder(
-      goldPerpsIdl as unknown as anchor.Idl,
-    );
 
     const loadChainState = async () => {
       if (!leaderboardKey || !data?.markets.length) {
@@ -664,8 +664,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
         const decodedConfig = configInfo?.data
           ? decodeAccount<ConfigAccountState>(
-              coder,
-              "ConfigState",
+              (data) => getConfigStateDecoder().decode(data) as ConfigState,
               configInfo.data,
             )
           : null;
@@ -675,8 +674,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
           const marketInfo = marketInfos[index];
           const decoded = marketInfo?.data
             ? decodeAccount<MarketAccountState>(
-                coder,
-                "MarketState",
+                (data) => getMarketStateDecoder().decode(data) as MarketState,
                 marketInfo.data,
               )
             : null;
@@ -740,8 +738,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
             const positionInfo = positionInfos[index];
             const decoded = positionInfo?.data
               ? decodeAccount<PositionAccountState>(
-                  coder,
-                  "PositionState",
+                  (data) => getPositionStateDecoder().decode(data) as PositionState,
                   positionInfo.data,
                 )
               : null;
@@ -946,10 +943,6 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
     setData(freshResponse);
   }, [data]);
 
-  const getProgram = React.useCallback(() => {
-    return createGoldPerpsProgram(connection, wallet);
-  }, [connection, wallet]);
-
   const handleOpenPosition = async (direction: TradeDirection) => {
     if (!selectedEntry || !selectedMarket) return;
     if (!ensureTradable("open")) return;
@@ -966,9 +959,11 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
       { id: txId },
     );
 
-    let tradeStage = "building transaction";
     try {
-      const program = getProgram();
+      if (!wallet.publicKey || !wallet.session) {
+        throw new Error("Connect a Solana wallet to trade model perps.");
+      }
+      const walletSigner = createWalletTransactionSigner(wallet.session).signer;
       const traderPublicKey = wallet.publicKey as PublicKey;
       const positionAddress = derivePositionPda(
         traderPublicKey,
@@ -990,59 +985,35 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                 ? quotedEntryPrice * 1.02
                 : quotedEntryPrice * 0.98,
             );
-      const marketIdArg = new anchor.BN(String(marketId));
-
-      const transaction = await program.methods
-        .modifyPosition(
-          marketIdArg,
-          new anchor.BN(String(marginDeltaLamports)),
-          new anchor.BN(String(signedSizeLamports)),
-          new anchor.BN(String(acceptablePriceLamports)),
-        )
-        .accountsPartial({
-          config: deriveConfigPda(),
-          market: deriveMarketPda(marketId),
-          position: positionAddress,
-          trader: traderPublicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .transaction();
-      transaction.feePayer = traderPublicKey;
-      const useHeliusSender = CONFIG.cluster === "mainnet-beta";
-      if (useHeliusSender) {
-        const accountKeys = [
-          traderPublicKey.toBase58(),
-          PROGRAM_ID.toBase58(),
-          deriveMarketPda(marketId).toBase58(),
-          positionAddress.toBase58(),
-        ];
-        const feeInstructions = await buildPriorityFeeInstructions(
-          connection.rpcEndpoint,
-          accountKeys,
-        );
-        const tipInstruction = SystemProgram.transfer({
-          fromPubkey: traderPublicKey,
-          toPubkey: new PublicKey(randomJitoTipAccount()),
-          lamports: JITO_TIP_LAMPORTS,
-        });
-        transaction.instructions.unshift(...feeInstructions, tipInstruction);
-      }
-      tradeStage = "fetching blockhash";
-      const latest = await getLatestBlockhashViaRpc(connection);
-      transaction.recentBlockhash = latest.blockhash;
-      const signTransaction = wallet.signTransaction;
-      if (!signTransaction) {
-        throw new Error("Wallet cannot sign transactions.");
-      }
-      tradeStage = "signing transaction";
-      const signed = await signTransaction(transaction);
-      tradeStage = "sending transaction";
-      const signature = await sendRawTransactionViaRpc(connection, signed, {
-        gameApiUrl: useHeliusSender ? GAME_API_URL : undefined,
-        useHeliusSender,
-      });
-      tradeStage = "confirming transaction";
-      await confirmSignatureViaRpc(connection, signature);
+      const marketAddress = deriveMarketPda(marketId);
+      const signature = await sendKitInstructions(
+        client,
+        wallet.session,
+        [
+          getModifyPositionInstruction({
+            acceptablePrice: acceptablePriceLamports,
+            config: toAddress(deriveConfigPda().toBase58()),
+            marginDelta: marginDeltaLamports,
+            market: toAddress(marketAddress.toBase58()),
+            marketId,
+            position: toAddress(positionAddress.toBase58()),
+            sizeDelta: signedSizeLamports,
+            trader: walletSigner,
+          }),
+        ],
+        {
+          accountKeys: [
+            traderPublicKey.toBase58(),
+            PROGRAM_ID.toBase58(),
+            marketAddress.toBase58(),
+            positionAddress.toBase58(),
+          ],
+          context: `opening ${direction.toLowerCase()} ${selectedEntry.name}`,
+          gameApiUrl:
+            CONFIG.cluster === "mainnet-beta" ? GAME_API_URL : undefined,
+          useHeliusSender: CONFIG.cluster === "mainnet-beta",
+        },
+      );
 
       const signedSize =
         collateralSol * effectiveLeverage * (direction === "LONG" ? 1 : -1);
@@ -1085,7 +1056,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
       );
       await refreshChainState();
     } catch (tradeError) {
-      const message = `${tradeStage}: ${getTradeErrorMessage(tradeError)}`;
+      const message = getTradeErrorMessage(tradeError);
       setLastTradeStatus(message);
       toast.error(message, { id: txId });
     } finally {
@@ -1103,9 +1074,11 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
     setLastTradeTx("-");
     toast.loading(`Closing ${selectedEntry.name} position`, { id: txId });
 
-    let tradeStage = "building transaction";
     try {
-      const program = getProgram();
+      if (!wallet.publicKey || !wallet.session) {
+        throw new Error("Connect a Solana wallet to trade model perps.");
+      }
+      const walletSigner = createWalletTransactionSigner(wallet.session).signer;
       const traderPublicKey = wallet.publicKey as PublicKey;
       const marketId = selectedEntry.marketId;
       const closeSizeLamports = -toLamports(selectedPosition.signedSize);
@@ -1125,60 +1098,36 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                 ? quotedClosePrice * 0.98
                 : quotedClosePrice * 1.02,
             );
-      const marketIdArg = new anchor.BN(String(marketId));
-
-      const transaction = await program.methods
-        .modifyPosition(
-          marketIdArg,
-          new anchor.BN(0),
-          new anchor.BN(String(closeSizeLamports)),
-          new anchor.BN(String(acceptablePriceLamports)),
-        )
-        .accountsPartial({
-          config: deriveConfigPda(),
-          market: deriveMarketPda(marketId),
-          position: derivePositionPda(traderPublicKey, marketId),
-          trader: traderPublicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .transaction();
-      transaction.feePayer = traderPublicKey;
-      const useHeliusSender = CONFIG.cluster === "mainnet-beta";
-      if (useHeliusSender) {
-        const positionAddress = derivePositionPda(traderPublicKey, marketId);
-        const accountKeys = [
-          traderPublicKey.toBase58(),
-          PROGRAM_ID.toBase58(),
-          deriveMarketPda(marketId).toBase58(),
-          positionAddress.toBase58(),
-        ];
-        const feeInstructions = await buildPriorityFeeInstructions(
-          connection.rpcEndpoint,
-          accountKeys,
-        );
-        const tipInstruction = SystemProgram.transfer({
-          fromPubkey: traderPublicKey,
-          toPubkey: new PublicKey(randomJitoTipAccount()),
-          lamports: JITO_TIP_LAMPORTS,
-        });
-        transaction.instructions.unshift(...feeInstructions, tipInstruction);
-      }
-      tradeStage = "fetching blockhash";
-      const latest = await getLatestBlockhashViaRpc(connection);
-      transaction.recentBlockhash = latest.blockhash;
-      const signTransaction = wallet.signTransaction;
-      if (!signTransaction) {
-        throw new Error("Wallet cannot sign transactions.");
-      }
-      tradeStage = "signing transaction";
-      const signed = await signTransaction(transaction);
-      tradeStage = "sending transaction";
-      const signature = await sendRawTransactionViaRpc(connection, signed, {
-        gameApiUrl: useHeliusSender ? GAME_API_URL : undefined,
-        useHeliusSender,
-      });
-      tradeStage = "confirming transaction";
-      await confirmSignatureViaRpc(connection, signature);
+      const marketAddress = deriveMarketPda(marketId);
+      const positionAddress = derivePositionPda(traderPublicKey, marketId);
+      const signature = await sendKitInstructions(
+        client,
+        wallet.session,
+        [
+          getModifyPositionInstruction({
+            acceptablePrice: acceptablePriceLamports,
+            config: toAddress(deriveConfigPda().toBase58()),
+            marginDelta: 0,
+            market: toAddress(marketAddress.toBase58()),
+            marketId,
+            position: toAddress(positionAddress.toBase58()),
+            sizeDelta: closeSizeLamports,
+            trader: walletSigner,
+          }),
+        ],
+        {
+          accountKeys: [
+            traderPublicKey.toBase58(),
+            PROGRAM_ID.toBase58(),
+            marketAddress.toBase58(),
+            positionAddress.toBase58(),
+          ],
+          context: `closing ${selectedEntry.name} position`,
+          gameApiUrl:
+            CONFIG.cluster === "mainnet-beta" ? GAME_API_URL : undefined,
+          useHeliusSender: CONFIG.cluster === "mainnet-beta",
+        },
+      );
 
       setPositions((current) => {
         const next = { ...current };
@@ -1190,7 +1139,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
       toast.success(`Closed ${selectedEntry.name} position`, { id: txId });
       await refreshChainState();
     } catch (tradeError) {
-      const message = `${tradeStage}: ${getTradeErrorMessage(tradeError)}`;
+      const message = getTradeErrorMessage(tradeError);
       setLastTradeStatus(message);
       toast.error(message, { id: txId });
     } finally {

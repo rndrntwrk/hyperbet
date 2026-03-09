@@ -1,19 +1,14 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Buffer } from "buffer";
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
+import { SolanaProvider } from "@solana/react-hooks";
+import { watchWalletStandardConnectors } from "@solana/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { getRpcUrl, getWsUrl } from "./lib/config";
-import { createHeadlessWalletsFromEnv } from "./lib/headlessWallet";
+import { AppWalletProvider } from "./lib/appWallet";
+import { createFrameworkClient } from "./lib/frameworkClient";
+import { createHeadlessWalletConnectorsFromEnv } from "./lib/headlessWallet";
 import { App } from "./App";
 import { StreamUIApp } from "./StreamUIApp";
-
-import "@solana/wallet-adapter-react-ui/styles.css";
 
 const IS_STREAM_UI = import.meta.env.MODE === "stream-ui";
 
@@ -24,43 +19,62 @@ if (!(globalThis as { Buffer?: typeof Buffer }).Buffer) {
 const queryClient = new QueryClient();
 
 export default function AppRoot() {
-  const endpoint = getRpcUrl();
-  const wsEndpoint = getWsUrl();
-  const headlessWallets = useMemo(() => createHeadlessWalletsFromEnv(), []);
+  const [walletScanVersion, setWalletScanVersion] = useState(0);
+  const headlessWallets = useMemo(
+    () => createHeadlessWalletConnectorsFromEnv(),
+    [],
+  );
+  const frameworkClient = useMemo(
+    () => createFrameworkClient(),
+    [walletScanVersion],
+  );
+  const knownConnectorIdsRef = useRef<string>("");
+  const autoConnectHeadlessConnectorId =
+    headlessWallets.find((entry) => entry.autoConnect)?.connector.id ?? null;
 
-  const wallets = useMemo(() => {
-    const walletList = [];
-    for (const wallet of headlessWallets) {
-      walletList.push(wallet.adapter);
-    }
-    walletList.push(new PhantomWalletAdapter());
-    return walletList;
-  }, [headlessWallets]);
+  useEffect(() => {
+    const stopWatchingWallets = watchWalletStandardConnectors((connectors) => {
+      const nextConnectorIds = connectors
+        .map((connector) => connector.id)
+        .sort()
+        .join("|");
+      if (nextConnectorIds === knownConnectorIdsRef.current) return;
+      knownConnectorIdsRef.current = nextConnectorIds;
 
-  const autoConnectWallet = headlessWallets.find((entry) => entry.autoConnect);
-  if (autoConnectWallet) {
-    localStorage.setItem(
-      "walletName",
-      JSON.stringify(autoConnectWallet.adapter.name),
-    );
-  }
+      const walletStatus = frameworkClient.store.getState().wallet.status;
+      if (walletStatus === "disconnected") {
+        setWalletScanVersion((value) => value + 1);
+      }
+    });
+
+    const delayedRescanId = window.setTimeout(() => {
+      const walletStatus = frameworkClient.store.getState().wallet.status;
+      if (walletStatus === "disconnected") {
+        setWalletScanVersion((value) => value + 1);
+      }
+    }, 500);
+
+    return () => {
+      stopWatchingWallets();
+      window.clearTimeout(delayedRescanId);
+    };
+  }, [frameworkClient]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ConnectionProvider
-        endpoint={endpoint}
-        config={{
-          wsEndpoint,
-          commitment: "confirmed",
-          disableRetryOnRateLimit: true,
-        }}
-      >
-        <WalletProvider wallets={wallets} autoConnect>
-          <WalletModalProvider>
-            {IS_STREAM_UI ? <StreamUIApp /> : <App />}
-          </WalletModalProvider>
-        </WalletProvider>
-      </ConnectionProvider>
-    </QueryClientProvider>
+    <SolanaProvider
+      client={frameworkClient}
+      walletPersistence={{
+        autoConnect: true,
+        storageKey: "hyperbet-solana:last-wallet",
+      }}
+    >
+      <QueryClientProvider client={queryClient}>
+        <AppWalletProvider
+          headlessAutoConnectorId={autoConnectHeadlessConnectorId}
+        >
+          {IS_STREAM_UI ? <StreamUIApp /> : <App />}
+        </AppWalletProvider>
+      </QueryClientProvider>
+    </SolanaProvider>
   );
 }

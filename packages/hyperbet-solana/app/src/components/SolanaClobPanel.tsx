@@ -2,20 +2,20 @@ import {
   type CSSProperties,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import { BN } from "@coral-xyz/anchor";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { createWalletTransactionSigner, toAddress } from "@solana/client";
+import { useSolanaClient } from "@solana/react-hooks";
+import { getTransferSolInstruction } from "@solana-program/system";
 import {
   type AccountMeta,
+  type Connection,
   LAMPORTS_PER_SOL,
   PublicKey,
-  SystemProgram,
-  Transaction,
 } from "@solana/web3.js";
 
+import { useAppConnection, useAppWallet } from "../lib/appWallet";
 import { findClobConfigPda, findClobVaultPda } from "../lib/clobPdas";
 import { CONFIG, GAME_API_URL } from "../lib/config";
 import { duelKeyHexToBytes, shortDuelKey } from "../lib/duelKey";
@@ -27,16 +27,32 @@ import {
   findPriceLevelPda,
   findUserBalancePda,
 } from "../lib/pdas";
-import { createPrograms, createReadonlyPrograms } from "../lib/programs";
 import {
-  buildPriorityFeeInstructions,
-  confirmSignatureViaRpc,
-  getLatestBlockhashViaRpc,
-  JITO_TIP_LAMPORTS,
-  randomJitoTipAccount,
-  sendRawTransactionViaRpc,
-} from "../lib/solanaRpc";
+  FIGHT_ORACLE_PROGRAM_ID,
+  GOLD_CLOB_MARKET_PROGRAM_ID,
+} from "../lib/programIds";
+import {
+  appendRemainingAccounts,
+  sendKitInstructions,
+  toKitRemainingAccounts,
+} from "../lib/kitTransactions";
 import { useStreamingState } from "../spectator/useStreamingState";
+import { getDuelStateDecoder } from "../generated/fight-oracle/accounts";
+import {
+  getMarketConfigDecoder,
+  getMarketStateDecoder,
+  getOrderDecoder,
+  getPriceLevelDecoder,
+  getUserBalanceDecoder,
+  type Order,
+} from "../generated/gold-clob-market/accounts";
+import { getCancelOrderInstruction } from "../generated/gold-clob-market/instructions/cancelOrder";
+import { getClaimInstruction } from "../generated/gold-clob-market/instructions/claim";
+import { getPlaceOrderInstruction } from "../generated/gold-clob-market/instructions/placeOrder";
+import {
+  GoldClobMarketAccount,
+  identifyGoldClobMarketAccount,
+} from "../generated/gold-clob-market/programs";
 import {
   PredictionMarketPanel,
   type ChartDataPoint,
@@ -46,14 +62,8 @@ import { PointsDisplay } from "./PointsDisplay";
 import { type Trade } from "./RecentTrades";
 
 type BetSide = "YES" | "NO";
-type ClobProgram = ReturnType<typeof createReadonlyPrograms>["goldClobMarket"];
-type AccountNamespaceFetcher = {
-  fetch: (pubkey: PublicKey) => Promise<Record<string, unknown>>;
-  fetchNullable: (pubkey: PublicKey) => Promise<Record<string, unknown> | null>;
-  all: () => Promise<
-    Array<{ publicKey: PublicKey; account: Record<string, unknown> }>
-  >;
-};
+type ClobProgramId = PublicKey;
+type DecodedProgramAccount<T> = { publicKey: PublicKey; account: T };
 
 type UserPosition = {
   aShares: bigint;
@@ -74,51 +84,56 @@ type MarketSnapshot = {
   betCloseTime: number | null;
 };
 
-type PriceLevelAccount = {
-  publicKey: PublicKey;
-  account: {
-    side: number;
-    price: number;
-    headOrderId: BN | bigint | number;
-    tailOrderId: BN | bigint | number;
-    totalOpen: BN | bigint | number;
-    marketState: PublicKey;
-  };
-};
-
-type OrderAccount = {
-  publicKey: PublicKey;
-  account: {
-    id: BN | bigint | number;
-    side: number;
-    price: number;
-    maker: PublicKey;
-    amount: BN | bigint | number;
-    filled: BN | bigint | number;
-    prevOrderId: BN | bigint | number;
-    nextOrderId: BN | bigint | number;
-    active: boolean;
-    marketState: PublicKey;
-  };
-};
-
-type BalanceAccount = {
-  publicKey: PublicKey;
-  account: {
-    user: PublicKey;
-    marketState: PublicKey;
-    aShares: BN | bigint | number;
-    bShares: BN | bigint | number;
-  };
-};
-
 const SIDE_BID = 1;
 const SIDE_ASK = 2;
 const MAX_MATCH_ACCOUNTS = 100;
+const duelStateDecoder = getDuelStateDecoder();
+const clobMarketConfigDecoder = getMarketConfigDecoder();
+const clobMarketStateDecoder = getMarketStateDecoder();
+const clobOrderDecoder = getOrderDecoder();
+const clobPriceLevelDecoder = getPriceLevelDecoder();
+const clobUserBalanceDecoder = getUserBalanceDecoder();
 
-function walletReady(wallet: ReturnType<typeof useWallet>): boolean {
+async function fetchMaybeDecodedAccount<T>(
+  connection: Connection,
+  pubkey: PublicKey,
+  decode: (data: Buffer) => T,
+): Promise<T | null> {
+  const account = await connection.getAccountInfo(pubkey, "confirmed");
+  if (!account) return null;
+  return decode(account.data);
+}
+
+async function fetchDecodedProgramAccounts<T>(
+  connection: Connection,
+  programId: PublicKey,
+  identify: (data: Uint8Array) => number,
+  expectedAccount: number,
+  decode: (data: Buffer) => T,
+): Promise<Array<DecodedProgramAccount<T>>> {
+  const accounts = await connection.getProgramAccounts(programId, "confirmed");
+  return accounts.flatMap(
+    (
+      entry: Awaited<ReturnType<Connection["getProgramAccounts"]>>[number],
+    ) => {
+    try {
+      if (identify(entry.account.data) !== expectedAccount) {
+        return [];
+      }
+      return [{ publicKey: entry.pubkey, account: decode(entry.account.data) }];
+    } catch {
+      return [];
+    }
+    },
+  );
+}
+
+function walletReady(wallet: ReturnType<typeof useAppWallet>): boolean {
   return Boolean(
-    wallet.publicKey && wallet.signTransaction && wallet.signAllTransactions,
+    wallet.publicKey &&
+      wallet.session &&
+      wallet.signTransaction &&
+      wallet.signAllTransactions,
   );
 }
 
@@ -207,8 +222,9 @@ export function SolanaClobPanel({
   compact = false,
   onMarketSnapshot,
 }: SolanaClobPanelProps) {
-  const { connection } = useConnection();
-  const wallet = useWallet();
+  const { connection } = useAppConnection();
+  const client = useSolanaClient();
+  const wallet = useAppWallet();
   const { state: streamingState } = useStreamingState();
 
   const [status, setStatus] = useState("Waiting for live Hyperscape duel");
@@ -234,14 +250,8 @@ export function SolanaClobPanel({
     no: 0n,
   });
 
-  const writablePrograms = useMemo(
-    () => (walletReady(wallet) ? createPrograms(connection, wallet) : null),
-    [connection, wallet],
-  );
-  const readonlyPrograms = useMemo(
-    () => createReadonlyPrograms(connection),
-    [connection],
-  );
+  const oracleProgramId = FIGHT_ORACLE_PROGRAM_ID;
+  const clobProgramId = GOLD_CLOB_MARKET_PROGRAM_ID;
 
   const cycle = streamingState?.cycle ?? null;
   const duelKeyHex =
@@ -303,57 +313,33 @@ export function SolanaClobPanel({
     lastSnapshotRef.current = { yes: nextYes, no: nextNo };
   }, []);
 
-  const submitTransaction = useCallback(
-    async (transaction: Transaction, context: string): Promise<string> => {
-      if (!wallet.publicKey || !wallet.signTransaction) {
+  const submitInstructions = useCallback(
+    async (
+      instructions: Parameters<typeof sendKitInstructions>[2],
+      accountKeys: readonly string[],
+      context: string,
+    ): Promise<string> => {
+      if (!wallet.publicKey || !wallet.session) {
         throw new Error("Connect wallet first");
       }
 
-      let stage = "fetching blockhash";
-      try {
-        transaction.feePayer = wallet.publicKey;
-        const useHeliusSender = CONFIG.cluster === "mainnet-beta";
-        if (useHeliusSender) {
-          const accountKeys = [wallet.publicKey.toBase58()];
-          const feeInstructions = await buildPriorityFeeInstructions(
-            connection.rpcEndpoint,
-            accountKeys,
-          );
-          const tipInstruction = SystemProgram.transfer({
-            fromPubkey: wallet.publicKey,
-            toPubkey: new PublicKey(randomJitoTipAccount()),
-            lamports: JITO_TIP_LAMPORTS,
-          });
-          transaction.instructions.unshift(...feeInstructions, tipInstruction);
-        }
-        const latest = await getLatestBlockhashViaRpc(connection);
-        transaction.recentBlockhash = latest.blockhash;
-
-        stage = "signing transaction";
-        const signed = await wallet.signTransaction(transaction);
-
-        stage = "sending transaction";
-        const signature = await sendRawTransactionViaRpc(connection, signed, {
-          gameApiUrl: useHeliusSender ? GAME_API_URL : undefined,
-          useHeliusSender,
-        });
-
-        stage = "confirming transaction";
-        await confirmSignatureViaRpc(connection, signature);
-        return signature;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`${context}: ${stage}: ${message}`);
-      }
+      return sendKitInstructions(client, wallet.session, instructions, {
+        accountKeys,
+        context,
+        gameApiUrl:
+          CONFIG.cluster === "mainnet-beta" ? GAME_API_URL : undefined,
+        useHeliusSender: CONFIG.cluster === "mainnet-beta",
+      });
     },
-    [connection, wallet.publicKey, wallet.signTransaction],
+    [client, wallet.publicKey, wallet.session],
   );
 
   const ensureVaultRentExempt = useCallback(
     async (vault: PublicKey): Promise<void> => {
-      if (!wallet.publicKey) {
+      if (!wallet.publicKey || !wallet.session) {
         throw new Error("Connect wallet first");
       }
+      const walletSigner = createWalletTransactionSigner(wallet.session).signer;
 
       const minimumLamports =
         await connection.getMinimumBalanceForRentExemption(0, "confirmed");
@@ -362,34 +348,31 @@ export function SolanaClobPanel({
         return;
       }
 
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: wallet.publicKey,
-          toPubkey: vault,
-          lamports: minimumLamports - currentLamports,
-        }),
+      await submitInstructions(
+        [
+          getTransferSolInstruction({
+            amount: BigInt(minimumLamports - currentLamports),
+            destination: toAddress(vault.toBase58()),
+            source: walletSigner,
+          }),
+        ],
+        [wallet.publicKey.toBase58(), vault.toBase58()],
+        "funding duel vault rent",
       );
-      await submitTransaction(transaction, "funding duel vault rent");
     },
-    [connection, submitTransaction, wallet.publicKey],
+    [connection, submitInstructions, wallet.publicKey, wallet.session],
   );
 
   const refreshData = useCallback(async () => {
-    const clobProgram = readonlyPrograms.goldClobMarket;
-    const oracleProgram = readonlyPrograms.fightOracle;
-    const clobAccounts = clobProgram.account as Record<
-      string,
-      AccountNamespaceFetcher
-    >;
-    const oracleAccounts = oracleProgram.account as Record<
-      string,
-      AccountNamespaceFetcher
-    >;
-    const runtimeConfigPda = findClobConfigPda(clobProgram.programId);
+    const runtimeConfigPda = findClobConfigPda(clobProgramId);
     setIsRefreshing(true);
 
     try {
-      const config = await clobAccounts.marketConfig.fetchNullable(runtimeConfigPda);
+      const config = await fetchMaybeDecodedAccount(
+        connection,
+        runtimeConfigPda,
+        (data) => clobMarketConfigDecoder.decode(data),
+      );
       if (!config) {
         setStatus("Market config not deployed");
         setActiveMarket(null);
@@ -408,21 +391,43 @@ export function SolanaClobPanel({
       }
 
       const duelKeyBytes = duelKeyHexToBytes(duelKeyHex);
-      const duelState = findDuelStatePda(oracleProgram.programId, duelKeyBytes);
+      const duelState = findDuelStatePda(oracleProgramId, duelKeyBytes);
       const marketState = findMarketStatePda(
-        clobProgram.programId,
+        clobProgramId,
         duelState,
         DUEL_WINNER_MARKET_KIND,
       );
-      const vault = findClobVaultPda(clobProgram.programId, marketState);
+      const vault = findClobVaultPda(clobProgramId, marketState);
 
       const [duelAccount, marketAccount, allLevels, allOrders, allBalances] =
         await Promise.all([
-          oracleAccounts.duelState.fetchNullable(duelState),
-          clobAccounts.marketState.fetchNullable(marketState),
-          clobAccounts.priceLevel.all(),
-          clobAccounts.order.all(),
-          clobAccounts.userBalance.all(),
+          fetchMaybeDecodedAccount(connection, duelState, (data) =>
+            duelStateDecoder.decode(data),
+          ),
+          fetchMaybeDecodedAccount(connection, marketState, (data) =>
+            clobMarketStateDecoder.decode(data),
+          ),
+          fetchDecodedProgramAccounts(
+            connection,
+            clobProgramId,
+            identifyGoldClobMarketAccount,
+            GoldClobMarketAccount.PriceLevel,
+            (data) => clobPriceLevelDecoder.decode(data),
+          ),
+          fetchDecodedProgramAccounts(
+            connection,
+            clobProgramId,
+            identifyGoldClobMarketAccount,
+            GoldClobMarketAccount.Order,
+            (data) => clobOrderDecoder.decode(data),
+          ),
+          fetchDecodedProgramAccounts(
+            connection,
+            clobProgramId,
+            identifyGoldClobMarketAccount,
+            GoldClobMarketAccount.UserBalance,
+            (data) => clobUserBalanceDecoder.decode(data),
+          ),
         ]);
 
       if (!duelAccount) {
@@ -440,14 +445,16 @@ export function SolanaClobPanel({
       const marketStatus = enumName(marketAccount.status);
       const winner = enumName(marketAccount.winner);
 
-      const levels = (allLevels as PriceLevelAccount[]).filter((entry) =>
-        (entry.account.marketState as PublicKey).equals(marketState),
+      const marketStateAddress = marketState.toBase58();
+      const walletAddress = wallet.publicKey?.toBase58() ?? null;
+      const levels = allLevels.filter((entry) =>
+        entry.account.marketState === marketStateAddress,
       );
-      const orders = (allOrders as OrderAccount[]).filter((entry) =>
-        (entry.account.marketState as PublicKey).equals(marketState),
+      const orders = allOrders.filter((entry) =>
+        entry.account.marketState === marketStateAddress,
       );
-      const balances = (allBalances as BalanceAccount[]).filter((entry) =>
-        (entry.account.marketState as PublicKey).equals(marketState),
+      const balances = allBalances.filter((entry) =>
+        entry.account.marketState === marketStateAddress,
       );
 
       const bidRows = levels
@@ -496,8 +503,8 @@ export function SolanaClobPanel({
         nextYesPool += aShares;
         nextNoPool += bShares;
         if (
-          wallet.publicKey &&
-          (balance.account.user as PublicKey).equals(wallet.publicKey)
+          walletAddress &&
+          balance.account.user === walletAddress
         ) {
           userPosition = { aShares, bShares };
         }
@@ -506,8 +513,8 @@ export function SolanaClobPanel({
       const userOpenOrders = orders
         .filter(
           (entry) =>
-            wallet.publicKey &&
-            (entry.account.maker as PublicKey).equals(wallet.publicKey) &&
+            walletAddress &&
+            entry.account.maker === walletAddress &&
             entry.account.active &&
             asBigInt(entry.account.amount) > asBigInt(entry.account.filled),
         )
@@ -566,8 +573,9 @@ export function SolanaClobPanel({
     duelKeyHex,
     effectiveAgent1,
     effectiveAgent2,
-    readonlyPrograms.fightOracle,
-    readonlyPrograms.goldClobMarket,
+    clobProgramId,
+    connection,
+    oracleProgramId,
     updateChartAndTrades,
     wallet.publicKey,
   ]);
@@ -580,23 +588,25 @@ export function SolanaClobPanel({
 
   const buildPlaceOrderRemainingAccounts = useCallback(
     async (
-      clobProgram: ClobProgram,
+      clobProgramId: ClobProgramId,
       market: MarketSnapshot,
       sideValue: number,
       price: number,
       amount: bigint,
     ): Promise<AccountMeta[]> => {
-      const clobAccounts = clobProgram.account as Record<
-        string,
-        AccountNamespaceFetcher
-      >;
       const metas: AccountMeta[] = [];
       const oppositeSide = sideValue === SIDE_BID ? SIDE_ASK : SIDE_BID;
       let remaining = amount;
       let matches = 0;
-      const oppositeLevels = ((await clobAccounts.priceLevel.all()) as PriceLevelAccount[])
+      const oppositeLevels = (await fetchDecodedProgramAccounts(
+        connection,
+        clobProgramId,
+        identifyGoldClobMarketAccount,
+        GoldClobMarketAccount.PriceLevel,
+        (data) => clobPriceLevelDecoder.decode(data),
+      ))
         .filter((entry) => {
-          const sameMarket = entry.account.marketState.equals(market.marketState);
+          const sameMarket = entry.account.marketState === market.marketState.toBase58();
           const sameSide = Number(entry.account.side) === oppositeSide;
           const hasLiquidity = asBigInt(entry.account.totalOpen) > 0n;
           if (!sameMarket || !sameSide || !hasLiquidity) {
@@ -625,16 +635,17 @@ export function SolanaClobPanel({
         let currentHead = asBigInt(level.account.headOrderId);
         let currentLevelOpen = asBigInt(level.account.totalOpen);
         while (remaining > 0n && currentHead > 0n && currentLevelOpen > 0n) {
-          const orderPda = findOrderPda(
-            clobProgram.programId,
-            market.marketState,
-            currentHead,
+          const orderPda = findOrderPda(clobProgramId, market.marketState, currentHead);
+          const order = await fetchMaybeDecodedAccount(connection, orderPda, (data) =>
+            clobOrderDecoder.decode(data),
           );
-          const order = await clobAccounts.order.fetch(orderPda);
+          if (!order) {
+            break;
+          }
           const makerBalancePda = findUserBalancePda(
-            clobProgram.programId,
+            clobProgramId,
             market.marketState,
-            order.maker as PublicKey,
+            new PublicKey(order.maker),
           );
 
           metas.push(
@@ -677,17 +688,19 @@ export function SolanaClobPanel({
       }
 
       const restingLevelPda = findPriceLevelPda(
-        clobProgram.programId,
+        clobProgramId,
         market.marketState,
         sideValue,
         price,
       );
       const restingLevel =
-        await clobAccounts.priceLevel.fetchNullable(restingLevelPda);
+        await fetchMaybeDecodedAccount(connection, restingLevelPda, (data) =>
+          clobPriceLevelDecoder.decode(data),
+        );
       if (restingLevel && asBigInt(restingLevel.tailOrderId) > 0n) {
         metas.push({
           pubkey: findOrderPda(
-            clobProgram.programId,
+            clobProgramId,
             market.marketState,
             asBigInt(restingLevel.tailOrderId),
           ),
@@ -698,38 +711,29 @@ export function SolanaClobPanel({
 
       return metas;
     },
-    [],
+    [connection],
   );
 
   const buildCancelRemainingAccounts = useCallback(
     async (
-      clobProgram: ClobProgram,
+      clobProgramId: ClobProgramId,
       marketState: PublicKey,
       orderId: bigint,
     ): Promise<{
-      order: {
-        side: BN | bigint | number;
-        price: BN | bigint | number;
-        prevOrderId: BN | bigint | number;
-        nextOrderId: BN | bigint | number;
-      };
+      order: Order;
       orderPda: PublicKey;
       priceLevelPda: PublicKey;
       metas: AccountMeta[];
     }> => {
-      const clobAccounts = clobProgram.account as Record<
-        string,
-        AccountNamespaceFetcher
-      >;
-      const orderPda = findOrderPda(clobProgram.programId, marketState, orderId);
-      const order = (await clobAccounts.order.fetch(orderPda)) as {
-        side: BN | bigint | number;
-        price: BN | bigint | number;
-        prevOrderId: BN | bigint | number;
-        nextOrderId: BN | bigint | number;
-      };
+      const orderPda = findOrderPda(clobProgramId, marketState, orderId);
+      const order = await fetchMaybeDecodedAccount(connection, orderPda, (data) =>
+        clobOrderDecoder.decode(data),
+      );
+      if (!order) {
+        throw new Error("Order not found");
+      }
       const priceLevelPda = findPriceLevelPda(
-        clobProgram.programId,
+        clobProgramId,
         marketState,
         Number(order.side),
         Number(order.price),
@@ -739,7 +743,7 @@ export function SolanaClobPanel({
       const prevOrderId = asBigInt(order.prevOrderId);
       if (prevOrderId > 0n) {
         metas.push({
-          pubkey: findOrderPda(clobProgram.programId, marketState, prevOrderId),
+          pubkey: findOrderPda(clobProgramId, marketState, prevOrderId),
           isSigner: false,
           isWritable: true,
         });
@@ -748,7 +752,7 @@ export function SolanaClobPanel({
       const nextOrderId = asBigInt(order.nextOrderId);
       if (nextOrderId > 0n) {
         metas.push({
-          pubkey: findOrderPda(clobProgram.programId, marketState, nextOrderId),
+          pubkey: findOrderPda(clobProgramId, marketState, nextOrderId),
           isSigner: false,
           isWritable: true,
         });
@@ -756,52 +760,57 @@ export function SolanaClobPanel({
 
       return { order, orderPda, priceLevelPda, metas };
     },
-    [],
+    [connection],
   );
 
   const handlePlaceOrder = useCallback(async () => {
-    const clobProgram = writablePrograms?.goldClobMarket;
-    if (!clobProgram || !wallet.publicKey || !activeMarket) {
+    if (!wallet.publicKey || !activeMarket) {
       setStatus("Connect wallet to trade");
       return;
     }
 
     try {
-      const clobAccounts = clobProgram.account as Record<
-        string,
-        AccountNamespaceFetcher
-      >;
       const amount = toBaseUnits(amountInput);
       if (amount <= 0n) {
         setStatus("Amount must be greater than zero");
         return;
       }
+      if (!wallet.session) {
+        setStatus("Connect wallet to trade");
+        return;
+      }
+      const walletSigner = createWalletTransactionSigner(wallet.session).signer;
 
-      const latestMarketAccount = await clobAccounts.marketState.fetch(
+      const latestMarketAccount = await fetchMaybeDecodedAccount(
+        connection,
         activeMarket.marketState,
+        (data) => clobMarketStateDecoder.decode(data),
       );
+      if (!latestMarketAccount) {
+        throw new Error("Market state not found");
+      }
 
       const price = clampPrice(priceInput);
       const sideValue = side === "YES" ? SIDE_BID : SIDE_ASK;
       const orderId = asBigInt(latestMarketAccount.nextOrderId);
       const userBalance = findUserBalancePda(
-        clobProgram.programId,
+        clobProgramId,
         activeMarket.marketState,
         wallet.publicKey,
       );
       const newOrder = findOrderPda(
-        clobProgram.programId,
+        clobProgramId,
         activeMarket.marketState,
         orderId,
       );
       const restingLevel = findPriceLevelPda(
-        clobProgram.programId,
+        clobProgramId,
         activeMarket.marketState,
         sideValue,
         price,
       );
       const remainingAccounts = await buildPlaceOrderRemainingAccounts(
-        clobProgram,
+        clobProgramId,
         activeMarket,
         sideValue,
         price,
@@ -810,29 +819,42 @@ export function SolanaClobPanel({
 
       await ensureVaultRentExempt(activeMarket.vault);
 
-      const tx = await clobProgram.methods
-        .placeOrder(new BN(orderId.toString()), sideValue, price, new BN(amount.toString()))
-        .accountsPartial({
-          marketState: activeMarket.marketState,
-          duelState: activeMarket.duelState,
-          userBalance,
-          newOrder,
-          restingLevel,
-          config: findClobConfigPda(clobProgram.programId),
-          treasury: (await clobAccounts.marketConfig.fetch(
-            findClobConfigPda(clobProgram.programId),
-          )).treasury as PublicKey,
-          marketMaker: (await clobAccounts.marketConfig.fetch(
-            findClobConfigPda(clobProgram.programId),
-          )).marketMaker as PublicKey,
-          vault: activeMarket.vault,
-          user: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .remainingAccounts(remainingAccounts)
-        .transaction();
+      const configPda = findClobConfigPda(clobProgramId);
+      const config = await fetchMaybeDecodedAccount(connection, configPda, (data) =>
+        clobMarketConfigDecoder.decode(data),
+      );
+      if (!config) {
+        throw new Error("Market config not found");
+      }
+      const instruction = appendRemainingAccounts(
+        getPlaceOrderInstruction({
+          amount,
+          config: toAddress(configPda.toBase58()),
+          duelState: toAddress(activeMarket.duelState.toBase58()),
+          marketMaker: toAddress(config.marketMaker),
+          marketState: toAddress(activeMarket.marketState.toBase58()),
+          newOrder: toAddress(newOrder.toBase58()),
+          orderId,
+          price,
+          restingLevel: toAddress(restingLevel.toBase58()),
+          side: sideValue,
+          treasury: toAddress(config.treasury),
+          user: walletSigner,
+          userBalance: toAddress(userBalance.toBase58()),
+          vault: toAddress(activeMarket.vault.toBase58()),
+        }),
+        toKitRemainingAccounts(remainingAccounts),
+      );
 
-      await submitTransaction(tx, "placing order");
+      await submitInstructions(
+        [instruction],
+        [
+          wallet.publicKey.toBase58(),
+          activeMarket.marketState.toBase58(),
+          activeMarket.vault.toBase58(),
+        ],
+        "placing order",
+      );
       setStatus("Order placed");
       await refreshData();
     } catch (error) {
@@ -846,45 +868,56 @@ export function SolanaClobPanel({
     priceInput,
     refreshData,
     side,
-    submitTransaction,
+    submitInstructions,
+    clobProgramId,
+    connection,
     wallet.publicKey,
-    writablePrograms,
+    wallet.session,
   ]);
 
   const handleCancelLastOrder = useCallback(async () => {
-    const clobProgram = writablePrograms?.goldClobMarket;
-    if (!clobProgram || !wallet.publicKey || !activeMarket || !lastOrderId) {
+    if (!wallet.publicKey || !activeMarket || !lastOrderId) {
       setStatus("No active order to cancel");
       return;
     }
 
     try {
+      if (!wallet.session) {
+        setStatus("Connect wallet to trade");
+        return;
+      }
+      const walletSigner = createWalletTransactionSigner(wallet.session).signer;
       const { order, orderPda, priceLevelPda, metas } =
         await buildCancelRemainingAccounts(
-          clobProgram,
+          clobProgramId,
           activeMarket.marketState,
           lastOrderId,
         );
 
-      const tx = await clobProgram.methods
-        .cancelOrder(
-          new BN(lastOrderId.toString()),
-          Number(order.side),
-          Number(order.price),
-        )
-        .accountsPartial({
-          marketState: activeMarket.marketState,
-          duelState: activeMarket.duelState,
-          order: orderPda,
-          priceLevel: priceLevelPda,
-          vault: activeMarket.vault,
-          user: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .remainingAccounts(metas)
-        .transaction();
+      const instruction = appendRemainingAccounts(
+        getCancelOrderInstruction({
+          duelState: toAddress(activeMarket.duelState.toBase58()),
+          marketState: toAddress(activeMarket.marketState.toBase58()),
+          order: toAddress(orderPda.toBase58()),
+          orderId: lastOrderId,
+          price: Number(order.price),
+          priceLevel: toAddress(priceLevelPda.toBase58()),
+          side: Number(order.side),
+          user: walletSigner,
+          vault: toAddress(activeMarket.vault.toBase58()),
+        }),
+        toKitRemainingAccounts(metas),
+      );
 
-      await submitTransaction(tx, "cancelling order");
+      await submitInstructions(
+        [instruction],
+        [
+          wallet.publicKey.toBase58(),
+          activeMarket.marketState.toBase58(),
+          orderPda.toBase58(),
+        ],
+        "cancelling order",
+      );
       setStatus("Order cancelled");
       await refreshData();
     } catch (error) {
@@ -895,52 +928,62 @@ export function SolanaClobPanel({
     buildCancelRemainingAccounts,
     lastOrderId,
     refreshData,
-    submitTransaction,
+    submitInstructions,
+    clobProgramId,
     wallet.publicKey,
-    writablePrograms,
+    wallet.session,
   ]);
 
   const handleClaim = useCallback(async () => {
-    const clobProgram = writablePrograms?.goldClobMarket;
-    if (!clobProgram || !wallet.publicKey || !activeMarket) {
+    if (!wallet.publicKey || !activeMarket) {
       setStatus("Connect wallet to claim");
       return;
     }
 
     try {
-      const clobAccounts = clobProgram.account as Record<
-        string,
-        AccountNamespaceFetcher
-      >;
+      if (!wallet.session) {
+        setStatus("Connect wallet to claim");
+        return;
+      }
+      const walletSigner = createWalletTransactionSigner(wallet.session).signer;
       const userBalance = findUserBalancePda(
-        clobProgram.programId,
+        clobProgramId,
         activeMarket.marketState,
         wallet.publicKey,
       );
-      const configPda = findClobConfigPda(clobProgram.programId);
-      const config = await clobAccounts.marketConfig.fetch(configPda);
+      const configPda = findClobConfigPda(clobProgramId);
+      const config = await fetchMaybeDecodedAccount(connection, configPda, (data) =>
+        clobMarketConfigDecoder.decode(data),
+      );
+      if (!config) {
+        throw new Error("Market config not found");
+      }
 
-      const tx = await clobProgram.methods
-        .claim()
-        .accountsPartial({
-          marketState: activeMarket.marketState,
-          duelState: activeMarket.duelState,
-          userBalance,
-          config: configPda,
-          marketMaker: config.marketMaker as PublicKey,
-          vault: activeMarket.vault,
-          user: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .transaction();
+      const instruction = getClaimInstruction({
+        config: toAddress(configPda.toBase58()),
+        duelState: toAddress(activeMarket.duelState.toBase58()),
+        marketMaker: toAddress(config.marketMaker),
+        marketState: toAddress(activeMarket.marketState.toBase58()),
+        user: walletSigner,
+        userBalance: toAddress(userBalance.toBase58()),
+        vault: toAddress(activeMarket.vault.toBase58()),
+      });
 
-      await submitTransaction(tx, "claiming winnings");
+      await submitInstructions(
+        [instruction],
+        [
+          wallet.publicKey.toBase58(),
+          activeMarket.marketState.toBase58(),
+          activeMarket.vault.toBase58(),
+        ],
+        "claiming winnings",
+      );
       setStatus("Claim complete");
       await refreshData();
     } catch (error) {
       setStatus(`Claim failed: ${(error as Error).message}`);
     }
-  }, [activeMarket, refreshData, submitTransaction, wallet.publicKey, writablePrograms]);
+  }, [activeMarket, refreshData, submitInstructions, clobProgramId, connection, wallet.publicKey, wallet.session]);
 
   useEffect(() => {
     if (!onMarketSnapshot) {

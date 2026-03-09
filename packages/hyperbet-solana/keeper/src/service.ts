@@ -2,7 +2,7 @@ import { Buffer } from "buffer";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { type Idl, type Program } from "@coral-xyz/anchor";
+import { type Program } from "@coral-xyz/anchor";
 import {
   type Connection,
   PublicKey,
@@ -20,6 +20,8 @@ import {
   GOLD_PERPS_MARKET_PROGRAM_ID,
   readKeypair,
 } from "./common";
+import type { FightOracle } from "./idl/fight_oracle";
+import type { GoldClobMarket } from "./idl/gold_clob_market";
 import {
   deleteIdentityMembers,
   loadAll,
@@ -691,11 +693,12 @@ function extractSenderProgramIds(
   if (transaction instanceof VersionedTransaction) {
     const accountKeys = transaction.message.staticAccountKeys;
     return transaction.message.compiledInstructions.map(
-      (instruction) =>
+      (instruction: { programIdIndex: number }) =>
         accountKeys[instruction.programIdIndex]?.toBase58() ?? "",
     );
   }
-  return transaction.instructions.map((instruction) =>
+  return transaction.instructions.map(
+    (instruction: { programId: PublicKey }) =>
     instruction.programId.toBase58(),
   );
 }
@@ -1106,8 +1109,8 @@ const solanaKeyRef =
 
 let solanaCtx: {
   connection: Connection;
-  fightProgram: Program<Idl>;
-  marketProgram: Program<Idl>;
+  fightProgram: Program<FightOracle>;
+  marketProgram: Program<GoldClobMarket>;
   marketProgramId: PublicKey;
 } | null = null;
 

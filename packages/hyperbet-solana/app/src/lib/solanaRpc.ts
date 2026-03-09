@@ -1,13 +1,3 @@
-import { Buffer } from "buffer";
-
-import type {
-  Connection,
-  Transaction,
-  TransactionInstruction,
-  VersionedTransaction,
-} from "@solana/web3.js";
-import { ComputeBudgetProgram } from "@solana/web3.js";
-
 interface PriorityFeeResult {
   priorityFeeEstimate?: number;
 }
@@ -25,13 +15,6 @@ interface JsonRpcSuccess<T> {
 }
 
 type JsonRpcResponse<T> = JsonRpcFailure | JsonRpcSuccess<T>;
-
-interface LatestBlockhashResult {
-  value: {
-    blockhash: string;
-    lastValidBlockHeight: number;
-  };
-}
 
 interface SignatureStatusesResult {
   value: Array<{
@@ -128,24 +111,6 @@ async function callJsonRpc<T>(
   return payload.result;
 }
 
-export async function getLatestBlockhashViaRpc(
-  connection: Connection,
-): Promise<{
-  blockhash: string;
-  lastValidBlockHeight: number;
-}> {
-  try {
-    return await connection.getLatestBlockhash("confirmed");
-  } catch {
-    const result = await callJsonRpc<LatestBlockhashResult>(
-      connection.rpcEndpoint,
-      "getLatestBlockhash",
-      [{ commitment: "confirmed" }],
-    );
-    return result.value;
-  }
-}
-
 export async function fetchPriorityFeeEstimate(
   rpcEndpoint: string,
   accountKeys: string[] = [],
@@ -165,30 +130,28 @@ export async function fetchPriorityFeeEstimate(
   }
 }
 
-export async function buildPriorityFeeInstructions(
+export async function buildPriorityFeeConfig(
   rpcEndpoint: string,
   accountKeys: string[] = [],
   computeUnitLimit = DEFAULT_COMPUTE_UNIT_LIMIT,
-): Promise<TransactionInstruction[]> {
+): Promise<{ computeUnitLimit: bigint; computeUnitPrice: bigint }> {
   const microLamports = await fetchPriorityFeeEstimate(rpcEndpoint, accountKeys);
-  return [
-    ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit }),
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports }),
-  ];
+  return {
+    computeUnitLimit: BigInt(computeUnitLimit),
+    computeUnitPrice: BigInt(microLamports),
+  };
 }
 
-async function sendViaKeeperSenderProxy(
+async function sendWireViaKeeperSenderProxy(
   gameApiUrl: string,
-  transaction: Transaction | VersionedTransaction,
+  wireTransaction: string,
 ): Promise<string> {
-  const serialized = transaction.serialize();
-  const encoded = Buffer.from(serialized).toString("base64");
   const response = await fetch(
     `${gameApiUrl.replace(/\/$/, "")}/api/proxy/solana/sender`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ transaction: encoded }),
+      body: JSON.stringify({ transaction: wireTransaction }),
     },
   );
   if (!response.ok) {
@@ -204,9 +167,9 @@ async function sendViaKeeperSenderProxy(
   return body.signature;
 }
 
-export async function sendRawTransactionViaRpc(
-  connection: Connection,
-  transaction: Transaction | VersionedTransaction,
+export async function sendWireTransactionViaRpc(
+  rpcEndpoint: string,
+  wireTransaction: string,
   options: {
     gameApiUrl?: string;
     useHeliusSender?: boolean;
@@ -216,69 +179,34 @@ export async function sendRawTransactionViaRpc(
 
   if (useHeliusSender && gameApiUrl) {
     try {
-      return await sendViaKeeperSenderProxy(gameApiUrl, transaction);
+      return await sendWireViaKeeperSenderProxy(gameApiUrl, wireTransaction);
     } catch {
       // Fall through to direct RPC submission if the proxy is unavailable.
     }
   }
 
-  const serialized = transaction.serialize();
-  try {
-    return await connection.sendRawTransaction(serialized, {
+  return callJsonRpc<string>(rpcEndpoint, "sendTransaction", [
+    wireTransaction,
+    {
+      encoding: "base64",
       preflightCommitment: "confirmed",
       skipPreflight: useHeliusSender,
       maxRetries: useHeliusSender ? 0 : 5,
-    });
-  } catch {
-    return callJsonRpc<string>(connection.rpcEndpoint, "sendTransaction", [
-      Buffer.from(serialized).toString("base64"),
-      {
-        encoding: "base64",
-        preflightCommitment: "confirmed",
-        skipPreflight: useHeliusSender,
-        maxRetries: useHeliusSender ? 0 : 5,
-      },
-    ]);
-  }
+    },
+  ]);
 }
 
-async function getSignatureStatusesViaConnection(
-  connection: Connection,
-  signature: string,
-): Promise<SignatureStatusesResult> {
-  try {
-    const result = await connection.getSignatureStatuses([signature], {
-      searchTransactionHistory: true,
-    });
-    return {
-      value: result.value.map((status) =>
-        status
-          ? {
-              err: status.err,
-              confirmationStatus: status.confirmationStatus ?? null,
-            }
-          : null,
-      ),
-    };
-  } catch {
-    return callJsonRpc<SignatureStatusesResult>(
-      connection.rpcEndpoint,
-      "getSignatureStatuses",
-      [[signature], { searchTransactionHistory: true }],
-    );
-  }
-}
-
-export async function confirmSignatureViaRpc(
-  connection: Connection,
+export async function confirmSignatureViaRpcEndpoint(
+  rpcEndpoint: string,
   signature: string,
   timeoutMs = 30_000,
 ): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    const result = await getSignatureStatusesViaConnection(
-      connection,
-      signature,
+    const result = await callJsonRpc<SignatureStatusesResult>(
+      rpcEndpoint,
+      "getSignatureStatuses",
+      [[signature], { searchTransactionHistory: true }],
     );
     const status = result.value[0];
     if (status?.err) {
