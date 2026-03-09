@@ -48,7 +48,7 @@ function resolveAnchorWsUrl(providerUrl: string): string {
 export async function getLatestBlockhashWithRetries(
   connection: anchor.web3.Connection,
   commitment: anchor.web3.Commitment = DEFAULT_COMMITMENT,
-  maxAttempts = 8,
+  maxAttempts = 16,
 ): Promise<anchor.web3.BlockhashWithExpiryBlockHeight> {
   let lastError: unknown = null;
 
@@ -58,7 +58,7 @@ export async function getLatestBlockhashWithRetries(
     } catch (error) {
       lastError = error;
       if (attempt < maxAttempts) {
-        await sleep(200 * attempt);
+        await sleep(Math.min(2_000, 250 * attempt));
       }
     }
   }

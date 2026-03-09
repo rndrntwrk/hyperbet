@@ -23,7 +23,7 @@ import { configureAnchorTests } from "./test-anchor";
 import { FightOracle } from "../target/types/fight_oracle";
 import { GoldClobMarket } from "../target/types/gold_clob_market";
 
-describe("gold-betting-demo", () => {
+describe("hyperbet-bsc", () => {
   const provider = configureAnchorTests();
   anchor.setProvider(provider);
 

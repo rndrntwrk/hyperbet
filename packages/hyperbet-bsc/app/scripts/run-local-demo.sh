@@ -50,7 +50,7 @@ kill_listeners "$APP_PORT"
 kill_listeners 8899
 
 echo "[local-demo] building anchor programs"
-bun run --cwd "$ANCHOR_DIR" build >/tmp/gold-betting-demo-local-build.log 2>&1
+bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-bsc-local-build.log 2>&1
 
 IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
 IDL_CLOB_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_clob_market.json" 2>/dev/null || true)"
@@ -79,7 +79,7 @@ if ! wait_for_rpc; then
 fi
 
 echo "[local-demo] seeding local state + writing app/.env.e2e"
-bun run "$APP_DIR/tests/e2e/setup-localnet.ts" >/tmp/gold-betting-demo-local-seed.log
+bun run "$APP_DIR/tests/e2e/setup-localnet.ts" >/tmp/hyperbet-bsc-local-seed.log
 
 echo "[local-demo] starting app at http://127.0.0.1:$APP_PORT"
 echo "[local-demo] validator log: $VALIDATOR_LOG"

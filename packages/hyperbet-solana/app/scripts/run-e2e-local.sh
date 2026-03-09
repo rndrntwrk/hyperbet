@@ -183,10 +183,10 @@ kill_listeners "$ANVIL_PORT"
 rm -f "$KEEPER_DB_PATH" "${KEEPER_DB_PATH}-shm" "${KEEPER_DB_PATH}-wal"
 
 echo "[e2e] building anchor programs"
-bun run --cwd "$ANCHOR_DIR" build >/tmp/gold-betting-demo-e2e-build.log 2>&1
+bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-solana-e2e-build.log 2>&1
 
 echo "[e2e] compiling evm contracts"
-bun run --cwd "$EVM_DIR" compile >/tmp/gold-betting-demo-e2e-evm-build.log 2>&1
+bun run --cwd "$EVM_DIR" compile >/tmp/hyperbet-solana-e2e-evm-build.log 2>&1
 
 IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
 IDL_MARKET_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_perps_market.json" 2>/dev/null || true)"

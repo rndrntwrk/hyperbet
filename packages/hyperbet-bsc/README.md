@@ -1,13 +1,13 @@
-# GOLD Binary Fight Demo (Anchor + Vite + Helius)
+# Hyperbet BSC
 
-Standalone demo package for a binary YES/NO betting market settled from a separate fight oracle.
+BSC-focused Hyperbet package for betting, CLOB, and futures interfaces backed by the shared duel oracle.
 
 ## What this includes
 
 - `anchor/programs/fight_oracle`: on-chain match lifecycle and winner posting.
 - `anchor/programs/gold_clob_market`: on-chain native-SOL CLOB market for binary prediction trading and winner claims.
 - `anchor/programs/gold_perps_market`: on-chain perps market used by the models / futures view.
-- `anchor/tests/gold-betting-demo.ts`: local end-to-end tests using mock GOLD token accounts and local validator.
+- `anchor/tests/hyperbet.ts`: local end-to-end tests using mock GOLD token accounts and local validator.
 - `app`: standalone Vite app for wallet connect, market creation, bet placement, Jupiter conversion (SOL/USDC -> GOLD), settlement, and claiming.
 - `keeper`: CLI automation scripts for market-maker seeding and oracle resolution, using Helius RPC.
   - includes a market bot that keeps rounds running, resolves finished rounds, and seeds liquidity.
@@ -30,12 +30,12 @@ Standalone demo package for a binary YES/NO betting market settled from a separa
 - GOLD perps program id: `HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik`
 - Mainnet GOLD mint: `DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump`
 
-Public contract metadata now lives in `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-bsc/deployments/contracts.json`.
+Public contract metadata now lives in `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-bsc/deployments/contracts.json`.
 That file is the shared source of truth for app defaults, keeper defaults, local scripts, and EVM deploy receipt syncing.
 
 ## Local E2E tests (Anchor + mock GOLD)
 
-From `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-bsc/anchor`:
+From `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-bsc/anchor`:
 
 ```bash
 bun install
@@ -64,7 +64,7 @@ bun run audit:strict
 
 ## UI E2E tests (headless wallet + mock GOLD localnet)
 
-From `/Users/shawwalters/eliza-workspace/hyperscape/packages/hyperbet-bsc/app`:
+From `/Users/shawwalters/eliza-workspace/hyperbet/packages/hyperbet-bsc/app`:
 
 ```bash
 bun run test:e2e
