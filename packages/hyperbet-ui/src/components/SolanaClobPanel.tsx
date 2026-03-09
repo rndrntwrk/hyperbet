@@ -307,22 +307,9 @@ export function SolanaClobPanel({
         amountTooLow: "数量必须大于 0",
         orderPlaced: "订单已提交",
         orderFailed: (message: string) => `下单失败：${message}`,
-        noActiveOrder: "没有可取消的活动订单",
-        orderCancelled: "订单已取消",
-        cancelFailed: (message: string) => `取消失败：${message}`,
         connectWalletToClaim: "连接钱包后即可领取",
         claimComplete: "领取完成",
         claimFailed: (message: string) => `领取失败：${message}`,
-        refreshing: "刷新中...",
-        refresh: "刷新",
-        duelKey: "对局键",
-        close: "封盘时间",
-        spread: "价差",
-        pending: "待定",
-        yourAShares: "你的 A 份额",
-        yourBShares: "你的 B 份额",
-        depth: "深度",
-        cancelLastOrder: "取消上一笔订单",
         claim: "领取",
         limitPrice: "限价",
         hideAdminPanel: "隐藏管理面板",
@@ -338,7 +325,6 @@ export function SolanaClobPanel({
         stageSending: "发送交易",
         stageConfirming: "确认交易",
         placingOrderContext: "下单",
-        cancellingOrderContext: "取消订单",
         claimingWinningsContext: "领取收益",
       }
       : {
@@ -358,22 +344,9 @@ export function SolanaClobPanel({
         amountTooLow: "Amount must be greater than zero",
         orderPlaced: "Order placed",
         orderFailed: (message: string) => `Order failed: ${message}`,
-        noActiveOrder: "No active order to cancel",
-        orderCancelled: "Order cancelled",
-        cancelFailed: (message: string) => `Cancel failed: ${message}`,
         connectWalletToClaim: "Connect wallet to claim",
         claimComplete: "Claim complete",
         claimFailed: (message: string) => `Claim failed: ${message}`,
-        refreshing: "Refreshing...",
-        refresh: "Refresh",
-        duelKey: "duel key",
-        close: "close",
-        spread: "spread",
-        pending: "pending",
-        yourAShares: "your A shares",
-        yourBShares: "your B shares",
-        depth: "depth",
-        cancelLastOrder: "Cancel Last Order",
         claim: "Claim",
         limitPrice: "Limit price",
         hideAdminPanel: "Hide Admin Panel",
@@ -389,7 +362,6 @@ export function SolanaClobPanel({
         stageSending: "sending transaction",
         stageConfirming: "confirming transaction",
         placingOrderContext: "placing order",
-        cancellingOrderContext: "cancelling order",
         claimingWinningsContext: "claiming winnings",
       };
 
@@ -878,53 +850,7 @@ export function SolanaClobPanel({
     [],
   );
 
-  const buildCancelRemainingAccounts = useCallback(
-    async (
-      clobProgram: any,
-      marketState: PublicKey,
-      orderId: bigint,
-    ): Promise<{
-      order: any;
-      orderPda: PublicKey;
-      priceLevelPda: PublicKey;
-      metas: AccountMeta[];
-    }> => {
-      const orderPda = findOrderPda(
-        clobProgram.programId,
-        marketState,
-        orderId,
-      );
-      const order = await clobProgram.account.order.fetch(orderPda);
-      const priceLevelPda = findPriceLevelPda(
-        clobProgram.programId,
-        marketState,
-        Number(order.side),
-        Number(order.price),
-      );
-      const metas: AccountMeta[] = [];
 
-      const prevOrderId = asBigInt(order.prevOrderId);
-      if (prevOrderId > 0n) {
-        metas.push({
-          pubkey: findOrderPda(clobProgram.programId, marketState, prevOrderId),
-          isSigner: false,
-          isWritable: true,
-        });
-      }
-
-      const nextOrderId = asBigInt(order.nextOrderId);
-      if (nextOrderId > 0n) {
-        metas.push({
-          pubkey: findOrderPda(clobProgram.programId, marketState, nextOrderId),
-          isSigner: false,
-          isWritable: true,
-        });
-      }
-
-      return { order, orderPda, priceLevelPda, metas };
-    },
-    [],
-  );
 
   const handlePlaceOrder = useCallback(async () => {
     const clobProgram: any = writablePrograms?.goldClobMarket;
@@ -1029,55 +955,7 @@ export function SolanaClobPanel({
     writablePrograms,
   ]);
 
-  const handleCancelLastOrder = useCallback(async () => {
-    const clobProgram: any = writablePrograms?.goldClobMarket;
-    if (!clobProgram || !wallet.publicKey || !activeMarket || !lastOrderId) {
-      setStatus(copy.noActiveOrder);
-      return;
-    }
 
-    try {
-      const { order, orderPda, priceLevelPda, metas } =
-        await buildCancelRemainingAccounts(
-          clobProgram,
-          activeMarket.marketState,
-          lastOrderId,
-        );
-
-      const tx = await clobProgram.methods
-        .cancelOrder(
-          new BN(lastOrderId.toString()),
-          Number(order.side),
-          Number(order.price),
-        )
-        .accountsPartial({
-          marketState: activeMarket.marketState,
-          duelState: activeMarket.duelState,
-          order: orderPda,
-          priceLevel: priceLevelPda,
-          vault: activeMarket.vault,
-          user: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .remainingAccounts(metas)
-        .transaction();
-
-      await submitTransaction(tx, copy.cancellingOrderContext);
-      setStatus(copy.orderCancelled);
-      await refreshData();
-    } catch (error) {
-      setStatus(copy.cancelFailed((error as Error).message));
-    }
-  }, [
-    activeMarket,
-    buildCancelRemainingAccounts,
-    copy,
-    lastOrderId,
-    refreshData,
-    submitTransaction,
-    wallet.publicKey,
-    writablePrograms,
-  ]);
 
   const handleClaim = useCallback(async () => {
     const clobProgram: any = writablePrograms?.goldClobMarket;
@@ -1220,49 +1098,21 @@ export function SolanaClobPanel({
             }}
           >
             <span>{status}</span>
-            <span>{isRefreshing ? copy.refreshing : duelLabel}</span>
+            <span>{duelLabel}</span>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
+          <button
+            type="button"
+            onClick={() => void handleClaim()}
+            disabled={!canClaim}
+            style={buttonStyle(
+              "#0f3f2b",
+              "rgba(34,197,94,0.35)",
+              !canClaim,
+            )}
           >
-            <button
-              data-testid={isE2eMode ? "solana-clob-refresh" : undefined}
-              type="button"
-              onClick={() => void refreshData()}
-              style={buttonStyle("#171717", "rgba(255,255,255,0.14)")}
-            >
-              {copy.refresh}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCancelLastOrder()}
-              disabled={!lastOrderId}
-              style={buttonStyle(
-                "#1f2937",
-                "rgba(148,163,184,0.32)",
-                !lastOrderId,
-              )}
-            >
-              {copy.cancelLastOrder}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleClaim()}
-              disabled={!canClaim}
-              style={buttonStyle(
-                "#0f3f2b",
-                "rgba(34,197,94,0.35)",
-                !canClaim,
-              )}
-            >
-              {copy.claim}
-            </button>
-          </div>
+            {copy.claim}
+          </button>
         </div>
       </PredictionMarketPanel>
       <div

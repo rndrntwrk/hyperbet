@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { resolveUiLocale, type UiLocale } from "@hyperbet/ui/i18n";
-import { useAccount, useChainId, useSwitchChain, useWalletClient } from "wagmi";
+import { useAccount, useWalletClient } from "wagmi";
 import {
   createWalletClient,
   formatUnits,
@@ -21,19 +21,15 @@ import { privateKeyToAccount } from "viem/accounts";
 import { useChain } from "../lib/ChainContext";
 import { getEvmChainConfig } from "../lib/chainConfig";
 import {
-  cancelOrder,
   claimWinnings,
   createEvmPublicClient,
   createUnlockedRpcWalletClient,
   getFeeBps,
   getMarketMeta,
   getNativeBalance,
-  getOrder,
   getOrderBook,
   getPosition,
-  getRecentOrders,
   getRecentTrades,
-  syncMarketFromOracle,
   placeOrder,
   toDuelKeyHex,
   type MarketMeta,
@@ -84,23 +80,14 @@ function getEvmPanelCopy(locale: UiLocale) {
       bettingLocked: "下注已锁定",
       marketOpen: "市场开放中",
       refreshFailed: (message: string) => `刷新失败：${message}`,
-      headlessWalletPinned: "无头 EVM 钱包已固定到配置的 RPC",
-      chainSwitchFailed: (message: string) => `切换网络失败：${message}`,
-      syncingMarket: "正在从对决预言机同步市场...",
       walletNotConnected: "钱包未连接",
-      syncFailed: (message: string) => `同步失败：${message}`,
       amountTooLow: "数量必须大于 0",
       placingOrder: "正在下单...",
       orderPlaced: "订单已提交",
       orderFailed: (message: string) => `下单失败：${message}`,
-      noActiveOrder: "没有可取消的活动订单",
-      cancellingOrder: "正在取消订单...",
-      orderCancelled: "订单已取消",
-      cancelFailed: (message: string) => `取消失败：${message}`,
       claimingSettlement: "正在领取结算...",
       claimComplete: "领取完成",
       claimFailed: (message: string) => `领取失败：${message}`,
-      switchToChain: (name: string) => `切换到 ${name}`,
       duel: "对局",
       pending: "待定",
       wallet: "钱包",
@@ -108,10 +95,6 @@ function getEvmPanelCopy(locale: UiLocale) {
       price: "价格",
       balance: "余额",
       yourShares: "你的 A / B 份额",
-      refreshing: "刷新中...",
-      refresh: "刷新",
-      syncOracle: "同步预言机",
-      cancelLastOrder: "取消上一笔订单",
       claim: "领取",
     };
   }
@@ -124,23 +107,14 @@ function getEvmPanelCopy(locale: UiLocale) {
     bettingLocked: "Betting locked",
     marketOpen: "Market open",
     refreshFailed: (message: string) => `Refresh failed: ${message}`,
-    headlessWalletPinned: "Headless EVM wallet is pinned to configured RPC",
-    chainSwitchFailed: (message: string) => `Chain switch failed: ${message}`,
-    syncingMarket: "Syncing market from duel oracle...",
     walletNotConnected: "Wallet not connected",
-    syncFailed: (message: string) => `Sync failed: ${message}`,
     amountTooLow: "Amount must be greater than zero",
     placingOrder: "Placing order...",
     orderPlaced: "Order placed",
     orderFailed: (message: string) => `Order failed: ${message}`,
-    noActiveOrder: "No active order to cancel",
-    cancellingOrder: "Cancelling order...",
-    orderCancelled: "Order cancelled",
-    cancelFailed: (message: string) => `Cancel failed: ${message}`,
     claimingSettlement: "Claiming settlement...",
     claimComplete: "Claim complete",
     claimFailed: (message: string) => `Claim failed: ${message}`,
-    switchToChain: (name: string) => `Switch to ${name}`,
     duel: "Duel",
     pending: "pending",
     wallet: "Wallet",
@@ -148,10 +122,6 @@ function getEvmPanelCopy(locale: UiLocale) {
     price: "Price",
     balance: "Balance",
     yourShares: "Your A / B",
-    refreshing: "Refreshing...",
-    refresh: "Refresh",
-    syncOracle: "Sync Oracle",
-    cancelLastOrder: "Cancel Last Order",
     claim: "Claim",
   };
 }
@@ -166,8 +136,6 @@ export function EvmBettingPanel({
   const copy = getEvmPanelCopy(resolvedLocale);
   const { activeChain } = useChain();
   const { address } = useAccount();
-  const connectedChainId = useChainId();
-  const { switchChainAsync } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
   const { state: streamingState } = useStreamingState();
   const isE2eMode = import.meta.env.MODE === "e2e";
@@ -263,10 +231,7 @@ export function EvmBettingPanel({
   const [bids, setBids] = useState<OrderLevel[]>([]);
   const [asks, setAsks] = useState<OrderLevel[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastOrderId, setLastOrderId] = useState<bigint | null>(null);
   const [lastOrderTx, setLastOrderTx] = useState("-");
-  const [lastResolveTx, setLastResolveTx] = useState("-");
   const [lastClaimTx, setLastClaimTx] = useState("-");
 
   const lastSnapshotRef = useRef<{ a: bigint; b: bigint }>({ a: 0n, b: 0n });
@@ -285,11 +250,7 @@ export function EvmBettingPanel({
     return createEvmPublicClient(chainConfig);
   }, [chainConfig]);
 
-  const isWrongChain = e2eWalletClient
-    ? false
-    : chainConfig
-      ? connectedChainId !== chainConfig.evmChainId
-      : false;
+
 
   const updateChartAndTrades = useCallback(
     (nextA: bigint, nextB: bigint) => {
@@ -347,7 +308,6 @@ export function EvmBettingPanel({
 
   const refreshData = useCallback(async () => {
     if (!publicClient || !chainConfig) return;
-    setIsRefreshing(true);
 
     try {
       if (!duelKeyHex) {
@@ -380,7 +340,7 @@ export function EvmBettingPanel({
 
       setMarketMeta(market);
       updateChartAndTrades(market.totalAShares, market.totalBShares);
-      const [feeBpsResult, orderBookResult, tradesResult, ordersResult] =
+      const [feeBpsResult, orderBookResult, tradesResult] =
         await Promise.allSettled([
           getFeeBps(publicClient, contractAddr),
           getOrderBook(
@@ -391,7 +351,6 @@ export function EvmBettingPanel({
             market,
           ),
           getRecentTrades(publicClient, contractAddr, market.marketKey),
-          getRecentOrders(publicClient, contractAddr, market.marketKey),
         ]);
 
       if (feeBpsResult.status === "fulfilled") {
@@ -432,9 +391,6 @@ export function EvmBettingPanel({
         setRecentTrades([]);
       }
 
-      const orders =
-        ordersResult.status === "fulfilled" ? ordersResult.value : [];
-
       if (effectiveAddress) {
         const [userPosition, balance] = await Promise.all([
           getPosition(
@@ -447,28 +403,9 @@ export function EvmBettingPanel({
         ]);
         setPosition(userPosition);
         setNativeBalance(balance);
-
-        const candidateOrders = orders
-          .filter((order) => order.maker === effectiveAddress)
-          .map((order) => order.orderId);
-        let nextLastOrderId: bigint | null = null;
-        for (const orderId of candidateOrders) {
-          const order = await getOrder(
-            publicClient,
-            contractAddr,
-            market.marketKey,
-            orderId,
-          );
-          if (order.active && order.amount > order.filled) {
-            nextLastOrderId = orderId;
-            break;
-          }
-        }
-        setLastOrderId(nextLastOrderId);
       } else {
         setPosition(null);
         setNativeBalance(0n);
-        setLastOrderId(null);
       }
 
       if (market.status === "RESOLVED") {
@@ -488,8 +425,6 @@ export function EvmBettingPanel({
       }
     } catch (error) {
       setStatus(copy.refreshFailed((error as Error).message));
-    } finally {
-      setIsRefreshing(false);
     }
   }, [
     chainConfig,
@@ -509,55 +444,7 @@ export function EvmBettingPanel({
     return () => clearInterval(id);
   }, [refreshData]);
 
-  const handleSwitchChain = async () => {
-    if (!chainConfig) return;
-    if (e2eWalletClient) {
-      setStatus(copy.headlessWalletPinned);
-      return;
-    }
-    try {
-      await switchChainAsync({ chainId: chainConfig.evmChainId });
-    } catch (error) {
-      setStatus(copy.chainSwitchFailed((error as Error).message));
-    }
-  };
 
-  const handleSyncMarket = useCallback(async () => {
-    if (
-      !effectiveWalletClient ||
-      !effectiveAddress ||
-      !chainConfig ||
-      !duelKeyHex
-    ) {
-      setStatus(copy.walletNotConnected);
-      return;
-    }
-
-    try {
-      const duelKey = toDuelKeyHex(duelKeyHex);
-      setStatus(copy.syncingMarket);
-      const tx = await syncMarketFromOracle(
-        effectiveWalletClient,
-        chainConfig.goldClobAddress as Address,
-        duelKey,
-        MARKET_KIND_DUEL_WINNER,
-        effectiveAddress,
-      );
-      setLastResolveTx(tx);
-      await publicClient?.waitForTransactionReceipt({ hash: tx });
-      await refreshData();
-    } catch (error) {
-      setStatus(copy.syncFailed((error as Error).message));
-    }
-  }, [
-    chainConfig,
-    copy,
-    duelKeyHex,
-    effectiveAddress,
-    effectiveWalletClient,
-    publicClient,
-    refreshData,
-  ]);
 
   const handlePlaceOrder = useCallback(async () => {
     if (
@@ -621,45 +508,7 @@ export function EvmBettingPanel({
     tradeFeeBps,
   ]);
 
-  const handleCancelLastOrder = useCallback(async () => {
-    if (
-      !effectiveWalletClient ||
-      !effectiveAddress ||
-      !chainConfig ||
-      !duelKeyHex ||
-      lastOrderId === null
-    ) {
-      setStatus(copy.noActiveOrder);
-      return;
-    }
 
-    try {
-      const duelKey = toDuelKeyHex(duelKeyHex);
-      setStatus(copy.cancellingOrder);
-      const tx = await cancelOrder(
-        effectiveWalletClient,
-        chainConfig.goldClobAddress as Address,
-        duelKey,
-        MARKET_KIND_DUEL_WINNER,
-        lastOrderId,
-        effectiveAddress,
-      );
-      await publicClient?.waitForTransactionReceipt({ hash: tx });
-      setStatus(copy.orderCancelled);
-      await refreshData();
-    } catch (error) {
-      setStatus(copy.cancelFailed((error as Error).message));
-    }
-  }, [
-    chainConfig,
-    copy,
-    duelKeyHex,
-    effectiveAddress,
-    effectiveWalletClient,
-    lastOrderId,
-    publicClient,
-    refreshData,
-  ]);
 
   const handleClaim = useCallback(async () => {
     if (
@@ -764,60 +613,15 @@ export function EvmBettingPanel({
             fontSize: 12,
           }}
         >
-          {isWrongChain && (
-            <button
-              type="button"
-              onClick={() => void handleSwitchChain()}
-              style={buttonStyle("#1f2937", "rgba(148,163,184,0.32)")}
-            >
-              {copy.switchToChain(chainConfig?.shortName ?? "EVM")}
-            </button>
-          )}
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              data-testid={isE2eMode ? "evm-refresh-market" : undefined}
-              type="button"
-              onClick={() => void refreshData()}
-              style={buttonStyle("#171717", "rgba(255,255,255,0.14)")}
-            >
-              {isRefreshing ? copy.refreshing : copy.refresh}
-            </button>
-            <button
-              data-testid={isE2eMode ? "evm-resolve-match" : undefined}
-              type="button"
-              onClick={() => void handleSyncMarket()}
-              disabled={!walletConnected || !duelKeyHex}
-              style={buttonStyle(
-                "#1f2937",
-                "rgba(148,163,184,0.32)",
-                !walletConnected || !duelKeyHex,
-              )}
-            >
-              {copy.syncOracle}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCancelLastOrder()}
-              disabled={lastOrderId === null}
-              style={buttonStyle(
-                "#1f2937",
-                "rgba(148,163,184,0.32)",
-                lastOrderId === null,
-              )}
-            >
-              {copy.cancelLastOrder}
-            </button>
-            <button
-              data-testid={isE2eMode ? "evm-claim-payout" : undefined}
-              type="button"
-              onClick={() => void handleClaim()}
-              disabled={!canClaim}
-              style={buttonStyle("#0f3f2b", "rgba(34,197,94,0.35)", !canClaim)}
-            >
-              {copy.claim}
-            </button>
-          </div>
+          <button
+            data-testid={isE2eMode ? "evm-claim-payout" : undefined}
+            type="button"
+            onClick={() => void handleClaim()}
+            disabled={!canClaim}
+            style={buttonStyle("#0f3f2b", "rgba(34,197,94,0.35)", !canClaim)}
+          >
+            {copy.claim}
+          </button>
           {isE2eMode ? (
             <div data-testid="evm-wallet-debug">{e2eWalletDebug}</div>
           ) : null}
@@ -852,7 +656,6 @@ export function EvmBettingPanel({
           }}
         >
           <div data-testid="evm-last-order-tx">{lastOrderTx}</div>
-          <div data-testid="evm-last-resolve-tx">{lastResolveTx}</div>
           <div data-testid="evm-last-claim-tx">{lastClaimTx}</div>
         </div>
       ) : null}
