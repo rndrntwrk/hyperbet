@@ -46,7 +46,7 @@ describe("gold_clob_market security regressions", () => {
       status: duelStatusBettingOpen(),
       betOpenTs: now - 10,
       betCloseTs: now + 300,
-      duelStartTs: now + 60,
+      duelStartTs: now + 360,
       metadataUri: "https://hyperscape.gg/tests/security/unauthorized",
     });
 
@@ -66,10 +66,7 @@ describe("gold_clob_market security regressions", () => {
       );
     }
 
-    const marketState = deriveMarketStatePda(
-      clobProgram.programId,
-      duelState,
-    );
+    const marketState = deriveMarketStatePda(clobProgram.programId, duelState);
     assert.strictEqual(
       await clobProgram.account.marketState.fetchNullable(marketState),
       null,
@@ -113,6 +110,53 @@ describe("gold_clob_market security regressions", () => {
       assert.ok(
         hasProgramError(error, "BettingClosed"),
         `expected BettingClosed, got ${String(error)}`,
+      );
+    }
+  });
+
+  it("rejects duel windows that close immediately or start before betting closes", async () => {
+    await ensureOracleReady(fightProgram, authority, authority.publicKey);
+    const now = Math.floor(Date.now() / 1000);
+
+    try {
+      await upsertDuel(
+        fightProgram,
+        authority,
+        uniqueDuelKey("instant-close"),
+        {
+          status: duelStatusBettingOpen(),
+          betOpenTs: now,
+          betCloseTs: now,
+          duelStartTs: now + 60,
+          metadataUri: "https://hyperscape.gg/tests/security/instant-close",
+        },
+      );
+      assert.fail("zero-length betting window was accepted");
+    } catch (error: unknown) {
+      assert.ok(
+        hasProgramError(error, "InvalidBetWindow"),
+        `expected InvalidBetWindow, got ${String(error)}`,
+      );
+    }
+
+    try {
+      await upsertDuel(
+        fightProgram,
+        authority,
+        uniqueDuelKey("duel-before-close"),
+        {
+          status: duelStatusBettingOpen(),
+          betOpenTs: now,
+          betCloseTs: now + 120,
+          duelStartTs: now + 60,
+          metadataUri: "https://hyperscape.gg/tests/security/duel-before-close",
+        },
+      );
+      assert.fail("duel start before bet close was accepted");
+    } catch (error: unknown) {
+      assert.ok(
+        hasProgramError(error, "InvalidLifecycleTransition"),
+        `expected InvalidLifecycleTransition, got ${String(error)}`,
       );
     }
   });

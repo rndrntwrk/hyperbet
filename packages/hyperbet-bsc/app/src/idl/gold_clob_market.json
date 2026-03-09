@@ -1238,6 +1238,14 @@
           {
             "name": "b_shares",
             "type": "u64"
+          },
+          {
+            "name": "a_stake",
+            "type": "u64"
+          },
+          {
+            "name": "b_stake",
+            "type": "u64"
           }
         ]
       }

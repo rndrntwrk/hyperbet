@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-03-09T04:29:11.674Z",
+  "network": {
+    "chainId": "31337",
+    "name": "unknown"
+  },
+  "oracle": "0x851356ae760d987E095750cCeb3bC6014560891C",
+  "clob": "0xf5059a5D33d5853360D16C683c16e67980206f36",
+  "scenarios": [
+    {
+      "name": "low_liquidity_fifo",
+      "details": {
+        "bestAsk": "650",
+        "restingHeadOrderId": "2",
+        "restingAmount": "1000",
+        "takerAShares": "1000"
+      }
+    },
+    {
+      "name": "same_block_mev_priority",
+      "details": {
+        "mevAShares": "1000",
+        "retailAShares": "0",
+        "restingBidHead": "3",
+        "restingBidAmount": "1000",
+        "bestBid": "450"
+      }
+    },
+    {
+      "name": "crossed_book_arbitrage",
+      "details": {
+        "combinedStake": "600",
+        "theoreticalGrossEdge": "400",
+        "clearedAShares": "0",
+        "clearedBShares": "0"
+      }
+    },
+    {
+      "name": "unauthorized_oracle_attack",
+      "details": {
+        "rejected": true,
+        "duel": "0x46d1af4265f4530c75b41282ed3b71617d3d435e96fe13b08848482173692f4f"
+      }
+    }
+  ]
+}

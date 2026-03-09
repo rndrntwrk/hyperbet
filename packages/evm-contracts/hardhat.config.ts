@@ -17,6 +17,8 @@ function normalizePrivateKey(raw?: string): string | undefined {
 }
 
 const privateKey = normalizePrivateKey(process.env.PRIVATE_KEY);
+const anvilPort = process.env.ANVIL_PORT || "18545";
+const anvilRpcUrl = process.env.ANVIL_RPC_URL || `http://127.0.0.1:${anvilPort}`;
 
 function resolveAccounts(networkKey: string): string[] {
   const specificKey = normalizePrivateKey(process.env[networkKey]);
@@ -40,6 +42,10 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       chainId: 31337,
+    },
+    anvil: {
+      url: anvilRpcUrl,
+      chainId: Number(process.env.ANVIL_CHAIN_ID || 31337),
     },
     bscTestnet: {
       url:

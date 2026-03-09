@@ -14,10 +14,7 @@ pub const DUEL_SEED: &[u8] = b"duel";
 pub mod fight_oracle {
     use super::*;
 
-    pub fn initialize_oracle(
-        ctx: Context<InitializeOracle>,
-        reporter: Pubkey,
-    ) -> Result<()> {
+    pub fn initialize_oracle(ctx: Context<InitializeOracle>, reporter: Pubkey) -> Result<()> {
         let oracle_config = &mut ctx.accounts.oracle_config;
 
         if oracle_config.authority != Pubkey::default() {
@@ -82,9 +79,9 @@ pub mod fight_oracle {
             ErrorCode::InvalidParticipants
         );
         require!(bet_open_ts > 0, ErrorCode::InvalidBetWindow);
-        require!(bet_close_ts >= bet_open_ts, ErrorCode::InvalidBetWindow);
+        require!(bet_close_ts > bet_open_ts, ErrorCode::InvalidBetWindow);
         require!(
-            duel_start_ts == 0 || duel_start_ts >= bet_open_ts,
+            duel_start_ts >= bet_close_ts,
             ErrorCode::InvalidLifecycleTransition
         );
 
@@ -142,7 +139,16 @@ pub mod fight_oracle {
                 && duel_state.status != DuelStatus::Cancelled,
             ErrorCode::DuelAlreadyFinalized
         );
+        require!(
+            duel_state.status != DuelStatus::Cancelled,
+            ErrorCode::DuelAlreadyCancelled
+        );
         duel_state.status = DuelStatus::Cancelled;
+        duel_state.winner = MarketSide::None;
+        duel_state.seed = 0;
+        duel_state.result_hash = [0_u8; 32];
+        duel_state.replay_hash = [0_u8; 32];
+        duel_state.duel_end_ts = 0;
         duel_state.metadata_uri = metadata_uri.clone();
 
         emit!(DuelCancelled {

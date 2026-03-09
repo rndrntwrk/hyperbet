@@ -149,6 +149,16 @@ function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
   }
 }
 
+function defaultAvaxRpcUrlForEnvironment(environment: Environment): string {
+  return environment === "mainnet-beta"
+    ? "https://api.avax.network/ext/bc/C/rpc"
+    : "https://api.avax-test.network/ext/bc/C/rpc";
+}
+
+function defaultAvaxChainIdForEnvironment(environment: Environment): number {
+  return environment === "mainnet-beta" ? 43114 : 43113;
+}
+
 function buildSolanaProgramConfig(
   environment: Environment,
 ): Pick<
@@ -181,6 +191,10 @@ function buildEvmConfig(
   | "baseChainId"
   | "baseGoldClobAddress"
   | "baseGoldTokenAddress"
+  | "avaxRpcUrl"
+  | "avaxChainId"
+  | "avaxGoldClobAddress"
+  | "avaxGoldTokenAddress"
 > {
   const defaults = resolveBettingEvmDefaults(
     asDeploymentEnvironment(environment),
@@ -194,6 +208,10 @@ function buildEvmConfig(
     baseChainId: defaults.base.chainId,
     baseGoldClobAddress: defaults.base.goldClobAddress,
     baseGoldTokenAddress: defaults.base.goldTokenAddress,
+    avaxRpcUrl: defaultAvaxRpcUrlForEnvironment(environment),
+    avaxChainId: defaultAvaxChainIdForEnvironment(environment),
+    avaxGoldClobAddress: "",
+    avaxGoldTokenAddress: "",
   };
 }
 
@@ -236,6 +254,10 @@ export interface EnvConfig {
   baseChainId: number;
   baseGoldClobAddress: string;
   baseGoldTokenAddress: string;
+  avaxRpcUrl: string;
+  avaxChainId: number;
+  avaxGoldClobAddress: string;
+  avaxGoldTokenAddress: string;
 
   walletConnectProjectId: string;
 }
@@ -470,6 +492,14 @@ export const CONFIG: EnvConfig = {
   baseGoldTokenAddress:
     readEnvString("VITE_BASE_GOLD_TOKEN_ADDRESS") ??
     baseEnvConfig.baseGoldTokenAddress,
+  avaxRpcUrl: readEnvString("VITE_AVAX_RPC_URL") ?? baseEnvConfig.avaxRpcUrl,
+  avaxChainId: readEnvNumber("VITE_AVAX_CHAIN_ID", baseEnvConfig.avaxChainId),
+  avaxGoldClobAddress:
+    readEnvString("VITE_AVAX_GOLD_CLOB_ADDRESS") ??
+    baseEnvConfig.avaxGoldClobAddress,
+  avaxGoldTokenAddress:
+    readEnvString("VITE_AVAX_GOLD_TOKEN_ADDRESS") ??
+    baseEnvConfig.avaxGoldTokenAddress,
   walletConnectProjectId:
     readEnvString("VITE_WALLETCONNECT_PROJECT_ID") ??
     baseEnvConfig.walletConnectProjectId,
@@ -562,7 +592,7 @@ function shouldUseLocalSolanaRpcProxy(): boolean {
   if (explicitOverride === "true") return true;
   if (explicitOverride === "false") return false;
   if (import.meta.env.MODE === "e2e") return true;
-  return import.meta.env.DEV && isLoopbackRpcUrl(CONFIG.rpcUrl);
+  return Boolean(import.meta.env.DEV && isLoopbackRpcUrl(CONFIG.rpcUrl));
 }
 
 function buildLocalSolanaProxyUrl(
@@ -618,7 +648,8 @@ export function getEvmRpcUrl(chain: "bsc" | "base"): string {
   if (shouldUseGameEvmRpcProxy()) {
     return `${GAME_API_URL}/api/proxy/evm/rpc?chain=${encodeURIComponent(chain)}`;
   }
-  return chain === "bsc" ? CONFIG.bscRpcUrl : CONFIG.baseRpcUrl;
+  if (chain === "bsc") return CONFIG.bscRpcUrl;
+  return CONFIG.baseRpcUrl;
 }
 
 export const BSC_RPC_URL: string = getEvmRpcUrl("bsc");
@@ -630,3 +661,11 @@ export const BASE_RPC_URL: string = getEvmRpcUrl("base");
 export const BASE_CHAIN_ID: number = CONFIG.baseChainId;
 export const BASE_GOLD_CLOB_ADDRESS: string = CONFIG.baseGoldClobAddress;
 export const BASE_GOLD_TOKEN_ADDRESS: string = CONFIG.baseGoldTokenAddress;
+
+export const AVAX_RPC_URL: string =
+  shouldUseGameEvmRpcProxy()
+    ? `${GAME_API_URL}/api/proxy/evm/rpc?chain=${encodeURIComponent("avax")}`
+    : CONFIG.avaxRpcUrl;
+export const AVAX_CHAIN_ID: number = CONFIG.avaxChainId;
+export const AVAX_GOLD_CLOB_ADDRESS: string = CONFIG.avaxGoldClobAddress;
+export const AVAX_GOLD_TOKEN_ADDRESS: string = CONFIG.avaxGoldTokenAddress;

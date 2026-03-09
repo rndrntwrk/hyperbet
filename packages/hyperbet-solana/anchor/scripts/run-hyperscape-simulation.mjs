@@ -218,6 +218,7 @@ async function main() {
   const tsxCliPath =
     [
       join(workspaceDir, "node_modules", ".bin", "tsx"),
+      join(workspaceDir, "..", "node_modules", ".bin", "tsx"),
       join(repoRoot, "node_modules", ".bin", "tsx"),
     ].find((candidate) => existsSync(candidate)) ?? null;
 
@@ -249,7 +250,7 @@ async function main() {
 
   if (!tsxCliPath) {
     throw new Error(
-      `Missing local tsx binary under ${workspaceDir}/node_modules/.bin/tsx or ${repoRoot}/node_modules/.bin/tsx`,
+      `Missing local tsx binary under ${workspaceDir}/node_modules/.bin/tsx, ${join(workspaceDir, "..", "node_modules", ".bin", "tsx")}, or ${repoRoot}/node_modules/.bin/tsx`,
     );
   }
 
@@ -328,7 +329,12 @@ async function main() {
       ledgerDir,
     ];
     for (const program of localnetPrograms) {
-      validatorArgs.push("--bpf-program", program.programId, program.soPath);
+      validatorArgs.push(
+        "--upgradeable-program",
+        program.programId,
+        program.soPath,
+        resolvedWalletPath,
+      );
     }
 
     validator = spawn("solana-test-validator", validatorArgs, {
@@ -349,6 +355,7 @@ async function main() {
         ANCHOR_WS_URL: wsUrl,
         SOLANA_URL: rpcUrl,
         ANCHOR_WALLET: resolvedWalletPath,
+        HYPERBET_SIMULATION_OUTPUT_DIR: join(workspaceDir, "simulations"),
       },
     );
     assertSuccess("solana simulation", simulate);

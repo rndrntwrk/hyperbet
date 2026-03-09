@@ -1,4 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
+import type { Address } from "@solana/kit";
 
 import { resolveBettingSolanaDeployment } from "../../../deployments";
 
@@ -385,18 +385,15 @@ export const CONFIG: EnvConfig = {
     readEnvString("VITE_JUPITER_BASE_URL") ?? baseEnvConfig.jupiterBaseUrl,
 };
 
-// Legacy Exports mapping to CONFIG
-export const GOLD_MAINNET_MINT = new PublicKey(
-  "DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump",
-);
+// Legacy exports retained for downstream callers that still import the token mints.
+export const GOLD_MAINNET_MINT =
+  "DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump" as Address;
 
-export const SOL_MINT = new PublicKey(
-  "So11111111111111111111111111111111111111112",
-);
+export const SOL_MINT =
+  "So11111111111111111111111111111111111111112" as Address;
 
-export const USDC_MINT = new PublicKey(
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-);
+export const USDC_MINT =
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as Address;
 
 export const DEFAULT_BET_WINDOW_SECONDS = CONFIG.betWindowSeconds;
 export const DEFAULT_NEW_ROUND_BET_WINDOW_SECONDS =

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const IS_LINUX = process.platform === "linux";
+const PW_HEADLESS = (process.env.PW_HEADLESS ?? "1") !== "0";
 const DEFAULT_LINUX_WEBGPU_ARGS = [
   "--enable-unsafe-webgpu",
   "--ozone-platform=x11",
@@ -15,6 +16,10 @@ const WEBGPU_LAUNCH_ARGS = [
   ...(IS_LINUX ? DEFAULT_LINUX_WEBGPU_ARGS : []),
   ...EXTRA_WEBGPU_ARGS,
 ];
+const DESKTOP_CHROMIUM = {
+  viewport: { width: 1280, height: 720 },
+  screen: { width: 1280, height: 720 },
+};
 
 // Playwright sets FORCE_COLOR; if NO_COLOR is also present it emits noisy startup warnings.
 delete process.env.NO_COLOR;
@@ -44,16 +49,15 @@ export default defineConfig({
     video: "retain-on-failure",
     actionTimeout: 30_000,
     navigationTimeout: 60_000,
-    // WebGPU is required for Hyperscape surfaces; run headed sessions.
-    headless: false,
-    launchOptions: WEBGPU_LAUNCH_ARGS.length
+    headless: PW_HEADLESS,
+    launchOptions: !PW_HEADLESS && WEBGPU_LAUNCH_ARGS.length
       ? { args: WEBGPU_LAUNCH_ARGS }
       : undefined,
   },
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: PW_HEADLESS ? DESKTOP_CHROMIUM : { ...devices["Desktop Chrome"] },
     },
   ],
 });

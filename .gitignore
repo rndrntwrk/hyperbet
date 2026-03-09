@@ -12,6 +12,8 @@ packages/*/.turbo
 packages/*/app/dist
 packages/*/app/.wrangler
 packages/*/app/test-results
+packages/*/app/.manual-keeper-*.sqlite*
+packages/*/app/tests/e2e/playwright-report/
 packages/*/app/.e2e-*
 packages/*/anchor/.anchor
 packages/*/anchor/.e2e-ledger*

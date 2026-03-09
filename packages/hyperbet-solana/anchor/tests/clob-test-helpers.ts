@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
+import BN from "bn.js";
 import {
   type AccountMeta,
   Keypair,
@@ -21,6 +22,7 @@ const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
 export const DUEL_WINNER_MARKET_KIND = 1;
 export const SIDE_BID = 1;
 export const SIDE_ASK = 2;
+const duelKeyCounters = new Map<string, number>();
 
 function u16Le(value: number): Buffer {
   const buffer = Buffer.alloc(2);
@@ -34,16 +36,15 @@ function u64Le(value: bigint | number): Buffer {
   return buffer;
 }
 
-function toBn(value: bigint | number): anchor.BN {
-  return new anchor.BN(BigInt(value).toString());
+function toBn(value: bigint | number): BN {
+  return new BN(BigInt(value).toString());
 }
 
 export function uniqueDuelKey(label: string): number[] {
+  const next = (duelKeyCounters.get(label) ?? 0) + 1;
+  duelKeyCounters.set(label, next);
   return Array.from(
-    crypto
-      .createHash("sha256")
-      .update(`${label}:${Date.now()}:${Math.random()}`)
-      .digest(),
+    crypto.createHash("sha256").update(`${label}:${next}`).digest(),
   );
 }
 
@@ -243,9 +244,9 @@ export async function ensureClobConfig(
   const marketMaker = options?.marketMaker ?? authority.publicKey;
   const tradeTreasuryFeeBps = options?.tradeTreasuryFeeBps ?? 100;
   const tradeMarketMakerFeeBps = options?.tradeMarketMakerFeeBps ?? 100;
-  const winningsMarketMakerFeeBps =
-    options?.winningsMarketMakerFeeBps ?? 200;
-  const existingConfig = await program.account.marketConfig.fetchNullable(config);
+  const winningsMarketMakerFeeBps = options?.winningsMarketMakerFeeBps ?? 200;
+  const existingConfig =
+    await program.account.marketConfig.fetchNullable(config);
 
   if (!existingConfig) {
     await program.methods
@@ -312,11 +313,17 @@ export async function upsertDuel(
   await program.methods
     .upsertDuel(
       [...duelKey],
-      [...(options.participantAHash ?? hashLabel(`${Buffer.from(duelKey).toString("hex")}:a`))],
-      [...(options.participantBHash ?? hashLabel(`${Buffer.from(duelKey).toString("hex")}:b`))],
+      [
+        ...(options.participantAHash ??
+          hashLabel(`${Buffer.from(duelKey).toString("hex")}:a`)),
+      ],
+      [
+        ...(options.participantBHash ??
+          hashLabel(`${Buffer.from(duelKey).toString("hex")}:b`)),
+      ],
       toBn(options.betOpenTs),
       toBn(options.betCloseTs),
-      toBn(options.duelStartTs ?? 0),
+      toBn(options.duelStartTs ?? options.betCloseTs),
       options.metadataUri ?? "https://hyperscape.gg/duels/test",
       options.status,
     )
@@ -325,6 +332,28 @@ export async function upsertDuel(
       oracleConfig,
       duelState,
       systemProgram: SystemProgram.programId,
+    })
+    .signers([reporter])
+    .rpc();
+
+  return duelState;
+}
+
+export async function cancelDuel(
+  program: Program<FightOracle>,
+  reporter: Keypair,
+  duelKey: readonly number[],
+  metadataUri = "https://hyperscape.gg/duels/cancelled",
+): Promise<PublicKey> {
+  const oracleConfig = deriveOracleConfigPda(program.programId);
+  const duelState = deriveDuelStatePda(program.programId, duelKey);
+
+  await program.methods
+    .cancelDuel([...duelKey], metadataUri)
+    .accountsPartial({
+      reporter: reporter.publicKey,
+      oracleConfig,
+      duelState,
     })
     .signers([reporter])
     .rpc();
@@ -353,33 +382,17 @@ export async function reportDuelResult(
       [...duelKey],
       options.winner,
       toBn(options.seed ?? 42),
-      [...(options.replayHash ?? hashLabel(`${Buffer.from(duelKey).toString("hex")}:replay`))],
-      [...(options.resultHash ?? hashLabel(`${Buffer.from(duelKey).toString("hex")}:result`))],
+      [
+        ...(options.replayHash ??
+          hashLabel(`${Buffer.from(duelKey).toString("hex")}:replay`)),
+      ],
+      [
+        ...(options.resultHash ??
+          hashLabel(`${Buffer.from(duelKey).toString("hex")}:result`)),
+      ],
       toBn(options.duelEndTs),
       options.metadataUri ?? "https://hyperscape.gg/duels/result",
     )
-    .accountsPartial({
-      reporter: reporter.publicKey,
-      oracleConfig,
-      duelState,
-    })
-    .signers([reporter])
-    .rpc();
-
-  return duelState;
-}
-
-export async function cancelDuel(
-  program: Program<FightOracle>,
-  reporter: Keypair,
-  duelKey: readonly number[],
-  metadataUri = "https://hyperbet.gg/duels/cancelled",
-): Promise<PublicKey> {
-  const oracleConfig = deriveOracleConfigPda(program.programId);
-  const duelState = deriveDuelStatePda(program.programId, duelKey);
-
-  await program.methods
-    .cancelDuel([...duelKey], metadataUri)
     .accountsPartial({
       reporter: reporter.publicKey,
       oracleConfig,
@@ -499,12 +512,7 @@ export async function placeClobOrder(
   );
 
   let builder = program.methods
-    .placeOrder(
-      toBn(args.orderId),
-      args.side,
-      args.price,
-      toBn(args.amount),
-    )
+    .placeOrder(toBn(args.orderId), args.side, args.price, toBn(args.amount))
     .accountsPartial({
       marketState: args.marketState,
       duelState: args.duelState,
@@ -541,7 +549,11 @@ export async function cancelClobOrder(
     remainingAccounts?: AccountMeta[];
   },
 ): Promise<{ order: PublicKey; priceLevel: PublicKey }> {
-  const order = deriveOrderPda(program.programId, args.marketState, args.orderId);
+  const order = deriveOrderPda(
+    program.programId,
+    args.marketState,
+    args.orderId,
+  );
   const priceLevel = derivePriceLevelPda(
     program.programId,
     args.marketState,
@@ -643,7 +655,8 @@ export async function createOpenMarketFixture(
     status: duelStatusBettingOpen(),
     betOpenTs: options?.betOpenTs ?? now - 30,
     betCloseTs: options?.betCloseTs ?? now + 3600,
-    duelStartTs: options?.duelStartTs ?? now + 60,
+    duelStartTs:
+      options?.duelStartTs ?? (options?.betCloseTs ?? now + 3600) + 60,
     metadataUri: options?.metadataUri,
   });
   const { marketState, vault } = await initializeCanonicalMarket(

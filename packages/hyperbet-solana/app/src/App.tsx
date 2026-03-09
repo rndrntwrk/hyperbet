@@ -42,6 +42,7 @@ import {
 import { FIGHT_ORACLE_PROGRAM_ID } from "./lib/programIds";
 import { useStreamingState } from "./spectator/useStreamingState";
 import { useDuelContext } from "./spectator/useDuelContext";
+import type { LeaderboardEntry } from "./spectator/types";
 import { useResizePanel, useIsMobile } from "./lib/useResizePanel";
 import { ResizeHandle } from "./components/ResizeHandle";
 import {
@@ -656,7 +657,7 @@ export function App() {
     winReason: liveCycle?.winReason ?? null,
     timeRemaining: liveCycle?.timeRemaining ?? 0,
   };
-  const effLeaderboard = streamingState?.leaderboard ?? [];
+  const effLeaderboard: LeaderboardEntry[] = streamingState?.leaderboard ?? [];
   const effTotalPool =
     (typeof effYesPot === "number" ? effYesPot : 0) +
     (typeof effNoPot === "number" ? effNoPot : 0);

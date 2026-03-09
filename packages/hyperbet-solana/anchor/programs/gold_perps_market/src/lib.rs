@@ -286,7 +286,10 @@ pub mod gold_perps_market {
                         size_delta == 0 || is_reduce_only_change(old_size, new_size),
                         PerpsError::MarketCloseOnly
                     );
-                    require!(market_index_price(market)? > 0, PerpsError::InvalidSpotIndex);
+                    require!(
+                        market_index_price(market)? > 0,
+                        PerpsError::InvalidSpotIndex
+                    );
                 }
                 MARKET_STATUS_ARCHIVED => return err!(PerpsError::MarketArchived),
                 _ => return err!(PerpsError::InvalidMarketStatus),
@@ -441,10 +444,7 @@ pub mod gold_perps_market {
         Ok(())
     }
 
-    pub fn liquidate_position(
-        ctx: Context<LiquidatePosition>,
-        market_id: u64,
-    ) -> Result<()> {
+    pub fn liquidate_position(ctx: Context<LiquidatePosition>, market_id: u64) -> Result<()> {
         let config = &ctx.accounts.config;
         let market = &mut ctx.accounts.market;
         require!(market.initialized, PerpsError::InvalidMarket);
@@ -465,7 +465,10 @@ pub mod gold_perps_market {
                 drift_funding(market, now)?;
             }
             MARKET_STATUS_CLOSE_ONLY => {
-                require!(market_index_price(market)? > 0, PerpsError::InvalidSpotIndex);
+                require!(
+                    market_index_price(market)? > 0,
+                    PerpsError::InvalidSpotIndex
+                );
             }
             MARKET_STATUS_ARCHIVED => return err!(PerpsError::MarketArchived),
             _ => return err!(PerpsError::InvalidMarketStatus),
@@ -618,8 +621,7 @@ pub mod gold_perps_market {
             FEE_BUCKET_MARKET_MAKER => {
                 require_market_maker(&ctx.accounts.config, ctx.accounts.authority.key())?;
                 require!(
-                    ctx.accounts.recipient.key()
-                        == ctx.accounts.config.market_maker_authority,
+                    ctx.accounts.recipient.key() == ctx.accounts.config.market_maker_authority,
                     PerpsError::InvalidFeeRecipient
                 );
                 market.market_maker_fee_balance = market
@@ -630,7 +632,12 @@ pub mod gold_perps_market {
             _ => return err!(PerpsError::InvalidFeeBucket),
         }
 
-        transfer_from_market(market, &ctx.accounts.recipient.to_account_info(), amount, false)?;
+        transfer_from_market(
+            market,
+            &ctx.accounts.recipient.to_account_info(),
+            amount,
+            false,
+        )?;
         Ok(())
     }
 }
@@ -673,8 +680,7 @@ fn validate_config_inputs(
         PerpsError::InvalidRiskConfig
     );
     require!(
-        maintenance_margin_bps > 0
-            && u64::from(maintenance_margin_bps) < BPS_DENOMINATOR,
+        maintenance_margin_bps > 0 && u64::from(maintenance_margin_bps) < BPS_DENOMINATOR,
         PerpsError::InvalidRiskConfig
     );
     require!(
@@ -682,8 +688,7 @@ fn validate_config_inputs(
         PerpsError::InvalidRiskConfig
     );
     require!(
-        u64::from(trade_treasury_fee_bps) + u64::from(trade_market_maker_fee_bps)
-            < BPS_DENOMINATOR,
+        u64::from(trade_treasury_fee_bps) + u64::from(trade_market_maker_fee_bps) < BPS_DENOMINATOR,
         PerpsError::InvalidRiskConfig
     );
 
@@ -699,8 +704,7 @@ fn validate_config_inputs(
 
 fn require_oracle_spot_index_bounds(config: &ConfigState, spot_index: u64) -> Result<()> {
     require!(
-        spot_index >= config.min_oracle_spot_index
-            && spot_index <= config.max_oracle_spot_index,
+        spot_index >= config.min_oracle_spot_index && spot_index <= config.max_oracle_spot_index,
         PerpsError::OracleSpotIndexOutOfBounds
     );
     Ok(())
@@ -756,10 +760,7 @@ fn require_market_maker(config: &ConfigState, signer: Pubkey) -> Result<()> {
 
 fn require_fresh_market(market: &MarketState, config: &ConfigState, now: i64) -> Result<()> {
     require!(market.spot_index > 0, PerpsError::InvalidSpotIndex);
-    require!(
-        market.oracle_last_updated > 0,
-        PerpsError::StaleOracle
-    );
+    require!(market.oracle_last_updated > 0, PerpsError::StaleOracle);
     let age = now.saturating_sub(market.oracle_last_updated);
     require!(
         age <= config.max_oracle_staleness_seconds,
@@ -1164,7 +1165,11 @@ fn calculate_insurance_usage(
 }
 
 fn abs_i128(value: i128) -> i128 {
-    if value < 0 { -value } else { value }
+    if value < 0 {
+        -value
+    } else {
+        value
+    }
 }
 
 fn same_sign(left: i128, right: i128) -> bool {
@@ -1485,7 +1490,10 @@ mod tests {
     #[test]
     fn insurance_usage_only_consumes_reserved_balance_when_needed() {
         assert_eq!(calculate_insurance_usage(400, 1_000, 100, 250).unwrap(), 0);
-        assert_eq!(calculate_insurance_usage(900, 1_000, 100, 250).unwrap(), 250);
+        assert_eq!(
+            calculate_insurance_usage(900, 1_000, 100, 250).unwrap(),
+            250
+        );
     }
 
     #[test]

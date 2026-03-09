@@ -372,15 +372,17 @@ async function main(): Promise<void> {
   const currentMarket = await createOpenMarketFixture(
     fightProgram as never,
     clobProgram as never,
-    authority,
-    {
-      duelKey: uniqueDuelKey("e2e-current-duel"),
+      authority,
+      {
+      duelKey: uniqueDuelKey(
+        `e2e-current-duel:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+      ),
       betOpenTs: now - 30,
       // Keep the duel market open long enough for the full local Playwright
       // suite to seed liquidity and submit prediction trades across multiple
       // specs without flaking on wall-clock expiry.
       betCloseTs: now + 3_600,
-      duelStartTs: now + 60,
+      duelStartTs: now + 3_660,
       metadataUri: currentDuelMetadata,
     },
   );

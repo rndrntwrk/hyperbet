@@ -7,9 +7,11 @@ ANCHOR_DIR="$DEMO_DIR/anchor"
 LEDGER_DIR="$ANCHOR_DIR/.local-demo-ledger"
 VALIDATOR_LOG="$APP_DIR/.local-demo-validator.log"
 PROGRAM_ORACLE_ID="6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD"
+PROGRAM_MARKET_ID="HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik"
 PROGRAM_CLOB_ID="ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi"
 APP_PORT="${APP_PORT:-4179}"
 RPC_URL="http://127.0.0.1:8899"
+WALLET_PATH=""
 
 VALIDATOR_PID=""
 
@@ -20,6 +22,28 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+resolve_wallet_path() {
+  local candidates=()
+
+  if [[ -n "${ANCHOR_WALLET:-}" ]]; then
+    candidates+=("${ANCHOR_WALLET}")
+  fi
+  candidates+=(
+    "$HOME/.config/solana/hyperscape-keys/deployer.json"
+    "$HOME/.config/solana/id.json"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  echo "[local-demo] no Anchor wallet found for upgradeable local validator" >&2
+  exit 1
+}
 
 wait_for_rpc() {
   for _ in {1..90}; do
@@ -35,14 +59,29 @@ wait_for_rpc() {
 
 kill_listeners() {
   local port="$1"
-  local pids
-  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
-  if [[ -n "$pids" ]]; then
-    echo "[local-demo] clearing existing listeners on :$port"
+  local attempt
+  for attempt in {1..10}; do
+    local pids
+    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
+    if [[ -z "$pids" ]]; then
+      return 0
+    fi
+    if [[ "$attempt" -eq 1 ]]; then
+      echo "[local-demo] clearing existing listeners on :$port"
+    fi
     for pid in $pids; do
-      kill "$pid" >/dev/null 2>&1 || true
+      if [[ "$attempt" -lt 4 ]]; then
+        kill "$pid" >/dev/null 2>&1 || true
+      else
+        kill -9 "$pid" >/dev/null 2>&1 || true
+      fi
     done
     sleep 1
+  done
+
+  if lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "[local-demo] failed to clear listener on :$port" >&2
+    exit 1
   fi
 }
 
@@ -53,13 +92,18 @@ echo "[local-demo] building anchor programs"
 bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-solana-local-build.log 2>&1
 
 IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
+IDL_MARKET_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_perps_market.json" 2>/dev/null || true)"
 IDL_CLOB_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_clob_market.json" 2>/dev/null || true)"
 if [[ -n "$IDL_ORACLE_ID" && "$IDL_ORACLE_ID" != "null" ]]; then
   PROGRAM_ORACLE_ID="$IDL_ORACLE_ID"
 fi
+if [[ -n "$IDL_MARKET_ID" && "$IDL_MARKET_ID" != "null" ]]; then
+  PROGRAM_MARKET_ID="$IDL_MARKET_ID"
+fi
 if [[ -n "$IDL_CLOB_ID" && "$IDL_CLOB_ID" != "null" ]]; then
   PROGRAM_CLOB_ID="$IDL_CLOB_ID"
 fi
+WALLET_PATH="$(resolve_wallet_path)"
 
 echo "[local-demo] starting local validator"
 rm -rf "$LEDGER_DIR"
@@ -67,8 +111,9 @@ solana-test-validator \
   --reset \
   --quiet \
   --ledger "$LEDGER_DIR" \
-  --bpf-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" \
-  --bpf-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" \
+  --upgradeable-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" "$WALLET_PATH" \
+  --upgradeable-program "$PROGRAM_MARKET_ID" "$ANCHOR_DIR/target/deploy/gold_perps_market.so" "$WALLET_PATH" \
+  --upgradeable-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" "$WALLET_PATH" \
   >"$VALIDATOR_LOG" 2>&1 &
 VALIDATOR_PID="$!"
 

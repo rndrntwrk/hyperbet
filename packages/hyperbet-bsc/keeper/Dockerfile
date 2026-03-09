@@ -2,11 +2,15 @@ FROM oven/bun:1.3.8
 
 WORKDIR /app
 
-COPY package.json ./
-RUN bun install --production
+COPY keeper/package.json ./keeper/package.json
+COPY keeper/bun.lock ./keeper/bun.lock
+RUN cd keeper && bun install --frozen-lockfile --production
 
-COPY tsconfig.json ./tsconfig.json
-COPY src ./src
+COPY deployments ./deployments
+COPY keeper/tsconfig.json ./keeper/tsconfig.json
+COPY keeper/src ./keeper/src
+
+WORKDIR /app/keeper
 
 ENV NODE_ENV=production
 ENV PORT=8080
