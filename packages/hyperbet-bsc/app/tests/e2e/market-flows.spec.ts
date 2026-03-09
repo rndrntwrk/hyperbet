@@ -918,7 +918,7 @@ test.describe("market flows", () => {
     });
 
     await page
-      .getByTestId(`models-market-row-${state.perpsCharacterId}`)
+      .getByTestId(`models-market-card-${state.perpsCharacterId}`)
       .click({ force: true });
     await page.getByTestId("models-market-collateral-input").fill("0.2");
     await page.getByTestId("models-market-leverage-2x").click({ force: true });

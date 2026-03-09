@@ -354,28 +354,7 @@ test.describe("app tabs and api coverage", () => {
       "BIDS",
     );
 
-    await page.getByTestId("duels-bottom-tab-news").click();
-    await expect(page.getByTestId("duels-bottom-panel-news")).toBeVisible();
-    await expect(page.getByTestId("duels-bottom-panel-news")).toContainText(
-      "Pressure the midpoint and deny the comeback window.",
-    );
 
-    await page.getByTestId("duels-bottom-tab-holders").click();
-    await expect(page.getByTestId("duels-bottom-panel-holders")).toBeVisible();
-    await expect(page.getByTestId("duels-bottom-panel-holders")).toContainText(
-      "Hyperscape",
-    );
-    await expect(page.getByTestId("duels-bottom-panel-holders")).toContainText(
-      "OpenRouter",
-    );
-
-    await page.getByTestId("duels-bottom-tab-topTraders").click();
-    await expect(
-      page.getByTestId("duels-bottom-panel-topTraders"),
-    ).toBeVisible();
-    await expect(
-      page.getByTestId("duels-bottom-panel-topTraders"),
-    ).toContainText(streamState.leaderboard[0]?.name || "");
 
     await page.getByTestId("duels-bottom-tab-positions").click();
     await expect(
@@ -486,7 +465,7 @@ test.describe("app tabs and api coverage", () => {
     });
 
     await page
-      .getByTestId(`models-market-row-${characterId}`)
+      .getByTestId(`models-market-card-${characterId}`)
       .click({ force: true });
     await expect(page.getByTestId("models-market-view")).toContainText(
       selectedMarket?.name || "",

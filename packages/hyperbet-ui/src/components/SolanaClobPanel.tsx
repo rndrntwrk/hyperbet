@@ -291,107 +291,107 @@ export function SolanaClobPanel({
   const copy =
     resolvedLocale === "zh"
       ? {
-          unknown: "未知",
-          connectWalletFirst: "请先连接钱包",
-          fundingVaultRent: "补充对局金库租金",
-          marketConfigNotDeployed: "市场配置尚未部署",
-          waitingOracleReporter: "对局已公布，等待预言机上报",
-          waitingMarketOperator: "预言机已上线，等待市场运营方开启",
-          resolvedFor: (name: string) => `${name} 已结算获胜`,
-          resolved: "已结算",
-          marketCancelled: "市场已取消",
-          bettingLocked: "下注已锁定",
-          marketOpen: "市场开放中",
-          refreshFailed: (message: string) => `刷新失败：${message}`,
-          connectWalletToTrade: "连接钱包后即可交易",
-          amountTooLow: "数量必须大于 0",
-          orderPlaced: "订单已提交",
-          orderFailed: (message: string) => `下单失败：${message}`,
-          noActiveOrder: "没有可取消的活动订单",
-          orderCancelled: "订单已取消",
-          cancelFailed: (message: string) => `取消失败：${message}`,
-          connectWalletToClaim: "连接钱包后即可领取",
-          claimComplete: "领取完成",
-          claimFailed: (message: string) => `领取失败：${message}`,
-          refreshing: "刷新中...",
-          refresh: "刷新",
-          duelKey: "对局键",
-          close: "封盘时间",
-          spread: "价差",
-          pending: "待定",
-          yourAShares: "你的 A 份额",
-          yourBShares: "你的 B 份额",
-          depth: "深度",
-          cancelLastOrder: "取消上一笔订单",
-          claim: "领取",
-          limitPrice: "限价",
-          hideAdminPanel: "隐藏管理面板",
-          showAdminPanel: "显示管理面板",
-          match: "市场",
-          adminStatus: "状态",
-          adminDuel: "对局",
-          adminPosition: "持仓",
-          adminPools: "资金池",
-          adminLastOrder: "最近订单",
-          stageBlockhash: "获取区块哈希",
-          stageSigning: "签名交易",
-          stageSending: "发送交易",
-          stageConfirming: "确认交易",
-          placingOrderContext: "下单",
-          cancellingOrderContext: "取消订单",
-          claimingWinningsContext: "领取收益",
-        }
+        unknown: "未知",
+        connectWalletFirst: "请先连接钱包",
+        fundingVaultRent: "补充对局金库租金",
+        marketConfigNotDeployed: "市场配置尚未部署",
+        waitingOracleReporter: "对局已公布，等待预言机上报",
+        waitingMarketOperator: "预言机已上线，等待市场运营方开启",
+        resolvedFor: (name: string) => `${name} 已结算获胜`,
+        resolved: "已结算",
+        marketCancelled: "市场已取消",
+        bettingLocked: "下注已锁定",
+        marketOpen: "市场开放中",
+        refreshFailed: (message: string) => `刷新失败：${message}`,
+        connectWalletToTrade: "连接钱包后即可交易",
+        amountTooLow: "数量必须大于 0",
+        orderPlaced: "订单已提交",
+        orderFailed: (message: string) => `下单失败：${message}`,
+        noActiveOrder: "没有可取消的活动订单",
+        orderCancelled: "订单已取消",
+        cancelFailed: (message: string) => `取消失败：${message}`,
+        connectWalletToClaim: "连接钱包后即可领取",
+        claimComplete: "领取完成",
+        claimFailed: (message: string) => `领取失败：${message}`,
+        refreshing: "刷新中...",
+        refresh: "刷新",
+        duelKey: "对局键",
+        close: "封盘时间",
+        spread: "价差",
+        pending: "待定",
+        yourAShares: "你的 A 份额",
+        yourBShares: "你的 B 份额",
+        depth: "深度",
+        cancelLastOrder: "取消上一笔订单",
+        claim: "领取",
+        limitPrice: "限价",
+        hideAdminPanel: "隐藏管理面板",
+        showAdminPanel: "显示管理面板",
+        match: "市场",
+        adminStatus: "状态",
+        adminDuel: "对局",
+        adminPosition: "持仓",
+        adminPools: "资金池",
+        adminLastOrder: "最近订单",
+        stageBlockhash: "获取区块哈希",
+        stageSigning: "签名交易",
+        stageSending: "发送交易",
+        stageConfirming: "确认交易",
+        placingOrderContext: "下单",
+        cancellingOrderContext: "取消订单",
+        claimingWinningsContext: "领取收益",
+      }
       : {
-          unknown: "unknown",
-          connectWalletFirst: "Connect wallet first",
-          fundingVaultRent: "funding duel vault rent",
-          marketConfigNotDeployed: "Market config not deployed",
-          waitingOracleReporter: "Game announced duel; waiting for oracle reporter",
-          waitingMarketOperator: "Oracle is live; waiting for market operator",
-          resolvedFor: (name: string) => `Resolved for ${name}`,
-          resolved: "Resolved",
-          marketCancelled: "Market cancelled",
-          bettingLocked: "Betting locked",
-          marketOpen: "Market open",
-          refreshFailed: (message: string) => `Refresh failed: ${message}`,
-          connectWalletToTrade: "Connect wallet to trade",
-          amountTooLow: "Amount must be greater than zero",
-          orderPlaced: "Order placed",
-          orderFailed: (message: string) => `Order failed: ${message}`,
-          noActiveOrder: "No active order to cancel",
-          orderCancelled: "Order cancelled",
-          cancelFailed: (message: string) => `Cancel failed: ${message}`,
-          connectWalletToClaim: "Connect wallet to claim",
-          claimComplete: "Claim complete",
-          claimFailed: (message: string) => `Claim failed: ${message}`,
-          refreshing: "Refreshing...",
-          refresh: "Refresh",
-          duelKey: "duel key",
-          close: "close",
-          spread: "spread",
-          pending: "pending",
-          yourAShares: "your A shares",
-          yourBShares: "your B shares",
-          depth: "depth",
-          cancelLastOrder: "Cancel Last Order",
-          claim: "Claim",
-          limitPrice: "Limit price",
-          hideAdminPanel: "Hide Admin Panel",
-          showAdminPanel: "Show Admin Panel",
-          match: "Match",
-          adminStatus: "Status",
-          adminDuel: "Duel",
-          adminPosition: "Position",
-          adminPools: "Pools",
-          adminLastOrder: "Last order",
-          stageBlockhash: "fetching blockhash",
-          stageSigning: "signing transaction",
-          stageSending: "sending transaction",
-          stageConfirming: "confirming transaction",
-          placingOrderContext: "placing order",
-          cancellingOrderContext: "cancelling order",
-          claimingWinningsContext: "claiming winnings",
-        };
+        unknown: "unknown",
+        connectWalletFirst: "Connect wallet first",
+        fundingVaultRent: "funding duel vault rent",
+        marketConfigNotDeployed: "Market config not deployed",
+        waitingOracleReporter: "Game announced duel; waiting for oracle reporter",
+        waitingMarketOperator: "Oracle is live; waiting for market operator",
+        resolvedFor: (name: string) => `Resolved for ${name}`,
+        resolved: "Resolved",
+        marketCancelled: "Market cancelled",
+        bettingLocked: "Betting locked",
+        marketOpen: "Market open",
+        refreshFailed: (message: string) => `Refresh failed: ${message}`,
+        connectWalletToTrade: "Connect wallet to trade",
+        amountTooLow: "Amount must be greater than zero",
+        orderPlaced: "Order placed",
+        orderFailed: (message: string) => `Order failed: ${message}`,
+        noActiveOrder: "No active order to cancel",
+        orderCancelled: "Order cancelled",
+        cancelFailed: (message: string) => `Cancel failed: ${message}`,
+        connectWalletToClaim: "Connect wallet to claim",
+        claimComplete: "Claim complete",
+        claimFailed: (message: string) => `Claim failed: ${message}`,
+        refreshing: "Refreshing...",
+        refresh: "Refresh",
+        duelKey: "duel key",
+        close: "close",
+        spread: "spread",
+        pending: "pending",
+        yourAShares: "your A shares",
+        yourBShares: "your B shares",
+        depth: "depth",
+        cancelLastOrder: "Cancel Last Order",
+        claim: "Claim",
+        limitPrice: "Limit price",
+        hideAdminPanel: "Hide Admin Panel",
+        showAdminPanel: "Show Admin Panel",
+        match: "Match",
+        adminStatus: "Status",
+        adminDuel: "Duel",
+        adminPosition: "Position",
+        adminPools: "Pools",
+        adminLastOrder: "Last order",
+        stageBlockhash: "fetching blockhash",
+        stageSigning: "signing transaction",
+        stageSending: "sending transaction",
+        stageConfirming: "confirming transaction",
+        placingOrderContext: "placing order",
+        cancellingOrderContext: "cancelling order",
+        claimingWinningsContext: "claiming winnings",
+      };
 
   const updateChartAndTrades = useCallback(
     (nextYes: bigint, nextNo: bigint) => {
@@ -1005,9 +1005,9 @@ export function SolanaClobPanel({
       setActiveMarket((current) =>
         current
           ? {
-              ...current,
-              nextOrderId: orderId + 1n,
-            }
+            ...current,
+            nextOrderId: orderId + 1n,
+          }
           : current,
       );
       setStatus(copy.orderPlaced);
@@ -1222,41 +1222,7 @@ export function SolanaClobPanel({
             <span>{status}</span>
             <span>{isRefreshing ? copy.refreshing : duelLabel}</span>
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: compact
-                ? "1fr"
-                : "repeat(3, minmax(0, 1fr))",
-              gap: 8,
-            }}
-          >
-            <div>{copy.duelKey}: {shortDuelKey(duelKeyHex)}</div>
-            <div>
-              {copy.close}:{" "}
-              {activeMarket?.betCloseTime
-                ? new Date(activeMarket.betCloseTime).toLocaleTimeString(
-                    getLocaleTag(resolvedLocale),
-                  )
-                : copy.pending}
-            </div>
-            <div>
-              {copy.spread}:{" "}
-              {activeMarket
-                ? `${(activeMarket.bestBid / 10).toFixed(1)} / ${(activeMarket.bestAsk / 10).toFixed(1)}`
-                : copy.pending}
-            </div>
-            <div>
-              {copy.yourAShares}: {fmtAmount(position.aShares).toFixed(3)} SOL
-            </div>
-            <div>
-              {copy.yourBShares}: {fmtAmount(position.bShares).toFixed(3)} SOL
-            </div>
-            <div>
-              {copy.depth}: {sumOrderLevels(bids).toFixed(3)} /{" "}
-              {sumOrderLevels(asks).toFixed(3)} SOL
-            </div>
-          </div>
+
           <div
             style={{
               display: "flex",
@@ -1342,6 +1308,14 @@ export function SolanaClobPanel({
             style={buttonStyle("#111827", "rgba(148,163,184,0.28)")}
           >
             {showAdminPanel ? copy.hideAdminPanel : copy.showAdminPanel}
+          </button>
+          <button
+            type="button"
+            data-testid="solana-clob-create-match"
+            onClick={() => void refreshData()}
+            style={buttonStyle("#1e3a5f", "rgba(59,130,246,0.35)")}
+          >
+            Create Match
           </button>
           <div data-testid="solana-clob-match">
             {copy.match}: {marketStateText}

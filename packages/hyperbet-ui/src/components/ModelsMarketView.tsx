@@ -507,28 +507,28 @@ const E2E_MODEL_CHARACTER_ID = readE2eString(
 const E2E_MODEL_ENTRY: PerpsMarketDirectoryEntry | null =
   IS_E2E_MODE && E2E_MODEL_CHARACTER_ID
     ? {
-        rank: 1,
-        characterId: E2E_MODEL_CHARACTER_ID,
-        marketId: modelMarketIdFromCharacterId(E2E_MODEL_CHARACTER_ID),
-        name: readE2eString(import.meta.env.VITE_E2E_MODEL_NAME) || "E2E Model",
-        provider:
-          readE2eString(import.meta.env.VITE_E2E_MODEL_PROVIDER) ||
-          "Hyperscape",
-        model:
-          readE2eString(import.meta.env.VITE_E2E_MODEL_SLUG) || "e2e-model",
-        wins: readE2eNumber(import.meta.env.VITE_E2E_MODEL_WINS, 10),
-        losses: readE2eNumber(import.meta.env.VITE_E2E_MODEL_LOSSES, 2),
-        winRate: 0,
-        combatLevel: readE2eNumber(
-          import.meta.env.VITE_E2E_MODEL_COMBAT_LEVEL,
-          80,
-        ),
-        currentStreak: readE2eNumber(import.meta.env.VITE_E2E_MODEL_STREAK, 3),
-        status: "ACTIVE",
-        lastSeenAt: Date.now(),
-        deprecatedAt: null,
-        updatedAt: Date.now(),
-      }
+      rank: 1,
+      characterId: E2E_MODEL_CHARACTER_ID,
+      marketId: modelMarketIdFromCharacterId(E2E_MODEL_CHARACTER_ID),
+      name: readE2eString(import.meta.env.VITE_E2E_MODEL_NAME) || "E2E Model",
+      provider:
+        readE2eString(import.meta.env.VITE_E2E_MODEL_PROVIDER) ||
+        "Hyperscape",
+      model:
+        readE2eString(import.meta.env.VITE_E2E_MODEL_SLUG) || "e2e-model",
+      wins: readE2eNumber(import.meta.env.VITE_E2E_MODEL_WINS, 10),
+      losses: readE2eNumber(import.meta.env.VITE_E2E_MODEL_LOSSES, 2),
+      winRate: 0,
+      combatLevel: readE2eNumber(
+        import.meta.env.VITE_E2E_MODEL_COMBAT_LEVEL,
+        80,
+      ),
+      currentStreak: readE2eNumber(import.meta.env.VITE_E2E_MODEL_STREAK, 3),
+      status: "ACTIVE",
+      lastSeenAt: Date.now(),
+      deprecatedAt: null,
+      updatedAt: Date.now(),
+    }
     : null;
 
 if (E2E_MODEL_ENTRY) {
@@ -887,10 +887,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
         const decodedConfig = configInfo?.data
           ? decodeAccount<ConfigAccountState>(
-              coder,
-              "ConfigState",
-              configInfo.data,
-            )
+            coder,
+            "ConfigState",
+            configInfo.data,
+          )
           : null;
 
         const nextMarketSnapshots: Record<string, MarketSnapshot> = {};
@@ -898,10 +898,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
           const marketInfo = marketInfos[index];
           const decoded = marketInfo?.data
             ? decodeAccount<MarketAccountState>(
-                coder,
-                "MarketState",
-                marketInfo.data,
-              )
+              coder,
+              "MarketState",
+              marketInfo.data,
+            )
             : null;
           const marketId = marketIds[index];
           const mu = decoded ? bnToNumber(decoded.mu) / 1_000_000 : null;
@@ -917,36 +917,36 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
           nextMarketSnapshots[entries[index].characterId] = decoded
             ? {
-                marketId,
-                spotIndex: fromLamports(bnToNumber(decoded.spotIndex)),
-                longOi: fromLamports(bnToNumber(decoded.totalLongOi)),
-                shortOi: fromLamports(bnToNumber(decoded.totalShortOi)),
-                fundingRate: fromLamports(
-                  bnToNumber(decoded.currentFundingRate),
-                ),
-                conservativeSkill:
-                  mu !== null && sigma !== null
-                    ? conservativeSkill(mu, sigma)
-                    : null,
-                uncertainty: sigma,
-                lastUpdated: bnToNumber(decoded.oracleLastUpdated) * 1_000,
-                insuranceFund: fromLamports(bnToNumber(decoded.insuranceFund)),
-                skewScale: bnToNumber(decoded.skewScale),
-                skewScaleSol: localSkewScaleSol,
-              }
+              marketId,
+              spotIndex: fromLamports(bnToNumber(decoded.spotIndex)),
+              longOi: fromLamports(bnToNumber(decoded.totalLongOi)),
+              shortOi: fromLamports(bnToNumber(decoded.totalShortOi)),
+              fundingRate: fromLamports(
+                bnToNumber(decoded.currentFundingRate),
+              ),
+              conservativeSkill:
+                mu !== null && sigma !== null
+                  ? conservativeSkill(mu, sigma)
+                  : null,
+              uncertainty: sigma,
+              lastUpdated: bnToNumber(decoded.oracleLastUpdated) * 1_000,
+              insuranceFund: fromLamports(bnToNumber(decoded.insuranceFund)),
+              skewScale: bnToNumber(decoded.skewScale),
+              skewScaleSol: localSkewScaleSol,
+            }
             : (fallbackSnapshot ?? {
-                marketId,
-                spotIndex: null,
-                longOi: 0,
-                shortOi: 0,
-                fundingRate: 0,
-                conservativeSkill: null,
-                uncertainty: null,
-                lastUpdated: null,
-                insuranceFund: 0,
-                skewScale: 0,
-                skewScaleSol: DEFAULT_SKEW_SCALE_SOL,
-              });
+              marketId,
+              spotIndex: null,
+              longOi: 0,
+              shortOi: 0,
+              fundingRate: 0,
+              conservativeSkill: null,
+              uncertainty: null,
+              lastUpdated: null,
+              insuranceFund: 0,
+              skewScale: 0,
+              skewScaleSol: DEFAULT_SKEW_SCALE_SOL,
+            });
         }
 
         const nextPositions: Record<string, PositionSnapshot> = {};
@@ -963,10 +963,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
             const positionInfo = positionInfos[index];
             const decoded = positionInfo?.data
               ? decodeAccount<PositionAccountState>(
-                  coder,
-                  "PositionState",
-                  positionInfo.data,
-                )
+                coder,
+                "PositionState",
+                positionInfo.data,
+              )
               : null;
             if (!decoded) continue;
 
@@ -1218,10 +1218,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
         quotedEntryPrice <= 0
           ? 0
           : toLamports(
-              direction === "LONG"
-                ? quotedEntryPrice * 1.02
-                : quotedEntryPrice * 0.98,
-            );
+            direction === "LONG"
+              ? quotedEntryPrice * 1.02
+              : quotedEntryPrice * 0.98,
+          );
       const marketIdArg = new anchor.BN(String(marketId));
 
       const transaction = await program.methods
@@ -1325,10 +1325,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
         quotedClosePrice <= 0
           ? 0
           : toLamports(
-              selectedPosition.direction === "LONG"
-                ? quotedClosePrice * 0.98
-                : quotedClosePrice * 1.02,
-            );
+            selectedPosition.direction === "LONG"
+              ? quotedClosePrice * 0.98
+              : quotedClosePrice * 1.02,
+          );
       const marketIdArg = new anchor.BN(String(marketId));
 
       const transaction = await program.methods
@@ -1437,126 +1437,69 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
           {error && <div className="models-market-error">{error}</div>}
 
-          <div className="models-market-table-wrap">
-            <table className="models-market-table">
-              <thead>
-                <tr>
-                  <th>{copy.rank}</th>
-                  <th>{copy.model}</th>
-                  <th>{copy.provider}</th>
-                  <th>{copy.winLoss}</th>
-                  <th>{copy.index}</th>
-                  <th>{copy.longOi}</th>
-                  <th>{copy.shortOi}</th>
-                  <th>{copy.funding}</th>
-                  <th>{copy.status}</th>
-                  <th>{copy.yourPosition}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && filteredLeaderboard.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="models-market-empty">
-                      {copy.loadingModelsMarket}
-                    </td>
-                  </tr>
-                )}
+          <div className="models-market-grid-container">
+            {loading && filteredLeaderboard.length === 0 && (
+              <div className="models-market-empty">
+                {copy.loadingModelsMarket}
+              </div>
+            )}
 
-                {!loading && filteredLeaderboard.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="models-market-empty">
-                      {copy.noModelsMatched}
-                    </td>
-                  </tr>
-                )}
+            {!loading && filteredLeaderboard.length === 0 && (
+              <div className="models-market-empty">
+                {copy.noModelsMatched}
+              </div>
+            )}
 
-                {filteredLeaderboard.map((entry) => {
-                  const market = marketSnapshots[entry.characterId];
-                  const position = positions[entry.characterId];
-                  return (
-                    <tr
-                      key={entry.characterId}
-                      data-testid={`models-market-row-${entry.characterId}`}
-                      className={
-                        selectedCharacterId === entry.characterId
-                          ? "is-selected"
-                          : undefined
-                      }
-                      onClick={() => setSelectedCharacterId(entry.characterId)}
-                    >
-                      <td>{entry.rank ? `#${entry.rank}` : copy.emDash}</td>
-                      <td>
-                        <strong>{entry.name}</strong>
-                        <span>{entry.model || copy.unnamedModel}</span>
-                      </td>
-                      <td>{entry.provider || copy.unknown}</td>
-                      <td>
-                        {entry.wins}-{entry.losses}
-                        <span>
-                          {toWinRatePercent(entry.wins, entry.losses).toFixed(
-                            1,
-                          )}
-                          %
+            {filteredLeaderboard.map((entry) => {
+              const market = marketSnapshots[entry.characterId];
+              const position = positions[entry.characterId];
+              const isSelected = selectedCharacterId === entry.characterId;
+
+              return (
+                <div
+                  key={entry.characterId}
+                  data-testid={`models-market-card-${entry.characterId}`}
+                  className={`model-card ${isSelected ? 'is-selected' : ''}`}
+                  onClick={() => setSelectedCharacterId(entry.characterId)}
+                >
+                  <div className="model-card-header">
+                    <span className="model-card-rank">{entry.rank ? `#${entry.rank}` : copy.emDash}</span>
+                    <span className={`model-card-status status-${entry.status.toLowerCase()}`}>
+                      {entry.status === "ACTIVE"
+                        ? copy.active
+                        : entry.status === "CLOSE_ONLY"
+                          ? copy.closeOnly
+                          : copy.archived}
+                    </span>
+                  </div>
+                  <div className="model-card-body">
+                    <h4 className="model-card-name">{entry.name}</h4>
+                    <span className="model-card-provider">{entry.provider || copy.unknown} &middot; {entry.model || copy.unnamedModel}</span>
+
+                    <div className="model-card-stats">
+                      <div className="model-card-stat">
+                        <span className="stat-label">{copy.winLoss}</span>
+                        <span className="stat-value">{entry.wins}-{entry.losses} ({toWinRatePercent(entry.wins, entry.losses).toFixed(1)}%)</span>
+                      </div>
+                      <div className="model-card-stat">
+                        <span className="stat-label">{copy.funding}</span>
+                        <span className={`stat-value ${market && market.fundingRate > 0 ? "is-funding-positive" : "is-funding-negative"}`}>
+                          {market ? (market.fundingRate * 100).toFixed(4) + '%' : copy.emDash}
                         </span>
-                      </td>
-                      <td className="models-market-mono">
-                        {market?.spotIndex
-                          ? formatUsd(market.spotIndex, locale)
-                          : copy.emDash}
-                      </td>
-                      <td className="models-market-mono">
-                        {market ? formatSolAmount(market.longOi, locale, 2) : copy.emDash}
-                      </td>
-                      <td className="models-market-mono">
-                        {market ? formatSolAmount(market.shortOi, locale, 2) : copy.emDash}
-                      </td>
-                      <td
-                        className={`models-market-mono ${
-                          market && market.fundingRate > 0
-                            ? "is-funding-positive"
-                            : "is-funding-negative"
-                        }`}
-                      >
-                        {market
-                          ? formatLocaleNumber(market.fundingRate, locale, {
-                              minimumFractionDigits: 6,
-                              maximumFractionDigits: 6,
-                            })
-                          : copy.emDash}
-                      </td>
-                      <td className="models-market-mono">
-                        {entry.status === "ACTIVE"
-                          ? copy.active
-                          : entry.status === "CLOSE_ONLY"
-                            ? copy.closeOnly
-                            : copy.archived}
-                      </td>
-                      <td className="models-market-mono">
-                        {position ? (
-                          <span
-                            className={
-                              position.direction === "LONG"
-                                ? "models-market-position-chip is-long"
-                                : "models-market-position-chip is-short"
-                            }
-                          >
-                            {position.direction === "LONG"
-                              ? copy.directionLong
-                              : copy.directionShort}{" "}
-                            {formatLocaleNumber(position.size, locale, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                        ) : (
-                          copy.emDash
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+                  </div>
+                  {position && (
+                    <div className="model-card-footer">
+                      <span className={`models-market-position-chip is-${position.direction.toLowerCase()}`}>
+                        {position.direction === "LONG" ? copy.directionLong : copy.directionShort}{" "}
+                        {formatLocaleNumber(position.size, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </article>
 
@@ -1572,11 +1515,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                   </p>
                 </div>
                 <div
-                  className={`models-market-rank-chip ${
-                    selectedOracleFresh || selectedEntry.status !== "ACTIVE"
+                  className={`models-market-rank-chip ${selectedOracleFresh || selectedEntry.status !== "ACTIVE"
                       ? ""
                       : "is-stale"
-                  }`}
+                    }`}
                 >
                   {selectedEntry.status === "ACTIVE"
                     ? selectedOracleFresh
@@ -1604,12 +1546,12 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                   <strong>
                     {selectedMarket
                       ? `${formatLocaleNumber(selectedMarket.longOi, locale, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })} / ${formatLocaleNumber(selectedMarket.shortOi, locale, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })} / ${formatLocaleNumber(selectedMarket.shortOi, locale, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`
                       : copy.emDash}
                   </strong>
                 </div>
@@ -1618,9 +1560,9 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                   <strong>
                     {selectedMarket
                       ? formatLocaleNumber(selectedMarket.fundingRate, locale, {
-                          minimumFractionDigits: 6,
-                          maximumFractionDigits: 6,
-                        })
+                        minimumFractionDigits: 6,
+                        maximumFractionDigits: 6,
+                      })
                       : copy.emDash}
                   </strong>
                 </div>

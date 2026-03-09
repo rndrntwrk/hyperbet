@@ -182,14 +182,14 @@ export function EvmBettingPanel({
 
   const configuredHeadlessPrivateKey = normalizePrivateKey(
     (import.meta.env.VITE_EVM_PRIVATE_KEY as string | undefined) ??
-      (import.meta.env.VITE_HEADLESS_EVM_PRIVATE_KEY as string | undefined) ??
-      (import.meta.env.VITE_E2E_EVM_PRIVATE_KEY as string | undefined) ??
-      "",
+    (import.meta.env.VITE_HEADLESS_EVM_PRIVATE_KEY as string | undefined) ??
+    (import.meta.env.VITE_E2E_EVM_PRIVATE_KEY as string | undefined) ??
+    "",
   );
   const configuredHeadlessAddress = normalizeAddress(
     (import.meta.env.VITE_E2E_EVM_ADDRESS as string | undefined) ??
-      (import.meta.env.VITE_HEADLESS_EVM_ADDRESS as string | undefined) ??
-      "",
+    (import.meta.env.VITE_HEADLESS_EVM_ADDRESS as string | undefined) ??
+    "",
   );
 
   const e2eAccountResult = useMemo(() => {
@@ -702,9 +702,9 @@ export function EvmBettingPanel({
   const yesPercent =
     marketMeta && marketMeta.totalAShares + marketMeta.totalBShares > 0n
       ? Number(
-          (marketMeta.totalAShares * 100n) /
-            (marketMeta.totalAShares + marketMeta.totalBShares),
-        )
+        (marketMeta.totalAShares * 100n) /
+        (marketMeta.totalAShares + marketMeta.totalBShares),
+      )
       : 50;
   const noPercent = 100 - yesPercent;
   const walletAddress = effectiveAddress ?? null;
@@ -712,13 +712,13 @@ export function EvmBettingPanel({
     marketMeta?.status === "RESOLVED" || marketMeta?.status === "CANCELLED";
   const e2eWalletDebug = isE2eMode
     ? [
-        `key=${configuredHeadlessPrivateKey ? "yes" : "no"}`,
-        `addrEnv=${configuredHeadlessAddress ? "yes" : "no"}`,
-        `acct=${e2eAccount ? (typeof e2eAccount === "string" ? "rpc" : "local") : "none"}`,
-        `wallet=${effectiveWalletClient ? "yes" : "no"}`,
-        `addr=${headlessAccountAddress ?? "-"}`,
-        `err=${e2eAccountResult.error ?? "-"}`,
-      ].join(" ")
+      `key=${configuredHeadlessPrivateKey ? "yes" : "no"}`,
+      `addrEnv=${configuredHeadlessAddress ? "yes" : "no"}`,
+      `acct=${e2eAccount ? (typeof e2eAccount === "string" ? "rpc" : "local") : "none"}`,
+      `wallet=${effectiveWalletClient ? "yes" : "no"}`,
+      `addr=${headlessAccountAddress ?? "-"}`,
+      `err=${e2eAccountResult.error ?? "-"}`,
+    ].join(" ")
     : "";
 
   return (
@@ -773,51 +773,7 @@ export function EvmBettingPanel({
               {copy.switchToChain(chainConfig?.shortName ?? "EVM")}
             </button>
           )}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: compact
-                ? "1fr"
-                : "repeat(3, minmax(0, 1fr))",
-              gap: 8,
-            }}
-          >
-            <div data-testid={isE2eMode ? "evm-status" : undefined}>
-              {status}
-            </div>
-            <div>
-              {copy.duel}:{" "}
-              {duelId ??
-                (duelKeyHex ? `${duelKeyHex.slice(0, 8)}...` : copy.pending)}
-            </div>
-            <div>
-              {copy.wallet}:{" "}
-              {walletAddress
-                ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
-                : copy.disconnected}
-            </div>
-            <div>
-              {copy.price}:{" "}
-              <input
-                data-testid={isE2eMode ? "evm-price-input" : undefined}
-                value={priceInput}
-                onChange={(event) => setPriceInput(event.target.value)}
-                inputMode="numeric"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              {copy.balance}:{" "}
-              {Number(formatUnits(nativeBalance, nativeDecimals)).toFixed(3)}{" "}
-              {nativeSymbol}
-            </div>
-            <div>
-              {copy.yourShares}:{" "}
-              {position
-                ? `${Number(formatUnits(position.aShares, nativeDecimals)).toFixed(3)} / ${Number(formatUnits(position.bShares, nativeDecimals)).toFixed(3)}`
-                : "0 / 0"}
-            </div>
-          </div>
+
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               data-testid={isE2eMode ? "evm-refresh-market" : undefined}
@@ -867,6 +823,26 @@ export function EvmBettingPanel({
           ) : null}
         </div>
       </PredictionMarketPanel>
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          color: "#d4d4d8",
+          fontFamily: "'Inter', system-ui, sans-serif",
+          fontSize: 12,
+        }}
+      >
+        <span>{copy.price}</span>
+        <input
+          data-testid={isE2eMode ? "evm-price-input" : undefined}
+          value={priceInput}
+          onChange={(event) => setPriceInput(event.target.value)}
+          inputMode="numeric"
+          style={inputStyle}
+        />
+      </div>
       {isE2eMode ? (
         <div
           style={{
