@@ -170,17 +170,7 @@ export function OrderBook({
         >
           {copy.orderBook}
         </div>
-        {goldPriceUsd !== null && (
-          <div
-            style={{
-              fontSize: 10,
-              color: "rgba(242,208,138,0.5)",
-              fontWeight: 700,
-            }}
-          >
-            {assetSymbol} ${goldPriceUsd.toFixed(4)}
-          </div>
-        )}
+        {goldPriceUsd !== null && false /* Shown in chart area instead */}
       </div>
 
       {/* Header */}
@@ -290,57 +280,7 @@ export function OrderBook({
         ))}
       </div>
 
-      {/* Pool Summary */}
-      {totalPot > 0 && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 10,
-            paddingTop: 4,
-            borderTop: "1px solid rgba(255,255,255,0.04)",
-          }}
-        >
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              color: "rgba(255,255,255,0.45)",
-            }}
-          >
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#00ffcc",
-                boxShadow: "0 0 4px rgba(0,255,204,0.4)",
-              }}
-            />
-            {copy.yesPool}: {formatLocaleAmount(yesPot, resolvedLocale)}
-          </span>
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              color: "rgba(255,255,255,0.45)",
-            }}
-          >
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#ff0d3c",
-                boxShadow: "0 0 4px rgba(255,13,60,0.4)",
-              }}
-            />
-            {copy.noPool}: {formatLocaleAmount(noPot, resolvedLocale)}
-          </span>
-        </div>
-      )}
+
     </>
   );
 }

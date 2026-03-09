@@ -19,7 +19,7 @@ export function Sidebar({
     <div
       style={{
         position: "relative",
-        width: isExpanded ? width : 48,
+        width: isExpanded ? `min(${width}px, calc(100vw - 48px))` : 48,
         height: "100%",
         transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         display: "flex",
@@ -35,7 +35,7 @@ export function Sidebar({
           bottom: 0,
           left: side === "left" ? 0 : "auto",
           right: side === "right" ? 0 : "auto",
-          width: width,
+          width: `min(${width}px, calc(100vw - 48px))`,
           background: "rgba(0,0,0,0.65)",
           borderRight:
             side === "left" ? "1px solid rgba(255,255,255,0.08)" : "none",
@@ -80,7 +80,7 @@ export function Sidebar({
             side === "left" && !isExpanded
               ? "rgba(255,255,255,0.1)"
               : "transparent",
-          width: 24,
+          width: 44,
           height: 64,
           display: "flex",
           alignItems: "center",

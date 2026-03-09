@@ -41,7 +41,6 @@ describe("RecentTrades", () => {
     );
 
     expect(container.textContent).toContain("RECENT TRADES");
-    expect(container.textContent).toContain("GOLD $1934.2000");
     expect(container.textContent).toContain("12.3456");
     expect(container.textContent).toContain("1.5K");
     expect(container.textContent).toContain("1m 30s ago");

@@ -228,6 +228,8 @@ export function PointsLeaderboard({ locale }: { locale?: UiLocale } = {}) {
             borderRadius: 12,
             border: "1px solid rgba(255,255,255,0.06)",
             overflow: "hidden",
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
           }}
         >
           <div

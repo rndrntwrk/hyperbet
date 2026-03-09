@@ -32,11 +32,11 @@ export function StreamUIApp() {
   const countdownText =
     mock.streamState.cycle.timeRemaining > 0
       ? `${Math.floor(mock.streamState.cycle.timeRemaining / 60)
-          .toString()
-          .padStart(
-            2,
-            "0",
-          )}:${(mock.streamState.cycle.timeRemaining % 60).toString().padStart(2, "0")}`
+        .toString()
+        .padStart(
+          2,
+          "0",
+        )}:${(mock.streamState.cycle.timeRemaining % 60).toString().padStart(2, "0")}`
       : "";
 
   return (
@@ -53,44 +53,7 @@ export function StreamUIApp() {
         }}
       />
 
-      {/* Dev mode badge */}
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          left: 12,
-          zIndex: 50,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 800,
-            textTransform: "uppercase",
-            letterSpacing: 1.2,
-            background: "rgba(234,179,8,0.2)",
-            border: "1px solid rgba(234,179,8,0.4)",
-            color: "#eab308",
-            padding: "4px 10px",
-            borderRadius: 6,
-          }}
-        >
-          DUEL ARENA DEV
-        </span>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(255,255,255,0.4)",
-            letterSpacing: 0.5,
-          }}
-        >
-          Mock duel feed &middot; HMR active
-        </span>
-      </div>
+
 
       {/* Fighting game HP bars + countdown + victory overlay */}
       <FightOverlay
@@ -128,7 +91,8 @@ export function StreamUIApp() {
               padding: "24px",
               borderRadius: "16px",
               border: "1px solid rgba(255,255,255,0.1)",
-              width: "320px",
+              width: "min(320px, 90vw)",
+              maxWidth: "90vw",
               boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
             }}
             onClick={(e) => e.stopPropagation()}
@@ -180,20 +144,18 @@ export function StreamUIApp() {
                 gap: 10,
                 padding: "6px 14px",
                 borderRadius: 10,
-                background: `linear-gradient(180deg, ${
-                  mock.statusColor === "#22c55e"
+                background: `linear-gradient(180deg, ${mock.statusColor === "#22c55e"
                     ? "rgba(34,197,94,0.15)"
                     : mock.statusColor === "#ef4444"
                       ? "rgba(239,68,68,0.15)"
                       : "rgba(234,179,8,0.12)"
-                } 0%, rgba(0,0,0,0.2) 100%)`,
-                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 8px ${
-                  mock.statusColor === "#22c55e"
+                  } 0%, rgba(0,0,0,0.2) 100%)`,
+                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 8px ${mock.statusColor === "#22c55e"
                     ? "rgba(34,197,94,0.12)"
                     : mock.statusColor === "#ef4444"
                       ? "rgba(239,68,68,0.12)"
                       : "rgba(234,179,8,0.1)"
-                }`,
+                  }`,
               }}
             >
               <span
@@ -237,7 +199,7 @@ export function StreamUIApp() {
               <button
                 type="button"
                 className="evm-connect-btn"
-                style={{ opacity: 0.5, cursor: "default" }}
+                style={{ opacity: 0.5, cursor: "default", display: "none" }}
               >
                 Mock Wallet
               </button>

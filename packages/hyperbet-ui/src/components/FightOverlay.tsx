@@ -168,7 +168,7 @@ function AgentHPBar({
         display: "flex",
         flexDirection: "column",
         gap: 4,
-        width: "clamp(280px, 38vw, 480px)",
+        width: "clamp(140px, 38vw, 480px)",
         alignItems: isRight ? "flex-end" : "flex-start",
       }}
     >
@@ -387,6 +387,7 @@ function AgentHPBar({
         </div>
 
         <div
+          className="fight-inventory-grid"
           style={{
             display: "flex",
             alignItems: "center",
@@ -622,9 +623,10 @@ function VictoryDisplay({
             "linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 100%)",
           border: "3px solid #f2d08a",
           borderRadius: 16,
-          padding: "40px 60px",
+          padding: "clamp(20px, 4vw, 40px) clamp(24px, 5vw, 60px)",
           textAlign: "center",
           animation: "fightGlow 2s ease-in-out infinite",
+          maxWidth: "min(90vw, 500px)",
         }}
       >
         <div
@@ -903,6 +905,9 @@ export function FightOverlay({
         @keyframes fightSlideIn {
           0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
           100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        @media (max-width: 480px) {
+          .fight-inventory-grid { display: none !important; }
         }
       `}</style>
     </div>

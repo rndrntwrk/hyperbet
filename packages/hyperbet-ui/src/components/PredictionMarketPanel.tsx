@@ -121,7 +121,7 @@ export function PredictionMarketPanel({
     <>
       {/* Layout: 4-column wide OR single-column compact sidebar */}
       <div
-        className={compact ? "pm-compact" : ""}
+        className={compact ? "pm-compact" : "pm-grid"}
         style={{
           display: "grid",
           gridTemplateColumns: compact
@@ -706,7 +706,7 @@ export function PredictionMarketPanel({
                     fontFamily: "'Teko', sans-serif",
                   }}
                 >
-                  {copy.predictionMarket}
+                  {copy.predictionMarket && false /* Hidden — chart is self-evident */}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ textAlign: "right" }}>
@@ -1072,6 +1072,21 @@ export function PredictionMarketPanel({
         .pm-compact .gm-tab-btn {
           touch-action: manipulation;
           -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ── Responsive: make wide grid stack on smaller screens ── */
+        @media (max-width: 768px) {
+          .pm-grid {
+            grid-template-columns: 1fr 1fr !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .pm-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .pm-grid > div:nth-child(n+2) {
+            display: none !important;
+          }
         }
       `}</style>
     </>

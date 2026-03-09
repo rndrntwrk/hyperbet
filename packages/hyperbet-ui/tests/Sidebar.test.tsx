@@ -14,7 +14,7 @@ describe("Sidebar", () => {
     const shell = container.firstElementChild as HTMLElement;
     const toggle = container.querySelector("button") as HTMLButtonElement;
 
-    expect(shell.style.width).toBe("320px");
+    expect(shell.style.width).toContain("min(320px");
     expect(toggle.textContent).toBe("◀");
     expect(container.textContent).toContain("Panel body");
 
