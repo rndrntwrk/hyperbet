@@ -178,6 +178,18 @@ function buildEvmConfig(
     asDeploymentEnvironment(environment),
   );
   return {
+    // BSC and Base are not used in the AVAX-only package.
+    // These fields remain in EnvConfig for interface compatibility with shared
+    // code in chainConfig.ts; they are empty so hasConfiguredContracts() returns
+    // false and the chains are never added to the enabled chains list.
+    bscRpcUrl: "",
+    bscChainId: 0,
+    bscGoldClobAddress: "",
+    bscGoldTokenAddress: "",
+    baseRpcUrl: "",
+    baseChainId: 0,
+    baseGoldClobAddress: "",
+    baseGoldTokenAddress: "",
     avaxRpcUrl: defaultRpcUrlForEvmNetwork(defaults.avax.networkKey),
     avaxChainId: defaults.avax.chainId,
     avaxGoldClobAddress: defaults.avax.goldClobAddress,
