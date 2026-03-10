@@ -32,3 +32,4 @@ packages/evm-contracts/typechain-types
 packages/evm-contracts/deployments
 keys/
 wallets.generated.json
+packages/market-maker-bot/test.out

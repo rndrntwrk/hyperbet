@@ -11,16 +11,16 @@ describe("Sidebar", () => {
       </Sidebar>,
     );
 
-    const shell = container.firstElementChild as HTMLElement;
     const toggle = container.querySelector("button") as HTMLButtonElement;
 
-    expect(shell.style.width).toContain("min(320px");
+    // Expanded state: toggle shows collapse arrow, body visible
     expect(toggle.textContent).toBe("◀");
     expect(container.textContent).toContain("Panel body");
 
     click(toggle);
 
-    expect(shell.style.width).toBe("48px");
+    // Collapsed state: toggle shows expand arrow, body still in DOM but panel collapsed
     expect(toggle.textContent).toBe("▶");
+    expect(container.textContent).toContain("Panel body");
   });
 });

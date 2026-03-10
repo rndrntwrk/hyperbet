@@ -1,4 +1,4 @@
-export type UiLocale = "en" | "zh";
+export type UiLocale = "en" | "zh" | "ko" | "pt" | "es";
 
 const UI_LOCALE_STORAGE_KEY = "hyperbet_ui_locale";
 
@@ -116,6 +116,114 @@ const UI_COPY: Record<UiLocale, UiCopy> = {
     winRate: "胜率",
     mockWallet: "模拟钱包",
   },
+  ko: {
+    stats: "통계",
+    buy: "매수",
+    sell: "매도",
+    connectWallet: "지갑 연결",
+    predictionMarket: "예측 시장",
+    orderBook: "호가창",
+    recentTrades: "최근 거래",
+    price: "가격",
+    size: "수량",
+    side: "방향",
+    time: "시간",
+    total: "합계",
+    spread: "스프레드",
+    noTradesYet: "아직 거래가 없습니다",
+    noSellAction: "매도 불가",
+    locked: "잠김",
+    yesPool: "YES 풀",
+    noPool: "NO 풀",
+    actionLabel: (action) => (action === "buy" ? "매수" : "매도"),
+    betAmountLabel: (symbol) => `${symbol} 베팅 금액`,
+    sellPanelDescription: (mode) => {
+      if (mode === "supported") return "아래 컨트롤로 매도 주문을 제출하세요.";
+      if (mode === "evm") return "EVM 패널에서 매도 주문을 지원합니다.";
+      return "시장 정산 전까지 매도가 비활성화됩니다.";
+    },
+    overall: "전체",
+    headToHead: "상대",
+    damage: "피해",
+    fight: "싸움!",
+    victory: "승리",
+    wins: "승",
+    losses: "패",
+    winRate: "승률",
+    mockWallet: "모의 지갑",
+  },
+  pt: {
+    stats: "ESTATÍSTICAS",
+    buy: "COMPRAR",
+    sell: "VENDER",
+    connectWallet: "CONECTAR CARTEIRA",
+    predictionMarket: "MERCADO DE PREVISÃO",
+    orderBook: "LIVRO DE ORDENS",
+    recentTrades: "NEGOCIAÇÕES RECENTES",
+    price: "Preço",
+    size: "Quantidade",
+    side: "Lado",
+    time: "Hora",
+    total: "Total",
+    spread: "Spread",
+    noTradesYet: "Nenhuma negociação ainda",
+    noSellAction: "SEM VENDA",
+    locked: "BLOQUEADO",
+    yesPool: "Pool SIM",
+    noPool: "Pool NÃO",
+    actionLabel: (action) => (action === "buy" ? "COMPRAR" : "VENDER"),
+    betAmountLabel: (symbol) => `Valor da aposta em ${symbol}`,
+    sellPanelDescription: (mode) => {
+      if (mode === "supported") return "Envie ordens de venda com os controles abaixo.";
+      if (mode === "evm") return "Ordens de venda EVM suportadas pelo painel EVM.";
+      return "Venda desativada até a resolução do mercado.";
+    },
+    overall: "GERAL",
+    headToHead: "H2H",
+    damage: "DANO",
+    fight: "LUTA!",
+    victory: "VITÓRIA",
+    wins: "Vitórias",
+    losses: "Derrotas",
+    winRate: "Taxa de Vitória",
+    mockWallet: "Carteira Simulada",
+  },
+  es: {
+    stats: "ESTADÍSTICAS",
+    buy: "COMPRAR",
+    sell: "VENDER",
+    connectWallet: "CONECTAR BILLETERA",
+    predictionMarket: "MERCADO DE PREDICCIÓN",
+    orderBook: "LIBRO DE ÓRDENES",
+    recentTrades: "OPERACIONES RECIENTES",
+    price: "Precio",
+    size: "Cantidad",
+    side: "Lado",
+    time: "Hora",
+    total: "Total",
+    spread: "Spread",
+    noTradesYet: "Sin operaciones aún",
+    noSellAction: "SIN VENTA",
+    locked: "BLOQUEADO",
+    yesPool: "Pool SÍ",
+    noPool: "Pool NO",
+    actionLabel: (action) => (action === "buy" ? "COMPRAR" : "VENDER"),
+    betAmountLabel: (symbol) => `Monto de apuesta en ${symbol}`,
+    sellPanelDescription: (mode) => {
+      if (mode === "supported") return "Envíe órdenes de venta con los controles de abajo.";
+      if (mode === "evm") return "Órdenes de venta EVM soportadas a través del panel EVM.";
+      return "Venta deshabilitada hasta la resolución del mercado.";
+    },
+    overall: "GRAL",
+    headToHead: "H2H",
+    damage: "DAÑO",
+    fight: "¡PELEA!",
+    victory: "VICTORIA",
+    wins: "Victorias",
+    losses: "Derrotas",
+    winRate: "Tasa de Victoria",
+    mockWallet: "Billetera Simulada",
+  },
 };
 
 function readStoredLocale(): string | null {
@@ -143,7 +251,12 @@ function readNavigatorLocale(): string | null {
 
 export function normalizeUiLocale(value: string | null | undefined): UiLocale {
   if (!value) return "en";
-  return value.trim().toLowerCase().startsWith("zh") ? "zh" : "en";
+  const lower = value.trim().toLowerCase();
+  if (lower.startsWith("zh")) return "zh";
+  if (lower.startsWith("ko")) return "ko";
+  if (lower.startsWith("pt")) return "pt";
+  if (lower.startsWith("es")) return "es";
+  return "en";
 }
 
 export function resolveUiLocale(value?: UiLocale | string | null): UiLocale {
@@ -163,7 +276,14 @@ export function setStoredUiLocale(locale: UiLocale): void {
 }
 
 export function getLocaleTag(locale: UiLocale): string {
-  return locale === "zh" ? "zh-CN" : "en-US";
+  const map: Record<UiLocale, string> = {
+    en: "en-US",
+    zh: "zh-CN",
+    ko: "ko-KR",
+    pt: "pt-BR",
+    es: "es-ES",
+  };
+  return map[locale];
 }
 
 export function getUiCopy(locale: UiLocale): UiCopy {
@@ -186,6 +306,9 @@ export function formatLocaleAmount(value: number, locale: UiLocale): string {
   if (locale === "zh") {
     if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(1)}亿`;
     if (value >= 10_000) return `${(value / 10_000).toFixed(1)}万`;
+  } else if (locale === "ko") {
+    if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(1)}억`;
+    if (value >= 10_000) return `${(value / 10_000).toFixed(1)}만`;
   } else {
     if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -199,12 +322,33 @@ export function formatLocaleAmount(value: number, locale: UiLocale): string {
 
 export function formatTimeAgoLabel(ts: number, locale: UiLocale): string {
   const ago = Math.floor((Date.now() - ts) / 1000);
-  if (ago < 0) return locale === "zh" ? "刚刚" : "just now";
-  const mins = Math.floor(ago / 60);
-  const secs = ago % 60;
+  const mins = Math.floor(Math.max(0, ago) / 60);
+  const secs = Math.max(0, ago) % 60;
+  if (ago < 0) {
+    const nowMap: Record<UiLocale, string> = {
+      en: "just now",
+      zh: "刚刚",
+      ko: "방금",
+      pt: "agora mesmo",
+      es: "justo ahora",
+    };
+    return nowMap[locale];
+  }
   if (locale === "zh") {
     if (mins > 0) return `${mins}分${secs}秒前`;
     return `${secs}秒前`;
+  }
+  if (locale === "ko") {
+    if (mins > 0) return `${mins}분 ${secs}초 전`;
+    return `${secs}초 전`;
+  }
+  if (locale === "pt") {
+    if (mins > 0) return `${mins}m ${secs}s atrás`;
+    return `${secs}s atrás`;
+  }
+  if (locale === "es") {
+    if (mins > 0) return `hace ${mins}m ${secs}s`;
+    return `hace ${secs}s`;
   }
   if (mins > 0) return `${mins}m ${secs}s ago`;
   return `${secs}s ago`;

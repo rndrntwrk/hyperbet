@@ -1,0 +1,5 @@
+[test]
+coverage = false
+
+[test.ignore]
+patterns = ["tests/e2e/.*"]
