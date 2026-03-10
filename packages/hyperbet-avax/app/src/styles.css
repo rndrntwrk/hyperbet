@@ -7122,8 +7122,10 @@ select:focus-visible {
   color: var(--hm-panel-muted-text);
 }
 
+
 /* ═══════════════════════════════════════════════════════════════════
    AVAX Perps Market View (.hm-perps-*)
+   All colours use semantic CSS variables — works in dark + light theme
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Root container ── */
@@ -7145,8 +7147,8 @@ select:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   padding: 14px 16px 10px;
-  background: var(--hm-panel-bg, rgba(0,0,0,0.3));
-  border: 1px solid var(--hm-panel-card-border, rgba(255,255,255,0.08));
+  background: var(--hm-surface);
+  border: 1px solid var(--hm-panel-card-border);
   border-radius: var(--hm-radius, 2px);
 }
 
@@ -7161,20 +7163,20 @@ select:focus-visible {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--hm-accent-gold, #e5b84a);
+  color: var(--hm-accent-gold);
 }
 
 .hm-perps-headline {
   margin: 0 0 6px;
   font-size: 16px;
   font-weight: 700;
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
 }
 
 .hm-perps-copy {
   margin: 0;
   font-size: 11px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.5));
+  color: var(--hm-panel-muted-text);
   line-height: 1.5;
 }
 
@@ -7190,8 +7192,8 @@ select:focus-visible {
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--hm-surface-raised);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
   min-width: 110px;
 }
@@ -7201,18 +7203,18 @@ select:focus-visible {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.45));
+  color: var(--hm-text-muted);
 }
 
 .hm-perps-metric-value {
   font-size: 13px;
   font-weight: 700;
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
 }
 
 .hm-perps-metric-sub {
   font-size: 9px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
 }
 
 /* ── Two-column grid ── */
@@ -7236,8 +7238,8 @@ select:focus-visible {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  background: var(--hm-panel-bg, rgba(0,0,0,0.3));
-  border: 1px solid var(--hm-panel-card-border, rgba(255,255,255,0.08));
+  background: var(--hm-surface);
+  border: 1px solid var(--hm-panel-card-border);
   border-radius: var(--hm-radius, 2px);
   min-height: 0;
   overflow: hidden;
@@ -7258,13 +7260,13 @@ select:focus-visible {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
 }
 
 .hm-perps-card-sub {
   margin: 0;
   font-size: 10px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.45));
+  color: var(--hm-panel-muted-text);
 }
 
 /* ── Toolbar (search + updated) ── */
@@ -7278,10 +7280,10 @@ select:focus-visible {
 .hm-perps-search {
   height: 26px;
   padding: 0 8px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--hm-surface-raised);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
   font-size: 11px;
   font-family: inherit;
   outline: none;
@@ -7289,27 +7291,27 @@ select:focus-visible {
 }
 
 .hm-perps-search:focus {
-  border-color: var(--hm-accent-gold, #e5b84a);
+  border-color: var(--hm-accent-gold);
 }
 
 .hm-perps-search::placeholder {
-  color: rgba(255,255,255,0.3);
+  color: var(--hm-text-muted);
 }
 
 .hm-perps-updated {
   font-size: 9px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
   white-space: nowrap;
 }
 
 /* ── Error state ── */
 .hm-perps-error {
   padding: 6px 8px;
-  background: rgba(239,68,68,0.12);
-  border: 1px solid rgba(239,68,68,0.25);
+  background: var(--hm-gold-glow-light);
+  border: 1px solid var(--hm-gold-border-subtle);
   border-radius: var(--hm-radius, 2px);
   font-size: 11px;
-  color: var(--hm-accent-red, #ef4444);
+  color: var(--hm-accent-red);
 }
 
 /* ── Table ── */
@@ -7325,7 +7327,7 @@ select:focus-visible {
 }
 
 .hm-perps-thead-row {
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--hm-border);
 }
 
 .hm-perps-th {
@@ -7335,29 +7337,29 @@ select:focus-visible {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.45));
+  color: var(--hm-text-muted);
   white-space: nowrap;
 }
 
 .hm-perps-row {
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--hm-border-subtle);
   cursor: pointer;
   transition: background 0.1s;
 }
 
 .hm-perps-row:hover {
-  background: rgba(255,255,255,0.04);
+  background: var(--hm-surface-raised);
 }
 
 .hm-perps-row--selected {
-  background: rgba(229,184,74,0.06);
-  border-bottom-color: rgba(229,184,74,0.15);
+  background: var(--hm-gold-glow-subtle);
+  border-bottom-color: var(--hm-gold-border-subtle);
 }
 
 .hm-perps-td {
   padding: 7px 8px;
   vertical-align: middle;
-  color: var(--hm-panel-text, rgba(255,255,255,0.9));
+  color: var(--hm-text);
 }
 
 .hm-perps-td--mono {
@@ -7366,28 +7368,28 @@ select:focus-visible {
 }
 
 .hm-perps-td--gold {
-  color: var(--hm-accent-gold, #e5b84a);
+  color: var(--hm-accent-gold);
 }
 
 .hm-perps-td--green {
-  color: var(--hm-accent-green, #22c55e);
+  color: var(--hm-accent-green);
 }
 
 .hm-perps-td--red {
-  color: var(--hm-accent-red, #ef4444);
+  color: var(--hm-accent-red);
 }
 
 .hm-perps-empty-cell {
   padding: 20px 8px;
   text-align: center;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
   font-size: 11px;
 }
 
 /* ── Rank ── */
 .hm-perps-rank {
   font-weight: 600;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.6));
+  color: var(--hm-text-dim);
   font-size: 10px;
 }
 
@@ -7400,34 +7402,34 @@ select:focus-visible {
 
 .hm-perps-agent-name {
   font-weight: 600;
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
   font-size: 11px;
 }
 
 .hm-perps-agent-model {
   font-size: 9px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
 }
 
 /* ── W/L display ── */
 .hm-perps-wr-wins {
-  color: var(--hm-accent-green, #22c55e);
+  color: var(--hm-accent-green);
   margin-right: 2px;
 }
 
 .hm-perps-wr-sep {
-  color: rgba(255,255,255,0.25);
+  color: var(--hm-text-muted);
   margin: 0 2px;
 }
 
 .hm-perps-wr-losses {
-  color: var(--hm-accent-red, #ef4444);
+  color: var(--hm-accent-red);
   margin-right: 4px;
 }
 
 .hm-perps-wr-pct {
   font-size: 9px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.5));
+  color: var(--hm-text-muted);
 }
 
 /* ── Status badge ── */
@@ -7442,18 +7444,22 @@ select:focus-visible {
 }
 
 .hm-perps-status-badge--active {
-  background: rgba(34,197,94,0.15);
-  color: var(--hm-accent-green, #22c55e);
+  background: color-mix(in srgb, var(--hm-accent-green) 15%, transparent);
+  color: var(--hm-accent-green);
 }
 
 .hm-perps-status-badge--close-only {
-  background: rgba(234,179,8,0.15);
+  background: color-mix(in srgb, #eab308 12%, transparent);
+  color: #ca8a04;
+}
+
+[data-theme="dark"] .hm-perps-status-badge--close-only {
   color: #eab308;
 }
 
 .hm-perps-status-badge--archived {
-  background: rgba(239,68,68,0.12);
-  color: var(--hm-accent-red, #ef4444);
+  background: color-mix(in srgb, var(--hm-accent-red) 12%, transparent);
+  color: var(--hm-accent-red);
 }
 
 /* ── Position chip in table ── */
@@ -7467,13 +7473,13 @@ select:focus-visible {
 }
 
 .hm-perps-position-chip--long {
-  background: rgba(34,197,94,0.15);
-  color: var(--hm-accent-green, #22c55e);
+  background: color-mix(in srgb, var(--hm-accent-green) 15%, transparent);
+  color: var(--hm-accent-green);
 }
 
 .hm-perps-position-chip--short {
-  background: rgba(239,68,68,0.12);
-  color: var(--hm-accent-red, #ef4444);
+  background: color-mix(in srgb, var(--hm-accent-red) 12%, transparent);
+  color: var(--hm-accent-red);
 }
 
 /* ── Rank chip (detail header) ── */
@@ -7484,17 +7490,17 @@ select:focus-visible {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: rgba(229,184,74,0.12);
-  color: var(--hm-accent-gold, #e5b84a);
-  border: 1px solid rgba(229,184,74,0.2);
+  background: var(--hm-gold-glow-light);
+  color: var(--hm-accent-gold);
+  border: 1px solid var(--hm-gold-border-subtle);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .hm-perps-rank-chip--stale {
-  background: rgba(239,68,68,0.1);
-  color: var(--hm-accent-red, #ef4444);
-  border-color: rgba(239,68,68,0.2);
+  background: color-mix(in srgb, var(--hm-accent-red) 10%, transparent);
+  color: var(--hm-accent-red);
+  border-color: color-mix(in srgb, var(--hm-accent-red) 20%, transparent);
 }
 
 /* ── Detail stats grid ── */
@@ -7509,8 +7515,8 @@ select:focus-visible {
   flex-direction: column;
   gap: 2px;
   padding: 6px 8px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--hm-surface-raised);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
 }
 
@@ -7519,26 +7525,26 @@ select:focus-visible {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.45));
+  color: var(--hm-text-muted);
 }
 
 .hm-perps-detail-value {
   font-size: 12px;
   font-weight: 700;
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
   font-family: var(--font-mono, "Geist Mono", monospace);
 }
 
 .hm-perps-detail-value--gold {
-  color: var(--hm-accent-gold, #e5b84a);
+  color: var(--hm-accent-gold);
 }
 
 .hm-perps-detail-value--green {
-  color: var(--hm-accent-green, #22c55e);
+  color: var(--hm-accent-green);
 }
 
 .hm-perps-detail-value--red {
-  color: var(--hm-accent-red, #ef4444);
+  color: var(--hm-accent-red);
 }
 
 /* ── Oracle history card ── */
@@ -7547,8 +7553,8 @@ select:focus-visible {
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--hm-surface-raised);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
 }
 
@@ -7565,13 +7571,13 @@ select:focus-visible {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--hm-panel-text, rgba(255,255,255,0.9));
+  color: var(--hm-text);
 }
 
 .hm-perps-section-sub {
   margin: 0;
   font-size: 9px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
 }
 
 .hm-perps-section-label {
@@ -7579,12 +7585,12 @@ select:focus-visible {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.45));
+  color: var(--hm-text-muted);
 }
 
 .hm-perps-oracle-updated {
   font-size: 9px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -7600,19 +7606,20 @@ select:focus-visible {
   flex-direction: column;
   gap: 2px;
   padding: 6px 8px;
-  background: rgba(0,0,0,0.85);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--hm-surface);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
   font-size: 11px;
+  box-shadow: 0 4px 12px var(--hm-panel-card-shadow, rgba(0,0,0,0.2));
 }
 
 .hm-perps-tooltip strong {
-  color: var(--hm-accent-gold, #e5b84a);
+  color: var(--hm-accent-gold);
   font-family: var(--font-mono, "Geist Mono", monospace);
 }
 
 .hm-perps-tooltip span {
-  color: rgba(255,255,255,0.6);
+  color: var(--hm-text-muted);
   font-size: 9px;
 }
 
@@ -7623,7 +7630,7 @@ select:focus-visible {
   justify-content: center;
   height: 100%;
   font-size: 10px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
   text-align: center;
   padding: 8px;
 }
@@ -7634,7 +7641,7 @@ select:focus-visible {
   justify-content: center;
   min-height: 120px;
   font-size: 11px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.4));
+  color: var(--hm-text-muted);
   text-align: center;
   padding: 16px;
 }
@@ -7645,8 +7652,8 @@ select:focus-visible {
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--hm-surface-raised);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
 }
 
@@ -7664,11 +7671,11 @@ select:focus-visible {
 }
 
 .hm-perps-position-direction--long {
-  color: var(--hm-accent-green, #22c55e);
+  color: var(--hm-accent-green);
 }
 
 .hm-perps-position-direction--short {
-  color: var(--hm-accent-red, #ef4444);
+  color: var(--hm-accent-red);
 }
 
 .hm-perps-position-stats {
@@ -7676,15 +7683,15 @@ select:focus-visible {
   flex-wrap: wrap;
   gap: 6px 12px;
   font-size: 10px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.6));
+  color: var(--hm-text-dim);
 }
 
 .hm-perps-pnl--pos {
-  color: var(--hm-accent-green, #22c55e);
+  color: var(--hm-accent-green);
 }
 
 .hm-perps-pnl--neg {
-  color: var(--hm-accent-red, #ef4444);
+  color: var(--hm-accent-red);
 }
 
 /* ── Trade card ── */
@@ -7693,8 +7700,8 @@ select:focus-visible {
   flex-direction: column;
   gap: 10px;
   padding: 10px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: var(--hm-surface-raised);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
 }
 
@@ -7707,8 +7714,8 @@ select:focus-visible {
 
 .hm-perps-chain-badge {
   padding: 2px 6px;
-  background: rgba(232,65,66,0.15);
-  border: 1px solid rgba(232,65,66,0.3);
+  background: color-mix(in srgb, #e84142 15%, transparent);
+  border: 1px solid color-mix(in srgb, #e84142 30%, transparent);
   border-radius: 2px;
   font-size: 9px;
   font-weight: 700;
@@ -7727,16 +7734,16 @@ select:focus-visible {
 .hm-perps-field-label {
   font-size: 10px;
   font-weight: 600;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.5));
+  color: var(--hm-text-muted);
 }
 
 .hm-perps-field-input {
   height: 28px;
   padding: 0 8px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--hm-surface);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius, 2px);
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
   font-size: 12px;
   font-family: var(--font-mono, "Geist Mono", monospace);
   outline: none;
@@ -7745,7 +7752,7 @@ select:focus-visible {
 }
 
 .hm-perps-field-input:focus {
-  border-color: var(--hm-accent-gold, #e5b84a);
+  border-color: var(--hm-accent-gold);
 }
 
 .hm-perps-field-row {
@@ -7758,7 +7765,7 @@ select:focus-visible {
 .hm-perps-lev-value {
   font-size: 12px;
   font-family: var(--font-mono, "Geist Mono", monospace);
-  color: var(--hm-accent-gold, #e5b84a);
+  color: var(--hm-accent-gold);
 }
 
 .hm-perps-lev-chips {
@@ -7768,30 +7775,31 @@ select:focus-visible {
 
 .hm-perps-lev-chip {
   padding: 2px 7px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--hm-border);
   border-radius: 2px;
   background: transparent;
-  color: rgba(255,255,255,0.6);
+  color: var(--hm-text-dim);
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.1s;
+  font-family: inherit;
 }
 
 .hm-perps-lev-chip:hover {
-  border-color: rgba(229,184,74,0.4);
-  color: var(--hm-accent-gold, #e5b84a);
+  border-color: var(--hm-gold-border-light);
+  color: var(--hm-accent-gold);
 }
 
 .hm-perps-lev-chip--active {
-  border-color: var(--hm-accent-gold, #e5b84a);
-  background: rgba(229,184,74,0.12);
-  color: var(--hm-accent-gold, #e5b84a);
+  border-color: var(--hm-accent-gold);
+  background: var(--hm-gold-glow-light);
+  color: var(--hm-accent-gold);
 }
 
 .hm-perps-lev-slider {
   width: 100%;
-  accent-color: var(--hm-accent-gold, #e5b84a);
+  accent-color: var(--hm-accent-gold);
   cursor: pointer;
 }
 
@@ -7801,7 +7809,8 @@ select:focus-visible {
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px;
-  background: rgba(0,0,0,0.2);
+  background: var(--hm-surface);
+  border: 1px solid var(--hm-border-subtle);
   border-radius: 2px;
 }
 
@@ -7810,11 +7819,11 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   font-size: 10px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.5));
+  color: var(--hm-text-muted);
 }
 
 .hm-perps-summary-row strong {
-  color: var(--hm-panel-text, #fff);
+  color: var(--hm-text);
   font-family: var(--font-mono, "Geist Mono", monospace);
   font-size: 10px;
 }
@@ -7848,7 +7857,11 @@ select:focus-visible {
 }
 
 .hm-perps-btn--long {
-  background: var(--hm-accent-green, #22c55e);
+  background: var(--hm-accent-green);
+  color: #fff;
+}
+
+[data-theme="dark"] .hm-perps-btn--long {
   color: #000;
 }
 
@@ -7857,7 +7870,7 @@ select:focus-visible {
 }
 
 .hm-perps-btn--short {
-  background: var(--hm-accent-red, #ef4444);
+  background: var(--hm-accent-red);
   color: #fff;
 }
 
@@ -7866,21 +7879,21 @@ select:focus-visible {
 }
 
 .hm-perps-btn--danger {
-  background: rgba(239,68,68,0.15);
-  border: 1px solid rgba(239,68,68,0.35);
-  color: var(--hm-accent-red, #ef4444);
+  background: color-mix(in srgb, var(--hm-accent-red) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hm-accent-red) 30%, transparent);
+  color: var(--hm-accent-red);
   width: 100%;
 }
 
 .hm-perps-btn--danger:not(:disabled):hover {
-  background: rgba(239,68,68,0.25);
+  background: color-mix(in srgb, var(--hm-accent-red) 22%, transparent);
 }
 
 /* ── Trade notices ── */
 .hm-perps-trade-notice {
   margin: 0;
   font-size: 10px;
-  color: var(--hm-panel-muted-text, rgba(255,255,255,0.45));
+  color: var(--hm-text-muted);
   text-align: center;
   padding: 4px 0;
   line-height: 1.45;
@@ -7889,7 +7902,7 @@ select:focus-visible {
 .hm-perps-wallet-info {
   margin: 0;
   font-size: 9px;
-  color: rgba(255,255,255,0.3);
+  color: var(--hm-text-muted);
   text-align: center;
   font-family: var(--font-mono, "Geist Mono", monospace);
 }
