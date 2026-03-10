@@ -911,13 +911,7 @@ export function App() {
                     evmWallet={evmWalletAddress ?? null}
                     locale={locale}
                     evmWalletPlatform={
-                      activeChain === "bsc"
-                        ? "BSC"
-                        : activeChain === "base"
-                          ? "BASE"
-                          : activeChain === "avax"
-                            ? "AVAX"
-                          : null
+                      activeChain === "avax" ? "AVAX" : null
                     }
                   />
                 </Suspense>
@@ -1077,7 +1071,7 @@ export function App() {
               value={activeChain}
               onChange={(event) =>
                 setActiveChain(
-                  event.target.value as "solana" | "bsc" | "base" | "avax",
+                  event.target.value as "solana" | "avax",
                 )
               }
             >

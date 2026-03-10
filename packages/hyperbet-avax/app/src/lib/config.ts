@@ -138,25 +138,11 @@ function asDeploymentEnvironment(
 
 function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
   switch (network) {
-    case "bsc":
-      return "https://bsc-dataseed.binance.org";
-    case "bscTestnet":
-      return "https://data-seed-prebsc-1-s1.binance.org:8545";
-    case "base":
-      return "https://mainnet.base.org";
-    case "baseSepolia":
-      return "https://sepolia.base.org";
+    case "avax":
+      return "https://api.avax.network/ext/bc/C/rpc";
+    case "avaxFuji":
+      return "https://api.avax-test.network/ext/bc/C/rpc";
   }
-}
-
-function defaultAvaxRpcUrlForEnvironment(environment: Environment): string {
-  return environment === "mainnet-beta"
-    ? "https://api.avax.network/ext/bc/C/rpc"
-    : "https://api.avax-test.network/ext/bc/C/rpc";
-}
-
-function defaultAvaxChainIdForEnvironment(environment: Environment): number {
-  return environment === "mainnet-beta" ? 43114 : 43113;
 }
 
 function buildSolanaProgramConfig(
@@ -183,14 +169,6 @@ function buildEvmConfig(
   environment: Environment,
 ): Pick<
   EnvConfig,
-  | "bscRpcUrl"
-  | "bscChainId"
-  | "bscGoldClobAddress"
-  | "bscGoldTokenAddress"
-  | "baseRpcUrl"
-  | "baseChainId"
-  | "baseGoldClobAddress"
-  | "baseGoldTokenAddress"
   | "avaxRpcUrl"
   | "avaxChainId"
   | "avaxGoldClobAddress"
@@ -200,18 +178,10 @@ function buildEvmConfig(
     asDeploymentEnvironment(environment),
   );
   return {
-    bscRpcUrl: defaultRpcUrlForEvmNetwork(defaults.bsc.networkKey),
-    bscChainId: defaults.bsc.chainId,
-    bscGoldClobAddress: defaults.bsc.goldClobAddress,
-    bscGoldTokenAddress: defaults.bsc.goldTokenAddress,
-    baseRpcUrl: defaultRpcUrlForEvmNetwork(defaults.base.networkKey),
-    baseChainId: defaults.base.chainId,
-    baseGoldClobAddress: defaults.base.goldClobAddress,
-    baseGoldTokenAddress: defaults.base.goldTokenAddress,
-    avaxRpcUrl: defaultAvaxRpcUrlForEnvironment(environment),
-    avaxChainId: defaultAvaxChainIdForEnvironment(environment),
-    avaxGoldClobAddress: "",
-    avaxGoldTokenAddress: "",
+    avaxRpcUrl: defaultRpcUrlForEvmNetwork(defaults.avax.networkKey),
+    avaxChainId: defaults.avax.chainId,
+    avaxGoldClobAddress: defaults.avax.goldClobAddress,
+    avaxGoldTokenAddress: defaults.avax.goldTokenAddress,
   };
 }
 
@@ -246,14 +216,6 @@ export interface EnvConfig {
   jupiterBaseUrl: string;
 
   // EVM
-  bscRpcUrl: string;
-  bscChainId: number;
-  bscGoldClobAddress: string;
-  bscGoldTokenAddress: string;
-  baseRpcUrl: string;
-  baseChainId: number;
-  baseGoldClobAddress: string;
-  baseGoldTokenAddress: string;
   avaxRpcUrl: string;
   avaxChainId: number;
   avaxGoldClobAddress: string;
@@ -476,22 +438,6 @@ export const CONFIG: EnvConfig = {
     readEnvString("VITE_HEADLESS_WALLETS") ?? baseEnvConfig.headlessWalletsJson,
   jupiterBaseUrl:
     readEnvString("VITE_JUPITER_BASE_URL") ?? baseEnvConfig.jupiterBaseUrl,
-  bscRpcUrl: readEnvString("VITE_BSC_RPC_URL") ?? baseEnvConfig.bscRpcUrl,
-  bscChainId: readEnvNumber("VITE_BSC_CHAIN_ID", baseEnvConfig.bscChainId),
-  bscGoldClobAddress:
-    readEnvString("VITE_BSC_GOLD_CLOB_ADDRESS") ??
-    baseEnvConfig.bscGoldClobAddress,
-  bscGoldTokenAddress:
-    readEnvString("VITE_BSC_GOLD_TOKEN_ADDRESS") ??
-    baseEnvConfig.bscGoldTokenAddress,
-  baseRpcUrl: readEnvString("VITE_BASE_RPC_URL") ?? baseEnvConfig.baseRpcUrl,
-  baseChainId: readEnvNumber("VITE_BASE_CHAIN_ID", baseEnvConfig.baseChainId),
-  baseGoldClobAddress:
-    readEnvString("VITE_BASE_GOLD_CLOB_ADDRESS") ??
-    baseEnvConfig.baseGoldClobAddress,
-  baseGoldTokenAddress:
-    readEnvString("VITE_BASE_GOLD_TOKEN_ADDRESS") ??
-    baseEnvConfig.baseGoldTokenAddress,
   avaxRpcUrl: readEnvString("VITE_AVAX_RPC_URL") ?? baseEnvConfig.avaxRpcUrl,
   avaxChainId: readEnvNumber("VITE_AVAX_CHAIN_ID", baseEnvConfig.avaxChainId),
   avaxGoldClobAddress:
@@ -644,28 +590,14 @@ function shouldUseGameEvmRpcProxy(): boolean {
   return USE_GAME_EVM_RPC_PROXY && CONFIG.cluster !== "localnet";
 }
 
-export function getEvmRpcUrl(chain: "bsc" | "base"): string {
+export function getEvmRpcUrl(chain: "avax"): string {
   if (shouldUseGameEvmRpcProxy()) {
     return `${GAME_API_URL}/api/proxy/evm/rpc?chain=${encodeURIComponent(chain)}`;
   }
-  if (chain === "bsc") return CONFIG.bscRpcUrl;
-  return CONFIG.baseRpcUrl;
+  return CONFIG.avaxRpcUrl;
 }
 
-export const BSC_RPC_URL: string = getEvmRpcUrl("bsc");
-export const BSC_CHAIN_ID: number = CONFIG.bscChainId;
-export const BSC_GOLD_CLOB_ADDRESS: string = CONFIG.bscGoldClobAddress;
-export const BSC_GOLD_TOKEN_ADDRESS: string = CONFIG.bscGoldTokenAddress;
-
-export const BASE_RPC_URL: string = getEvmRpcUrl("base");
-export const BASE_CHAIN_ID: number = CONFIG.baseChainId;
-export const BASE_GOLD_CLOB_ADDRESS: string = CONFIG.baseGoldClobAddress;
-export const BASE_GOLD_TOKEN_ADDRESS: string = CONFIG.baseGoldTokenAddress;
-
-export const AVAX_RPC_URL: string =
-  shouldUseGameEvmRpcProxy()
-    ? `${GAME_API_URL}/api/proxy/evm/rpc?chain=${encodeURIComponent("avax")}`
-    : CONFIG.avaxRpcUrl;
+export const AVAX_RPC_URL: string = getEvmRpcUrl("avax");
 export const AVAX_CHAIN_ID: number = CONFIG.avaxChainId;
 export const AVAX_GOLD_CLOB_ADDRESS: string = CONFIG.avaxGoldClobAddress;
 export const AVAX_GOLD_TOKEN_ADDRESS: string = CONFIG.avaxGoldTokenAddress;
