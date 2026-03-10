@@ -82,7 +82,9 @@ export function buildInviteShareLink(inviteCodeRaw: string): string {
     return `${WEBSITE_INVITE_ORIGIN}/?invite=${encodeURIComponent(inviteCode)}`;
   }
 
-  const origin = window.location.origin || WEBSITE_INVITE_ORIGIN;
+  const rawOrigin = window.location.origin;
+  const origin =
+    rawOrigin && rawOrigin !== "null" ? rawOrigin : WEBSITE_INVITE_ORIGIN;
   const url = new URL(window.location.pathname || "/", `${origin}/`);
   url.searchParams.set("invite", inviteCode);
   return url.toString();
