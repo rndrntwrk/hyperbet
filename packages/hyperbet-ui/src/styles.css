@@ -1622,17 +1622,17 @@ select:focus-visible {
   gap: 6px;
   height: 28px;
   padding: 0 10px;
-  background: linear-gradient(180deg,
+  background: var(--hm-header-control-bg, linear-gradient(180deg,
       var(--hm-stone-dark) 0%,
-      var(--hm-surface) 100%);
-  border: 1px solid var(--hm-gold-border-subtle);
+      var(--hm-surface) 100%));
+  border: 1px solid var(--hm-header-control-border, var(--hm-gold-border-subtle));
   border-radius: 2px;
-  color: var(--hm-text-dim);
+  color: var(--hm-header-control-text, var(--hm-text-dim));
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.5px;
   font-family: var(--hm-font-mono);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--hm-header-control-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.04));
 }
 
 .chain-badge-icon {
@@ -1641,7 +1641,7 @@ select:focus-visible {
 }
 
 .chain-badge-name {
-  color: var(--hm-accent-gold-dim);
+  color: var(--hm-header-control-text, var(--hm-accent-gold-dim));
 }
 
 .chain-select-wrap {
@@ -1654,25 +1654,27 @@ select:focus-visible {
   height: 28px;
   min-width: 80px;
   padding: 0 28px 0 10px;
-  background: linear-gradient(180deg,
+  background: var(--hm-header-control-bg, linear-gradient(180deg,
       var(--hm-stone-dark) 0%,
-      var(--hm-surface) 100%);
-  border: 1px solid var(--hm-gold-border-subtle);
+      var(--hm-surface) 100%));
+  border: 1px solid var(--hm-header-control-border, var(--hm-gold-border-subtle));
   border-radius: 2px;
-  color: var(--hm-accent-gold-dim);
+  color: var(--hm-header-control-text, var(--hm-accent-gold-dim));
   font-size: 12px;
   font-weight: 700;
   font-family: var(--hm-font-mono);
   cursor: pointer;
   outline: none;
   appearance: none;
-  transition: border-color 0.15s;
+  box-shadow: var(--hm-header-control-shadow, none);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
 .chain-select:hover,
 .chain-select:focus {
-  border-color: var(--hm-gold-border-light);
-  color: var(--hm-accent-gold);
+  background: var(--hm-header-control-hover-bg, var(--hm-surface-raised));
+  border-color: var(--hm-header-control-border-strong, var(--hm-gold-border-light));
+  color: var(--hm-header-control-text, var(--hm-accent-gold));
 }
 
 .chain-select-arrow {

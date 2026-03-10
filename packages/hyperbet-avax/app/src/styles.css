@@ -1710,102 +1710,6 @@ select:focus-visible {
 }
 
 /* ============================================================
-   Chain Selector
-   ============================================================ */
-.chain-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-}
-
-.chain-badge-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  line-height: 1;
-}
-
-.chain-badge-icon img {
-  width: 16px !important;
-  height: 16px !important;
-  object-fit: contain;
-}
-
-.chain-badge-name {
-  color: var(--hm-header-control-text);
-  font-family: var(--hm-font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.chain-select-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.chain-select {
-  height: 32px;
-  min-width: 80px;
-  padding: 0 26px 0 10px;
-  background: var(--hm-header-control-bg);
-  border: 1px solid var(--hm-header-control-border);
-  border-radius: var(--hm-radius);
-  color: var(--hm-header-control-text);
-  font-size: 11px;
-  font-weight: 700;
-  font-family: var(--hm-font-mono);
-  letter-spacing: 0.6px;
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-  box-shadow: var(--hm-header-control-shadow);
-}
-
-.chain-select:hover,
-.chain-select:focus {
-  background: var(--hm-header-control-hover-bg);
-  border-color: var(--hm-header-control-border-strong);
-  color: var(--hm-header-control-text);
-}
-
-.chain-select-arrow {
-  position: absolute;
-  right: 8px;
-  pointer-events: none;
-  color: var(--hm-header-control-text);
-  font-size: 9px;
-}
-
-/* ============================================================
-   App Tabs
-   ============================================================ */
-.app-tab-btn {
-  position: relative;
-  overflow: hidden;
-}
-
-.app-tab-btn:hover {
-  background: rgba(242, 208, 138, 0.15) !important;
-  border-color: rgba(242, 208, 138, 0.6) !important;
-  color: #fff !important;
-  box-shadow: 0 0 16px rgba(242, 208, 138, 0.2);
-}
-
-.app-tab-btn.active {
-  box-shadow: inset 0 0 12px rgba(242, 208, 138, 0.1);
-}
-
-/* ============================================================
    HYPERSCAPE MARKET — Stream UI Layout
    Gold/Steel/Stone aesthetic, WCAG AA compliant
    Matches website design language
@@ -3823,70 +3727,6 @@ select:focus-visible {
   border-color: var(--hm-gold-border-subtle);
 }
 
-/* Shares input */
-.hm-input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 16px 0;
-}
-
-.hm-input-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--hm-text-dim);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.hm-input-row {
-  display: flex;
-  align-items: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--hm-stone-dark);
-  border-radius: var(--hm-radius);
-  overflow: hidden;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-
-.hm-shares-input {
-  flex: 1;
-  padding: 10px 12px;
-  background: transparent;
-  border: none;
-  color: var(--hm-text);
-  font-size: 15px;
-  font-family: var(--hm-font-mono);
-  outline: none;
-  min-width: 0;
-}
-
-.hm-shares-input::placeholder {
-  color: var(--hm-text-muted);
-}
-
-.hm-input-row:focus-within {
-  border-color: var(--hm-accent-gold);
-  box-shadow:
-    0 0 0 1px var(--hm-gold-border-light),
-    0 0 8px var(--hm-gold-glow-subtle);
-}
-
-.hm-input-suffix {
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--hm-text-muted);
-  font-family: var(--hm-font-mono);
-  flex-shrink: 0;
-  border-left: 1px solid var(--hm-stone-dark);
-  height: 100%;
-  display: flex;
-  align-items: center;
-}
-
 /* Quick amount buttons */
 .hm-quick-amounts {
   display: flex;
@@ -4065,77 +3905,6 @@ select:focus-visible {
   font-weight: 600;
   color: var(--hm-text);
   font-family: var(--hm-font-mono);
-}
-
-/* Trade CTA — Metallic Gold, matches website .btn-primary */
-.hm-trade-btn {
-  width: calc(100% - 32px);
-  margin: 14px 16px 0;
-  height: 44px;
-  background: linear-gradient(180deg, var(--hm-cta-bg-from) 0%, var(--hm-cta-bg-mid) 35%, var(--hm-cta-bg-to) 100%);
-  border: 1px solid var(--hm-gold-border-accent);
-  border-radius: var(--hm-radius);
-  color: var(--hm-cta-text);
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
-    0 2px 8px rgba(0, 0, 0, 0.4),
-    0 0 20px var(--hm-gold-glow-medium);
-  position: relative;
-  overflow: hidden;
-}
-
-.hm-trade-btn::after {
-  content: "";
-  position: absolute;
-  top: -50%;
-  left: -100%;
-  width: 60%;
-  height: 200%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.12),
-    transparent
-  );
-  transform: skewX(-25deg);
-  animation: hmBtnSweep 4s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.hm-trade-btn:hover {
-  background: linear-gradient(180deg, var(--hm-accent-gold-bright) 0%, var(--hm-accent-gold) 40%, var(--hm-accent-gold-dim) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.1),
-    0 4px 16px rgba(0, 0, 0, 0.4),
-    0 0 32px var(--hm-gold-glow-strong);
-  transform: translateY(-1px);
-}
-
-.hm-trade-btn:active {
-  background: linear-gradient(180deg, var(--hm-accent-gold-dim) 0%, var(--hm-accent-gold-shadow) 100%);
-  box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.3),
-    0 1px 2px rgba(0, 0, 0, 0.3);
-  transform: translateY(1px);
-}
-
-@keyframes hmBtnSweep {
-  0% {
-    left: -100%;
-  }
-  40%,
-  100% {
-    left: 200%;
-  }
 }
 
 /* Legal text */
@@ -5053,48 +4822,6 @@ select:focus-visible {
   overflow-wrap: anywhere;
 }
 
-/* ================================================================
-   MOBILE SIDEBAR DRAWER (FAB trigger)
-   ================================================================ */
-.hm-bet-fab {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 49;
-  height: 48px;
-  padding: 0 24px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: linear-gradient(180deg, var(--hm-cta-bg-from) 0%, var(--hm-cta-bg-mid) 35%, var(--hm-cta-bg-to) 100%);
-  color: var(--hm-cta-text);
-  font-family: var(--hm-font-display);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border: 1px solid var(--hm-gold-border-accent);
-  border-radius: 2px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
-    0 4px 16px rgba(0, 0, 0, 0.5),
-    0 0 20px var(--hm-gold-glow-medium);
-  cursor: pointer;
-  transition:
-    transform 0.15s,
-    box-shadow 0.15s,
-    filter 0.15s;
-}
-
-.hm-bet-fab:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 6px 32px var(--hm-gold-glow-medium),
-    0 4px 12px rgba(0, 0, 0, 0.6);
-}
-
 .hm-sidebar-close {
   display: none; /* shown only on mobile via media query */
   width: 28px;
@@ -5203,67 +4930,25 @@ select:focus-visible {
   margin-left: 2px;
 }
 
-/* ================================================================
-   LIGHT THEME OVERRIDES
-   Targets elements with hardcoded dark backgrounds/colors
-   ================================================================ */
-
-/* Header */
-[data-theme="light"] .hm-header {
-  background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(245,245,245,0.99) 100%);
-  border-bottom-color: var(--hm-gold-border-subtle);
-}
-
-/* Wallet button */
-[data-theme="light"] .hm-wallet-btn {
-  background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
-  color: var(--hm-text-dim);
-}
-[data-theme="light"] .hm-wallet-btn--linked {
-  background: linear-gradient(180deg, #fff0f0 0%, #ffe8e8 100%);
-  color: var(--hm-accent-gold-dim);
-}
-
-/* Locale / chain select dropdowns */
-[data-theme="light"] .hm-locale-selector,
-[data-theme="light"] .chain-select {
-  background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
-  color: var(--hm-text);
-  border-color: var(--hm-border);
-}
-
-/* Bottom panel & sidebar surfaces */
-[data-theme="light"] .hm-bottom-panel {
-  background: #ffffff;
-}
-[data-theme="light"] .hm-sidebar {
-  background: #ffffff;
-  border-left-color: var(--hm-border);
-}
-
-/* Betting dock */
-[data-theme="light"] .hm-buysell-btn {
-  background: linear-gradient(180deg, #f5f5f5 0%, #ebebeb 100%);
-  color: var(--hm-text);
-  border-color: var(--hm-border);
-}
-
-/* Wallet adapter modals */
 [data-theme="light"] .wallet-adapter-dropdown-list {
-  background: rgba(255,255,255,0.98) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
 }
+
 [data-theme="light"] .wallet-adapter-modal-wrapper {
-  background: linear-gradient(180deg, rgba(245,245,245,0.99) 0%, rgba(240,240,240,0.99) 100%) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(245, 245, 245, 0.99) 0%,
+    rgba(240, 240, 240, 0.99) 100%
+  ) !important;
 }
 
-/* PnL colors work in both themes */
-[data-theme="light"] .pnl-positive { color: #16a34a; }
-[data-theme="light"] .pnl-negative { color: #E84142; }
-
-/* Game bg in light mode */
 [data-theme="light"] .hm-game-bg {
   background:
-    radial-gradient(ellipse 60% 50% at 50% 60%, rgba(232,65,66,0.05) 0%, transparent 70%),
+    radial-gradient(
+      ellipse 60% 50% at 50% 60%,
+      rgba(232, 65, 66, 0.05) 0%,
+      transparent 70%
+    ),
     linear-gradient(180deg, #f0f0f0 0%, #e8e8e8 50%, #f0f0f0 100%);
 }
 
@@ -5715,76 +5400,6 @@ select:focus-visible {
   }
 }
 
-/* ============================================================
-   DARK THEME — OVERRIDES FOR SHARED STYLESHEET HARDCODED VALUES
-   The shared @hyperbet/ui stylesheet has inline dark backgrounds
-   and gold gradients. Override them here to use slate + red.
-   ============================================================ */
-
-/* Header — slate surface with red shimmer border */
-[data-theme="dark"] .hm-header {
-  background: linear-gradient(
-    180deg,
-    var(--hm-surface) 0%,
-    var(--hm-bg) 100%
-  ) !important;
-  border-bottom: 1px solid var(--hm-gold-border-subtle) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    0 1px 0 var(--hm-gold-border-subtle),
-    0 4px 24px rgba(0, 0, 0, 0.5) !important;
-}
-
-/* Mobile row1 header */
-[data-theme="dark"] .hm-header-mob-row1 {
-  background: linear-gradient(
-    180deg,
-    var(--hm-surface) 0%,
-    var(--hm-bg) 100%
-  ) !important;
-  border-bottom: 1px solid var(--hm-gold-border-subtle) !important;
-}
-
-/* Nav tab active — red gradient */
-[data-theme="dark"] .hm-nav-tab--active {
-  color: #ffffff !important;
-  background: linear-gradient(175deg,
-    var(--hm-accent-gold-bright) 0%,
-    var(--hm-accent-gold) 35%,
-    var(--hm-accent-gold-dim) 100%) !important;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3) !important;
-}
-
-/* View tab active — red gradient */
-[data-theme="dark"] .hm-view-tab--active {
-  color: #ffffff !important;
-  background: linear-gradient(160deg,
-    var(--hm-accent-gold-bright) 0%,
-    var(--hm-accent-gold) 45%,
-    var(--hm-accent-gold-dim) 100%) !important;
-  text-shadow: none !important;
-}
-
-/* Locale selector option — slate bg */
-[data-theme="dark"] .hm-locale-selector option {
-  background: var(--hm-surface) !important;
-  color: var(--hm-text) !important;
-}
-
-/* Trade / order button text — already white via --hm-cta-text but shared rule uses #1a1408 */
-[data-theme="dark"] .hm-trade-btn {
-  color: var(--hm-cta-text) !important;
-}
-[data-theme="dark"] .hm-bet-fab {
-  color: var(--hm-cta-text) !important;
-}
-[data-theme="dark"] .hm-odds-chip {
-  color: #ffffff !important;
-}
-[data-theme="dark"] .hm-badge-special {
-  color: #ffffff !important;
-}
-
 /* ── Touch input safety: prevent iOS zoom on inputs ── */
 @media (max-width: 768px) {
   input[type="number"],
@@ -5800,29 +5415,6 @@ select:focus-visible {
    These override hardcoded dark/gold values from the shared
    @hyperbet/ui stylesheet that can't be changed upstream.
    ============================================================ */
-
-/* ── Header ── */
-[data-theme="light"] .hm-header {
-  background: var(--hm-accent-gold) !important;
-  border-bottom: 1px solid var(--hm-accent-gold-dim) !important;
-  box-shadow: 0 2px 12px rgba(232, 65, 66, 0.2) !important;
-}
-[data-theme="light"] .hm-header::after {
-  background: linear-gradient(90deg,
-    transparent,
-    rgba(255, 255, 255, 0.4) 30%,
-    rgba(255, 255, 255, 0.6) 50%,
-    rgba(255, 255, 255, 0.4) 70%,
-    transparent) !important;
-}
-
-/* Logo / wordmark on red header */
-[data-theme="light"] .hm-logo-text,
-[data-theme="light"] .hm-header-logo,
-[data-theme="light"] .hm-wordmark {
-  color: #ffffff !important;
-  filter: none !important;
-}
 
 [data-theme="light"] .hm-logo .chain-badge,
 [data-theme="light"] .hm-logo .chain-select-wrap,
@@ -5852,240 +5444,9 @@ select:focus-visible {
 }
 
 /* All nav text / icon buttons in header become white */
-[data-theme="light"] .hm-header-right,
-[data-theme="light"] .hm-header-right button,
-[data-theme="light"] .hm-header-right a {
-  color: #ffffff !important;
-}
-
 [data-theme="light"] .hm-header-right .hm-theme-toggle,
 [data-theme="light"] .hm-header-right .hm-theme-toggle svg {
   color: var(--hm-header-theme-icon) !important;
-}
-
-/* ── App tabs (bottom panel tabs) ── */
-[data-theme="light"] .app-tab-btn {
-  color: var(--hm-text-dim) !important;
-  background: transparent !important;
-}
-[data-theme="light"] .app-tab-btn:hover {
-  color: var(--hm-text) !important;
-  background: var(--hm-surface-raised) !important;
-}
-[data-theme="light"] .app-tab-btn.is-active,
-[data-theme="light"] .app-tab-btn[aria-selected="true"] {
-  color: var(--hm-accent-gold) !important;
-  background: transparent !important;
-  border-bottom-color: var(--hm-accent-gold) !important;
-}
-
-/* ── Aux toggle (filter buttons) ── */
-[data-theme="light"] .aux-toggle-btn {
-  background: rgba(0, 0, 0, 0.06) !important;
-  color: var(--hm-text) !important;
-}
-[data-theme="light"] .aux-toggle-btn-label {
-  color: var(--hm-text-dim) !important;
-}
-[data-theme="light"] .aux-toggle-btn-select,
-[data-theme="light"] .aux-toggle-btn:hover {
-  background: rgba(0, 0, 0, 0.10) !important;
-  color: var(--hm-text) !important;
-}
-
-/* ── Match table messages ── */
-[data-theme="light"] .match-table-message {
-  color: var(--hm-text-dim) !important;
-  background: rgba(0, 0, 0, 0.03) !important;
-}
-[data-theme="light"] .match-table-message-footer {
-  background: rgba(0, 0, 0, 0.02) !important;
-}
-
-/* ── Market action buttons ── */
-[data-theme="light"] .hm-market-action-btn {
-  background: rgba(0, 0, 0, 0.04) !important;
-  color: var(--hm-text) !important;
-}
-[data-theme="light"] .hm-market-action-btn:hover {
-  background: rgba(0, 0, 0, 0.08) !important;
-}
-[data-theme="light"] .hm-market-action-btn.is-active {
-  background: rgba(232, 65, 66, 0.08) !important;
-  color: var(--hm-accent-gold) !important;
-}
-[data-theme="light"] .hm-market-pending-tag {
-  color: var(--hm-text-dim) !important;
-}
-
-/* ── Input fields ── */
-[data-theme="light"] .hm-input,
-[data-theme="light"] input[type="number"],
-[data-theme="light"] input[type="text"] {
-  background: var(--hm-surface-raised) !important;
-  color: var(--hm-text) !important;
-  border-color: var(--hm-border) !important;
-}
-[data-theme="light"] .hm-input:focus,
-[data-theme="light"] input[type="number"]:focus,
-[data-theme="light"] input[type="text"]:focus {
-  border-color: var(--hm-accent-gold) !important;
-  box-shadow: 0 0 0 2px rgba(232, 65, 66, 0.12) !important;
-}
-[data-theme="light"] .hm-input-label,
-[data-theme="light"] .hm-input-hint {
-  color: var(--hm-text-dim) !important;
-}
-
-/* ── Quick amount chips ── */
-[data-theme="light"] .hm-quick-amount-btn {
-  background: var(--hm-surface-raised) !important;
-  color: var(--hm-text) !important;
-  border: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-quick-amount-btn:hover,
-[data-theme="light"] .hm-quick-amount-btn.is-active {
-  background: rgba(232, 65, 66, 0.08) !important;
-  color: var(--hm-accent-gold) !important;
-  border-color: rgba(232, 65, 66, 0.3) !important;
-}
-
-/* ── Order summary / payout section ── */
-[data-theme="light"] .hm-payout-section,
-[data-theme="light"] .hm-order-summary {
-  background: var(--hm-surface-raised) !important;
-  border: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-payout-label,
-[data-theme="light"] .hm-order-summary-label {
-  color: var(--hm-text-dim) !important;
-}
-[data-theme="light"] .hm-payout-value,
-[data-theme="light"] .hm-order-summary-value {
-  color: var(--hm-text) !important;
-}
-
-/* ── Trade / place order CTA buttons — already use var(--hm-cta-*) ── */
-/* No override needed — vars resolve correctly from [data-theme] block */
-
-/* ── Odds chips / badges ── */
-[data-theme="light"] .hm-odds-chip {
-  color: #ffffff !important;
-}
-[data-theme="light"] .hm-badge-special {
-  color: #ffffff !important;
-}
-
-[data-theme="light"] .hm-chart-matchup-overlay {
-  background: rgba(255, 255, 255, 0.85) !important;
-  border: 1px solid var(--hm-border) !important;
-  color: var(--hm-text) !important;
-}
-[data-theme="light"] .hm-price-chart-bg {
-  background:
-    radial-gradient(ellipse 60% 50% at 50% 60%, rgba(232, 65, 66, 0.04) 0%, transparent 70%),
-    linear-gradient(180deg, var(--hm-surface) 0%, var(--hm-surface-raised) 50%, var(--hm-surface) 100%) !important;
-}
-
-/* ── Game viewport ── */
-[data-theme="light"] .hm-game-viewport {
-  background: var(--hm-bg) !important;
-}
-
-[data-theme="light"] .hm-market-meta,
-[data-theme="light"] .hm-market-timer {
-  color: var(--hm-text-dim) !important;
-}
-
-/* ── Locale selector option (rendered by OS — needs bg) ── */
-[data-theme="light"] .hm-locale-selector option {
-  background: #ffffff !important;
-  color: var(--hm-text) !important;
-}
-
-/* ── Wallet buttons in header ── */
-[data-theme="light"] .hm-header .wallet-adapter-button,
-[data-theme="light"] .hm-header .rainbow-connect-btn,
-[data-theme="light"] .hm-header [class*="wallet-btn"],
-[data-theme="light"] .hm-header [class*="ConnectButton"] {
-  background: rgba(255, 255, 255, 0.2) !important;
-  color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.35) !important;
-}
-[data-theme="light"] .hm-header .wallet-adapter-button:hover,
-[data-theme="light"] .hm-header [class*="wallet-btn"]:hover {
-  background: rgba(255, 255, 255, 0.3) !important;
-}
-
-/* ── Locale selector on red header ── */
-[data-theme="light"] .hm-locale-selector {
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
-  background: rgba(255, 255, 255, 0.15) !important;
-}
-
-/* ── Modal / glass surfaces ── */
-[data-theme="light"] .hm-modal,
-[data-theme="light"] [class*="modal-wrapper"],
-[data-theme="light"] [class*="modal-backdrop"] {
-  background: rgba(0, 0, 0, 0.3) !important;
-}
-[data-theme="light"] .hm-modal-inner,
-[data-theme="light"] [class*="modal-content"] {
-  background: var(--hm-surface) !important;
-  border: 1px solid var(--hm-border) !important;
-  color: var(--hm-text) !important;
-}
-
-/* ── Perps panel ── */
-[data-theme="light"] .perp-wrap {
-  background: var(--hm-surface) !important;
-}
-[data-theme="light"] .perp-tab {
-  color: var(--hm-text-dim) !important;
-}
-[data-theme="light"] .perp-tab.is-active {
-  color: var(--hm-accent-gold) !important;
-  border-bottom-color: var(--hm-accent-gold) !important;
-}
-[data-theme="light"] .perp-btn {
-  color: #ffffff !important;
-}
-
-/* ── Send auth / invite panels ── */
-[data-theme="light"] .send-auth-tx-submit-hint {
-  color: var(--hm-text-dim) !important;
-}
-
-/* ── Phase badge ── */
-[data-theme="light"] .hm-phase-badge--opening {
-  color: #16a34a !important;
-}
-
-/* ── Sidebar mobile sheet drag handle ── */
-[data-theme="light"] .hm-sidebar::after {
-  background: var(--hm-border) !important;
-}
-[data-theme="light"] .hm-sidebar-close {
-  color: var(--hm-text-dim) !important;
-  border-color: var(--hm-border) !important;
-}
-[data-theme="light"] .hm-sidebar-close:hover {
-  color: var(--hm-text) !important;
-  border-color: var(--hm-accent-gold) !important;
-}
-
-/* ── Bet FAB (mobile floating action button) ── */
-[data-theme="light"] .hm-bet-fab {
-  color: #ffffff !important;
-}
-
-/* ── Scrollbar ── */
-[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: var(--hm-stone-dark) !important;
-}
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: var(--hm-accent-gold) !important;
 }
 
 /* ============================================================
