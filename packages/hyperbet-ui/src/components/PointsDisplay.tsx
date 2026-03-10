@@ -112,6 +112,81 @@ function getPointsDisplayCopy(locale: UiLocale) {
     };
   }
 
+  if (locale === "ko") {
+    return {
+      connectWallet: "포인트를 보려면 지갑을 연결하세요",
+      loadingPoints: "포인트 로딩 중...",
+      points: "포인트",
+      rank: (value: number) => `순위 #${value}`,
+      breakdown: "자/승/추/스",
+      gold: "GOLD",
+      tier: "등급",
+      boost: (value: number) => `${value}× 부스트`,
+      boostTitle: "GOLD 포인트 부스트",
+      yourTier: "현재 등급",
+      nextTier: (value: number) =>
+        `다음 등급: ${value.toLocaleString(getLocaleTag(locale))} GOLD`,
+      heldGoldBoost: "GOLD를 보유하거나 스테이킹하면 배율이 올라갑니다.",
+      buyGold: "GOLD 구매",
+      tierRows: [
+        { emoji: "🟤", label: "1K+ GOLD", multiplier: "1×", color: "#a16207" },
+        { emoji: "🥈", label: "100K+ GOLD", multiplier: "2×", color: "#a3a3a3" },
+        { emoji: "🥇", label: "1M+ GOLD", multiplier: "3×", color: "#eab308" },
+        { emoji: "💎", label: "10일+ 보유", multiplier: "+1×", color: "#60a5fa" },
+      ],
+    };
+  }
+
+  if (locale === "pt") {
+    return {
+      connectWallet: "Conecte a carteira para ver os pontos",
+      loadingPoints: "Carregando pontos...",
+      points: "PONTOS",
+      rank: (value: number) => `POSIÇÃO #${value}`,
+      breakdown: "P/V/I/S",
+      gold: "GOLD",
+      tier: "NÍVEL",
+      boost: (value: number) => `${value}× BÔNUS`,
+      boostTitle: "BÔNUS DE PONTOS GOLD",
+      yourTier: "Seu Nível",
+      nextTier: (value: number) =>
+        `Próximo nível em ${value.toLocaleString(getLocaleTag(locale))} GOLD`,
+      heldGoldBoost: "GOLD mantido ou staked aumenta seu multiplicador.",
+      buyGold: "Comprar GOLD",
+      tierRows: [
+        { emoji: "🟤", label: "1K+ GOLD", multiplier: "1×", color: "#a16207" },
+        { emoji: "🥈", label: "100K+ GOLD", multiplier: "2×", color: "#a3a3a3" },
+        { emoji: "🥇", label: "1M+ GOLD", multiplier: "3×", color: "#eab308" },
+        { emoji: "💎", label: "10+ dias mantido", multiplier: "+1×", color: "#60a5fa" },
+      ],
+    };
+  }
+
+  if (locale === "es") {
+    return {
+      connectWallet: "Conecta la billetera para ver los puntos",
+      loadingPoints: "Cargando puntos...",
+      points: "PUNTOS",
+      rank: (value: number) => `RANGO #${value}`,
+      breakdown: "P/V/R/S",
+      gold: "GOLD",
+      tier: "NIVEL",
+      boost: (value: number) => `${value}× BONO`,
+      boostTitle: "BONO DE PUNTOS GOLD",
+      yourTier: "Tu Nivel",
+      nextTier: (value: number) =>
+        `Siguiente nivel en ${value.toLocaleString(getLocaleTag(locale))} GOLD`,
+      heldGoldBoost: "GOLD mantenido o staked aumenta tu multiplicador.",
+      buyGold: "Comprar GOLD",
+      tierRows: [
+        { emoji: "🟤", label: "1K+ GOLD", multiplier: "1×", color: "#a16207" },
+        { emoji: "🥈", label: "100K+ GOLD", multiplier: "2×", color: "#a3a3a3" },
+        { emoji: "🥇", label: "1M+ GOLD", multiplier: "3×", color: "#eab308" },
+        { emoji: "💎", label: "10+ días mantenido", multiplier: "+1×", color: "#60a5fa" },
+      ],
+    };
+  }
+
   return {
     connectWallet: "Connect wallet to view points",
     loadingPoints: "Loading points...",
