@@ -133,7 +133,7 @@ describe("GoldClob", function () {
       });
 
     const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
-    let queue = await clob.orderQueues(
+    let queue = await clob.getPriceLevel(
       duel,
       MARKET_KIND_DUEL_WINNER,
       BUY_SIDE,
@@ -144,7 +144,7 @@ describe("GoldClob", function () {
     expect(queue[2]).to.equal(makerAmount);
 
     await clob.connect(traderA).cancelOrder(duel, MARKET_KIND_DUEL_WINNER, 1);
-    queue = await clob.orderQueues(
+    queue = await clob.getPriceLevel(
       duel,
       MARKET_KIND_DUEL_WINNER,
       BUY_SIDE,
@@ -208,7 +208,7 @@ describe("GoldClob", function () {
       clob.connect(traderA).cancelOrder(duel, MARKET_KIND_DUEL_WINNER, 1),
     );
 
-    const queue = await clob.orderQueues(
+    const queue = await clob.getPriceLevel(
       duel,
       MARKET_KIND_DUEL_WINNER,
       BUY_SIDE,

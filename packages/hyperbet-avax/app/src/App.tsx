@@ -29,15 +29,15 @@ import {
 import {
   captureInviteCodeFromLocation,
   getStoredInviteCode,
-} from "./lib/invite";
-import { StreamPlayer } from "./components/StreamPlayer";
-import { ChainSelector } from "./components/ChainSelector";
-import { PointsDisplay } from "./components/PointsDisplay";
+} from "@hyperbet/ui/lib/invite";
+import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
+import { ChainSelector } from "@hyperbet/ui/components/ChainSelector";
+import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
 import { useChain } from "./lib/ChainContext";
-import { useStreamingState } from "./spectator/useStreamingState";
-import { useDuelContext } from "./spectator/useDuelContext";
-import { useResizePanel, useIsMobile } from "./lib/useResizePanel";
-import { ResizeHandle } from "./components/ResizeHandle";
+import { useStreamingState } from "@hyperbet/ui/spectator/useStreamingState";
+import { useDuelContext } from "@hyperbet/ui/spectator/useDuelContext";
+import { useResizePanel, useIsMobile } from "@hyperbet/ui/lib/useResizePanel";
+import { ResizeHandle } from "@hyperbet/ui/components/ResizeHandle";
 import {
   LineChart,
   Line,
@@ -324,32 +324,32 @@ function getMarketStatusLabel(
 }
 
 const EvmBettingPanel = lazy(() =>
-  import("./components/EvmBettingPanel").then((module) => ({
+  import("@hyperbet/ui/components/EvmBettingPanel").then((module) => ({
     default: module.EvmBettingPanel,
   })),
 );
 const ModelsMarketView = lazy(() =>
-  import("./components/ModelsMarketView").then((module) => ({
+  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
     default: module.ModelsMarketView,
   })),
 );
 const PointsLeaderboard = lazy(() =>
-  import("./components/PointsLeaderboard").then((module) => ({
+  import("@hyperbet/ui/components/PointsLeaderboard").then((module) => ({
     default: module.PointsLeaderboard,
   })),
 );
 const PointsHistory = lazy(() =>
-  import("./components/PointsHistory").then((module) => ({
+  import("@hyperbet/ui/components/PointsHistory").then((module) => ({
     default: module.PointsHistory,
   })),
 );
 const ReferralPanel = lazy(() =>
-  import("./components/ReferralPanel").then((module) => ({
+  import("@hyperbet/ui/components/ReferralPanel").then((module) => ({
     default: module.ReferralPanel,
   })),
 );
 const AgentStats = lazy(() =>
-  import("./components/AgentStats").then((module) => ({
+  import("@hyperbet/ui/components/AgentStats").then((module) => ({
     default: module.AgentStats,
   })),
 );

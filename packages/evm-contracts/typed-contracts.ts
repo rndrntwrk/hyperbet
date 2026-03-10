@@ -86,7 +86,7 @@ export interface GoldClobContract extends TypedContract<GoldClobContract> {
   getMarket(duelKey: BytesLike, marketKind: BigNumberish): Promise<GoldClobMatch>;
   positions(marketKey: BytesLike, trader: string): Promise<GoldClobPosition>;
   orders(marketKey: BytesLike, orderId: BigNumberish): Promise<GoldClobOrder>;
-  orderQueues(
+  getPriceLevel(
     duelKey: BytesLike,
     marketKind: BigNumberish,
     side: BigNumberish,

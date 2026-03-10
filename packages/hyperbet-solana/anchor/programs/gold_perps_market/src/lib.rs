@@ -1,6 +1,4 @@
 #![allow(unexpected_cfgs)]
-#![allow(deprecated)]
-#![allow(clippy::too_many_arguments)]
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
@@ -37,10 +35,12 @@ fn bootstrap_authority() -> Pubkey {
 /// Positions are managed with signed size deltas through `modify_position`,
 /// which supports opening, increasing, reducing, flipping, depositing margin,
 /// withdrawing margin, and fully closing the account.
+#[allow(clippy::too_many_arguments)]
 #[program]
 pub mod gold_perps_market {
     use super::*;
 
+    #[allow(clippy::too_many_arguments)]
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
         keeper_authority: Pubkey,
@@ -99,6 +99,7 @@ pub mod gold_perps_market {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_config(
         ctx: Context<UpdateConfig>,
         keeper_authority: Pubkey,
@@ -178,25 +179,17 @@ pub mod gold_perps_market {
             market.initialized = true;
             market.market_id = market_id;
             market.status = MARKET_STATUS_ACTIVE;
-            market.insurance_fund = 0;
-            market.treasury_fee_balance = 0;
-            market.market_maker_fee_balance = 0;
-            market.open_positions = 0;
             market.skew_scale = ctx.accounts.config.default_skew_scale;
             market.funding_velocity = ctx.accounts.config.default_funding_velocity;
             market.spot_index = spot_index;
-            market.settlement_spot_index = 0;
             market.mu = mu;
             market.sigma = sigma;
             market.oracle_last_updated = now;
             market.last_funding_time = now;
-            market.current_funding_rate = 0;
-            market.total_long_oi = 0;
-            market.total_short_oi = 0;
             return Ok(());
         }
 
-        require!(market.market_id == market_id, PerpsError::InvalidMarket);
+        require_market(market, market_id)?;
         require!(
             market.status == MARKET_STATUS_ACTIVE,
             PerpsError::MarketNotActive
@@ -221,11 +214,7 @@ pub mod gold_perps_market {
         amount: u64,
     ) -> Result<()> {
         require!(amount > 0, PerpsError::InvalidInsuranceDeposit);
-        require!(ctx.accounts.market.initialized, PerpsError::InvalidMarket);
-        require!(
-            ctx.accounts.market.market_id == market_id,
-            PerpsError::InvalidMarket
-        );
+        require_market(&ctx.accounts.market, market_id)?;
 
         let transfer_ctx = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -272,8 +261,7 @@ pub mod gold_perps_market {
 
         {
             let market = &mut ctx.accounts.market;
-            require!(market.initialized, PerpsError::InvalidMarket);
-            require!(market.market_id == market_id, PerpsError::InvalidMarket);
+            require_market(market, market_id)?;
             match market.status {
                 MARKET_STATUS_ACTIVE => {
                     if size_delta != 0 || margin_delta < 0 {
@@ -447,8 +435,7 @@ pub mod gold_perps_market {
     pub fn liquidate_position(ctx: Context<LiquidatePosition>, market_id: u64) -> Result<()> {
         let config = &ctx.accounts.config;
         let market = &mut ctx.accounts.market;
-        require!(market.initialized, PerpsError::InvalidMarket);
-        require!(market.market_id == market_id, PerpsError::InvalidMarket);
+        require_market(market, market_id)?;
 
         let position = &ctx.accounts.position;
         require!(position.initialized, PerpsError::NoOpenPosition);
@@ -533,8 +520,7 @@ pub mod gold_perps_market {
         require_operator(&ctx.accounts.config, ctx.accounts.authority.key())?;
 
         let market = &mut ctx.accounts.market;
-        require!(market.initialized, PerpsError::InvalidMarket);
-        require!(market.market_id == market_id, PerpsError::InvalidMarket);
+        require_market(market, market_id)?;
 
         let now = Clock::get()?.unix_timestamp;
         match next_status {
@@ -580,8 +566,7 @@ pub mod gold_perps_market {
         require_market_maker(&ctx.accounts.config, ctx.accounts.authority.key())?;
 
         let market = &mut ctx.accounts.market;
-        require!(market.initialized, PerpsError::InvalidMarket);
-        require!(market.market_id == market_id, PerpsError::InvalidMarket);
+        require_market(market, market_id)?;
 
         market.market_maker_fee_balance = market
             .market_maker_fee_balance
@@ -603,8 +588,7 @@ pub mod gold_perps_market {
         require!(amount > 0, PerpsError::InvalidFeeWithdrawal);
 
         let market = &mut ctx.accounts.market;
-        require!(market.initialized, PerpsError::InvalidMarket);
-        require!(market.market_id == market_id, PerpsError::InvalidMarket);
+        require_market(market, market_id)?;
 
         match fee_bucket {
             FEE_BUCKET_TREASURY => {
@@ -642,6 +626,13 @@ pub mod gold_perps_market {
     }
 }
 
+fn require_market(market: &MarketState, market_id: u64) -> Result<()> {
+    require!(market.initialized, PerpsError::InvalidMarket);
+    require!(market.market_id == market_id, PerpsError::InvalidMarket);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn validate_config_inputs(
     default_skew_scale: u64,
     max_oracle_staleness_seconds: i64,
@@ -846,12 +837,12 @@ fn calculate_realized_trade_pnl(
     execution_price: u64,
     size_delta: i128,
 ) -> Result<i128> {
-    if old_size == 0 || size_delta == 0 || same_sign(old_size, size_delta) {
+    if old_size == 0 || size_delta == 0 || old_size.signum() == size_delta.signum() {
         return Ok(0);
     }
 
     require!(old_entry_price > 0, PerpsError::InvalidPositionState);
-    let close_size = cmp::min(abs_i128(old_size), abs_i128(size_delta));
+    let close_size = cmp::min(old_size.abs(), size_delta.abs());
     let pnl = if old_size > 0 {
         (execution_price as i128 - old_entry_price as i128)
             .checked_mul(close_size)
@@ -884,17 +875,17 @@ fn calculate_next_entry_price(
     if size_delta == 0 {
         return Ok(old_entry_price);
     }
-    if !same_sign(old_size, new_size) {
+    if old_size.signum() != new_size.signum() {
         return Ok(execution_price);
     }
-    if !same_sign(old_size, size_delta) {
+    if old_size.signum() != size_delta.signum() {
         return Ok(old_entry_price);
     }
 
     require!(old_entry_price > 0, PerpsError::InvalidPositionState);
-    let old_abs = abs_i128(old_size);
-    let delta_abs = abs_i128(size_delta);
-    let new_abs = abs_i128(new_size);
+    let old_abs = old_size.abs();
+    let delta_abs = size_delta.abs();
+    let new_abs = new_size.abs();
     let weighted = (old_entry_price as i128)
         .checked_mul(old_abs)
         .and_then(|value| value.checked_add((execution_price as i128) * delta_abs))
@@ -920,7 +911,7 @@ fn calculate_position_equity(
 }
 
 fn calculate_maintenance_margin(size: i128, maintenance_margin_bps: u16) -> Result<i128> {
-    abs_i128(size)
+    size.abs()
         .checked_mul(i128::from(maintenance_margin_bps))
         .ok_or(PerpsError::Overflow)?
         .checked_div(BPS_DENOMINATOR as i128)
@@ -928,7 +919,7 @@ fn calculate_maintenance_margin(size: i128, maintenance_margin_bps: u16) -> Resu
 }
 
 fn calculate_liquidation_fee(size: i128, liquidation_fee_bps: u16) -> Result<u64> {
-    let fee = abs_i128(size)
+    let fee = size.abs()
         .checked_mul(i128::from(liquidation_fee_bps))
         .ok_or(PerpsError::Overflow)?
         .checked_div(BPS_DENOMINATOR as i128)
@@ -941,7 +932,7 @@ fn calculate_trade_fees(
     treasury_fee_bps: u16,
     market_maker_fee_bps: u16,
 ) -> Result<(u64, u64)> {
-    let abs_size = abs_i128(size_delta);
+    let abs_size = size_delta.abs();
     if abs_size == 0 {
         return Ok((0, 0));
     }
@@ -988,10 +979,47 @@ fn require_leverage(margin: u64, size: i128, max_leverage: u64) -> Result<()> {
         .checked_mul(max_leverage as i128)
         .ok_or(PerpsError::Overflow)?;
     require!(
-        leverage_capacity >= abs_i128(size),
+        leverage_capacity >= size.abs(),
         PerpsError::InvalidLeverage
     );
     Ok(())
+}
+
+fn apply_oi_delta(
+    long_oi: u64,
+    short_oi: u64,
+    remove_size: i128,
+    add_size: i128,
+) -> Result<(u64, u64)> {
+    let mut next_long = long_oi;
+    let mut next_short = short_oi;
+    match remove_size.cmp(&0) {
+        cmp::Ordering::Greater => {
+            next_long = next_long
+                .checked_sub(to_u64(remove_size.abs())?)
+                .ok_or(PerpsError::Overflow)?;
+        }
+        cmp::Ordering::Less => {
+            next_short = next_short
+                .checked_sub(to_u64(remove_size.abs())?)
+                .ok_or(PerpsError::Overflow)?;
+        }
+        cmp::Ordering::Equal => {}
+    }
+    match add_size.cmp(&0) {
+        cmp::Ordering::Greater => {
+            next_long = next_long
+                .checked_add(to_u64(add_size.abs())?)
+                .ok_or(PerpsError::Overflow)?;
+        }
+        cmp::Ordering::Less => {
+            next_short = next_short
+                .checked_add(to_u64(add_size.abs())?)
+                .ok_or(PerpsError::Overflow)?;
+        }
+        cmp::Ordering::Equal => {}
+    }
+    Ok((next_long, next_short))
 }
 
 fn update_market_open_interest(
@@ -999,37 +1027,10 @@ fn update_market_open_interest(
     old_size: i128,
     new_size: i128,
 ) -> Result<()> {
-    match old_size.cmp(&0) {
-        cmp::Ordering::Greater => {
-            market.total_long_oi = market
-                .total_long_oi
-                .checked_sub(to_u64(abs_i128(old_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Less => {
-            market.total_short_oi = market
-                .total_short_oi
-                .checked_sub(to_u64(abs_i128(old_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Equal => {}
-    }
-
-    match new_size.cmp(&0) {
-        cmp::Ordering::Greater => {
-            market.total_long_oi = market
-                .total_long_oi
-                .checked_add(to_u64(abs_i128(new_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Less => {
-            market.total_short_oi = market
-                .total_short_oi
-                .checked_add(to_u64(abs_i128(new_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Equal => {}
-    }
+    let (next_long, next_short) =
+        apply_oi_delta(market.total_long_oi, market.total_short_oi, old_size, new_size)?;
+    market.total_long_oi = next_long;
+    market.total_short_oi = next_short;
     Ok(())
 }
 
@@ -1038,38 +1039,7 @@ fn projected_open_interest(
     old_size: i128,
     new_size: i128,
 ) -> Result<(u64, u64)> {
-    let mut next_long_oi = market.total_long_oi;
-    let mut next_short_oi = market.total_short_oi;
-
-    match old_size.cmp(&0) {
-        cmp::Ordering::Greater => {
-            next_long_oi = next_long_oi
-                .checked_sub(to_u64(abs_i128(old_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Less => {
-            next_short_oi = next_short_oi
-                .checked_sub(to_u64(abs_i128(old_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Equal => {}
-    }
-
-    match new_size.cmp(&0) {
-        cmp::Ordering::Greater => {
-            next_long_oi = next_long_oi
-                .checked_add(to_u64(abs_i128(new_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Less => {
-            next_short_oi = next_short_oi
-                .checked_add(to_u64(abs_i128(new_size))?)
-                .ok_or(PerpsError::Overflow)?;
-        }
-        cmp::Ordering::Equal => {}
-    }
-
-    Ok((next_long_oi, next_short_oi))
+    apply_oi_delta(market.total_long_oi, market.total_short_oi, old_size, new_size)
 }
 
 fn is_reduce_only_change(old_size: i128, new_size: i128) -> bool {
@@ -1079,10 +1049,10 @@ fn is_reduce_only_change(old_size: i128, new_size: i128) -> bool {
     if new_size == 0 {
         return true;
     }
-    if !same_sign(old_size, new_size) {
+    if old_size.signum() != new_size.signum() {
         return false;
     }
-    abs_i128(new_size) <= abs_i128(old_size)
+    new_size.abs() <= old_size.abs()
 }
 
 fn transfer_from_market<'info>(
@@ -1162,18 +1132,6 @@ fn calculate_insurance_usage(
         PerpsError::InsufficientLiquidity
     );
     Ok(insurance_used)
-}
-
-fn abs_i128(value: i128) -> i128 {
-    if value < 0 {
-        -value
-    } else {
-        value
-    }
-}
-
-fn same_sign(left: i128, right: i128) -> bool {
-    left.signum() == right.signum()
 }
 
 fn to_u64(value: i128) -> Result<u64> {

@@ -1,9 +1,9 @@
 import { createHyperbetAppRoot } from "@hyperbet/ui";
 
 import { getRpcUrl, getWsUrl } from "./lib/config";
-import { createHeadlessWalletsFromEnv } from "./lib/headlessWallet";
+import { createHeadlessWalletsFromEnv } from "@hyperbet/ui/lib/evmHeadlessWallet";
 import { ChainProvider } from "./lib/ChainContext";
-import { wagmiConfig } from "./lib/wagmiConfig";
+import { wagmiConfig } from "@hyperbet/ui/lib/wagmiConfig";
 import { App } from "./App";
 import { StreamUIApp } from "./StreamUIApp";
 

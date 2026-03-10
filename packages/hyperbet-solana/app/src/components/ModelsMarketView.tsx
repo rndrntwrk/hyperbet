@@ -16,7 +16,7 @@ import {
   resolveUiLocale,
   type UiLocale,
 } from "@hyperbet/ui/i18n";
-import { getModelsMarketCopy } from "../lib/modelsMarketCopy";
+import { getModelsMarketCopy } from "@hyperbet/ui/lib/modelsMarketCopy";
 import {
   useAppConnection,
   useAppWallet,
@@ -32,8 +32,8 @@ import {
   type PerpsMarketDirectoryEntry,
   type PerpsOracleHistorySnapshot,
   type PerpsMarketsResponse,
-} from "../lib/modelMarkets";
-import { findProgramAddressSync } from "../lib/programAddress";
+} from "@hyperbet/ui/lib/modelMarkets";
+import { findProgramAddressSync } from "@hyperbet/ui/lib/programAddress";
 import {
   getConfigStateDecoder,
   getMarketStateDecoder,

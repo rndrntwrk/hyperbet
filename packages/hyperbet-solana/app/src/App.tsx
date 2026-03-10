@@ -28,11 +28,11 @@ import {
 import {
   captureInviteCodeFromLocation,
   getStoredInviteCode,
-} from "./lib/invite";
+} from "@hyperbet/ui/lib/invite";
 import { useAppConnection, useAppWallet, useAppWalletModal } from "./lib/appWallet";
-import { StreamPlayer } from "./components/StreamPlayer";
-import { PointsDisplay } from "./components/PointsDisplay";
-import type { SolanaClobMarketSnapshot } from "./components/SolanaClobPanel";
+import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
+import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
+import type { SolanaClobMarketSnapshot } from "@hyperbet/ui/components/SolanaClobPanel";
 import { getDuelStateDecoder } from "./generated/fight-oracle/accounts";
 import {
   FightOracleAccount,
@@ -44,10 +44,10 @@ import {
 } from "./generated/gold-clob-market/programs";
 import { FIGHT_ORACLE_PROGRAM_ID } from "./lib/programIds";
 import { useStreamingState } from "./spectator/useStreamingState";
-import { useDuelContext } from "./spectator/useDuelContext";
+import { useDuelContext } from "@hyperbet/ui/spectator/useDuelContext";
 import type { LeaderboardEntry } from "./spectator/types";
-import { useResizePanel, useIsMobile } from "./lib/useResizePanel";
-import { ResizeHandle } from "./components/ResizeHandle";
+import { useResizePanel, useIsMobile } from "@hyperbet/ui/lib/useResizePanel";
+import { ResizeHandle } from "@hyperbet/ui/components/ResizeHandle";
 import {
   LineChart,
   Line,
@@ -591,27 +591,27 @@ function goldDisplay(amount: unknown): string {
   return (raw / 10 ** GOLD_DECIMALS).toFixed(6);
 }
 const SolanaClobPanel = lazy(() =>
-  import("./components/SolanaClobPanel").then((module) => ({
+  import("@hyperbet/ui/components/SolanaClobPanel").then((module) => ({
     default: module.SolanaClobPanel,
   })),
 );
 const ModelsMarketView = lazy(() =>
-  import("./components/ModelsMarketView").then((module) => ({
+  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
     default: module.ModelsMarketView,
   })),
 );
 const PointsLeaderboard = lazy(() =>
-  import("./components/PointsLeaderboard").then((module) => ({
+  import("@hyperbet/ui/components/PointsLeaderboard").then((module) => ({
     default: module.PointsLeaderboard,
   })),
 );
 const PointsHistory = lazy(() =>
-  import("./components/PointsHistory").then((module) => ({
+  import("@hyperbet/ui/components/PointsHistory").then((module) => ({
     default: module.PointsHistory,
   })),
 );
 const ReferralPanel = lazy(() =>
-  import("./components/ReferralPanel").then((module) => ({
+  import("@hyperbet/ui/components/ReferralPanel").then((module) => ({
     default: module.ReferralPanel,
   })),
 );

@@ -6,12 +6,11 @@ import { getSetComputeUnitPriceInstruction } from "@solana-program/compute-budge
 import { getTransferSolInstruction } from "@solana-program/system";
 
 import {
-  buildPriorityFeeConfig,
-  confirmSignatureViaRpcEndpoint,
-  JITO_TIP_LAMPORTS,
+  fetchPriorityFeeEstimate,
+  HELIUS_SENDER_MIN_TIP_LAMPORTS,
   randomJitoTipAccount,
-  sendWireTransactionViaRpc,
-} from "./solanaRpc";
+  sendViaHeliusSender,
+} from "@hyperbet/ui/lib/solanaRpc";
 
 type RemainingAccountLike = {
   isSigner: boolean;
@@ -66,7 +65,6 @@ export async function sendKitInstructions(
     accountKeys = [],
     computeUnitLimit = 200_000,
     context,
-    gameApiUrl,
     useHeliusSender = false,
   } = options;
   const rpcEndpoint = client.store.getState().cluster.endpoint;
@@ -75,24 +73,21 @@ export async function sendKitInstructions(
   let stage = "preparing transaction";
   try {
     let preparedInstructions = [...instructions];
-    let computeUnitPrice: bigint | undefined;
     let computeUnitLimitBigInt: bigint | undefined;
 
     if (useHeliusSender) {
-      const priorityFee = await buildPriorityFeeConfig(
+      const priorityFee = await fetchPriorityFeeEstimate(
         rpcEndpoint,
         [...accountKeys],
-        computeUnitLimit,
       );
-      computeUnitLimitBigInt = priorityFee.computeUnitLimit;
-      computeUnitPrice = priorityFee.computeUnitPrice;
+      computeUnitLimitBigInt = BigInt(computeUnitLimit);
       preparedInstructions = [
         getSetComputeUnitLimitInstruction({ units: computeUnitLimit }),
         getSetComputeUnitPriceInstruction({
-          microLamports: priorityFee.computeUnitPrice,
+          microLamports: BigInt(priorityFee),
         }),
         getTransferSolInstruction({
-          amount: BigInt(JITO_TIP_LAMPORTS),
+          amount: BigInt(HELIUS_SENDER_MIN_TIP_LAMPORTS),
           destination: toAddress(randomJitoTipAccount()),
           source: transactionSigner,
         }),
@@ -103,25 +98,22 @@ export async function sendKitInstructions(
     const prepared = await client.transaction.prepare({
       authority: transactionSigner,
       computeUnitLimit: computeUnitLimitBigInt,
-      computeUnitPrice,
       instructions: preparedInstructions,
       version: "auto",
     });
 
     stage = "sending transaction";
     let signature: string;
-    if (useHeliusSender && gameApiUrl) {
+    if (useHeliusSender) {
       const wire = await client.transaction.toWire(prepared);
-      signature = await sendWireTransactionViaRpc(rpcEndpoint, wire, {
-        gameApiUrl,
-        useHeliusSender: true,
-      });
+      const base64 = Buffer.from(wire).toString("base64");
+      signature = await sendViaHeliusSender(base64);
     } else {
       signature = (await client.transaction.send(prepared)).toString();
     }
 
     stage = "confirming transaction";
-    await confirmSignatureViaRpcEndpoint(rpcEndpoint, signature);
+    // Confirmation is handled by the caller via connection.confirmTransaction or polling
     return signature;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
