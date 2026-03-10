@@ -64,24 +64,28 @@ export function createHyperbetAppRoot({
       );
     }
 
-    const content = (
-      <ChainProvider>
-        <ConnectionProvider
-          endpoint={endpoint}
-          config={{
-            wsEndpoint,
-            commitment: "confirmed",
-            disableRetryOnRateLimit: true,
-          }}
-        >
-          <WalletProvider wallets={wallets} autoConnect>
-            <WalletModalProvider>
-              {isStreamUi ? <StreamUIApp /> : <App />}
-            </WalletModalProvider>
-          </WalletProvider>
-        </ConnectionProvider>
-      </ChainProvider>
+    const appContent = isStreamUi ? <StreamUIApp /> : <App />;
+
+    // Only mount Solana providers when a valid RPC endpoint is configured.
+    // EVM-only chain packages (AVAX, BSC) pass an empty string to opt out.
+    const innerContent = endpoint ? (
+      <ConnectionProvider
+        endpoint={endpoint}
+        config={{
+          wsEndpoint,
+          commitment: "confirmed",
+          disableRetryOnRateLimit: true,
+        }}
+      >
+        <WalletProvider wallets={wallets} autoConnect>
+          <WalletModalProvider>{appContent}</WalletModalProvider>
+        </WalletProvider>
+      </ConnectionProvider>
+    ) : (
+      appContent
     );
+
+    const content = <ChainProvider>{innerContent}</ChainProvider>;
 
     return (
       <QueryClientProvider client={queryClient}>
