@@ -32,6 +32,9 @@ export function LocaleSelector({
     >
       <option value="en">🇺🇸</option>
       <option value="zh">🇨🇳</option>
+      <option value="ko">🇰🇷</option>
+      <option value="pt">🇧🇷</option>
+      <option value="es">🇪🇸</option>
     </select>
   );
 }

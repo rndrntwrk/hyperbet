@@ -63,6 +63,27 @@ const TIER_NAMES: Record<UiLocale, Record<MultiplierData["tier"], string>> = {
     GOLD: "黄金",
     DIAMOND: "钻石",
   },
+  ko: {
+    NONE: "None",
+    BRONZE: "Bronze",
+    SILVER: "Silver",
+    GOLD: "Gold",
+    DIAMOND: "Diamond",
+  },
+  pt: {
+    NONE: "None",
+    BRONZE: "Bronze",
+    SILVER: "Silver",
+    GOLD: "Gold",
+    DIAMOND: "Diamond",
+  },
+  es: {
+    NONE: "None",
+    BRONZE: "Bronze",
+    SILVER: "Silver",
+    GOLD: "Gold",
+    DIAMOND: "Diamond",
+  },
 };
 
 function getPointsDisplayCopy(locale: UiLocale) {
