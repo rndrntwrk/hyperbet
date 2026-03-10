@@ -2088,332 +2088,6 @@ select:focus-visible {
   color: var(--hm-accent-red);
 }
 
-.hm-wallet-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 14px;
-  background: var(--hm-header-control-bg);
-  border: 1px solid var(--hm-header-control-border);
-  border-radius: var(--hm-radius);
-  color: var(--hm-header-control-text);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    border-color 0.2s,
-    color 0.2s,
-    box-shadow 0.2s,
-    background 0.2s;
-  white-space: nowrap;
-  font-family: var(--hm-font-mono);
-  overflow: hidden;
-  box-shadow: var(--hm-header-control-shadow);
-}
-
-.hm-wallet-btn::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 20%,
-      rgba(255, 255, 255, 0.12) 50%,
-      transparent 80%
-  );
-  transform: translateX(-100%);
-  transition: transform 0.55s ease;
-  pointer-events: none;
-}
-
-.hm-wallet-btn:hover::before {
-  transform: translateX(100%);
-}
-
-.hm-wallet-btn:hover {
-  border-color: var(--hm-header-control-border-strong);
-  color: var(--hm-header-control-text);
-  background: var(--hm-header-control-hover-bg);
-  box-shadow: var(--hm-header-control-shadow);
-}
-
-.hm-wallet-btn--linked {
-  border-color: var(--hm-header-control-border-strong);
-  color: var(--hm-header-control-text);
-  background: var(--hm-header-control-bg);
-}
-
-.hm-wallet-btn--linked:hover {
-  border-color: var(--hm-header-control-border-strong);
-  color: var(--hm-header-control-text);
-  background: var(--hm-header-control-hover-bg);
-  box-shadow: var(--hm-header-control-shadow);
-}
-
-/* ── Locale selector ── */
-.hm-locale-selector {
-  appearance: none;
-  -webkit-appearance: none;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: var(--hm-radius);
-  border: 1px solid var(--hm-header-control-border);
-  background: var(--hm-header-control-bg);
-  color: var(--hm-header-control-text);
-  font-size: 10.5px;
-  font-weight: 700;
-  font-family: var(--hm-font-mono);
-  letter-spacing: 0.7px;
-  cursor: pointer;
-  outline: none;
-  transition:
-    border-color 0.2s,
-    color 0.2s,
-    box-shadow 0.2s;
-  box-shadow: var(--hm-header-control-shadow);
-}
-
-.hm-locale-selector:hover {
-  border-color: var(--hm-header-control-border-strong);
-  color: var(--hm-header-control-text);
-  background: var(--hm-header-control-hover-bg);
-  box-shadow: var(--hm-header-control-shadow);
-}
-
-.hm-locale-selector:focus {
-  border-color: var(--hm-header-control-border-strong);
-  color: var(--hm-header-control-text);
-}
-
-.hm-locale-selector option {
-  background: var(--hm-surface);
-  color: var(--hm-text);
-}
-
-/* ── Theme toggle button ── */
-.hm-theme-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 28px;
-  width: 28px;
-  padding: 0;
-  border-radius: var(--hm-radius);
-  border: 1px solid var(--hm-gold-border-subtle);
-  background: linear-gradient(
-    180deg,
-    rgba(42, 45, 55, 0.9) 0%,
-    rgba(20, 22, 30, 0.95) 100%
-  );
-  color: var(--hm-text-dim);
-  font-size: 14px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
-}
-
-.hm-theme-btn:hover {
-  border-color: var(--hm-gold-border-light);
-  color: var(--hm-accent-gold);
-  box-shadow: 0 0 10px var(--hm-gold-glow-light);
-}
-
-[data-theme="light"] .hm-theme-btn {
-  background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
-  color: var(--hm-text-dim);
-  border-color: var(--hm-border);
-}
-
-[data-theme="light"] .hm-theme-btn:hover {
-  border-color: var(--hm-gold-border-medium);
-  color: var(--hm-accent-gold);
-}
-
-/* ── NavTabs — premium component ── */
-.hm-nav-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  background: var(--hm-header-nav-shell-bg);
-  border: 1px solid var(--hm-header-nav-shell-border);
-  border-radius: 4px;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 12px 24px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.hm-nav-tabs--mobile {
-  width: 100%;
-}
-
-.hm-nav-tabs--mobile .hm-nav-tab {
-  flex: 1;
-}
-
-.hm-root .hm-nav-tab {
-  min-height: unset;
-}
-
-.hm-nav-tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  height: 32px;
-  border: 1px solid transparent;
-  border-radius: var(--hm-radius);
-  padding: 0 14px;
-  background: transparent;
-  color: var(--hm-header-nav-tab-text);
-  font-family: var(--hm-font-mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  transition:
-    color 0.25s ease,
-    background 0.25s ease,
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
-}
-
-/* Hover shimmer sweep */
-.hm-nav-tab::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 20%,
-    rgba(229, 184, 74, 0.08) 50%,
-    transparent 80%
-  );
-  transform: translateX(-100%);
-  transition: transform 0.6s ease;
-  pointer-events: none;
-}
-
-.hm-nav-tab:not(.hm-nav-tab--active):hover::before {
-  transform: translateX(100%);
-}
-
-.hm-nav-tab:not(.hm-nav-tab--active):hover {
-  color: var(--hm-header-nav-tab-hover-text);
-  background: var(--hm-header-nav-tab-hover-bg);
-  border-color: transparent;
-}
-
-.hm-nav-tab--active {
-  color: var(--hm-header-nav-active-text);
-  background: var(--hm-header-nav-active-bg);
-  border-color: transparent;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    0 8px 20px var(--hm-header-nav-glow);
-}
-
-/* Top-edge light catch */
-.hm-nav-tab--active::before {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.25) 0%,
-    transparent 100%
-  );
-  transform: none;
-  transition: none;
-}
-
-/* Floating ambient glow */
-.hm-nav-tab-glow {
-  position: absolute;
-  inset: -4px -8px;
-  background: radial-gradient(
-    ellipse at 50% 100%,
-    rgba(229, 184, 74, 0.35) 0%,
-    transparent 70%
-  );
-  pointer-events: none;
-  z-index: -1;
-  isolation: isolate;
-}
-
-.hm-nav-tab-label {
-  position: relative;
-  z-index: 1;
-}
-
-@keyframes hm-nav-tab-breathe {
-  0%, 100% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.35),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.2),
-      0 0 12px rgba(229, 184, 74, 0.3);
-  }
-  50% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.35),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.2),
-      0 0 20px rgba(229, 184, 74, 0.5),
-      0 0 40px rgba(229, 184, 74, 0.2);
-  }
-}
-
-.hm-nav-tab--active {
-  animation: hm-nav-tab-breathe 4s ease-in-out infinite;
-}
-
-/* ================================================================
-   MAIN CONTENT
-   ================================================================ */
-.hm-main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.hm-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
-
-.hm-main--models {
-  overflow: auto;
-  background:
-    radial-gradient(
-      circle at top left,
-      rgba(229, 184, 74, 0.1),
-      transparent 32%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(8, 10, 14, 0.96) 0%,
-      rgba(11, 12, 14, 1) 48%,
-      rgba(7, 8, 10, 1) 100%
-    );
-}
-
-.hm-models-main {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 18px 20px 28px;
-}
-
 /* ================================================================
    AVAX MODELS MARKET VIEW
    ================================================================ */
@@ -2743,11 +2417,11 @@ select:focus-visible {
 .hm-view-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid var(--hm-gold-border-subtle);
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 2px;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--hm-header-nav-shell-border);
+  background: var(--hm-header-nav-shell-bg);
+  border-radius: 4px;
 }
 
 .hm-view-tabs--header {
@@ -2761,13 +2435,13 @@ select:focus-visible {
 
 .hm-view-tab {
   border: 0;
-  border-radius: 2px;
-  padding: 8px 14px;
+  border-radius: var(--hm-radius);
+  padding: 7px 12px;
   background: transparent;
-  color: var(--hm-text-dim);
-  font-size: 11px;
+  color: var(--hm-header-nav-tab-text);
+  font-size: 10.5px;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 1.1px;
   text-transform: uppercase;
   cursor: pointer;
   transition:
@@ -2776,18 +2450,14 @@ select:focus-visible {
 }
 
 .hm-view-tab:hover {
-  color: var(--hm-text);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--hm-header-nav-tab-hover-text);
+  background: var(--hm-header-nav-tab-hover-bg);
 }
 
 .hm-view-tab--active {
-  color: var(--hm-tab-active-text);
-  background: linear-gradient(
-    180deg,
-    var(--hm-tab-active-bg-from) 0%,
-    var(--hm-tab-active-bg-to) 100%
-  );
-  box-shadow: 0 6px 20px var(--hm-gold-glow-light);
+  color: var(--hm-header-nav-active-text);
+  background: var(--hm-header-nav-active-bg);
+  box-shadow: 0 8px 20px var(--hm-header-nav-glow);
 }
 
 .hm-mode-summary {
@@ -5484,42 +5154,6 @@ select:focus-visible {
    MOBILE HEADER (rendered via isMobile in React)
    ================================================================ */
 
-/* Row 1: Brand rail */
-.hm-header-mob-row1 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  height: 48px;
-  background: var(--hm-surface);
-  border-bottom: 1px solid var(--hm-border-subtle);
-  flex-shrink: 0;
-  width: 100%;
-  min-width: 0;
-  gap: 8px;
-}
-
-.hm-header-mob-row1 .hm-logo {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.hm-header-mob-row1 .hm-logo-text {
-  display: block !important;
-  font-family: var(--hm-font-display);
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 2px;
-  color: var(--hm-accent-gold);
-  text-transform: uppercase;
-  white-space: nowrap;
-  text-shadow: 0 0 12px var(--hm-gold-glow-medium);
-}
-
 .hm-logo-text--stacked {
   display: flex !important;
   flex-direction: column;
@@ -5541,90 +5175,6 @@ select:focus-visible {
   gap: 5px;
   flex-shrink: 0;
   min-width: 0;
-}
-
-/* Icon-only button (🏆) */
-.hm-header-mob-icon-btn {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--hm-stone-dark);
-  border-radius: var(--hm-radius);
-  font-size: 14px;
-  cursor: pointer;
-  color: var(--hm-text-dim);
-  padding: 0;
-  flex-shrink: 0;
-  transition: border-color 0.15s;
-  touch-action: manipulation;
-}
-
-.hm-header-mob-icon-btn:hover {
-  border-color: var(--hm-gold-border-subtle);
-}
-
-/* Compact wallet button — SOL and EVM side by side */
-.hm-header-mob-wallet-btn {
-  height: 30px;
-  padding: 0 9px;
-  background: linear-gradient(
-    180deg,
-    var(--hm-stone-dark) 0%,
-    var(--hm-surface) 100%
-  );
-  border: 1px solid var(--hm-stone-dark);
-  border-radius: var(--hm-radius);
-  color: var(--hm-text-dim);
-  font-size: 10px;
-  font-weight: 700;
-  font-family: var(--hm-font-mono);
-  letter-spacing: 0.2px;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.15s;
-  touch-action: manipulation;
-}
-
-.hm-header-mob-wallet-btn--linked {
-  border-color: var(--hm-gold-border-subtle);
-  color: var(--hm-accent-gold-dim);
-  background: linear-gradient(
-    180deg,
-    rgba(229, 184, 74, 0.08) 0%,
-    rgba(229, 184, 74, 0.04) 100%
-  );
-}
-
-/* Row 2: Match strip */
-.hm-header-mob-row2 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 12px;
-  height: 40px;
-  background: var(--hm-bg);
-  border-bottom: 1px solid var(--hm-border);
-  flex-shrink: 0;
-  width: 100%;
-  overflow: hidden;
-}
-
-/* Market name in row 2 */
-.hm-header-mob-row2 .hm-market-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--hm-text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-  max-width: none;
 }
 
 /* Chip group */
@@ -5651,23 +5201,6 @@ select:focus-visible {
   font-size: 10px;
   font-family: var(--hm-font-mono);
   margin-left: 2px;
-}
-
-/* Full shimmer line at bottom of header (replaces hm-header::after which is desktop only) */
-.hm-header-mob-row2::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 10%;
-  right: 10%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--hm-gold-shimmer-fade),
-    transparent
-  );
-  pointer-events: none;
 }
 
 /* ================================================================
@@ -6330,46 +5863,6 @@ select:focus-visible {
   color: var(--hm-header-theme-icon) !important;
 }
 
-/* ── Nav tabs ── */
-[data-theme="light"] .hm-nav-tab {
-  color: rgba(255, 255, 255, 0.85) !important;
-}
-[data-theme="light"] .hm-nav-tab:hover {
-  color: #ffffff !important;
-  background: rgba(255, 255, 255, 0.15) !important;
-}
-[data-theme="light"] .hm-nav-tab--active {
-  color: var(--hm-accent-gold) !important;
-  background: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
-  text-shadow: none !important;
-}
-[data-theme="light"] .hm-nav-tab--active::before {
-  background: transparent !important;
-}
-/* Override shared stylesheet's animated breathe to a static style */
-[data-theme="light"] .hm-nav-tab--active {
-  animation: none !important;
-}
-
-/* ── View tabs (DUELS / MODELS) ── */
-[data-theme="light"] .hm-view-tab {
-  color: var(--hm-text-dim) !important;
-  background: transparent !important;
-}
-[data-theme="light"] .hm-view-tab:hover {
-  color: var(--hm-text) !important;
-  background: var(--hm-surface-raised) !important;
-}
-[data-theme="light"] .hm-view-tab--active {
-  color: #ffffff !important;
-  background: linear-gradient(160deg,
-    var(--hm-accent-gold-bright) 0%,
-    var(--hm-accent-gold) 45%,
-    var(--hm-accent-gold-dim) 100%) !important;
-  text-shadow: none !important;
-}
-
 /* ── App tabs (bottom panel tabs) ── */
 [data-theme="light"] .app-tab-btn {
   color: var(--hm-text-dim) !important;
@@ -6629,43 +6122,11 @@ select:focus-visible {
   background: rgba(255, 255, 255, 0.3) !important;
 }
 
-/* ── Theme toggle button on red header ── */
-[data-theme="light"] .hm-theme-btn {
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
-  background: rgba(255, 255, 255, 0.15) !important;
-}
-[data-theme="light"] .hm-theme-btn:hover {
-  background: rgba(255, 255, 255, 0.25) !important;
-}
-
 /* ── Locale selector on red header ── */
 [data-theme="light"] .hm-locale-selector {
   color: #ffffff !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
   background: rgba(255, 255, 255, 0.15) !important;
-}
-
-/* ── Mobile header ── */
-[data-theme="light"] .hm-header-mob-row1 {
-  background: var(--hm-accent-gold) !important;
-}
-[data-theme="light"] .hm-header-mob-row2 {
-  background: var(--hm-surface) !important;
-  border-bottom: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-header-mob-icon-btn {
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
-}
-[data-theme="light"] .hm-header-mob-icon-btn:hover {
-  border-color: rgba(255, 255, 255, 0.55) !important;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2) !important;
-}
-[data-theme="light"] .hm-header-mob-wallet-btn--linked {
-  border-color: rgba(255, 255, 255, 0.35) !important;
-  background: rgba(255, 255, 255, 0.2) !important;
-  color: #ffffff !important;
 }
 
 /* ── Modal / glass surfaces ── */
@@ -6889,6 +6350,27 @@ select:focus-visible {
 .hm-logo-text {
   color: var(--hm-header-logo);
   text-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+}
+
+.hm-locale-selector {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--hm-radius);
+  border-style: solid;
+  border-width: 1px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: var(--hm-font-mono);
+  letter-spacing: 0.7px;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
 }
 
 .hm-nav-tabs,
