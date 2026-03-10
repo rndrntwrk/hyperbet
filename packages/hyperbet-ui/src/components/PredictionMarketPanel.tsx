@@ -122,14 +122,6 @@ export function PredictionMarketPanel({
       {/* Layout: 4-column wide OR single-column compact sidebar */}
       <div
         className={compact ? "pm-compact" : "pm-grid"}
-        style={{
-          display: "grid",
-          gridTemplateColumns: compact
-            ? "1fr"
-            : "210px 1fr minmax(180px, 220px) minmax(180px, 220px)",
-          alignItems: "stretch",
-          gap: compact ? 0 : 12,
-        }}
       >
         {/* ========== COL 1: Betting Controls ========== */}
         <div
