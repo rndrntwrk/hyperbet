@@ -748,8 +748,14 @@ export function App() {
     liveCycle?.agent2?.name?.trim() && liveCycle.agent2.name.trim().length > 0
       ? liveCycle.agent2.name.trim()
       : null;
-  const effAgent1Name = currentMatch?.agent1Name ?? liveAgent1Name ?? "Agent A";
-  const effAgent2Name = currentMatch?.agent2Name ?? liveAgent2Name ?? "Agent B";
+  const mockAgent1Name =
+    mockData?.streamingState?.state?.cycle.agent1.name?.trim() || null;
+  const mockAgent2Name =
+    mockData?.streamingState?.state?.cycle.agent2.name?.trim() || null;
+  const effAgent1Name =
+    currentMatch?.agent1Name ?? liveAgent1Name ?? mockAgent1Name ?? "Agent A";
+  const effAgent2Name =
+    currentMatch?.agent2Name ?? liveAgent2Name ?? mockAgent2Name ?? "Agent B";
   const effStatusColor = status ? "#fda4af" : "rgba(255,255,255,0.78)";
   const effStatus = status;
   const contextAgent1 = duelContext?.cycle.agent1 ?? null;
@@ -1434,7 +1440,8 @@ const [hmBottomTab, setHmBottomTab] = useState<
               }
             >
               <AvaxModelsMarketView
-                activeMatchup={`${effA1.name} vs ${effA2.name}`}
+                fightingAgentA={effA1.name}
+                fightingAgentB={effA2.name}
                 locale={locale}
               />
             </Suspense>

@@ -7906,3 +7906,40 @@ select:focus-visible {
   text-align: center;
   font-family: var(--font-mono, "Geist Mono", monospace);
 }
+
+/* ── Live fighting indicators ── */
+.hm-perps-row--live {
+  background: color-mix(in srgb, var(--hm-accent-gold) 6%, transparent);
+  border-left: 2px solid var(--hm-accent-gold);
+}
+
+.hm-perps-row--live:hover {
+  background: color-mix(in srgb, var(--hm-accent-gold) 10%, transparent);
+}
+
+.hm-perps-row--live.hm-perps-row--selected {
+  background: color-mix(in srgb, var(--hm-accent-gold) 14%, transparent);
+}
+
+.hm-perps-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hm-accent-gold);
+  background: color-mix(in srgb, var(--hm-accent-gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hm-accent-gold) 40%, transparent);
+  border-radius: 3px;
+  vertical-align: middle;
+  animation: hm-perps-live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes hm-perps-live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}

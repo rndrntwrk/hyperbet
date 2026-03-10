@@ -111,7 +111,10 @@ interface ApiOracleHistoryResponse {
 }
 
 interface AvaxModelsMarketViewProps {
-  activeMatchup: string;
+  /** Name of the first agent currently fighting (from live SSE / mock engine). */
+  fightingAgentA: string;
+  /** Name of the second agent currently fighting. */
+  fightingAgentB: string;
   locale?: UiLocale;
 }
 
@@ -413,7 +416,8 @@ function OracleTooltip({
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function AvaxModelsMarketView({
-  activeMatchup,
+  fightingAgentA,
+  fightingAgentB,
 }: AvaxModelsMarketViewProps) {
   const mockData = useMockDataOptional();
   const { address: evmAddress, isConnected: isEvmConnected } = useAccount();
@@ -659,7 +663,11 @@ export function AvaxModelsMarketView({
           <article className="hm-perps-metric-card">
             <span className="hm-perps-metric-label">Tracked Models</span>
             <strong className="hm-perps-metric-value">{entries.length}</strong>
-            <small className="hm-perps-metric-sub">Current duel: {activeMatchup || "—"}</small>
+            <small className="hm-perps-metric-sub">
+              {fightingAgentA && fightingAgentB
+                ? `${fightingAgentA} vs ${fightingAgentB}`
+                : "—"}
+            </small>
           </article>
           <article className="hm-perps-metric-card">
             <span className="hm-perps-metric-label">Aggregate OI</span>
@@ -742,10 +750,19 @@ export function AvaxModelsMarketView({
                   const market = marketSnapshots[entry.characterId];
                   const position = positions[entry.characterId];
                   const isSelected = selectedId === entry.characterId;
+                  const isFighting =
+                    entry.name === fightingAgentA ||
+                    entry.name === fightingAgentB;
                   return (
                     <tr
                       key={entry.characterId}
-                      className={`hm-perps-row${isSelected ? " hm-perps-row--selected" : ""}`}
+                      className={[
+                        "hm-perps-row",
+                        isSelected ? "hm-perps-row--selected" : "",
+                        isFighting ? "hm-perps-row--live" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       onClick={() => setSelectedId(entry.characterId)}
                     >
                       <td className="hm-perps-td">
@@ -755,7 +772,14 @@ export function AvaxModelsMarketView({
                       </td>
                       <td className="hm-perps-td">
                         <div className="hm-perps-agent-cell">
-                          <span className="hm-perps-agent-name">{entry.name}</span>
+                          <span className="hm-perps-agent-name">
+                            {entry.name}
+                            {isFighting && (
+                              <span className="hm-perps-live-badge" aria-label="Currently fighting">
+                                ⚡ LIVE
+                              </span>
+                            )}
+                          </span>
                           <span className="hm-perps-agent-model">
                             {entry.model || "—"}
                           </span>
