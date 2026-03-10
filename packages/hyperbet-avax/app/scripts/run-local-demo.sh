@@ -3,54 +3,28 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_DIR="$(cd "$APP_DIR/.." && pwd)"
-ANCHOR_DIR="$DEMO_DIR/anchor"
-LEDGER_DIR="$ANCHOR_DIR/.local-demo-ledger"
-VALIDATOR_LOG="$APP_DIR/.local-demo-validator.log"
-PROGRAM_ORACLE_ID="6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD"
-PROGRAM_CLOB_ID="ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi"
+EVM_DIR="$(cd "$DEMO_DIR/../evm-contracts" && pwd)"
+ANVIL_LOG="$APP_DIR/.local-demo-anvil.log"
 APP_PORT="${APP_PORT:-4179}"
-RPC_URL="http://127.0.0.1:8899"
+ANVIL_PORT="${ANVIL_PORT:-8545}"
+ANVIL_RPC_URL="http://127.0.0.1:${ANVIL_PORT}"
+EVM_CHAIN_ID="${EVM_CHAIN_ID:-43113}"
 
-VALIDATOR_PID=""
-
-resolve_wallet_path() {
-  local candidates=()
-
-  if [[ -n "${SOLANA_BOOTSTRAP_KEYPAIR:-}" ]]; then
-    candidates+=("${SOLANA_BOOTSTRAP_KEYPAIR}")
-  fi
-  if [[ -n "${ANCHOR_WALLET:-}" ]]; then
-    candidates+=("${ANCHOR_WALLET}")
-  fi
-  candidates+=(
-    "$HOME/.config/solana/hyperscape-keys/deployer.json"
-    "$HOME/.config/solana/id.json"
-  )
-
-  for candidate in "${candidates[@]}"; do
-    if [[ -f "$candidate" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
-
-  printf '[local-demo] no bootstrap wallet found\n' >&2
-  exit 1
-}
+ANVIL_PID=""
 
 cleanup() {
-  if [[ -n "$VALIDATOR_PID" ]] && kill -0 "$VALIDATOR_PID" >/dev/null 2>&1; then
-    kill "$VALIDATOR_PID" >/dev/null 2>&1 || true
-    wait "$VALIDATOR_PID" >/dev/null 2>&1 || true
+  if [[ -n "$ANVIL_PID" ]] && kill -0 "$ANVIL_PID" >/dev/null 2>&1; then
+    kill "$ANVIL_PID" >/dev/null 2>&1 || true
+    wait "$ANVIL_PID" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
 
-wait_for_rpc() {
-  for _ in {1..90}; do
-    if curl -s -X POST "$RPC_URL" \
+wait_for_anvil() {
+  for _ in {1..60}; do
+    if curl -s -X POST "$ANVIL_RPC_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' | rg -q '"result":"ok"'; then
+      -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' | grep -q '"result"'; then
       return 0
     fi
     sleep 1
@@ -72,42 +46,31 @@ kill_listeners() {
 }
 
 kill_listeners "$APP_PORT"
-kill_listeners 8899
+kill_listeners "$ANVIL_PORT"
 
-echo "[local-demo] building anchor programs"
-bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-bsc-local-build.log 2>&1
+echo "[local-demo] compiling EVM contracts"
+bun run --cwd "$EVM_DIR" compile >/tmp/hyperbet-avax-local-build.log 2>&1
 
-IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
-IDL_CLOB_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_clob_market.json" 2>/dev/null || true)"
-if [[ -n "$IDL_ORACLE_ID" && "$IDL_ORACLE_ID" != "null" ]]; then
-  PROGRAM_ORACLE_ID="$IDL_ORACLE_ID"
-fi
-if [[ -n "$IDL_CLOB_ID" && "$IDL_CLOB_ID" != "null" ]]; then
-  PROGRAM_CLOB_ID="$IDL_CLOB_ID"
-fi
+echo "[local-demo] starting local Anvil (chain id $EVM_CHAIN_ID)"
+anvil \
+  --silent \
+  --host 127.0.0.1 \
+  --port "$ANVIL_PORT" \
+  --chain-id "$EVM_CHAIN_ID" \
+  >"$ANVIL_LOG" 2>&1 &
+ANVIL_PID="$!"
 
-echo "[local-demo] starting local validator"
-rm -rf "$LEDGER_DIR"
-SOLANA_BOOTSTRAP_KEYPAIR="$(resolve_wallet_path)"
-solana-test-validator \
-  --reset \
-  --quiet \
-  --ledger "$LEDGER_DIR" \
-  --upgradeable-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" "$SOLANA_BOOTSTRAP_KEYPAIR" \
-  --upgradeable-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" "$SOLANA_BOOTSTRAP_KEYPAIR" \
-  >"$VALIDATOR_LOG" 2>&1 &
-VALIDATOR_PID="$!"
-
-if ! wait_for_rpc; then
-  echo "[local-demo] validator did not become ready"
-  tail -n 120 "$VALIDATOR_LOG" || true
+if ! wait_for_anvil; then
+  echo "[local-demo] Anvil did not become ready"
+  tail -n 120 "$ANVIL_LOG" || true
   exit 1
 fi
 
-echo "[local-demo] seeding local state + writing app/.env.e2e"
-bun run "$APP_DIR/tests/e2e/setup-localnet.ts" >/tmp/hyperbet-bsc-local-seed.log
+echo "[local-demo] seeding EVM state + writing app/.env.e2e"
+E2E_EVM_PORT="$ANVIL_PORT" E2E_EVM_CHAIN_ID="$EVM_CHAIN_ID" \
+  bun run "$APP_DIR/tests/e2e/setup-evm-local.ts" >/tmp/hyperbet-avax-local-seed.log
 
 echo "[local-demo] starting app at http://127.0.0.1:$APP_PORT"
-echo "[local-demo] validator log: $VALIDATOR_LOG"
+echo "[local-demo] Anvil log: $ANVIL_LOG"
 VITE_HEADLESS_WALLET_AUTO_CONNECT=false \
   bun run --cwd "$APP_DIR" dev --mode e2e --port "$APP_PORT"

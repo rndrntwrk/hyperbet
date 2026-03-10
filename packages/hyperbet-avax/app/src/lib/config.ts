@@ -138,25 +138,11 @@ function asDeploymentEnvironment(
 
 function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
   switch (network) {
-    case "bsc":
-      return "https://bsc-dataseed.binance.org";
-    case "bscTestnet":
-      return "https://data-seed-prebsc-1-s1.binance.org:8545";
-    case "base":
-      return "https://mainnet.base.org";
-    case "baseSepolia":
-      return "https://sepolia.base.org";
+    case "avax":
+      return "https://api.avax.network/ext/bc/C/rpc";
+    case "avaxFuji":
+      return "https://api.avax-test.network/ext/bc/C/rpc";
   }
-}
-
-function defaultAvaxRpcUrlForEnvironment(environment: Environment): string {
-  return environment === "mainnet-beta"
-    ? "https://api.avax.network/ext/bc/C/rpc"
-    : "https://api.avax-test.network/ext/bc/C/rpc";
-}
-
-function defaultAvaxChainIdForEnvironment(environment: Environment): number {
-  return environment === "mainnet-beta" ? 43114 : 43113;
 }
 
 function buildSolanaProgramConfig(
@@ -200,18 +186,22 @@ function buildEvmConfig(
     asDeploymentEnvironment(environment),
   );
   return {
-    bscRpcUrl: defaultRpcUrlForEvmNetwork(defaults.bsc.networkKey),
-    bscChainId: defaults.bsc.chainId,
-    bscGoldClobAddress: defaults.bsc.goldClobAddress,
-    bscGoldTokenAddress: defaults.bsc.goldTokenAddress,
-    baseRpcUrl: defaultRpcUrlForEvmNetwork(defaults.base.networkKey),
-    baseChainId: defaults.base.chainId,
-    baseGoldClobAddress: defaults.base.goldClobAddress,
-    baseGoldTokenAddress: defaults.base.goldTokenAddress,
-    avaxRpcUrl: defaultAvaxRpcUrlForEnvironment(environment),
-    avaxChainId: defaultAvaxChainIdForEnvironment(environment),
-    avaxGoldClobAddress: "",
-    avaxGoldTokenAddress: "",
+    // BSC and Base are not used in the AVAX-only package.
+    // These fields remain in EnvConfig for interface compatibility with shared
+    // code in chainConfig.ts; they are empty so hasConfiguredContracts() returns
+    // false and the chains are never added to the enabled chains list.
+    bscRpcUrl: "",
+    bscChainId: 0,
+    bscGoldClobAddress: "",
+    bscGoldTokenAddress: "",
+    baseRpcUrl: "",
+    baseChainId: 0,
+    baseGoldClobAddress: "",
+    baseGoldTokenAddress: "",
+    avaxRpcUrl: defaultRpcUrlForEvmNetwork(defaults.avax.networkKey),
+    avaxChainId: defaults.avax.chainId,
+    avaxGoldClobAddress: defaults.avax.goldClobAddress,
+    avaxGoldTokenAddress: defaults.avax.goldTokenAddress,
   };
 }
 

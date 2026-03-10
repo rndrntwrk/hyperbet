@@ -103,7 +103,7 @@ fi
 echo "[e2e] ensuring playwright chromium is installed"
 (
   cd "$APP_DIR"
-  bunx playwright install chromium >/tmp/hyperbet-bsc-playwright-install.log 2>&1
+  bunx playwright install chromium >/tmp/hyperbet-avax-playwright-install.log 2>&1
 )
 
 echo "[e2e] running playwright tests (cluster=$CLUSTER)"
