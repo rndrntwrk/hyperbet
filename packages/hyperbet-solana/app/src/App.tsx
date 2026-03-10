@@ -60,9 +60,11 @@ import {
 
 // ── Shared UI utilities ──────────────────────────────────────────────────────
 function formatGold(v: number, locale: UiLocale = "en"): string {
-  if (locale === "zh") {
-    if (v >= 100_000_000) return `${(v / 100_000_000).toFixed(1)}亿`;
-    if (v >= 10_000) return `${(v / 10_000).toFixed(1)}万`;
+  if (locale === "zh" || locale === "ko") {
+    const yi = locale === "zh" ? "亿" : "억";
+    const wan = locale === "zh" ? "万" : "만";
+    if (v >= 100_000_000) return `${(v / 100_000_000).toFixed(1)}${yi}`;
+    if (v >= 10_000) return `${(v / 10_000).toFixed(1)}${wan}`;
   } else {
     if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -73,11 +75,26 @@ function formatGold(v: number, locale: UiLocale = "en"): string {
 
 function formatTimeAgo(ts: number, locale: UiLocale = "en"): string {
   const ago = Math.floor((Date.now() - ts) / 1000);
-  if (ago < 0) return locale === "zh" ? "刚刚" : "just now";
+  if (ago < 0) {
+    const nowMap: Record<string, string> = { zh: "刚刚", ko: "방금", pt: "agora", es: "ahora" };
+    return nowMap[locale] ?? "just now";
+  }
   const mins = Math.floor(ago / 60);
   if (locale === "zh") {
     if (mins > 0) return `${mins}分前`;
     return `${ago}秒前`;
+  }
+  if (locale === "ko") {
+    if (mins > 0) return `${mins}분 전`;
+    return `${ago}초 전`;
+  }
+  if (locale === "pt") {
+    if (mins > 0) return `${mins}m atrás`;
+    return `${ago}s atrás`;
+  }
+  if (locale === "es") {
+    if (mins > 0) return `hace ${mins}m`;
+    return `hace ${ago}s`;
   }
   if (mins > 0) return `${mins}m`;
   return `${ago}s`;
@@ -103,11 +120,11 @@ function getAppCopy(locale: UiLocale) {
       trades: "成交",
       orderBook: "订单簿",
       matchLog: "对局日志",
-      agents: "代理",
+      agents: "智能体",
       positions: "仓位",
       pool: "资金池",
       side: "方向",
-      agent: "代理",
+      agent: "智能体",
       price: "价格",
       amount: "数量",
       age: "时间",
@@ -203,7 +220,7 @@ function getAppCopy(locale: UiLocale) {
       wl: "승/패",
       dmg: "피해",
       action: "행동",
-      thought: "사고",
+      thought: "생각",
       result: "결과",
       winner: (name: string, reason: string | null | undefined) =>
         `${name} 승리!${reason ? ` ${reason}` : ""}`,
@@ -212,7 +229,7 @@ function getAppCopy(locale: UiLocale) {
       closeTradingPanel: "거래 패널 닫기",
       openTradingPanel: "거래 패널 열기",
       placeBet: "베팅하기",
-      legalLead: "거래함으로써 다음에 동의합니다:",
+      legalLead: "거래 시 동의한 것으로 간주됩니다:",
       terms: "이용약관",
       privacy: "개인정보",
       round: (value: string) => `${value}라운드`,
@@ -254,7 +271,7 @@ function getAppCopy(locale: UiLocale) {
       waitingForStream: "Aguardando transmissão…",
       trades: "Negociações",
       orderBook: "Livro de Ordens",
-      matchLog: "Log da Partida",
+      matchLog: "Log da Luta",
       agents: "Agentes",
       positions: "Posições",
       pool: "Pool",
@@ -315,7 +332,7 @@ function getAppCopy(locale: UiLocale) {
   if (locale === "es") {
     return {
       points: "Puntos",
-      leaderboard: "Clasificación",
+      leaderboard: "Ranking",
       history: "Historial",
       referral: "Referido",
       loadingLeaderboard: "Cargando clasificación",
@@ -323,14 +340,14 @@ function getAppCopy(locale: UiLocale) {
       loadingReferral: "Cargando referidos",
       loadingAgentStats: "Cargando estadísticas del agente",
       loadingModelMarkets: "Cargando mercados de modelos",
-      leaderboardAndStats: "Clasificación y Estadísticas",
+      leaderboardAndStats: "Ranking y Stats",
       unmuteStream: "Activar sonido",
       muteStream: "Silenciar",
       source: "Fuente",
       waitingForStream: "Esperando transmisión…",
-      trades: "Operaciones",
+      trades: "Trades",
       orderBook: "Libro de Órdenes",
-      matchLog: "Registro de Partida",
+      matchLog: "Registro de Pelea",
       agents: "Agentes",
       positions: "Posiciones",
       pool: "Pool",
@@ -339,7 +356,7 @@ function getAppCopy(locale: UiLocale) {
       price: "Precio",
       amount: "Cantidad",
       age: "Tiempo",
-      trader: "Operador",
+      trader: "Trader",
       buy: "COMPRAR",
       sell: "VENDER",
       bids: (name: string) => `COMPRAS (${name})`,
