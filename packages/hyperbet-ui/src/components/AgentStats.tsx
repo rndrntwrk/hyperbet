@@ -79,7 +79,7 @@ export function AgentStats({
           color: "rgba(255,255,255,0.3)",
           fontSize: 13,
           fontWeight: 900,
-          fontFamily: "'Teko', sans-serif",
+          fontFamily: "var(--hm-font-display)",
           textTransform: "uppercase",
           letterSpacing: 2,
         }}
@@ -99,7 +99,7 @@ export function AgentStats({
         display: "flex",
         flexDirection: "column",
         gap: 16,
-        fontFamily: "'Inter', system-ui, sans-serif",
+        fontFamily: "var(--hm-font-body)",
       }}
     >
       {/* Header Info */}
@@ -116,7 +116,7 @@ export function AgentStats({
             justifyContent: "center",
             fontSize: 28,
             fontWeight: 900,
-            fontFamily: "'Teko', sans-serif",
+            fontFamily: "var(--hm-font-display)",
             border: `1px solid ${accentColor}44`,
             boxShadow: `0 4px 16px ${accentColor}18, inset 0 1px 0 rgba(255,255,255,0.1)`,
             color: accentColor,
@@ -133,7 +133,7 @@ export function AgentStats({
               fontSize: 26,
               fontWeight: 900,
               letterSpacing: 1,
-              fontFamily: "'Teko', sans-serif",
+              fontFamily: "var(--hm-font-display)",
               textTransform: "uppercase",
               lineHeight: 1,
               color: "#fff",
@@ -149,7 +149,7 @@ export function AgentStats({
               fontWeight: 800,
               letterSpacing: 1.5,
               textTransform: "uppercase",
-              fontFamily: "'Orbitron', sans-serif",
+              fontFamily: "var(--hm-font-display)",
             }}
           >
             {copy.level(agent.combatLevel, agent.provider, agent.model)}
@@ -192,7 +192,7 @@ export function AgentStats({
             fontSize: 14,
             fontWeight: 900,
             textTransform: "uppercase",
-            fontFamily: "'Teko', sans-serif",
+            fontFamily: "var(--hm-font-display)",
             letterSpacing: 2,
           }}
         >
@@ -237,7 +237,7 @@ export function AgentStats({
             textTransform: "uppercase",
             letterSpacing: 2,
             marginBottom: 10,
-            fontFamily: "'Teko', sans-serif",
+            fontFamily: "var(--hm-font-display)",
           }}
         >
           {copy.inventory}
@@ -285,7 +285,7 @@ export function AgentStats({
                       right: 3,
                       fontSize: 9,
                       fontWeight: 900,
-                      fontFamily: "monospace",
+                      fontFamily: "var(--hm-font-mono)",
                       background: "rgba(0,0,0,0.6)",
                       padding: "0 3px",
                       borderRadius: 4,
@@ -312,7 +312,7 @@ export function AgentStats({
               textTransform: "uppercase",
               letterSpacing: 2,
               marginBottom: 10,
-              fontFamily: "'Teko', sans-serif",
+              fontFamily: "var(--hm-font-display)",
             }}
           >
             {copy.feed}
@@ -348,7 +348,7 @@ export function AgentStats({
                   color: "rgba(255,255,255,0.85)",
                   position: "relative",
                   zIndex: 2,
-                  fontFamily: "'Inter', sans-serif",
+                  fontFamily: "var(--hm-font-body)",
                 }}
               >
                 <span
@@ -360,7 +360,7 @@ export function AgentStats({
                     textTransform: "uppercase",
                     fontWeight: 900,
                     letterSpacing: 1,
-                    fontFamily: "'Orbitron', sans-serif",
+                    fontFamily: "var(--hm-font-display)",
                   }}
                 >
                   {copy.monoType(mono.type)}
@@ -406,7 +406,7 @@ function StatBox({
           textTransform: "uppercase",
           letterSpacing: 1,
           marginBottom: 2,
-          fontFamily: "'Orbitron', sans-serif",
+          fontFamily: "var(--hm-font-display)",
         }}
       >
         {label}
@@ -416,7 +416,7 @@ function StatBox({
           fontSize: 22,
           fontWeight: 900,
           color: valueColor,
-          fontFamily: "'Teko', sans-serif",
+          fontFamily: "var(--hm-font-display)",
           lineHeight: 1,
           letterSpacing: 1,
         }}

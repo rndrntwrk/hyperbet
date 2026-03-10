@@ -1,52 +1,26 @@
-@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Teko:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800;900&display=swap");
+@font-face {
+  font-family: "Geist Sans";
+  src: url("./assets/fonts/Geist-VF.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./assets/fonts/GeistMono-VF.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
-  --panel-bg: rgba(12, 14, 20, 0.55);
-  --panel-border: rgba(255, 255, 255, 0.1);
-  --glass-bg: rgba(14, 16, 24, 0.52);
-  --glass-border: rgba(255, 255, 255, 0.12);
+  /* Layout & spacing — theme-invariant */
   --glass-highlight: rgba(255, 255, 255, 0.08);
   --glass-blur: 32px;
   --focus-ring: #60a5fa;
   --betting-dock-height: 300px;
   --betting-dock-gap: 24px;
-
-  /* Hyperscape Market theme — gold/steel/stone palette (from website) */
-  --hm-bg: #0b0c0e;
-  --hm-surface: #12141a;
-  --hm-surface-raised: #1a1d24;
-  --hm-border: #252830;
-  --hm-border-subtle: rgba(255, 255, 255, 0.06);
-  --hm-border-bronze: #6b5a20;
-  --hm-text: #f2f0eb;
-  --hm-text-dim: #b8b5ad;
-  --hm-text-muted: #8a8880;
-  --hm-accent-gold: #e5b84a;
-  --hm-accent-gold-bright: #f0d060;
-  --hm-accent-gold-dim: #d4a84b;
-  --hm-accent-gold-ember: #b8860b;
-  --hm-accent-gold-shadow: #8b6914;
-  --hm-accent-green: #22c55e;
-  --hm-accent-red: #ef4444;
-  --hm-accent-teal: #14b8a6;
-  --hm-accent-purple: #7c3aed;
-  --hm-buy: #22c55e;
-  --hm-sell: #ef4444;
-  --hm-gold-glow-subtle: rgba(229, 184, 74, 0.06);
-  --hm-gold-glow-light: rgba(229, 184, 74, 0.08);
-  --hm-gold-glow-medium: rgba(229, 184, 74, 0.15);
-  --hm-gold-glow-strong: rgba(229, 184, 74, 0.2);
-  --hm-gold-border-subtle: rgba(229, 184, 74, 0.12);
-  --hm-gold-border-light: rgba(229, 184, 74, 0.2);
-  --hm-gold-border-medium: rgba(229, 184, 74, 0.35);
-  --hm-gold-border-accent: rgba(229, 184, 74, 0.6);
-  --hm-gold-shimmer: rgba(229, 184, 74, 0.5);
-  --hm-gold-shimmer-fade: rgba(229, 184, 74, 0.35);
-  --hm-stone-dark: #2a2d34;
-  --hm-stone-mid: #3d4149;
-  --hm-stone-light: #6b6f78;
-  --hm-glass-surface: rgba(11, 12, 14, 0.92);
-  --hm-glass-border: rgba(60, 65, 75, 0.5);
   --hm-radius: 2px;
   --hm-radius-sm: 2px;
   --hm-spacing-xs: 4px;
@@ -54,9 +28,172 @@
   --hm-spacing-md: 12px;
   --hm-spacing-lg: 16px;
   --hm-spacing-xl: 24px;
-  --hm-font-body: "Inter", system-ui, -apple-system, sans-serif;
-  --hm-font-mono: "IBM Plex Mono", "Menlo", monospace;
-  --hm-font-display: "Orbitron", "Inter", system-ui, sans-serif;
+  --hm-font-body: "Geist Sans", system-ui, -apple-system, sans-serif;
+  --hm-font-mono: "Geist Mono", "Menlo", monospace;
+  --hm-font-display: "Geist Sans", system-ui, -apple-system, sans-serif;
+  --font-body: var(--hm-font-body);
+  --font-mono: var(--hm-font-mono);
+}
+
+/* ── Dark theme (default) — Avalanche obsidian + red ── */
+[data-theme="dark"] {
+  --panel-bg: rgba(10, 10, 11, 0.72);
+  --panel-border: rgba(255, 255, 255, 0.07);
+  --glass-bg: rgba(12, 12, 14, 0.72);
+  --glass-border: rgba(232, 65, 66, 0.18);
+
+  /* Obsidian backgrounds with warm contrast */
+  --hm-bg: #070809;
+  --hm-surface: #121416;
+  --hm-surface-raised: #1a1d21;
+  --hm-border: #2a2d31;
+  --hm-border-subtle: rgba(255, 255, 255, 0.06);
+  --hm-border-bronze: rgba(232, 65, 66, 0.35);
+  --hm-text: #f5f5f5;
+  --hm-text-dim: #b4bac3;
+  --hm-text-muted: #727884;
+
+  /* Avalanche red accent — all gold vars repurposed to red */
+  --hm-accent-gold: #E84142;
+  --hm-accent-gold-bright: #FF394A;
+  --hm-accent-gold-dim: #c73030;
+  --hm-accent-gold-ember: #a02525;
+  --hm-accent-gold-shadow: #7a1a1a;
+
+  --hm-accent-green: #22c55e;
+  --hm-accent-red: #E84142;
+  --hm-accent-teal: #14b8a6;
+  --hm-accent-purple: #7c3aed;
+  --hm-buy: #22c55e;
+  --hm-sell: #E84142;
+
+  --hm-gold-glow-subtle: rgba(232, 65, 66, 0.06);
+  --hm-gold-glow-light: rgba(232, 65, 66, 0.10);
+  --hm-gold-glow-medium: rgba(232, 65, 66, 0.18);
+  --hm-gold-glow-strong: rgba(232, 65, 66, 0.28);
+  --hm-gold-border-subtle: rgba(232, 65, 66, 0.14);
+  --hm-gold-border-light: rgba(232, 65, 66, 0.25);
+  --hm-gold-border-medium: rgba(232, 65, 66, 0.45);
+  --hm-gold-border-accent: rgba(232, 65, 66, 0.70);
+  --hm-gold-shimmer: rgba(232, 65, 66, 0.55);
+  --hm-gold-shimmer-fade: rgba(232, 65, 66, 0.35);
+
+  /* Charcoal stone tones */
+  --hm-stone-dark: #141619;
+  --hm-stone-mid: #2b2f35;
+  --hm-stone-light: #5a606c;
+
+  --hm-glass-surface: rgba(10, 10, 12, 0.94);
+  --hm-glass-border: rgba(232, 65, 66, 0.18);
+
+  --hm-tab-active-text: #ffffff;
+  --hm-tab-active-bg-from: #FF394A;
+  --hm-tab-active-bg-to: #c73030;
+  --hm-cta-bg-from: #FF394A;
+  --hm-cta-bg-mid: #E84142;
+  --hm-cta-bg-to: #c73030;
+  --hm-cta-text: #ffffff;
+  --hm-panel-shell-bg: radial-gradient(circle at top, rgba(232, 65, 66, 0.08) 0%, rgba(232, 65, 66, 0) 32%), linear-gradient(180deg, rgba(10, 10, 12, 0.98) 0%, rgba(18, 20, 22, 0.99) 100%);
+  --hm-panel-shell-border: rgba(232, 65, 66, 0.18);
+  --hm-panel-shell-shadow: rgba(0, 0, 0, 0.48);
+  --hm-panel-shell-highlight: rgba(255, 255, 255, 0.06);
+  --hm-panel-card-bg: linear-gradient(180deg, rgba(20, 21, 24, 0.96) 0%, rgba(11, 12, 14, 0.99) 100%);
+  --hm-panel-card-bg-elevated: linear-gradient(180deg, rgba(28, 30, 35, 0.96) 0%, rgba(15, 16, 18, 0.99) 100%);
+  --hm-panel-card-border: rgba(232, 65, 66, 0.16);
+  --hm-panel-card-shadow: rgba(0, 0, 0, 0.32);
+  --hm-panel-card-highlight: rgba(255, 255, 255, 0.08);
+  --hm-panel-pill-bg: rgba(255, 255, 255, 0.04);
+  --hm-panel-pill-border: rgba(232, 65, 66, 0.14);
+  --hm-panel-pill-text: rgba(245, 245, 245, 0.8);
+  --hm-panel-muted-text: rgba(180, 186, 195, 0.78);
+  --hm-panel-subtle-text: rgba(140, 148, 160, 0.68);
+  --hm-panel-claim-idle-bg: linear-gradient(180deg, rgba(33, 36, 40, 0.82) 0%, rgba(18, 20, 23, 0.94) 100%);
+  --hm-panel-claim-idle-border: rgba(255, 255, 255, 0.08);
+  --hm-tab-strip-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(8, 8, 10, 0.88) 100%);
+  --hm-tab-strip-border: rgba(232, 65, 66, 0.14);
+  --hm-agent-card-bg: linear-gradient(180deg, rgba(21, 23, 26, 0.96) 0%, rgba(10, 11, 13, 0.99) 100%);
+  --hm-agent-card-border: rgba(232, 65, 66, 0.14);
+  --hm-agent-card-shadow: rgba(0, 0, 0, 0.3);
+  --hm-agent-card-title: #ffffff;
+  --hm-agent-card-stat: #f3f4f6;
+  --hm-agent-card-track: rgba(140, 148, 160, 0.2);
+  --hm-agent-card-monologue-bg: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Light theme — Avalanche red & white ── */
+[data-theme="light"] {
+  --panel-bg: rgba(245, 245, 245, 0.85);
+  --panel-border: rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.80);
+  --glass-border: rgba(232, 65, 66, 0.20);
+
+  --hm-bg: #f5f5f5;
+  --hm-surface: #ffffff;
+  --hm-surface-raised: #efefef;
+  --hm-border: #d8d8de;
+  --hm-border-subtle: rgba(0, 0, 0, 0.08);
+  --hm-border-bronze: rgba(232, 65, 66, 0.30);
+  --hm-text: #1a1a1f;
+  --hm-text-dim: #4a4a55;
+  --hm-text-muted: #8a8a95;
+  --hm-accent-gold: #E84142;
+  --hm-accent-gold-bright: #FF394A;
+  --hm-accent-gold-dim: #c73030;
+  --hm-accent-gold-ember: #a02525;
+  --hm-accent-gold-shadow: #7a1a1a;
+  --hm-accent-green: #16a34a;
+  --hm-accent-red: #E84142;
+  --hm-accent-teal: #0d9488;
+  --hm-accent-purple: #7c3aed;
+  --hm-buy: #16a34a;
+  --hm-sell: #E84142;
+  --hm-gold-glow-subtle: rgba(232, 65, 66, 0.05);
+  --hm-gold-glow-light: rgba(232, 65, 66, 0.08);
+  --hm-gold-glow-medium: rgba(232, 65, 66, 0.14);
+  --hm-gold-glow-strong: rgba(232, 65, 66, 0.22);
+  --hm-gold-border-subtle: rgba(232, 65, 66, 0.18);
+  --hm-gold-border-light: rgba(232, 65, 66, 0.30);
+  --hm-gold-border-medium: rgba(232, 65, 66, 0.55);
+  --hm-gold-border-accent: rgba(232, 65, 66, 0.80);
+  --hm-gold-shimmer: rgba(232, 65, 66, 0.45);
+  --hm-gold-shimmer-fade: rgba(232, 65, 66, 0.28);
+  --hm-stone-dark: #d0d0d8;
+  --hm-stone-mid: #b8b8c0;
+  --hm-stone-light: #909098;
+  --hm-glass-surface: rgba(255, 255, 255, 0.95);
+  --hm-glass-border: rgba(232, 65, 66, 0.20);
+  --hm-tab-active-text: #ffffff;
+  --hm-tab-active-bg-from: #FF394A;
+  --hm-tab-active-bg-to: #c73030;
+  --hm-cta-bg-from: #FF394A;
+  --hm-cta-bg-mid: #E84142;
+  --hm-cta-bg-to: #c73030;
+  --hm-cta-text: #ffffff;
+  --hm-panel-shell-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 245, 245, 1) 100%);
+  --hm-panel-shell-border: rgba(232, 65, 66, 0.18);
+  --hm-panel-shell-shadow: rgba(127, 29, 29, 0.12);
+  --hm-panel-shell-highlight: rgba(255, 255, 255, 0.82);
+  --hm-panel-card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 247, 247, 1) 100%);
+  --hm-panel-card-bg-elevated: linear-gradient(180deg, rgba(255, 250, 250, 0.98) 0%, rgba(255, 240, 240, 1) 100%);
+  --hm-panel-card-border: rgba(232, 65, 66, 0.16);
+  --hm-panel-card-shadow: rgba(127, 29, 29, 0.08);
+  --hm-panel-card-highlight: rgba(255, 255, 255, 0.9);
+  --hm-panel-pill-bg: rgba(232, 65, 66, 0.06);
+  --hm-panel-pill-border: rgba(232, 65, 66, 0.14);
+  --hm-panel-pill-text: rgba(127, 29, 29, 0.82);
+  --hm-panel-muted-text: rgba(71, 85, 105, 0.84);
+  --hm-panel-subtle-text: rgba(100, 116, 139, 0.82);
+  --hm-panel-claim-idle-bg: linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(241, 245, 249, 0.98) 100%);
+  --hm-panel-claim-idle-border: rgba(148, 163, 184, 0.2);
+  --hm-tab-strip-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 244, 244, 0.96) 100%);
+  --hm-tab-strip-border: rgba(232, 65, 66, 0.12);
+  --hm-agent-card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 246, 246, 1) 100%);
+  --hm-agent-card-border: rgba(232, 65, 66, 0.14);
+  --hm-agent-card-shadow: rgba(127, 29, 29, 0.08);
+  --hm-agent-card-title: #991b1b;
+  --hm-agent-card-stat: #0f172a;
+  --hm-agent-card-track: rgba(148, 163, 184, 0.22);
+  --hm-agent-card-monologue-bg: rgba(232, 65, 66, 0.03);
 }
 
 * {
@@ -75,7 +212,7 @@ body {
   min-height: 100vh;
   background: var(--hm-bg, #0b0c0e);
   color: var(--hm-text, #f2f0eb);
-  font-family: var(--hm-font-body, "Inter", system-ui, sans-serif);
+  font-family: var(--hm-font-body);
   /* hm-root manages its own overflow: hidden at 100dvh */
   overflow: hidden;
 }
@@ -117,7 +254,7 @@ body {
   height: 100vh;
   overflow: hidden;
   background: var(--hm-bg, #0b0c0e);
-  font-family: var(--hm-font-body, "Inter", system-ui, sans-serif);
+  font-family: var(--hm-font-body);
   display: flex;
   flex-direction: column;
 }
@@ -514,7 +651,7 @@ body {
   color: var(--hm-text);
   padding: 10px 12px;
   font-size: 14px;
-  font-family: var(--hm-font-mono, "IBM Plex Mono", monospace);
+  font-family: var(--hm-font-mono, "Geist Mono", monospace);
   transition: border-color 0.15s ease;
 }
 
@@ -570,11 +707,11 @@ body {
   padding: 16px;
   background: linear-gradient(
     180deg,
-    var(--hm-accent-gold-bright, #f0d060) 0%,
-    var(--hm-accent-gold-dim, #d4a84b) 35%,
-    var(--hm-accent-gold-ember, #b8860b) 100%
+    var(--hm-cta-bg-from) 0%,
+    var(--hm-cta-bg-mid) 35%,
+    var(--hm-cta-bg-to) 100%
   );
-  color: #1a1200;
+  color: var(--hm-cta-text);
   border: 1px solid var(--hm-accent-gold-ember);
   border-radius: var(--hm-radius-sm, 2px);
   font-size: 13px;
@@ -582,7 +719,7 @@ body {
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: var(--hm-font-body, "Inter", sans-serif);
+  font-family: var(--hm-font-body);
   letter-spacing: 1.5px;
   box-shadow:
     0 2px 12px rgba(229, 184, 74, 0.25),
@@ -596,9 +733,9 @@ body {
 }
 
 .place-order-btn:not(:disabled):hover {
-  background: linear-gradient(180deg, #f8e070 0%, #e5c060 35%, #c8960b 100%);
+  background: linear-gradient(180deg, var(--hm-accent-gold-bright) 0%, var(--hm-accent-gold) 35%, var(--hm-accent-gold-dim) 100%);
   box-shadow:
-    0 4px 20px rgba(229, 184, 74, 0.4),
+    0 4px 20px var(--hm-gold-glow-strong),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
@@ -616,7 +753,7 @@ body {
   padding: 0 12px;
   font-size: 11px;
   font-weight: 700;
-  font-family: var(--hm-font-body, "Inter", sans-serif);
+  font-family: var(--hm-font-body);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s ease;
@@ -656,7 +793,7 @@ body {
     var(--hm-surface) 100%
   ) !important;
   color: var(--hm-text-dim) !important;
-  font-family: "Inter", system-ui, sans-serif !important;
+  font-family: var(--hm-font-body) !important;
   border: 1px solid var(--hm-stone-mid) !important;
   border-radius: 2px !important;
   padding: 0 14px !important;
@@ -704,7 +841,7 @@ select:focus-visible {
 }
 
 .wallet-adapter-dropdown-list-item {
-  font-family: "Inter", system-ui, sans-serif !important;
+  font-family: var(--hm-font-body) !important;
   color: #fff !important;
 }
 
@@ -745,7 +882,7 @@ select:focus-visible {
 }
 
 .wallet-adapter-modal-title {
-  font-family: "Teko", sans-serif !important;
+  font-family: var(--hm-font-display) !important;
   font-weight: 700 !important;
   font-size: 22px !important;
   letter-spacing: 2px !important;
@@ -802,7 +939,7 @@ select:focus-visible {
   border-radius: 12px !important;
   padding: 10px 14px !important;
   height: 48px !important;
-  font-family: "Inter", system-ui, sans-serif !important;
+  font-family: var(--hm-font-body) !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   color: rgba(255, 255, 255, 0.88) !important;
@@ -834,7 +971,7 @@ select:focus-visible {
 .wallet-adapter-modal-list .wallet-adapter-button span {
   font-size: 10px !important;
   color: rgba(255, 255, 255, 0.3) !important;
-  font-family: "Inter", system-ui, sans-serif !important;
+  font-family: var(--hm-font-body) !important;
   text-transform: uppercase !important;
   letter-spacing: 0.3px !important;
   margin-left: auto !important;
@@ -843,7 +980,7 @@ select:focus-visible {
 .wallet-adapter-modal-list-more {
   background: none !important;
   color: rgba(242, 208, 138, 0.65) !important;
-  font-family: "Inter", system-ui, sans-serif !important;
+  font-family: var(--hm-font-body) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   letter-spacing: 0.3px !important;
@@ -853,11 +990,11 @@ select:focus-visible {
 }
 
 .wallet-adapter-modal-list-more:hover {
-  color: #f2d08a !important;
+  color: var(--hm-accent-gold-bright) !important;
 }
 
 .wallet-adapter-modal-list-more svg {
-  fill: rgba(242, 208, 138, 0.65) !important;
+  fill: var(--hm-gold-shimmer-fade) !important;
   width: 10px !important;
   height: 10px !important;
 }
@@ -1594,30 +1731,35 @@ select:focus-visible {
 .chain-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  background: linear-gradient(
-    180deg,
-    var(--hm-stone-dark) 0%,
-    var(--hm-surface) 100%
-  );
-  border: 1px solid var(--hm-gold-border-subtle);
-  border-radius: 2px;
-  color: var(--hm-text-dim);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  font-family: var(--hm-font-mono);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  gap: 5px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 .chain-badge-icon {
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   line-height: 1;
 }
+
+.chain-badge-icon img {
+  width: 16px !important;
+  height: 16px !important;
+  object-fit: contain;
+}
+
 .chain-badge-name {
   color: var(--hm-accent-gold-dim);
+  font-family: var(--hm-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .chain-select-wrap {
@@ -1716,33 +1858,49 @@ select:focus-visible {
    HEADER
    ================================================================ */
 .hm-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--hm-spacing-xl);
-  padding: 6px var(--hm-spacing-lg);
-  background: var(--hm-surface);
-  border-bottom: 1px solid var(--hm-border);
-  min-height: 48px;
+  padding: 0 var(--hm-spacing-lg);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(22, 25, 34, 0.98) 0%,
+      rgba(14, 16, 22, 0.99) 100%
+    );
+  border-bottom: 1px solid rgba(229, 184, 74, 0.14);
+  min-height: 52px;
   flex-shrink: 0;
   z-index: 20;
   position: relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 0 rgba(229, 184, 74, 0.08),
+    0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 .hm-header::after {
   content: "";
   position: absolute;
   bottom: -1px;
-  left: 10%;
-  right: 10%;
+  left: 5%;
+  right: 5%;
   height: 1px;
   background: linear-gradient(
     90deg,
-    transparent,
-    var(--hm-gold-shimmer-fade),
-    transparent
+    transparent 0%,
+    rgba(229, 184, 74, 0.18) 20%,
+    rgba(229, 184, 74, 0.55) 50%,
+    rgba(229, 184, 74, 0.18) 80%,
+    transparent 100%
   );
   pointer-events: none;
+  animation: hm-header-shimmer 8s ease-in-out infinite;
+}
+
+@keyframes hm-header-shimmer {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 .hm-header-left {
@@ -1752,15 +1910,23 @@ select:focus-visible {
   min-width: 0;
 }
 
+.hm-header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .hm-header-right {
   display: flex;
   align-items: center;
   gap: var(--hm-spacing-sm);
-  flex-shrink: 0;
+  justify-content: flex-end;
 }
 
 .hm-logo {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
@@ -1768,13 +1934,13 @@ select:focus-visible {
 
 .hm-logo-text {
   font-family: var(--hm-font-display);
-  font-size: 14px;
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
   color: var(--hm-accent-gold);
   text-transform: uppercase;
   white-space: nowrap;
-  text-shadow: 0 0 12px var(--hm-gold-glow-medium);
+  text-shadow: 0 0 18px var(--hm-gold-glow-medium);
 }
 
 .hm-chain-badge {
@@ -1947,46 +2113,326 @@ select:focus-visible {
 }
 
 .hm-wallet-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 14px;
+  height: 34px;
+  padding: 0 16px;
   background: linear-gradient(
     180deg,
-    rgba(42, 45, 52, 0.95) 0%,
-    rgba(26, 29, 36, 0.98) 100%
+    rgba(42, 45, 55, 0.9) 0%,
+    rgba(20, 22, 30, 0.95) 100%
   );
-  border: 1px solid var(--hm-stone-dark);
+  border: 1px solid rgba(229, 184, 74, 0.22);
   border-radius: var(--hm-radius);
   color: var(--hm-text-dim);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
   white-space: nowrap;
   font-family: var(--hm-font-mono);
+  overflow: hidden;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 2px 4px rgba(0, 0, 0, 0.3);
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.hm-wallet-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgba(229, 184, 74, 0.1) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.55s ease;
+  pointer-events: none;
+}
+
+.hm-wallet-btn:hover::before {
+  transform: translateX(100%);
 }
 
 .hm-wallet-btn:hover {
-  border-color: var(--hm-gold-border-light);
+  border-color: rgba(229, 184, 74, 0.45);
   color: var(--hm-accent-gold);
+  background: linear-gradient(
+    180deg,
+    rgba(55, 50, 30, 0.95) 0%,
+    rgba(30, 26, 14, 0.98) 100%
+  );
   box-shadow:
-    inset 0 1px 0 var(--hm-gold-glow-light),
-    0 0 12px var(--hm-gold-glow-subtle);
+    inset 0 1px 0 rgba(229, 184, 74, 0.12),
+    0 0 18px rgba(229, 184, 74, 0.14),
+    0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 .hm-wallet-btn--linked {
-  border-color: var(--hm-gold-border-subtle);
+  border-color: rgba(229, 184, 74, 0.3);
   color: var(--hm-accent-gold-dim);
+  background: linear-gradient(
+    180deg,
+    rgba(48, 44, 24, 0.9) 0%,
+    rgba(26, 23, 12, 0.95) 100%
+  );
 }
 
 .hm-wallet-btn--linked:hover {
+  border-color: rgba(229, 184, 74, 0.55);
+  color: var(--hm-accent-gold);
+  box-shadow:
+    inset 0 1px 0 rgba(229, 184, 74, 0.15),
+    0 0 20px rgba(229, 184, 74, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Locale selector ── */
+.hm-locale-selector {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--hm-radius);
+  border: 1px solid rgba(229, 184, 74, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(42, 45, 55, 0.9) 0%,
+    rgba(20, 22, 30, 0.95) 100%
+  );
+  color: var(--hm-text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--hm-font-mono);
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    box-shadow 0.2s;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.hm-locale-selector:hover {
+  border-color: rgba(229, 184, 74, 0.4);
+  color: var(--hm-accent-gold);
+  box-shadow:
+    inset 0 1px 0 rgba(229, 184, 74, 0.1),
+    0 0 14px rgba(229, 184, 74, 0.13),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.hm-locale-selector:focus {
+  border-color: rgba(229, 184, 74, 0.5);
+  color: var(--hm-accent-gold);
+}
+
+.hm-locale-selector option {
+  background: var(--hm-surface);
+  color: var(--hm-text);
+}
+
+/* ── Theme toggle button ── */
+.hm-theme-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  width: 28px;
+  padding: 0;
+  border-radius: var(--hm-radius);
+  border: 1px solid var(--hm-gold-border-subtle);
+  background: linear-gradient(
+    180deg,
+    rgba(42, 45, 55, 0.9) 0%,
+    rgba(20, 22, 30, 0.95) 100%
+  );
+  color: var(--hm-text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.hm-theme-btn:hover {
+  border-color: var(--hm-gold-border-light);
+  color: var(--hm-accent-gold);
+  box-shadow: 0 0 10px var(--hm-gold-glow-light);
+}
+
+[data-theme="light"] .hm-theme-btn {
+  background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+  color: var(--hm-text-dim);
+  border-color: var(--hm-border);
+}
+
+[data-theme="light"] .hm-theme-btn:hover {
   border-color: var(--hm-gold-border-medium);
   color: var(--hm-accent-gold);
+}
+
+/* ── NavTabs — premium component ── */
+.hm-nav-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(0, 0, 0, 0) 100%
+    ),
+    rgba(8, 9, 12, 0.85);
+  border: 1px solid rgba(229, 184, 74, 0.18);
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.hm-nav-tabs--mobile {
+  width: 100%;
+}
+
+.hm-nav-tabs--mobile .hm-nav-tab {
+  flex: 1;
+}
+
+.hm-root .hm-nav-tab {
+  min-height: unset;
+}
+
+.hm-nav-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--hm-radius);
+  padding: 0 16px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.28);
+  font-family: var(--hm-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  transition:
+    color 0.25s ease,
+    background 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+/* Hover shimmer sweep */
+.hm-nav-tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgba(229, 184, 74, 0.08) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+  pointer-events: none;
+}
+
+.hm-nav-tab:not(.hm-nav-tab--active):hover::before {
+  transform: translateX(100%);
+}
+
+.hm-nav-tab:not(.hm-nav-tab--active):hover {
+  color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(229, 184, 74, 0.1);
+}
+
+.hm-nav-tab--active {
+  color: var(--hm-tab-active-text);
+  background: linear-gradient(
+    180deg,
+    var(--hm-tab-active-bg-from) 0%,
+    var(--hm-tab-active-bg-to) 100%
+  );
+  border-color: var(--hm-gold-border-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 0 12px var(--hm-gold-glow-medium);
+}
+
+/* Top-edge light catch */
+.hm-nav-tab--active::before {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.25) 0%,
+    transparent 100%
+  );
+  transform: none;
+  transition: none;
+}
+
+/* Floating ambient glow */
+.hm-nav-tab-glow {
+  position: absolute;
+  inset: -4px -8px;
+  background: radial-gradient(
+    ellipse at 50% 100%,
+    rgba(229, 184, 74, 0.35) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+  isolation: isolate;
+}
+
+.hm-nav-tab-label {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes hm-nav-tab-breathe {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+      0 0 12px rgba(229, 184, 74, 0.3);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+      0 0 20px rgba(229, 184, 74, 0.5),
+      0 0 40px rgba(229, 184, 74, 0.2);
+  }
+}
+
+.hm-nav-tab--active {
+  animation: hm-nav-tab-breathe 4s ease-in-out infinite;
 }
 
 /* ================================================================
@@ -2071,13 +2517,13 @@ select:focus-visible {
 }
 
 .hm-view-tab--active {
-  color: #0e1015;
+  color: var(--hm-tab-active-text);
   background: linear-gradient(
     180deg,
-    rgba(240, 208, 96, 0.95) 0%,
-    rgba(212, 168, 75, 0.95) 100%
+    var(--hm-tab-active-bg-from) 0%,
+    var(--hm-tab-active-bg-to) 100%
   );
-  box-shadow: 0 6px 20px rgba(229, 184, 74, 0.18);
+  box-shadow: 0 6px 20px var(--hm-gold-glow-light);
 }
 
 .hm-mode-summary {
@@ -2761,8 +3207,8 @@ select:focus-visible {
   border-radius: 1px;
   pointer-events: none;
 }
-/* Hide resize handles on narrow screens where layout stacks differently */
-@media (max-width: 768px) {
+/* Hide resize handles once the desktop split layout is no longer active */
+@media (max-width: 960px) {
   .resize-handle {
     display: none;
   }
@@ -2771,24 +3217,21 @@ select:focus-visible {
 /* ---- Viewport Row ---- */
 .hm-viewport-row {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex: 1;
-  min-height: 0;
+  min-height: 280px;
   overflow: hidden;
   background: var(--hm-bg);
 }
 
 .hm-game-viewport {
-  flex: none;
+  flex: 4.5;
   position: relative;
-  width: 100%;
   min-width: 0;
-  min-height: 240px;
-  aspect-ratio: 16 / 9;
-  max-height: min(44vh, 560px);
+  min-height: 0;
   overflow: hidden;
   background: var(--hm-bg);
-  border-bottom: 1px solid var(--hm-border);
+  border-right: 1px solid var(--hm-border);
 }
 
 .hm-game-placeholder {
@@ -2806,7 +3249,7 @@ select:focus-visible {
       var(--hm-gold-glow-subtle) 0%,
       transparent 70%
     ),
-    linear-gradient(180deg, #0b0c0e 0%, #12141a 50%, #0b0c0e 100%);
+    linear-gradient(180deg, var(--hm-bg) 0%, var(--hm-surface) 50%, var(--hm-bg) 100%);
 }
 
 .hm-game-waiting {
@@ -2880,11 +3323,11 @@ select:focus-visible {
 
 /* ---- Chart Panel ---- */
 .hm-chart-panel {
-  flex: 1;
+  flex: 4;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 220px;
+  min-height: 0;
   position: relative;
   background: var(--hm-surface);
   border-bottom: 1px solid var(--hm-border);
@@ -2897,6 +3340,57 @@ select:focus-visible {
   display: flex;
   gap: 4px;
   z-index: 5;
+}
+
+.hm-chart-matchup-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(11, 12, 14, 0.72);
+  border: 1px solid var(--hm-border);
+  border-radius: var(--hm-radius);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.hm-chart-matchup-yes {
+  font-family: var(--hm-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hm-accent-gold);
+  letter-spacing: 0.6px;
+  text-shadow: 0 0 10px rgba(229, 184, 74, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.hm-chart-matchup-vs {
+  font-family: var(--hm-font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--hm-text-muted);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.hm-chart-matchup-no {
+  font-family: var(--hm-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hm-accent-red);
+  letter-spacing: 0.6px;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
 }
 
 .hm-chart-tool-btn {
@@ -2932,7 +3426,7 @@ select:focus-visible {
     var(--hm-accent-gold) 0%,
     var(--hm-accent-gold-ember) 100%
   );
-  color: #1a1408;
+  color: var(--hm-cta-text);
   padding: 3px 12px;
   font-size: 12px;
   font-weight: 700;
@@ -3644,10 +4138,10 @@ select:focus-visible {
   width: calc(100% - 32px);
   margin: 14px 16px 0;
   height: 44px;
-  background: linear-gradient(180deg, #f0d060 0%, #d4a84b 35%, #b8860b 100%);
+  background: linear-gradient(180deg, var(--hm-cta-bg-from) 0%, var(--hm-cta-bg-mid) 35%, var(--hm-cta-bg-to) 100%);
   border: 1px solid var(--hm-gold-border-accent);
   border-radius: var(--hm-radius);
-  color: #1a1408;
+  color: var(--hm-cta-text);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
@@ -3683,7 +4177,7 @@ select:focus-visible {
 }
 
 .hm-trade-btn:hover {
-  background: linear-gradient(180deg, #f5e6b8 0%, #e5b84a 40%, #d4a84b 100%);
+  background: linear-gradient(180deg, var(--hm-accent-gold-bright) 0%, var(--hm-accent-gold) 40%, var(--hm-accent-gold-dim) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     inset 0 -2px 0 rgba(0, 0, 0, 0.1),
@@ -3693,7 +4187,7 @@ select:focus-visible {
 }
 
 .hm-trade-btn:active {
-  background: linear-gradient(180deg, #d4a84b 0%, #8b6914 100%);
+  background: linear-gradient(180deg, var(--hm-accent-gold-dim) 0%, var(--hm-accent-gold-shadow) 100%);
   box-shadow:
     inset 0 2px 4px rgba(0, 0, 0, 0.3),
     0 1px 2px rgba(0, 0, 0, 0.3);
@@ -3711,12 +4205,61 @@ select:focus-visible {
 }
 
 /* Legal text */
+.hm-footer-socials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 16px 9px;
+  flex-shrink: 0;
+}
+
+.hm-footer-social {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--hm-panel-card-border, var(--hm-border-subtle));
+  background: var(--hm-panel-pill-bg, rgba(255, 255, 255, 0.04));
+  color: var(--hm-accent-gold);
+  box-shadow: inset 0 1px 0 var(--hm-panel-card-highlight, rgba(255,255,255,0.08));
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.hm-footer-social:hover {
+  transform: translateY(-1px);
+  border-color: var(--hm-accent-gold);
+  color: var(--hm-accent-gold-bright);
+  background: var(--hm-panel-card-bg-elevated, rgba(255, 255, 255, 0.06));
+}
+
+.hm-footer-social svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+  flex-shrink: 0;
+}
+
 .hm-legal-text {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--hm-text-muted);
   text-align: center;
-  margin: 8px 16px 12px;
-  line-height: 1.6;
+  margin: 0;
+  padding: 9px 16px 1px;
+  line-height: 1.45;
+  flex-shrink: 0;
+  border-top: 1px solid var(--hm-border-subtle);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
 }
 
 .hm-legal-text a {
@@ -3840,7 +4383,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px 0;
+  padding: 6px 12px 0;
 }
 
 /* Right-side group: phase badge + close button sit together */
@@ -3852,7 +4395,7 @@ select:focus-visible {
 }
 
 .hm-matchup-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3860,16 +4403,16 @@ select:focus-visible {
 }
 
 .hm-phase-badge--sm {
-  font-size: 9px;
-  padding: 2px 7px;
+  font-size: 8px;
+  padding: 1px 5px;
   height: auto;
 }
 
 .hm-matchup {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px 12px;
+  gap: 6px;
+  padding: 5px 12px 8px;
   border-bottom: 1px solid var(--hm-border);
 }
 
@@ -3882,7 +4425,7 @@ select:focus-visible {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .hm-matchup-agent--right {
@@ -3891,27 +4434,27 @@ select:focus-visible {
 }
 
 .hm-matchup-name {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--hm-text);
   letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 110px;
+  max-width: 90px;
 }
 
 .hm-matchup-record {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--hm-text-muted);
   font-family: var(--hm-font-mono);
 }
 
 .hm-matchup-odds {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 800;
   font-family: var(--hm-font-mono);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .hm-matchup-odds--yes {
@@ -3923,7 +4466,7 @@ select:focus-visible {
 
 .hm-matchup-vs {
   font-family: var(--hm-font-display);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 800;
   color: var(--hm-accent-gold);
   letter-spacing: 1px;
@@ -4590,8 +5133,8 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: linear-gradient(180deg, #f0d060 0%, #d4a84b 35%, #b8860b 100%);
-  color: #1a1408;
+  background: linear-gradient(180deg, var(--hm-cta-bg-from) 0%, var(--hm-cta-bg-mid) 35%, var(--hm-cta-bg-to) 100%);
+  color: var(--hm-cta-text);
   font-family: var(--hm-font-display);
   font-size: 13px;
   font-weight: 800;
@@ -4694,20 +5237,23 @@ select:focus-visible {
 
 .hm-header-mob-row1 .hm-logo {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .hm-header-mob-row1 .hm-logo-text {
   display: block !important;
   font-family: var(--hm-font-display);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   color: var(--hm-accent-gold);
   text-transform: uppercase;
   white-space: nowrap;
+  text-shadow: 0 0 12px var(--hm-gold-glow-medium);
 }
 
 .hm-logo-text--stacked {
@@ -4860,6 +5406,70 @@ select:focus-visible {
   pointer-events: none;
 }
 
+/* ================================================================
+   LIGHT THEME OVERRIDES
+   Targets elements with hardcoded dark backgrounds/colors
+   ================================================================ */
+
+/* Header */
+[data-theme="light"] .hm-header {
+  background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(245,245,245,0.99) 100%);
+  border-bottom-color: var(--hm-gold-border-subtle);
+}
+
+/* Wallet button */
+[data-theme="light"] .hm-wallet-btn {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
+  color: var(--hm-text-dim);
+}
+[data-theme="light"] .hm-wallet-btn--linked {
+  background: linear-gradient(180deg, #fff0f0 0%, #ffe8e8 100%);
+  color: var(--hm-accent-gold-dim);
+}
+
+/* Locale / chain select dropdowns */
+[data-theme="light"] .hm-locale-selector,
+[data-theme="light"] .chain-select {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
+  color: var(--hm-text);
+  border-color: var(--hm-border);
+}
+
+/* Bottom panel & sidebar surfaces */
+[data-theme="light"] .hm-bottom-panel {
+  background: #ffffff;
+}
+[data-theme="light"] .hm-sidebar {
+  background: #ffffff;
+  border-left-color: var(--hm-border);
+}
+
+/* Betting dock */
+[data-theme="light"] .hm-buysell-btn {
+  background: linear-gradient(180deg, #f5f5f5 0%, #ebebeb 100%);
+  color: var(--hm-text);
+  border-color: var(--hm-border);
+}
+
+/* Wallet adapter modals */
+[data-theme="light"] .wallet-adapter-dropdown-list {
+  background: rgba(255,255,255,0.98) !important;
+}
+[data-theme="light"] .wallet-adapter-modal-wrapper {
+  background: linear-gradient(180deg, rgba(245,245,245,0.99) 0%, rgba(240,240,240,0.99) 100%) !important;
+}
+
+/* PnL colors work in both themes */
+[data-theme="light"] .pnl-positive { color: #16a34a; }
+[data-theme="light"] .pnl-negative { color: #E84142; }
+
+/* Game bg in light mode */
+[data-theme="light"] .hm-game-bg {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 60%, rgba(232,65,66,0.05) 0%, transparent 70%),
+    linear-gradient(180deg, #f0f0f0 0%, #e8e8e8 50%, #f0f0f0 100%);
+}
+
 /* ── ≤960px: tablet landscape — stack content above sidebar ── */
 @media (max-width: 960px) {
   .hm-main {
@@ -4876,7 +5486,9 @@ select:focus-visible {
 
   .hm-viewport-row {
     flex: 1;
+    height: auto;
     min-height: 0;
+    flex-direction: column;
   }
 
   .hm-game-viewport {
@@ -4894,7 +5506,6 @@ select:focus-visible {
   }
 
   .hm-bottom-panel {
-    height: clamp(160px, 22vh, 220px) !important; /* Override JS inline style */
     flex-shrink: 0;
   }
 
@@ -4942,7 +5553,7 @@ select:focus-visible {
     flex-shrink: 0;
     width: 100%;
     padding: 0 10px 6px;
-    background: #0a0a0a;
+    background: var(--hm-bg);
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -5307,6 +5918,76 @@ select:focus-visible {
   }
 }
 
+/* ============================================================
+   DARK THEME — OVERRIDES FOR SHARED STYLESHEET HARDCODED VALUES
+   The shared @hyperbet/ui stylesheet has inline dark backgrounds
+   and gold gradients. Override them here to use slate + red.
+   ============================================================ */
+
+/* Header — slate surface with red shimmer border */
+[data-theme="dark"] .hm-header {
+  background: linear-gradient(
+    180deg,
+    var(--hm-surface) 0%,
+    var(--hm-bg) 100%
+  ) !important;
+  border-bottom: 1px solid var(--hm-gold-border-subtle) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 1px 0 var(--hm-gold-border-subtle),
+    0 4px 24px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Mobile row1 header */
+[data-theme="dark"] .hm-header-mob-row1 {
+  background: linear-gradient(
+    180deg,
+    var(--hm-surface) 0%,
+    var(--hm-bg) 100%
+  ) !important;
+  border-bottom: 1px solid var(--hm-gold-border-subtle) !important;
+}
+
+/* Nav tab active — red gradient */
+[data-theme="dark"] .hm-nav-tab--active {
+  color: #ffffff !important;
+  background: linear-gradient(175deg,
+    var(--hm-accent-gold-bright) 0%,
+    var(--hm-accent-gold) 35%,
+    var(--hm-accent-gold-dim) 100%) !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* View tab active — red gradient */
+[data-theme="dark"] .hm-view-tab--active {
+  color: #ffffff !important;
+  background: linear-gradient(160deg,
+    var(--hm-accent-gold-bright) 0%,
+    var(--hm-accent-gold) 45%,
+    var(--hm-accent-gold-dim) 100%) !important;
+  text-shadow: none !important;
+}
+
+/* Locale selector option — slate bg */
+[data-theme="dark"] .hm-locale-selector option {
+  background: var(--hm-surface) !important;
+  color: var(--hm-text) !important;
+}
+
+/* Trade / order button text — already white via --hm-cta-text but shared rule uses #1a1408 */
+[data-theme="dark"] .hm-trade-btn {
+  color: var(--hm-cta-text) !important;
+}
+[data-theme="dark"] .hm-bet-fab {
+  color: var(--hm-cta-text) !important;
+}
+[data-theme="dark"] .hm-odds-chip {
+  color: #ffffff !important;
+}
+[data-theme="dark"] .hm-badge-special {
+  color: #ffffff !important;
+}
+
 /* ── Touch input safety: prevent iOS zoom on inputs ── */
 @media (max-width: 768px) {
   input[type="number"],
@@ -5315,4 +5996,802 @@ select:focus-visible {
   select {
     font-size: max(16px, 1em);
   }
+}
+
+/* ============================================================
+   LIGHT THEME — COMPREHENSIVE OVERRIDES
+   These override hardcoded dark/gold values from the shared
+   @hyperbet/ui stylesheet that can't be changed upstream.
+   ============================================================ */
+
+/* ── Header ── */
+[data-theme="light"] .hm-header {
+  background: var(--hm-accent-gold) !important;
+  border-bottom: 1px solid var(--hm-accent-gold-dim) !important;
+  box-shadow: 0 2px 12px rgba(232, 65, 66, 0.2) !important;
+}
+[data-theme="light"] .hm-header::after {
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4) 30%,
+    rgba(255, 255, 255, 0.6) 50%,
+    rgba(255, 255, 255, 0.4) 70%,
+    transparent) !important;
+}
+
+/* Logo / wordmark on red header */
+[data-theme="light"] .hm-logo-text,
+[data-theme="light"] .hm-header-logo,
+[data-theme="light"] .hm-wordmark {
+  color: #ffffff !important;
+  filter: none !important;
+}
+
+[data-theme="light"] .hm-logo .chain-badge,
+[data-theme="light"] .hm-logo .chain-select-wrap,
+[data-theme="light"] .hm-logo .chain-select {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+[data-theme="light"] .hm-logo .chain-badge-name,
+[data-theme="light"] .hm-logo .chain-select {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .hm-logo .chain-badge-icon img {
+  filter: drop-shadow(0 0 0.8px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.45));
+}
+
+[data-theme="light"] .hm-logo .chain-select {
+  padding-left: 0 !important;
+  padding-right: 18px !important;
+}
+
+[data-theme="light"] .hm-logo .chain-select-arrow {
+  color: #ffffff !important;
+}
+
+/* All nav text / icon buttons in header become white */
+[data-theme="light"] .hm-header-right,
+[data-theme="light"] .hm-header-right button,
+[data-theme="light"] .hm-header-right a {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .hm-header-right .hm-theme-toggle,
+[data-theme="light"] .hm-header-right .hm-theme-toggle svg {
+  color: var(--hm-header-theme-icon) !important;
+}
+
+/* ── Nav tabs ── */
+[data-theme="light"] .hm-nav-tab {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+[data-theme="light"] .hm-nav-tab:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+[data-theme="light"] .hm-nav-tab--active {
+  color: var(--hm-accent-gold) !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  text-shadow: none !important;
+}
+[data-theme="light"] .hm-nav-tab--active::before {
+  background: transparent !important;
+}
+/* Override shared stylesheet's animated breathe to a static style */
+[data-theme="light"] .hm-nav-tab--active {
+  animation: none !important;
+}
+
+/* ── View tabs (DUELS / MODELS) ── */
+[data-theme="light"] .hm-view-tab {
+  color: var(--hm-text-dim) !important;
+  background: transparent !important;
+}
+[data-theme="light"] .hm-view-tab:hover {
+  color: var(--hm-text) !important;
+  background: var(--hm-surface-raised) !important;
+}
+[data-theme="light"] .hm-view-tab--active {
+  color: #ffffff !important;
+  background: linear-gradient(160deg,
+    var(--hm-accent-gold-bright) 0%,
+    var(--hm-accent-gold) 45%,
+    var(--hm-accent-gold-dim) 100%) !important;
+  text-shadow: none !important;
+}
+
+/* ── App tabs (bottom panel tabs) ── */
+[data-theme="light"] .app-tab-btn {
+  color: var(--hm-text-dim) !important;
+  background: transparent !important;
+}
+[data-theme="light"] .app-tab-btn:hover {
+  color: var(--hm-text) !important;
+  background: var(--hm-surface-raised) !important;
+}
+[data-theme="light"] .app-tab-btn.is-active,
+[data-theme="light"] .app-tab-btn[aria-selected="true"] {
+  color: var(--hm-accent-gold) !important;
+  background: transparent !important;
+  border-bottom-color: var(--hm-accent-gold) !important;
+}
+
+/* ── Aux toggle (filter buttons) ── */
+[data-theme="light"] .aux-toggle-btn {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: var(--hm-text) !important;
+}
+[data-theme="light"] .aux-toggle-btn-label {
+  color: var(--hm-text-dim) !important;
+}
+[data-theme="light"] .aux-toggle-btn-select,
+[data-theme="light"] .aux-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.10) !important;
+  color: var(--hm-text) !important;
+}
+
+/* ── Match table messages ── */
+[data-theme="light"] .match-table-message {
+  color: var(--hm-text-dim) !important;
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+[data-theme="light"] .match-table-message-footer {
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* ── Market action buttons ── */
+[data-theme="light"] .hm-market-action-btn {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--hm-text) !important;
+}
+[data-theme="light"] .hm-market-action-btn:hover {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .hm-market-action-btn.is-active {
+  background: rgba(232, 65, 66, 0.08) !important;
+  color: var(--hm-accent-gold) !important;
+}
+[data-theme="light"] .hm-market-pending-tag {
+  color: var(--hm-text-dim) !important;
+}
+
+/* ── Bottom panel & table ── */
+[data-theme="light"] .hm-bottom-panel {
+  background: var(--hm-surface) !important;
+  border-top: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-bottom-panel-tabs {
+  background: var(--hm-surface) !important;
+  border-bottom: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-trades-table {
+  background: var(--hm-surface) !important;
+}
+[data-theme="light"] .hm-trades-table thead th {
+  background: var(--hm-surface-raised) !important;
+  color: var(--hm-text-dim) !important;
+  border-bottom: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-trades-table tbody tr:hover {
+  background: rgba(232, 65, 66, 0.04) !important;
+}
+[data-theme="light"] .hm-trades-table td {
+  color: var(--hm-text) !important;
+  border-bottom: 1px solid var(--hm-border-subtle) !important;
+}
+
+/* ── Order book ── */
+[data-theme="light"] .orderbook-header,
+[data-theme="light"] .hm-orderbook-header {
+  background: var(--hm-surface-raised) !important;
+  color: var(--hm-text-dim) !important;
+}
+[data-theme="light"] .orderbook-row,
+[data-theme="light"] .hm-orderbook-row {
+  color: var(--hm-text) !important;
+}
+
+/* ── Betting side buttons (YES/NO) ── */
+[data-theme="light"] .betting-side-btn.is-yes {
+  border-color: rgba(22, 163, 74, 0.5) !important;
+  color: #16a34a !important;
+}
+[data-theme="light"] .betting-side-btn.is-no {
+  border-color: rgba(232, 65, 66, 0.5) !important;
+  color: var(--hm-accent-gold) !important;
+}
+[data-theme="light"] .betting-side-btn-value {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ── Sidebar ── */
+[data-theme="light"] .hm-sidebar {
+  background: #ffffff !important;
+  border-left: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-sidebar::before {
+  background: radial-gradient(ellipse 80% 30% at 50% 0%, rgba(232, 65, 66, 0.06) 0%, transparent 100%) !important;
+}
+[data-theme="light"] .hm-sidebar-divider {
+  background: linear-gradient(90deg,
+    transparent,
+    var(--hm-border) 30%,
+    var(--hm-border) 70%,
+    transparent) !important;
+}
+
+/* ── Buy/sell toggle buttons in sidebar ── */
+[data-theme="light"] .hm-buysell-btn {
+  background: var(--hm-surface-raised) !important;
+  color: var(--hm-text-dim) !important;
+  border: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-buysell-btn.is-active-buy {
+  background: rgba(22, 163, 74, 0.12) !important;
+  color: #16a34a !important;
+  border-color: rgba(22, 163, 74, 0.35) !important;
+}
+[data-theme="light"] .hm-buysell-btn.is-active-sell {
+  background: rgba(232, 65, 66, 0.10) !important;
+  color: var(--hm-accent-gold) !important;
+  border-color: rgba(232, 65, 66, 0.35) !important;
+}
+
+/* ── Input fields ── */
+[data-theme="light"] .hm-input,
+[data-theme="light"] input[type="number"],
+[data-theme="light"] input[type="text"] {
+  background: var(--hm-surface-raised) !important;
+  color: var(--hm-text) !important;
+  border-color: var(--hm-border) !important;
+}
+[data-theme="light"] .hm-input:focus,
+[data-theme="light"] input[type="number"]:focus,
+[data-theme="light"] input[type="text"]:focus {
+  border-color: var(--hm-accent-gold) !important;
+  box-shadow: 0 0 0 2px rgba(232, 65, 66, 0.12) !important;
+}
+[data-theme="light"] .hm-input-label,
+[data-theme="light"] .hm-input-hint {
+  color: var(--hm-text-dim) !important;
+}
+
+/* ── Quick amount chips ── */
+[data-theme="light"] .hm-quick-amount-btn {
+  background: var(--hm-surface-raised) !important;
+  color: var(--hm-text) !important;
+  border: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-quick-amount-btn:hover,
+[data-theme="light"] .hm-quick-amount-btn.is-active {
+  background: rgba(232, 65, 66, 0.08) !important;
+  color: var(--hm-accent-gold) !important;
+  border-color: rgba(232, 65, 66, 0.3) !important;
+}
+
+/* ── Order summary / payout section ── */
+[data-theme="light"] .hm-payout-section,
+[data-theme="light"] .hm-order-summary {
+  background: var(--hm-surface-raised) !important;
+  border: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-payout-label,
+[data-theme="light"] .hm-order-summary-label {
+  color: var(--hm-text-dim) !important;
+}
+[data-theme="light"] .hm-payout-value,
+[data-theme="light"] .hm-order-summary-value {
+  color: var(--hm-text) !important;
+}
+
+/* ── Trade / place order CTA buttons — already use var(--hm-cta-*) ── */
+/* No override needed — vars resolve correctly from [data-theme] block */
+
+/* ── Odds chips / badges ── */
+[data-theme="light"] .hm-odds-chip {
+  color: #ffffff !important;
+}
+[data-theme="light"] .hm-badge-special {
+  color: #ffffff !important;
+}
+
+/* ── Chart panel ── */
+[data-theme="light"] .hm-chart-panel {
+  background: var(--hm-surface) !important;
+  border-bottom: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-chart-toolbar button {
+  background: var(--hm-surface-raised) !important;
+  color: var(--hm-text-dim) !important;
+  border: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-chart-toolbar button:hover,
+[data-theme="light"] .hm-chart-toolbar button.is-active {
+  color: var(--hm-accent-gold) !important;
+  border-color: rgba(232, 65, 66, 0.35) !important;
+}
+[data-theme="light"] .hm-chart-matchup-overlay {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid var(--hm-border) !important;
+  color: var(--hm-text) !important;
+}
+[data-theme="light"] .hm-price-chart-bg {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 60%, rgba(232, 65, 66, 0.04) 0%, transparent 70%),
+    linear-gradient(180deg, var(--hm-surface) 0%, var(--hm-surface-raised) 50%, var(--hm-surface) 100%) !important;
+}
+
+/* ── Game viewport ── */
+[data-theme="light"] .hm-game-viewport {
+  background: var(--hm-bg) !important;
+}
+
+/* ── Market info row ── */
+[data-theme="light"] .hm-market-info {
+  background: var(--hm-surface) !important;
+  border-bottom: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-market-name {
+  color: var(--hm-text) !important;
+}
+[data-theme="light"] .hm-market-meta,
+[data-theme="light"] .hm-market-timer {
+  color: var(--hm-text-dim) !important;
+}
+
+/* ── Locale selector option (rendered by OS — needs bg) ── */
+[data-theme="light"] .hm-locale-selector option {
+  background: #ffffff !important;
+  color: var(--hm-text) !important;
+}
+
+/* ── Wallet buttons in header ── */
+[data-theme="light"] .hm-header .wallet-adapter-button,
+[data-theme="light"] .hm-header .rainbow-connect-btn,
+[data-theme="light"] .hm-header [class*="wallet-btn"],
+[data-theme="light"] .hm-header [class*="ConnectButton"] {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+[data-theme="light"] .hm-header .wallet-adapter-button:hover,
+[data-theme="light"] .hm-header [class*="wallet-btn"]:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ── Theme toggle button on red header ── */
+[data-theme="light"] .hm-theme-btn {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+[data-theme="light"] .hm-theme-btn:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* ── Locale selector on red header ── */
+[data-theme="light"] .hm-locale-selector {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ── Mobile header ── */
+[data-theme="light"] .hm-header-mob-row1 {
+  background: var(--hm-accent-gold) !important;
+}
+[data-theme="light"] .hm-header-mob-row2 {
+  background: var(--hm-surface) !important;
+  border-bottom: 1px solid var(--hm-border) !important;
+}
+[data-theme="light"] .hm-header-mob-icon-btn {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+[data-theme="light"] .hm-header-mob-icon-btn:hover {
+  border-color: rgba(255, 255, 255, 0.55) !important;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2) !important;
+}
+[data-theme="light"] .hm-header-mob-wallet-btn--linked {
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+}
+
+/* ── Modal / glass surfaces ── */
+[data-theme="light"] .hm-modal,
+[data-theme="light"] [class*="modal-wrapper"],
+[data-theme="light"] [class*="modal-backdrop"] {
+  background: rgba(0, 0, 0, 0.3) !important;
+}
+[data-theme="light"] .hm-modal-inner,
+[data-theme="light"] [class*="modal-content"] {
+  background: var(--hm-surface) !important;
+  border: 1px solid var(--hm-border) !important;
+  color: var(--hm-text) !important;
+}
+
+/* ── Perps panel ── */
+[data-theme="light"] .perp-wrap {
+  background: var(--hm-surface) !important;
+}
+[data-theme="light"] .perp-tab {
+  color: var(--hm-text-dim) !important;
+}
+[data-theme="light"] .perp-tab.is-active {
+  color: var(--hm-accent-gold) !important;
+  border-bottom-color: var(--hm-accent-gold) !important;
+}
+[data-theme="light"] .perp-btn {
+  color: #ffffff !important;
+}
+
+/* ── Send auth / invite panels ── */
+[data-theme="light"] .send-auth-tx-submit-hint {
+  color: var(--hm-text-dim) !important;
+}
+
+/* ── Phase badge ── */
+[data-theme="light"] .hm-phase-badge--opening {
+  color: #16a34a !important;
+}
+
+/* ── Sidebar mobile sheet drag handle ── */
+[data-theme="light"] .hm-sidebar::after {
+  background: var(--hm-border) !important;
+}
+[data-theme="light"] .hm-sidebar-close {
+  color: var(--hm-text-dim) !important;
+  border-color: var(--hm-border) !important;
+}
+[data-theme="light"] .hm-sidebar-close:hover {
+  color: var(--hm-text) !important;
+  border-color: var(--hm-accent-gold) !important;
+}
+
+/* ── Bet FAB (mobile floating action button) ── */
+[data-theme="light"] .hm-bet-fab {
+  color: #ffffff !important;
+}
+
+/* ── Scrollbar ── */
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: var(--hm-stone-dark) !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--hm-accent-gold) !important;
+}
+
+/* ============================================================
+   AVAX Theme Overrides
+   ============================================================ */
+[data-theme="dark"] {
+  --hm-header-bg: linear-gradient(180deg, #161617 0%, #09090b 100%);
+  --hm-header-border: rgba(232, 65, 66, 0.2);
+  --hm-header-shadow: 0 14px 30px rgba(0, 0, 0, 0.42);
+  --hm-header-shimmer-start: rgba(232, 65, 66, 0.16);
+  --hm-header-shimmer-mid: rgba(232, 65, 66, 0.55);
+  --hm-header-logo: #ffffff;
+  --hm-header-control-bg: linear-gradient(180deg, rgba(28, 29, 33, 0.94) 0%, rgba(14, 14, 16, 0.99) 100%);
+  --hm-header-control-hover-bg: linear-gradient(180deg, rgba(38, 39, 44, 0.98) 0%, rgba(18, 18, 21, 1) 100%);
+  --hm-header-control-border: rgba(255, 255, 255, 0.1);
+  --hm-header-control-border-strong: rgba(232, 65, 66, 0.34);
+  --hm-header-control-text: #eceef2;
+  --hm-header-theme-icon: #E84142;
+  --hm-header-control-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  --hm-header-nav-shell-bg: rgba(10, 10, 12, 0.76);
+  --hm-header-nav-shell-border: rgba(232, 65, 66, 0.22);
+  --hm-header-nav-tab-text: rgba(236, 238, 242, 0.74);
+  --hm-header-nav-tab-hover-text: #ffffff;
+  --hm-header-nav-tab-hover-bg: rgba(255, 255, 255, 0.06);
+  --hm-header-nav-active-bg: linear-gradient(180deg, #f05252 0%, #E84142 100%);
+  --hm-header-nav-active-text: #ffffff;
+  --hm-header-nav-glow: rgba(232, 65, 66, 0.24);
+  --hm-models-bg: radial-gradient(circle at top, rgba(232, 65, 66, 0.07) 0%, rgba(232, 65, 66, 0) 24%), linear-gradient(180deg, rgba(7, 8, 9, 0.99) 0%, rgba(15, 15, 17, 1) 100%);
+  --hm-chart-bg: #0d0e10;
+  --hm-chart-grid: rgba(255, 255, 255, 0.06);
+  --hm-chart-border: rgba(255, 255, 255, 0.08);
+  --hm-chart-text: rgba(236, 238, 242, 0.68);
+  --hm-chart-midline: rgba(255, 255, 255, 0.14);
+  --hm-chart-crosshair: rgba(236, 238, 242, 0.18);
+  --hm-chart-crosshair-label-bg: #16181b;
+  --hm-chart-yes: #ff5257;
+  --hm-chart-yes-dim: rgba(232, 65, 66, 0.22);
+  --hm-chart-yes-zero: rgba(232, 65, 66, 0);
+  --hm-chart-no: #22c55e;
+  --hm-chart-no-dim: rgba(34, 197, 94, 0.12);
+  --hm-chart-no-zero: rgba(34, 197, 94, 0);
+  --hm-chip-bg: linear-gradient(180deg, rgba(25, 26, 30, 0.94) 0%, rgba(11, 12, 15, 0.97) 100%);
+  --hm-chip-bg-strong: rgba(11, 12, 15, 0.72);
+  --hm-chip-border: rgba(232, 65, 66, 0.24);
+  --hm-chip-highlight: rgba(232, 65, 66, 0.24);
+  --hm-chip-shadow: rgba(232, 65, 66, 0.12);
+  --hm-buy-soft: rgba(34, 197, 94, 0.22);
+  --hm-buy-soft-fade: rgba(34, 197, 94, 0.06);
+  --hm-buy-soft-faint: rgba(34, 197, 94, 0.08);
+  --hm-buy-border: rgba(34, 197, 94, 0.4);
+  --hm-buy-glow-soft: rgba(34, 197, 94, 0.22);
+  --hm-buy-glow-subtle: rgba(34, 197, 94, 0.08);
+  --hm-buy-glow-strong: rgba(34, 197, 94, 0.55);
+  --hm-buy-strong: #15803d;
+  --hm-sell-soft: rgba(232, 65, 66, 0.22);
+  --hm-sell-soft-fade: rgba(232, 65, 66, 0.06);
+  --hm-sell-soft-faint: rgba(232, 65, 66, 0.08);
+  --hm-sell-border: rgba(232, 65, 66, 0.42);
+  --hm-sell-glow-soft: rgba(232, 65, 66, 0.24);
+  --hm-sell-glow-subtle: rgba(232, 65, 66, 0.08);
+  --hm-sell-glow-strong: rgba(232, 65, 66, 0.56);
+  --hm-sell-strong: #b91c1c;
+  --hm-orderbook-bid-bg: rgba(34, 197, 94, 0.14);
+  --hm-orderbook-ask-bg: rgba(232, 65, 66, 0.14);
+  --hm-orderbook-bid-border: rgba(34, 197, 94, 0.35);
+  --hm-orderbook-ask-border: rgba(232, 65, 66, 0.35);
+  --hm-flash-up-bg: rgba(255, 255, 255, 0.1);
+  --hm-flash-down-bg: rgba(232, 65, 66, 0.16);
+  --hm-trade-buy-glow: rgba(34, 197, 94, 0.45);
+  --hm-trade-sell-glow: rgba(232, 65, 66, 0.45);
+}
+
+[data-theme="light"] {
+  --hm-header-bg: linear-gradient(180deg, #f05252 0%, #E84142 100%);
+  --hm-header-border: rgba(190, 24, 24, 0.18);
+  --hm-header-shadow: 0 14px 32px rgba(232, 65, 66, 0.22);
+  --hm-header-shimmer-start: rgba(255, 255, 255, 0.16);
+  --hm-header-shimmer-mid: rgba(255, 255, 255, 0.72);
+  --hm-header-logo: #ffffff;
+  --hm-header-control-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 248, 248, 0.98) 100%);
+  --hm-header-control-hover-bg: linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(255, 240, 240, 1) 100%);
+  --hm-header-control-border: rgba(255, 255, 255, 0.32);
+  --hm-header-control-border-strong: rgba(255, 255, 255, 0.56);
+  --hm-header-control-text: #7f1d1d;
+  --hm-header-theme-icon: #E84142;
+  --hm-header-control-shadow: 0 10px 24px rgba(153, 27, 27, 0.14);
+  --hm-header-nav-shell-bg: rgba(255, 255, 255, 0.18);
+  --hm-header-nav-shell-border: rgba(255, 255, 255, 0.26);
+  --hm-header-nav-tab-text: rgba(255, 255, 255, 0.84);
+  --hm-header-nav-tab-hover-text: #ffffff;
+  --hm-header-nav-tab-hover-bg: rgba(255, 255, 255, 0.12);
+  --hm-header-nav-active-bg: linear-gradient(180deg, #ffffff 0%, #fff1f2 100%);
+  --hm-header-nav-active-text: #b91c1c;
+  --hm-header-nav-glow: rgba(255, 255, 255, 0.22);
+  --hm-models-bg: linear-gradient(180deg, #fff6f6 0%, #ffffff 100%);
+  --hm-chart-bg: #ffffff;
+  --hm-chart-grid: rgba(148, 163, 184, 0.12);
+  --hm-chart-border: rgba(203, 213, 225, 0.85);
+  --hm-chart-text: rgba(71, 85, 105, 0.88);
+  --hm-chart-midline: rgba(148, 163, 184, 0.28);
+  --hm-chart-crosshair: rgba(71, 85, 105, 0.22);
+  --hm-chart-crosshair-label-bg: #fff1f2;
+  --hm-chart-yes: #E84142;
+  --hm-chart-yes-dim: rgba(232, 65, 66, 0.16);
+  --hm-chart-yes-zero: rgba(232, 65, 66, 0);
+  --hm-chart-no: #15803d;
+  --hm-chart-no-dim: rgba(21, 128, 61, 0.1);
+  --hm-chart-no-zero: rgba(21, 128, 61, 0);
+  --hm-chip-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 247, 247, 1) 100%);
+  --hm-chip-bg-strong: rgba(255, 255, 255, 0.9);
+  --hm-chip-border: rgba(232, 65, 66, 0.22);
+  --hm-chip-highlight: rgba(232, 65, 66, 0.18);
+  --hm-chip-shadow: rgba(232, 65, 66, 0.08);
+  --hm-buy-soft: rgba(21, 128, 61, 0.16);
+  --hm-buy-soft-fade: rgba(21, 128, 61, 0.04);
+  --hm-buy-soft-faint: rgba(21, 128, 61, 0.06);
+  --hm-buy-border: rgba(21, 128, 61, 0.25);
+  --hm-buy-glow-soft: rgba(21, 128, 61, 0.18);
+  --hm-buy-glow-subtle: rgba(21, 128, 61, 0.06);
+  --hm-buy-glow-strong: rgba(21, 128, 61, 0.34);
+  --hm-buy-strong: #166534;
+  --hm-sell-soft: rgba(232, 65, 66, 0.16);
+  --hm-sell-soft-fade: rgba(232, 65, 66, 0.04);
+  --hm-sell-soft-faint: rgba(232, 65, 66, 0.06);
+  --hm-sell-border: rgba(232, 65, 66, 0.28);
+  --hm-sell-glow-soft: rgba(232, 65, 66, 0.2);
+  --hm-sell-glow-subtle: rgba(232, 65, 66, 0.06);
+  --hm-sell-glow-strong: rgba(232, 65, 66, 0.36);
+  --hm-sell-strong: #b91c1c;
+  --hm-orderbook-bid-bg: rgba(21, 128, 61, 0.1);
+  --hm-orderbook-ask-bg: rgba(232, 65, 66, 0.1);
+  --hm-orderbook-bid-border: rgba(21, 128, 61, 0.24);
+  --hm-orderbook-ask-border: rgba(232, 65, 66, 0.24);
+  --hm-flash-up-bg: rgba(15, 23, 42, 0.08);
+  --hm-flash-down-bg: rgba(232, 65, 66, 0.12);
+  --hm-trade-buy-glow: rgba(21, 128, 61, 0.28);
+  --hm-trade-sell-glow: rgba(232, 65, 66, 0.32);
+}
+
+.hm-header {
+  background: var(--hm-header-bg);
+  border-bottom-color: var(--hm-header-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--hm-header-shadow);
+}
+
+.hm-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--hm-header-shimmer-start) 20%,
+    var(--hm-header-shimmer-mid) 50%,
+    var(--hm-header-shimmer-start) 80%,
+    transparent 100%
+  );
+}
+
+.hm-logo-text {
+  color: var(--hm-header-logo);
+  text-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+}
+
+.hm-nav-tabs,
+.hm-view-tabs,
+.hm-wallet-btn,
+.hm-locale-selector,
+.hm-theme-toggle,
+.chain-select,
+.chain-badge,
+.hm-header-mob-icon-btn,
+.hm-header-mob-wallet-btn {
+  background: var(--hm-header-control-bg);
+  border-color: var(--hm-header-control-border);
+  color: var(--hm-header-control-text);
+  box-shadow: var(--hm-header-control-shadow);
+}
+
+.hm-nav-tabs {
+  background: var(--hm-header-nav-shell-bg);
+  border-color: var(--hm-header-nav-shell-border);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+.hm-nav-tab,
+.hm-view-tab {
+  color: var(--hm-header-nav-tab-text);
+}
+
+.hm-nav-tab:not(.hm-nav-tab--active):hover,
+.hm-view-tab:hover:not(.hm-view-tab--active) {
+  color: var(--hm-header-nav-tab-hover-text);
+  background: var(--hm-header-nav-tab-hover-bg);
+  border-color: transparent;
+}
+
+.hm-nav-tab--active,
+.hm-view-tab--active {
+  background: var(--hm-header-nav-active-bg);
+  color: var(--hm-header-nav-active-text);
+  border-color: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 20px var(--hm-header-nav-glow);
+}
+
+.hm-nav-tab-glow {
+  background: radial-gradient(
+    ellipse at 50% 100%,
+    var(--hm-header-nav-glow) 0%,
+    transparent 70%
+  );
+}
+
+.hm-wallet-btn:hover,
+.hm-locale-selector:hover,
+.hm-theme-toggle:hover,
+.chain-select:hover,
+.hm-header-mob-icon-btn:hover,
+.hm-header-mob-wallet-btn:hover {
+  background: var(--hm-header-control-hover-bg);
+  border-color: var(--hm-header-control-border-strong);
+  color: var(--hm-header-control-text);
+}
+
+.hm-main--models {
+  background: var(--hm-models-bg);
+}
+
+.hm-header-mob-row1,
+.hm-header-mob-row2 {
+  background: transparent;
+}
+
+.hm-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--hm-radius);
+  border: 1px solid var(--hm-header-control-border);
+  color: var(--hm-header-theme-icon);
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.hm-theme-toggle svg {
+  color: inherit;
+}
+
+.hm-theme-toggle:focus-visible {
+  border-color: var(--hm-header-control-border-strong);
+  outline: 2px solid var(--hm-header-control-border-strong);
+  outline-offset: 2px;
+}
+
+.hm-theme-toggle--compact {
+  width: 30px;
+  height: 30px;
+}
+
+.hm-bottom-tabs {
+  background: var(--hm-tab-strip-bg);
+  border-bottom-color: var(--hm-tab-strip-border);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.hm-bottom-tab {
+  color: var(--hm-text-dim);
+}
+
+.hm-bottom-tab:hover {
+  color: var(--hm-text);
+  background: rgba(232, 65, 66, 0.04);
+}
+
+.hm-bottom-tab--active {
+  color: var(--hm-accent-gold);
+  border-bottom-color: var(--hm-accent-gold);
+}
+
+.hm-agent-card {
+  background: var(--hm-agent-card-bg);
+  border-color: var(--hm-agent-card-border);
+  box-shadow:
+    inset 0 1px 0 var(--hm-panel-card-highlight),
+    0 12px 28px var(--hm-agent-card-shadow);
+}
+
+.hm-agent-card::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--hm-gold-shimmer-fade),
+    transparent
+  );
+}
+
+.hm-agent-card-header strong {
+  color: var(--hm-agent-card-title);
+}
+
+.hm-agent-stat-value {
+  color: var(--hm-agent-card-stat);
+}
+
+.hm-agent-hp-bar-wrap {
+  background: var(--hm-agent-card-track);
+}
+
+.hm-agent-monologues {
+  border-top-color: var(--hm-panel-card-border);
+}
+
+.hm-monologue {
+  color: var(--hm-panel-muted-text);
+}
+
+.hm-monologue--action {
+  color: var(--hm-accent-gold-dim);
+}
+
+.hm-monologue--thought {
+  color: var(--hm-panel-muted-text);
 }

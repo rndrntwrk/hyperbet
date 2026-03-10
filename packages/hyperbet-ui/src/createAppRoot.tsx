@@ -1,16 +1,11 @@
 import {
+  lazy,
+  Suspense,
   useMemo,
   type ComponentProps,
   type ComponentType,
   type ReactNode,
 } from "react";
-import type { Adapter } from "@solana/wallet-adapter-base";
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
@@ -19,11 +14,19 @@ import { WagmiProvider } from "wagmi";
 // version mismatches between packages don't cause deep structural errors.
 type WagmiConfig = ComponentProps<typeof WagmiProvider>["config"];
 
-import "@solana/wallet-adapter-react-ui/styles.css";
 import "@rainbow-me/rainbowkit/styles.css";
 
-type HeadlessWalletDescriptor = {
-  adapter: Adapter;
+// Solana wallet providers are lazy-loaded so the import is only followed
+// at runtime — not at Vite dep-scan time for EVM-only packages that use
+// createEvmAppRoot instead of this factory.
+const SolanaProviders = lazy(() =>
+  import("./SolanaProviders").then((m) => ({ default: m.SolanaProviders })),
+);
+
+export type HeadlessWalletDescriptor = {
+  // Using `unknown` here avoids importing @solana/wallet-adapter-base in this
+  // file. SolanaProviders.tsx imports the real Adapter type directly.
+  adapter: unknown;
   autoConnect: boolean;
 };
 
@@ -55,41 +58,18 @@ export function createHyperbetAppRoot({
     const wsEndpoint = getWsUrl();
     const headlessWallets = useMemo(() => createHeadlessWalletsFromEnv(), []);
 
-    const wallets = useMemo(() => {
-      const walletList: Adapter[] = headlessWallets.map(
-        (wallet) => wallet.adapter,
-      );
-      walletList.push(new PhantomWalletAdapter());
-      return walletList;
-    }, [headlessWallets]);
-
-    const autoConnectWallet = headlessWallets.find(
-      (entry) => entry.autoConnect,
-    );
-    if (autoConnectWallet) {
-      localStorage.setItem(
-        "walletName",
-        JSON.stringify(autoConnectWallet.adapter.name),
-      );
-    }
-
     const appContent = isStreamUi ? <StreamUIApp /> : <App />;
 
-    // Only mount Solana providers when a valid RPC endpoint is configured.
-    // EVM-only chain packages (AVAX, BSC) pass an empty string to opt out.
     const innerContent = endpoint ? (
-      <ConnectionProvider
-        endpoint={endpoint}
-        config={{
-          wsEndpoint,
-          commitment: "confirmed",
-          disableRetryOnRateLimit: true,
-        }}
-      >
-        <WalletProvider wallets={wallets} autoConnect>
-          <WalletModalProvider>{appContent}</WalletModalProvider>
-        </WalletProvider>
-      </ConnectionProvider>
+      <Suspense fallback={null}>
+        <SolanaProviders
+          endpoint={endpoint}
+          wsEndpoint={wsEndpoint}
+          headlessWallets={headlessWallets}
+        >
+          {appContent}
+        </SolanaProviders>
+      </Suspense>
     ) : (
       appContent
     );

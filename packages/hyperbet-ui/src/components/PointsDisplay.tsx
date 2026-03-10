@@ -293,14 +293,13 @@ export function PointsDisplay({
     height: compact ? 38 : undefined,
     minHeight: compact ? 38 : undefined,
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.08)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+    border: "1px solid var(--hm-border-subtle, rgba(255,255,255,0.08))",
+    background: "var(--hm-panel-card-bg, linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%))",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     fontSize: 11,
-    color: "rgba(255,255,255,0.5)",
-    fontFamily: "'Inter', system-ui, sans-serif",
+    color: "var(--hm-text-dim, rgba(255,255,255,0.5))",
+    fontFamily: "var(--hm-font-body)",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
   };
 
@@ -335,14 +334,14 @@ export function PointsDisplay({
         height: compact ? 38 : undefined,
         minHeight: compact ? 38 : undefined,
         background:
-          "linear-gradient(95deg, rgba(242,208,138,0.08) 0%, rgba(10,10,18,0.6) 50%, rgba(10,10,18,0.5) 100%)",
-        borderRadius: 12,
-        border: "1px solid rgba(242, 208, 138, 0.15)",
+          "var(--hm-points-pill-bg, linear-gradient(95deg, rgba(232,65,66,0.08) 0%, rgba(10,10,18,0.6) 50%, rgba(10,10,18,0.5) 100%))",
+        borderRadius: 4,
+        border: "1px solid var(--hm-chip-border, rgba(232,65,66,0.15))",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
         position: "relative",
         boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.2)",
+          "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px var(--hm-chip-shadow, rgba(0,0,0,0.2))",
         overflow: "hidden",
       }}
     >
@@ -355,7 +354,7 @@ export function PointsDisplay({
           right: 0,
           height: 1,
           background:
-            "linear-gradient(90deg, transparent 10%, rgba(242,208,138,0.3) 50%, transparent 90%)",
+            "linear-gradient(90deg, transparent 10%, var(--hm-chip-highlight, rgba(232,65,66,0.3)) 50%, transparent 90%)",
         }}
       />
 
@@ -365,7 +364,7 @@ export function PointsDisplay({
         <span
           style={{
             fontSize: compact ? 12 : 18,
-            filter: "drop-shadow(0 0 6px rgba(242,208,138,0.5))",
+            filter: "drop-shadow(0 0 6px var(--hm-chip-highlight, rgba(232,65,66,0.5)))",
             lineHeight: 1,
           }}
         >
@@ -377,11 +376,11 @@ export function PointsDisplay({
             style={{
               fontSize: compact ? 13 : 20,
               fontWeight: 900,
-              color: "#f2d08a",
+              color: "var(--hm-accent-gold)",
               lineHeight: 1,
-              fontFamily: "'Teko', sans-serif",
+              fontFamily: "var(--hm-font-display)",
               letterSpacing: 1,
-              textShadow: "0 0 8px rgba(242,208,138,0.3)",
+              textShadow: "0 0 8px var(--hm-chip-highlight, rgba(232,65,66,0.3))",
             }}
           >
             {totalPoints.toLocaleString(getLocaleTag(resolvedLocale))}
@@ -390,11 +389,11 @@ export function PointsDisplay({
             <div
               style={{
                 fontSize: 8,
-                color: "rgba(242,208,138,0.45)",
+                color: "var(--hm-text-muted, rgba(232,65,66,0.45))",
                 textTransform: "uppercase",
                 letterSpacing: 1.5,
                 fontWeight: 800,
-                fontFamily: "'Teko', sans-serif",
+                fontFamily: "var(--hm-font-display)",
               }}
             >
               {rank && rank.rank > 0 ? copy.rank(rank.rank) : copy.points}
@@ -410,7 +409,7 @@ export function PointsDisplay({
             height: 16,
             flexShrink: 0,
             background:
-              "linear-gradient(180deg, transparent, rgba(242,208,138,0.2), transparent)",
+              "linear-gradient(180deg, transparent, var(--hm-chip-highlight, rgba(232,65,66,0.2)), transparent)",
           }}
         />
       )}
@@ -423,9 +422,9 @@ export function PointsDisplay({
             gap: 10,
             fontSize: 9,
             fontWeight: 700,
-            color: "rgba(255,255,255,0.35)",
+            color: "var(--hm-text-muted, rgba(255,255,255,0.35))",
             textTransform: "uppercase",
-            fontFamily: "'Inter', system-ui, sans-serif",
+            fontFamily: "var(--hm-font-body)",
             letterSpacing: 0.5,
           }}
         >
@@ -440,7 +439,7 @@ export function PointsDisplay({
             {copy.gold}:{" "}
             <span
               data-testid="points-display-gold"
-              style={{ color: "#f2d08a" }}
+              style={{ color: "var(--hm-accent-gold)" }}
             >
               {points?.goldBalance ?? "0"}
             </span>
@@ -467,20 +466,20 @@ export function PointsDisplay({
             gap: 4,
             padding: compact ? "3px 8px" : "4px 10px",
             background:
-              "linear-gradient(135deg, rgba(242,208,138,0.15) 0%, rgba(242,208,138,0.05) 100%)",
-            border: "1px solid rgba(242,208,138,0.25)",
+              "var(--hm-chip-bg, linear-gradient(135deg, rgba(232,65,66,0.15) 0%, rgba(232,65,66,0.05) 100%))",
+            border: "1px solid var(--hm-chip-border, rgba(232,65,66,0.25))",
             borderRadius: 6,
             cursor: "pointer",
             fontSize: 10,
             fontWeight: 800,
-            color: "#f2d08a",
-            fontFamily: "'Teko', sans-serif",
+            color: "var(--hm-accent-gold)",
+            fontFamily: "var(--hm-font-display)",
             letterSpacing: 1,
             textTransform: "uppercase",
             transition: "all 0.15s ease",
             backdropFilter: "blur(8px)",
             WebkitBackdropFilter: "blur(8px)",
-            boxShadow: "inset 0 1px 0 rgba(242,208,138,0.08)",
+            boxShadow: "inset 0 1px 0 var(--hm-chip-highlight, rgba(232,65,66,0.08))",
             flexShrink: 0,
           }}
         >
@@ -489,15 +488,38 @@ export function PointsDisplay({
       )}
 
       {error ? (
-        <div
-          style={{
-            fontSize: 9,
-            color: "rgba(255,100,100,0.7)",
-            flexShrink: 0,
-          }}
-        >
-          {error}
-        </div>
+        compact ? (
+          <div
+            aria-label={error}
+            title={error}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 18,
+              height: 18,
+              borderRadius: 999,
+              border: "1px solid rgba(255,100,100,0.3)",
+              background: "rgba(255,100,100,0.08)",
+              color: "rgba(255,140,140,0.9)",
+              fontSize: 10,
+              fontWeight: 900,
+              flexShrink: 0,
+            }}
+          >
+            !
+          </div>
+        ) : (
+          <div
+            style={{
+              fontSize: 9,
+              color: "rgba(255,100,100,0.7)",
+              flexShrink: 0,
+            }}
+          >
+            {error}
+          </div>
+        )
       ) : null}
 
       {showPopup && (
@@ -569,7 +591,7 @@ function GoldBonusPopupInline({
           style={{
             fontSize: 16,
             fontWeight: 800,
-            fontFamily: "'Teko', sans-serif",
+            fontFamily: "var(--hm-font-display)",
             letterSpacing: 1.5,
             textTransform: "uppercase",
             color: "#f2d08a",
@@ -637,7 +659,7 @@ function GoldBonusPopupInline({
               fontSize: 14,
               fontWeight: 900,
               color: TIER_COLORS[detail.tier] ?? "#fff",
-              fontFamily: "'Teko', sans-serif",
+              fontFamily: "var(--hm-font-display)",
               letterSpacing: 1,
             }}
           >
@@ -652,7 +674,7 @@ function GoldBonusPopupInline({
             fontSize: 10,
             color: "rgba(255,255,255,0.4)",
             marginBottom: 10,
-            fontFamily: "'Inter', system-ui, sans-serif",
+            fontFamily: "var(--hm-font-body)",
           }}
         >
           {copy.nextTier(detail.nextTierThreshold)}
@@ -664,7 +686,7 @@ function GoldBonusPopupInline({
           fontSize: 11,
           color: "rgba(255,255,255,0.4)",
           marginBottom: 14,
-          fontFamily: "'Inter', system-ui, sans-serif",
+          fontFamily: "var(--hm-font-body)",
         }}
       >
         {copy.heldGoldBoost}
@@ -685,7 +707,7 @@ function GoldBonusPopupInline({
           color: "#0a0a0a",
           fontSize: 14,
           fontWeight: 900,
-          fontFamily: "'Teko', sans-serif",
+          fontFamily: "var(--hm-font-display)",
           letterSpacing: 2,
           textTransform: "uppercase",
           textAlign: "center",
@@ -736,7 +758,7 @@ function TierRow({
             fontSize: 11,
             fontWeight: 600,
             color: "rgba(255,255,255,0.7)",
-            fontFamily: "'Inter', system-ui, sans-serif",
+            fontFamily: "var(--hm-font-body)",
           }}
         >
           {label}
@@ -747,7 +769,7 @@ function TierRow({
           fontSize: 13,
           fontWeight: 900,
           color,
-          fontFamily: "'Teko', sans-serif",
+          fontFamily: "var(--hm-font-display)",
           letterSpacing: 1,
           textShadow: `0 0 8px ${color}40`,
         }}

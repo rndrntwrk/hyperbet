@@ -1118,7 +1118,7 @@ export function SolanaClobPanel({
             gap: 10,
             padding: compact ? "0 16px 14px" : "12px 0 0",
             color: "#d4d4d8",
-            fontFamily: "'Inter', system-ui, sans-serif",
+            fontFamily: "var(--hm-font-body)",
             fontSize: 12,
           }}
         >
@@ -1155,7 +1155,7 @@ export function SolanaClobPanel({
           alignItems: "center",
           gap: 10,
           color: "#d4d4d8",
-          fontFamily: "'Inter', system-ui, sans-serif",
+          fontFamily: "var(--hm-font-body)",
           fontSize: 12,
         }}
       >

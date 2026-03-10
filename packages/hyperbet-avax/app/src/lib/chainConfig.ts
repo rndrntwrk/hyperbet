@@ -88,7 +88,7 @@ const AVAX_CONFIG: EvmChainConfig = {
       : AVAX_CHAIN_ID === 43113
         ? "Avalanche Fuji"
         : `Avalanche Local (${AVAX_CHAIN_ID})`,
-  shortName: "AVAX",
+  shortName: "AVALANCHE",
   rpcUrl: AVAX_RPC_URL,
   goldClobAddress: AVAX_GOLD_CLOB_ADDRESS,
   nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },

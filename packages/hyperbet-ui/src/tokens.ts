@@ -56,7 +56,7 @@ const CHAIN_UI_CONFIG: Record<SupportedUiChainId, ChainUiConfig> = {
   },
   avax: {
     chainId: "avax",
-    icon: "🔺",
+    icon: "https://images.ctfassets.net/gcj8jwzm6086/5VHupNKwnDYJvqMENeV7iJ/fdd6326b7a82c8388e4ee9d4be7062d4/avalanche-avax-logo.svg",
     color: "#E84142",
     name: { en: "Avalanche", zh: "雪崩链", ko: "아발란체", pt: "Avalanche", es: "Avalanche" },
     shortName: "AVAX",
