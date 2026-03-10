@@ -1,0 +1,29 @@
+{
+  "workspaces": {
+    ".": {
+      "ignore": ["packages/evm-contracts/**"]
+    },
+    "packages/hyperbet-ui": {
+      "entry": ["src/index.ts", "src/StreamUIApp.tsx"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/hyperbet-solana": {
+      "entry": ["app/src/main.tsx", "keeper/src/index.ts", "app/src/index.tsx"],
+      "project": ["app/src/**/*.{ts,tsx}", "keeper/src/**/*.{ts,tsx}", "tests/**/*.ts"]
+    },
+    "packages/hyperbet-bsc": {
+      "entry": ["app/src/main.tsx", "keeper/src/index.ts", "app/src/index.tsx"],
+      "project": ["app/src/**/*.{ts,tsx}", "keeper/src/**/*.{ts,tsx}", "tests/**/*.ts"]
+    },
+    "packages/hyperbet-avax": {
+      "entry": ["app/src/main.tsx", "keeper/src/index.ts", "app/src/index.tsx"],
+      "project": ["app/src/**/*.{ts,tsx}", "keeper/src/**/*.{ts,tsx}", "tests/**/*.ts"]
+    },
+    "packages/market-maker-bot": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    }
+  },
+  "exclude": ["dependencies", "unlisted", "binaries", "unresolved"],
+  "ignoreBinaries": ["madge"]
+}

@@ -262,7 +262,7 @@ export class HeadlessKeypairWalletAdapter extends BaseSignInMessageSignerWalletA
   }
 }
 
-export function getHeadlessWalletName(): string {
+function getHeadlessWalletName(): string {
   return CONFIG.headlessWalletName || DEFAULT_HEADLESS_WALLET_NAME;
 }
 

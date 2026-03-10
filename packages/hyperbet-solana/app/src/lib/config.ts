@@ -203,7 +203,7 @@ const baseConfig: Partial<EnvConfig> = {
   headlessWalletsJson: import.meta.env.VITE_HEADLESS_WALLETS || "",
 };
 
-export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
+const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   devnet: {
     ...baseConfig,
     ...buildSolanaProgramConfig("devnet"),

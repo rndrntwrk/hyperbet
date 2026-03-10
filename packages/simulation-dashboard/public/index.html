@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hyperbet Simulation Dashboard</title>
+  <meta name="description" content="Real-time simulation dashboard for Hyperbet CLOB contracts — visualize agent strategies, order book depth, and contract events." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="header">
+    <div class="header-left">
+      <h1>⚡ Hyperbet <span class="accent">Simulation</span></h1>
+      <div id="connection-badge" class="badge badge-disconnected">Disconnected</div>
+    </div>
+    <div class="header-right">
+      <span id="tick-counter" class="mono">Tick #0</span>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Top Row: Controls + Contract Info -->
+    <section id="controls-section" class="panel">
+      <h2>🎮 Controls</h2>
+      <div class="controls-row">
+        <button id="btn-start" class="btn btn-primary" title="Start simulation">▶ Start</button>
+        <button id="btn-pause" class="btn btn-warning" title="Pause simulation">⏸ Pause</button>
+        <button id="btn-step" class="btn btn-secondary" title="Single tick">⏭ Step</button>
+        <div class="speed-control">
+          <label for="speed-slider">Speed</label>
+          <input type="range" id="speed-slider" min="100" max="3000" step="100" value="500" />
+          <span id="speed-value" class="mono">500ms</span>
+        </div>
+      </div>
+      <div class="controls-row">
+        <select id="scenario-select" class="select">
+          <option value="">— Select Scenario —</option>
+        </select>
+        <button id="btn-resolve-a" class="btn btn-accent" title="Resolve duel: Side A wins">🏆 A Wins</button>
+        <button id="btn-resolve-b" class="btn btn-accent" title="Resolve duel: Side B wins">🏆 B Wins</button>
+        <button id="btn-new-duel" class="btn btn-secondary" title="Open a new duel">🔄 New Duel</button>
+      </div>
+    </section>
+
+    <section id="contract-section" class="panel">
+      <h2>📋 Contract Overview</h2>
+      <div id="contract-info" class="info-grid">
+        <div class="info-item"><span class="info-label">Oracle</span><span id="oracle-addr" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">CLOB</span><span id="clob-addr" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">Duel</span><span id="duel-label">—</span></div>
+        <div class="info-item"><span class="info-label">Status</span><span id="market-status" class="badge">—</span></div>
+        <div class="info-item"><span class="info-label">Best Bid</span><span id="best-bid" class="mono bid-color">—</span></div>
+        <div class="info-item"><span class="info-label">Best Ask</span><span id="best-ask" class="mono ask-color">—</span></div>
+        <div class="info-item"><span class="info-label">A Shares</span><span id="total-a" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">B Shares</span><span id="total-b" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">Treasury Fee</span><span id="fee-treasury" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">MM Fee</span><span id="fee-mm" class="mono">—</span></div>
+      </div>
+    </section>
+
+    <!-- Middle Row: Order Book + Trade Tape -->
+    <section id="book-section" class="panel panel-wide">
+      <h2>📊 Order Book</h2>
+      <div id="order-book">
+        <div id="book-bids" class="book-side">
+          <div class="book-header">BIDS</div>
+          <div id="bids-container" class="book-levels"></div>
+        </div>
+        <div id="book-spread" class="book-spread">
+          <div class="spread-label">Spread</div>
+          <div id="spread-value" class="mono">—</div>
+        </div>
+        <div id="book-asks" class="book-side">
+          <div class="book-header">ASKS</div>
+          <div id="asks-container" class="book-levels"></div>
+        </div>
+      </div>
+      <div id="depth-chart">
+        <svg id="depth-svg" width="100%" height="160" preserveAspectRatio="none"></svg>
+      </div>
+    </section>
+
+    <!-- Visualizer Row -->
+    <section id="visualizer-section" class="panel panel-wide">
+      <h2>🕸️ System Visualizer</h2>
+      <div id="visualizer-container" style="width: 100%; height: 300px; position: relative;"></div>
+    </section>
+
+    <section id="tape-section" class="panel panel-tall">
+      <h2>📜 Event Log <span id="event-count" class="badge badge-count">0</span></h2>
+      <div id="event-tape"></div>
+    </section>
+
+    <!-- Bottom Row: Agents -->
+    <section id="agents-section" class="panel panel-full">
+      <h2>🤖 Agents</h2>
+      <div id="agents-grid"></div>
+    </section>
+  </main>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

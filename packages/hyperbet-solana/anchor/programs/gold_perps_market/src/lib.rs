@@ -40,7 +40,6 @@ fn bootstrap_authority() -> Pubkey {
 pub mod gold_perps_market {
     use super::*;
 
-    #[allow(clippy::too_many_arguments)]
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
         keeper_authority: Pubkey,
@@ -99,7 +98,6 @@ pub mod gold_perps_market {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn update_config(
         ctx: Context<UpdateConfig>,
         keeper_authority: Pubkey,
@@ -291,11 +289,7 @@ pub mod gold_perps_market {
             require!(size_delta != 0, PerpsError::NoOpenPosition);
         }
 
-        let deposit_amount = if margin_delta > 0 {
-            margin_delta as u64
-        } else {
-            0
-        };
+        let deposit_amount = margin_delta.max(0) as u64;
         if deposit_amount > 0 {
             let transfer_ctx = CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -438,12 +432,6 @@ pub mod gold_perps_market {
         require_market(market, market_id)?;
 
         let position = &ctx.accounts.position;
-        require!(position.initialized, PerpsError::NoOpenPosition);
-        require!(position.market_id == market_id, PerpsError::InvalidMarket);
-        require!(
-            position.owner == ctx.accounts.owner.key(),
-            PerpsError::InvalidPositionOwner
-        );
 
         let now = Clock::get()?.unix_timestamp;
         match market.status {
@@ -707,11 +695,7 @@ fn require_oracle_price_step(
     max_oracle_price_delta_bps: u16,
 ) -> Result<()> {
     require!(previous_spot_index > 0, PerpsError::InvalidSpotIndex);
-    let price_delta = if next_spot_index >= previous_spot_index {
-        u128::from(next_spot_index - previous_spot_index)
-    } else {
-        u128::from(previous_spot_index - next_spot_index)
-    };
+    let price_delta = u128::from(next_spot_index.abs_diff(previous_spot_index));
     let max_delta = u128::from(previous_spot_index)
         .checked_mul(u128::from(max_oracle_price_delta_bps))
         .ok_or(PerpsError::Overflow)?;

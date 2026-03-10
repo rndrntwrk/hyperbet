@@ -34,17 +34,15 @@ contract SkillOracle is Ownable {
     }
 
     function updateAgentSkill(bytes32 agentId, uint256 mu, uint256 sigma) external onlyOwner {
-        uint256 activeAgentCount = activeAgents.length;
         if (!agentExists[agentId]) {
             agentExists[agentId] = true;
             activeAgents.push(agentId);
             totalMu += mu;
-            activeAgentCount += 1;
         } else {
             totalMu = totalMu - agentSkills[agentId].mu + mu;
         }
         agentSkills[agentId] = AgentSkill(mu, sigma, block.timestamp);
-        globalMeanMu = totalMu / activeAgentCount;
+        globalMeanMu = totalMu / activeAgents.length;
         emit SkillUpdated(agentId, mu, sigma);
     }
 

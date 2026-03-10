@@ -50,7 +50,6 @@ pub mod fight_oracle {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn upsert_duel(
         ctx: Context<UpsertDuel>,
         duel_key: [u8; 32],
@@ -142,7 +141,6 @@ pub mod fight_oracle {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn report_result(
         ctx: Context<ReportResult>,
         _duel_key: [u8; 32],

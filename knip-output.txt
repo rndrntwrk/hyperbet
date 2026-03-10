@@ -1,0 +1,514 @@
+Unused files (109)
+packages/hyperbet-avax/app/src/idl/fight_oracle.ts           packages/hyperbet-avax/app/src/idl/fight_oracle.ts         
+packages/hyperbet-avax/app/src/idl/gold_clob_market.ts       packages/hyperbet-avax/app/src/idl/gold_clob_market.ts     
+packages/hyperbet-avax/app/src/idl/gold_perps_market.ts      packages/hyperbet-avax/app/src/idl/gold_perps_market.ts    
+packages/hyperbet-avax/app/src/lib/chainConfig.ts            packages/hyperbet-avax/app/src/lib/chainConfig.ts          
+packages/hyperbet-avax/app/src/lib/goldClobAbi.ts            packages/hyperbet-avax/app/src/lib/goldClobAbi.ts          
+packages/hyperbet-avax/app/src/spectator/types.ts            packages/hyperbet-avax/app/src/spectator/types.ts          
+packages/hyperbet-avax/keeper/src/bot.ts                     packages/hyperbet-avax/keeper/src/bot.ts                   
+packages/hyperbet-avax/keeper/src/common.ts                  packages/hyperbet-avax/keeper/src/common.ts                
+packages/hyperbet-avax/keeper/src/db.test.ts                 packages/hyperbet-avax/keeper/src/db.test.ts               
+packages/hyperbet-avax/keeper/src/db.ts                      packages/hyperbet-avax/keeper/src/db.ts                    
+packages/hyperbet-avax/keeper/src/fight.ts                   packages/hyperbet-avax/keeper/src/fight.ts                 
+packages/hyperbet-avax/keeper/src/game-client.test.ts        packages/hyperbet-avax/keeper/src/game-client.test.ts      
+packages/hyperbet-avax/keeper/src/game-client.ts             packages/hyperbet-avax/keeper/src/game-client.ts           
+packages/hyperbet-avax/keeper/src/modelMarkets.test.ts       packages/hyperbet-avax/keeper/src/modelMarkets.test.ts     
+packages/hyperbet-avax/keeper/src/modelMarkets.ts            packages/hyperbet-avax/keeper/src/modelMarkets.ts          
+packages/hyperbet-avax/keeper/src/perpsMath.test.ts          packages/hyperbet-avax/keeper/src/perpsMath.test.ts        
+packages/hyperbet-avax/keeper/src/perpsMath.ts               packages/hyperbet-avax/keeper/src/perpsMath.ts             
+packages/hyperbet-avax/keeper/src/resolve.ts                 packages/hyperbet-avax/keeper/src/resolve.ts               
+packages/hyperbet-avax/keeper/src/service.ts                 packages/hyperbet-avax/keeper/src/service.ts               
+packages/hyperbet-avax/keeper/src/trueskill.ts               packages/hyperbet-avax/keeper/src/trueskill.ts             
+packages/hyperbet-avax/keeper/src/walletKeys.test.ts         packages/hyperbet-avax/keeper/src/walletKeys.test.ts       
+packages/hyperbet-avax/keeper/src/walletKeys.ts              packages/hyperbet-avax/keeper/src/walletKeys.ts            
+packages/hyperbet-avax/tests/deployments.test.ts             packages/hyperbet-avax/tests/deployments.test.ts           
+packages/hyperbet-bsc/app/src/idl/fight_oracle.ts            packages/hyperbet-bsc/app/src/idl/fight_oracle.ts          
+packages/hyperbet-bsc/app/src/idl/gold_clob_market.ts        packages/hyperbet-bsc/app/src/idl/gold_clob_market.ts      
+packages/hyperbet-bsc/app/src/idl/gold_perps_market.ts       packages/hyperbet-bsc/app/src/idl/gold_perps_market.ts     
+packages/hyperbet-bsc/app/src/lib/chainConfig.ts             packages/hyperbet-bsc/app/src/lib/chainConfig.ts           
+packages/hyperbet-bsc/app/src/lib/goldClobAbi.ts             packages/hyperbet-bsc/app/src/lib/goldClobAbi.ts           
+packages/hyperbet-bsc/app/src/spectator/types.ts             packages/hyperbet-bsc/app/src/spectator/types.ts           
+packages/hyperbet-bsc/app/src/types/bs58.d.ts                packages/hyperbet-bsc/app/src/types/bs58.d.ts              
+packages/hyperbet-bsc/keeper/src/bot.ts                      packages/hyperbet-bsc/keeper/src/bot.ts                    
+packages/hyperbet-bsc/keeper/src/common.ts                   packages/hyperbet-bsc/keeper/src/common.ts                 
+packages/hyperbet-bsc/keeper/src/db.test.ts                  packages/hyperbet-bsc/keeper/src/db.test.ts                
+packages/hyperbet-bsc/keeper/src/db.ts                       packages/hyperbet-bsc/keeper/src/db.ts                     
+packages/hyperbet-bsc/keeper/src/fight.ts                    packages/hyperbet-bsc/keeper/src/fight.ts                  
+packages/hyperbet-bsc/keeper/src/game-client.test.ts         packages/hyperbet-bsc/keeper/src/game-client.test.ts       
+packages/hyperbet-bsc/keeper/src/game-client.ts              packages/hyperbet-bsc/keeper/src/game-client.ts            
+packages/hyperbet-bsc/keeper/src/modelMarkets.test.ts        packages/hyperbet-bsc/keeper/src/modelMarkets.test.ts      
+packages/hyperbet-bsc/keeper/src/modelMarkets.ts             packages/hyperbet-bsc/keeper/src/modelMarkets.ts           
+packages/hyperbet-bsc/keeper/src/perpsMath.test.ts           packages/hyperbet-bsc/keeper/src/perpsMath.test.ts         
+packages/hyperbet-bsc/keeper/src/perpsMath.ts                packages/hyperbet-bsc/keeper/src/perpsMath.ts              
+packages/hyperbet-bsc/keeper/src/resolve.ts                  packages/hyperbet-bsc/keeper/src/resolve.ts                
+packages/hyperbet-bsc/keeper/src/service.ts                  packages/hyperbet-bsc/keeper/src/service.ts                
+packages/hyperbet-bsc/keeper/src/trueskill.test.ts           packages/hyperbet-bsc/keeper/src/trueskill.test.ts         
+packages/hyperbet-bsc/keeper/src/trueskill.ts                packages/hyperbet-bsc/keeper/src/trueskill.ts              
+packages/hyperbet-bsc/keeper/src/walletKeys.test.ts          packages/hyperbet-bsc/keeper/src/walletKeys.test.ts        
+packages/hyperbet-bsc/keeper/src/walletKeys.ts               packages/hyperbet-bsc/keeper/src/walletKeys.ts             
+packages/hyperbet-bsc/tests/deployments.test.ts              packages/hyperbet-bsc/tests/deployments.test.ts            
+packages/hyperbet-solana/app/src/components/ModelsMarketVi…  …es/hyperbet-solana/app/src/components/ModelsMarketView.tsx
+packages/hyperbet-solana/app/src/generated/fight-oracle/er…  …olana/app/src/generated/fight-oracle/errors/fightOracle.ts
+packages/hyperbet-solana/app/src/generated/fight-oracle/er…  …rbet-solana/app/src/generated/fight-oracle/errors/index.ts
+packages/hyperbet-solana/app/src/generated/fight-oracle/in…  …es/hyperbet-solana/app/src/generated/fight-oracle/index.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …a/app/src/generated/gold-clob-market/accounts/duelState.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …olana/app/src/generated/gold-clob-market/accounts/index.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …pp/src/generated/gold-clob-market/accounts/marketConfig.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …app/src/generated/gold-clob-market/accounts/marketState.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …olana/app/src/generated/gold-clob-market/accounts/order.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …/app/src/generated/gold-clob-market/accounts/priceLevel.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …app/src/generated/gold-clob-market/accounts/userBalance.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …pp/src/generated/gold-clob-market/errors/goldClobMarket.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …-solana/app/src/generated/gold-clob-market/errors/index.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …yperbet-solana/app/src/generated/gold-clob-market/index.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …ana/app/src/generated/gold-clob-market/types/duelStatus.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …t-solana/app/src/generated/gold-clob-market/types/index.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …ana/app/src/generated/gold-clob-market/types/marketSide.ts
+packages/hyperbet-solana/app/src/generated/gold-clob-marke…  …a/app/src/generated/gold-clob-market/types/marketStatus.ts
+packages/hyperbet-solana/app/src/generated/gold-perps-mark…  …pp/src/generated/gold-perps-market/accounts/configState.ts
+packages/hyperbet-solana/app/src/generated/gold-perps-mark…  …lana/app/src/generated/gold-perps-market/accounts/index.ts
+packages/hyperbet-solana/app/src/generated/gold-perps-mark…  …pp/src/generated/gold-perps-market/accounts/marketState.ts
+packages/hyperbet-solana/app/src/generated/gold-perps-mark…  …/src/generated/gold-perps-market/accounts/positionState.ts
+packages/hyperbet-solana/app/src/generated/gold-perps-mark…  …/src/generated/gold-perps-market/errors/goldPerpsMarket.ts
+packages/hyperbet-solana/app/src/generated/gold-perps-mark…  …solana/app/src/generated/gold-perps-market/errors/index.ts
+packages/hyperbet-solana/app/src/generated/gold-perps-mark…  …perbet-solana/app/src/generated/gold-perps-market/index.ts
+packages/hyperbet-solana/app/src/idl/fight_oracle.ts         packages/hyperbet-solana/app/src/idl/fight_oracle.ts       
+packages/hyperbet-solana/app/src/idl/gold_clob_market.ts     packages/hyperbet-solana/app/src/idl/gold_clob_market.ts   
+packages/hyperbet-solana/app/src/idl/gold_perps_market.ts    packages/hyperbet-solana/app/src/idl/gold_perps_market.ts  
+packages/hyperbet-solana/app/src/lib/kitTransactions.ts      packages/hyperbet-solana/app/src/lib/kitTransactions.ts    
+packages/hyperbet-solana/app/src/types/bs58.d.ts             packages/hyperbet-solana/app/src/types/bs58.d.ts           
+packages/hyperbet-solana/keeper/src/bot.ts                   packages/hyperbet-solana/keeper/src/bot.ts                 
+packages/hyperbet-solana/keeper/src/common.ts                packages/hyperbet-solana/keeper/src/common.ts              
+packages/hyperbet-solana/keeper/src/db.test.ts               packages/hyperbet-solana/keeper/src/db.test.ts             
+packages/hyperbet-solana/keeper/src/db.ts                    packages/hyperbet-solana/keeper/src/db.ts                  
+packages/hyperbet-solana/keeper/src/fight.ts                 packages/hyperbet-solana/keeper/src/fight.ts               
+packages/hyperbet-solana/keeper/src/game-client.test.ts      packages/hyperbet-solana/keeper/src/game-client.test.ts    
+packages/hyperbet-solana/keeper/src/game-client.ts           packages/hyperbet-solana/keeper/src/game-client.ts         
+packages/hyperbet-solana/keeper/src/idl/fight_oracle.ts      packages/hyperbet-solana/keeper/src/idl/fight_oracle.ts    
+packages/hyperbet-solana/keeper/src/idl/gold_clob_market.ts  packages/hyperbet-solana/keeper/src/idl/gold_clob_market.ts
+packages/hyperbet-solana/keeper/src/idl/gold_perps_market.…  …ckages/hyperbet-solana/keeper/src/idl/gold_perps_market.ts
+packages/hyperbet-solana/keeper/src/keeperBot.test.ts        packages/hyperbet-solana/keeper/src/keeperBot.test.ts      
+packages/hyperbet-solana/keeper/src/keeperBot.ts             packages/hyperbet-solana/keeper/src/keeperBot.ts           
+packages/hyperbet-solana/keeper/src/modelMarkets.test.ts     packages/hyperbet-solana/keeper/src/modelMarkets.test.ts   
+packages/hyperbet-solana/keeper/src/modelMarkets.ts          packages/hyperbet-solana/keeper/src/modelMarkets.ts        
+packages/hyperbet-solana/keeper/src/perpsMath.test.ts        packages/hyperbet-solana/keeper/src/perpsMath.test.ts      
+packages/hyperbet-solana/keeper/src/perpsMath.ts             packages/hyperbet-solana/keeper/src/perpsMath.ts           
+packages/hyperbet-solana/keeper/src/resolve.ts               packages/hyperbet-solana/keeper/src/resolve.ts             
+packages/hyperbet-solana/keeper/src/resultHash.test.ts       packages/hyperbet-solana/keeper/src/resultHash.test.ts     
+packages/hyperbet-solana/keeper/src/resultHash.ts            packages/hyperbet-solana/keeper/src/resultHash.ts          
+packages/hyperbet-solana/keeper/src/service.ts               packages/hyperbet-solana/keeper/src/service.ts             
+packages/hyperbet-solana/keeper/src/trueskill.ts             packages/hyperbet-solana/keeper/src/trueskill.ts           
+packages/hyperbet-solana/keeper/src/walletKeys.test.ts       packages/hyperbet-solana/keeper/src/walletKeys.test.ts     
+packages/hyperbet-solana/keeper/src/walletKeys.ts            packages/hyperbet-solana/keeper/src/walletKeys.ts          
+packages/hyperbet-solana/tests/deployments.test.ts           packages/hyperbet-solana/tests/deployments.test.ts         
+packages/hyperbet-ui/.storybook/mocks/evmClient.ts           packages/hyperbet-ui/.storybook/mocks/evmClient.ts         
+packages/hyperbet-ui/.storybook/mocks/programs.ts            packages/hyperbet-ui/.storybook/mocks/programs.ts          
+packages/hyperbet-ui/.storybook/mocks/solanaWalletAdapterR…  …/hyperbet-ui/.storybook/mocks/solanaWalletAdapterReact.tsx
+packages/hyperbet-ui/.storybook/mocks/solanaWalletAdapterR…  …yperbet-ui/.storybook/mocks/solanaWalletAdapterReactUi.tsx
+packages/hyperbet-ui/.storybook/mocks/useStreamingState.ts   packages/hyperbet-ui/.storybook/mocks/useStreamingState.ts 
+packages/hyperbet-ui/.storybook/mocks/wagmi.ts               packages/hyperbet-ui/.storybook/mocks/wagmi.ts             
+packages/simulation-dashboard/public/app.js                  packages/simulation-dashboard/public/app.js                
+Unused exports (278)
+ACTIVE_ENV                                    packages/hyperbet-avax/app/src/lib/config.ts:94:14                        
+RUNTIME_ENV                                   packages/hyperbet-avax/app/src/lib/config.ts:131:14                       
+ENV_CONFIGS                                   packages/hyperbet-avax/app/src/lib/config.ts:270:14                       
+CONFIG                                        packages/hyperbet-avax/app/src/lib/config.ts:382:14                       
+GOLD_MAINNET_MINT                             packages/hyperbet-avax/app/src/lib/config.ts:467:14                       
+SOL_MINT                                      packages/hyperbet-avax/app/src/lib/config.ts:471:14                       
+USDC_MINT                                     packages/hyperbet-avax/app/src/lib/config.ts:475:14                       
+DEFAULT_BET_WINDOW_SECONDS                    packages/hyperbet-avax/app/src/lib/config.ts:479:14                       
+DEFAULT_NEW_ROUND_BET_WINDOW_SECO…            packages/hyperbet-avax/app/src/lib/config.ts:480:14                       
+DEFAULT_AUTO_SEED_DELAY_SECONDS               packages/hyperbet-avax/app/src/lib/config.ts:482:14                       
+DEFAULT_SEED_GOLD_AMOUNT                      packages/hyperbet-avax/app/src/lib/config.ts:483:14                       
+DEFAULT_BET_FEE_BPS                           packages/hyperbet-avax/app/src/lib/config.ts:484:14                       
+GOLD_DECIMALS                                 packages/hyperbet-avax/app/src/lib/config.ts:485:14                       
+toBaseUnits                         function  packages/hyperbet-avax/app/src/lib/config.ts:488:17                       
+STREAM_URL                                    packages/hyperbet-avax/app/src/lib/config.ts:492:14                       
+GAME_WS_URL                                   packages/hyperbet-avax/app/src/lib/config.ts:495:14                       
+UI_SYNC_DELAY_MS                              packages/hyperbet-avax/app/src/lib/config.ts:496:14                       
+ENABLE_MANUAL_MARKET_ADMIN_CONTRO…            packages/hyperbet-avax/app/src/lib/config.ts:526:14                       
+buildArenaWriteHeaders              function  packages/hyperbet-avax/app/src/lib/config.ts:530:17                       
+getCluster                          function  packages/hyperbet-avax/app/src/lib/config.ts:543:17                       
+getEvmRpcUrl                        function  packages/hyperbet-avax/app/src/lib/config.ts:605:17                       
+AVAX_RPC_URL                                  packages/hyperbet-avax/app/src/lib/config.ts:612:14                       
+AVAX_CHAIN_ID                                 packages/hyperbet-avax/app/src/lib/config.ts:613:14                       
+AVAX_GOLD_CLOB_ADDRESS                        packages/hyperbet-avax/app/src/lib/config.ts:614:14                       
+AVAX_GOLD_TOKEN_ADDRESS                       packages/hyperbet-avax/app/src/lib/config.ts:615:14                       
+ACTIVE_ENV                                    packages/hyperbet-bsc/app/src/lib/config.ts:94:14                         
+RUNTIME_ENV                                   packages/hyperbet-bsc/app/src/lib/config.ts:131:14                        
+ENV_CONFIGS                                   packages/hyperbet-bsc/app/src/lib/config.ts:296:14                        
+CONFIG                                        packages/hyperbet-bsc/app/src/lib/config.ts:408:14                        
+GOLD_MAINNET_MINT                             packages/hyperbet-bsc/app/src/lib/config.ts:509:14                        
+SOL_MINT                                      packages/hyperbet-bsc/app/src/lib/config.ts:513:14                        
+USDC_MINT                                     packages/hyperbet-bsc/app/src/lib/config.ts:517:14                        
+DEFAULT_BET_WINDOW_SECONDS                    packages/hyperbet-bsc/app/src/lib/config.ts:521:14                        
+DEFAULT_NEW_ROUND_BET_WINDOW_SECO…            packages/hyperbet-bsc/app/src/lib/config.ts:522:14                        
+DEFAULT_AUTO_SEED_DELAY_SECONDS               packages/hyperbet-bsc/app/src/lib/config.ts:524:14                        
+DEFAULT_SEED_GOLD_AMOUNT                      packages/hyperbet-bsc/app/src/lib/config.ts:525:14                        
+DEFAULT_BET_FEE_BPS                           packages/hyperbet-bsc/app/src/lib/config.ts:526:14                        
+GOLD_DECIMALS                                 packages/hyperbet-bsc/app/src/lib/config.ts:527:14                        
+toBaseUnits                         function  packages/hyperbet-bsc/app/src/lib/config.ts:530:17                        
+STREAM_URL                                    packages/hyperbet-bsc/app/src/lib/config.ts:534:14                        
+GAME_WS_URL                                   packages/hyperbet-bsc/app/src/lib/config.ts:537:14                        
+UI_SYNC_DELAY_MS                              packages/hyperbet-bsc/app/src/lib/config.ts:538:14                        
+ENABLE_MANUAL_MARKET_ADMIN_CONTRO…            packages/hyperbet-bsc/app/src/lib/config.ts:568:14                        
+buildArenaWriteHeaders              function  packages/hyperbet-bsc/app/src/lib/config.ts:572:17                        
+getCluster                          function  packages/hyperbet-bsc/app/src/lib/config.ts:585:17                        
+getEvmRpcUrl                        function  packages/hyperbet-bsc/app/src/lib/config.ts:647:17                        
+BSC_RPC_URL                                   packages/hyperbet-bsc/app/src/lib/config.ts:655:14                        
+BSC_CHAIN_ID                                  packages/hyperbet-bsc/app/src/lib/config.ts:656:14                        
+BSC_GOLD_CLOB_ADDRESS                         packages/hyperbet-bsc/app/src/lib/config.ts:657:14                        
+BSC_GOLD_TOKEN_ADDRESS                        packages/hyperbet-bsc/app/src/lib/config.ts:658:14                        
+BASE_RPC_URL                                  packages/hyperbet-bsc/app/src/lib/config.ts:660:14                        
+BASE_CHAIN_ID                                 packages/hyperbet-bsc/app/src/lib/config.ts:661:14                        
+BASE_GOLD_CLOB_ADDRESS                        packages/hyperbet-bsc/app/src/lib/config.ts:662:14                        
+BASE_GOLD_TOKEN_ADDRESS                       packages/hyperbet-bsc/app/src/lib/config.ts:663:14                        
+AVAX_RPC_URL                                  packages/hyperbet-bsc/app/src/lib/config.ts:665:14                        
+AVAX_CHAIN_ID                                 packages/hyperbet-bsc/app/src/lib/config.ts:669:14                        
+AVAX_GOLD_CLOB_ADDRESS                        packages/hyperbet-bsc/app/src/lib/config.ts:670:14                        
+AVAX_GOLD_TOKEN_ADDRESS                       packages/hyperbet-bsc/app/src/lib/config.ts:671:14                        
+DUEL_STATE_DISCRIMINATOR                      …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:12:14
+getDuelStateDiscriminatorBytes      function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:14:17
+getDuelStateEncoder                 function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:21:17
+getDuelStateCodec                   function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:31:17
+decodeDuelState                     function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:35:17
+fetchDuelState                      function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:41:23
+fetchMaybeDuelState                 function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:51:23
+fetchAllDuelState                   function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:60:23
+fetchAllMaybeDuelState              function  …yperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:70:23
+ORACLE_CONFIG_DISCRIMINATOR                   …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:11:14
+getOracleConfigDiscriminatorBytes   function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:13:17
+getOracleConfigEncoder              function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:20:17
+getOracleConfigDecoder              function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:25:17
+getOracleConfigCodec                function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:30:17
+decodeOracleConfig                  function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:34:17
+fetchOracleConfig                   function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:40:23
+fetchMaybeOracleConfig              function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:50:23
+fetchAllOracleConfig                function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:59:23
+fetchAllMaybeOracleConfig           function  …rbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:69:23
+CANCEL_DUEL_DISCRIMINATOR                     …et-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:13:14
+getCancelDuelDiscriminatorBytes     function  …et-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:15:17
+getCancelDuelInstructionDataEncod…  function  …et-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:24:17
+getCancelDuelInstructionDataDecod…  function  …et-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:28:17
+getCancelDuelInstructionDataCodec   function  …et-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:32:17
+getCancelDuelInstructionAsync       function  …et-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:44:23
+getCancelDuelInstruction            function  …et-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:77:17
+INITIALIZE_ORACLE_DISCRIMINATOR               …ana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:13:14
+getInitializeOracleDiscriminatorB…  function  …ana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:15:17
+getInitializeOracleInstructionDat…  function  …ana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:24:17
+getInitializeOracleInstructionDat…  function  …ana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:28:17
+getInitializeOracleInstructionDat…  function  …ana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:32:17
+getInitializeOracleInstructionAsy…  function  …ana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:45:23
+getInitializeOracleInstruction      function  …ana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:82:17
+REPORT_RESULT_DISCRIMINATOR                   …-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:14:14
+getReportResultDiscriminatorBytes   function  …-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:16:17
+getReportResultInstructionDataEnc…  function  …-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:25:17
+getReportResultInstructionDataDec…  function  …-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:29:17
+getReportResultInstructionDataCod…  function  …-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:33:17
+getReportResultInstructionAsync     function  …-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:50:23
+getReportResultInstruction          function  …-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:88:17
+UPDATE_ORACLE_CONFIG_DISCRIMINATOR            …a/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:13:14
+getUpdateOracleConfigDiscriminato…  function  …a/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:15:17
+getUpdateOracleConfigInstructionD…  function  …a/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:24:17
+getUpdateOracleConfigInstructionD…  function  …a/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:28:17
+getUpdateOracleConfigInstructionD…  function  …a/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:32:17
+getUpdateOracleConfigInstructionA…  function  …a/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:43:23
+getUpdateOracleConfigInstruction    function  …a/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:72:17
+UPSERT_DUEL_DISCRIMINATOR                     …et-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:14:14
+getUpsertDuelDiscriminatorBytes     function  …et-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:16:17
+getUpsertDuelInstructionDataEncod…  function  …et-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:25:17
+getUpsertDuelInstructionDataDecod…  function  …et-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:29:17
+getUpsertDuelInstructionDataCodec   function  …et-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:33:17
+getUpsertDuelInstructionAsync       function  …et-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:52:23
+getUpsertDuelInstruction            function  …et-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:95:17
+identifyFightOracleInstruction      function  …erbet-solana/app/src/generated/fight-oracle/programs/fightOracle.ts:25:17
+parseFightOracleInstruction         function  …erbet-solana/app/src/generated/fight-oracle/programs/fightOracle.ts:43:25
+expectAddress                       function  …ages/hyperbet-solana/app/src/generated/fight-oracle/shared/index.ts:26:17
+expectProgramDerivedAddress         function  …ages/hyperbet-solana/app/src/generated/fight-oracle/shared/index.ts:45:17
+expectTransactionSigner             function  …ages/hyperbet-solana/app/src/generated/fight-oracle/shared/index.ts:58:17
+isTransactionSigner                 function  …ges/hyperbet-solana/app/src/generated/fight-oracle/shared/index.ts:107:17
+getDuelCancelledEncoder             function  …perbet-solana/app/src/generated/fight-oracle/types/duelCancelled.ts:15:17
+getDuelCancelledDecoder             function  …perbet-solana/app/src/generated/fight-oracle/types/duelCancelled.ts:19:17
+getDuelCancelledCodec               function  …perbet-solana/app/src/generated/fight-oracle/types/duelCancelled.ts:23:17
+getDuelResolvedEncoder              function  …yperbet-solana/app/src/generated/fight-oracle/types/duelResolved.ts:16:17
+getDuelResolvedDecoder              function  …yperbet-solana/app/src/generated/fight-oracle/types/duelResolved.ts:20:17
+getDuelResolvedCodec                function  …yperbet-solana/app/src/generated/fight-oracle/types/duelResolved.ts:24:17
+getDuelStatusCodec                  function  …/hyperbet-solana/app/src/generated/fight-oracle/types/duelStatus.ts:23:17
+getDuelUpsertedEncoder              function  …yperbet-solana/app/src/generated/fight-oracle/types/duelUpserted.ts:16:17
+getDuelUpsertedDecoder              function  …yperbet-solana/app/src/generated/fight-oracle/types/duelUpserted.ts:20:17
+getDuelUpsertedCodec                function  …yperbet-solana/app/src/generated/fight-oracle/types/duelUpserted.ts:24:17
+getMarketSideCodec                  function  …/hyperbet-solana/app/src/generated/fight-oracle/types/marketSide.ts:23:17
+CANCEL_ORDER_DISCRIMINATOR                    …lana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:13:14
+getCancelOrderDiscriminatorBytes    function  …lana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:15:17
+getCancelOrderInstructionDataEnco…  function  …lana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:24:17
+getCancelOrderInstructionDataDeco…  function  …lana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:28:17
+getCancelOrderInstructionDataCodec  function  …lana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:32:17
+getCancelOrderInstructionAsync      function  …lana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:49:23
+getCancelOrderInstruction           function  …lana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:90:17
+CLAIM_DISCRIMINATOR                           …bet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:13:14
+getClaimDiscriminatorBytes          function  …bet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:15:17
+getClaimInstructionDataEncoder      function  …bet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:24:17
+getClaimInstructionDataDecoder      function  …bet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:28:17
+getClaimInstructionDataCodec        function  …bet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:32:17
+getClaimInstructionAsync            function  …bet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:47:23
+getClaimInstruction                 function  …bet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:85:17
+INITIALIZE_CONFIG_DISCRIMINATOR               …app/src/generated/gold-clob-market/instructions/initializeConfig.ts:13:14
+getInitializeConfigDiscriminatorB…  function  …app/src/generated/gold-clob-market/instructions/initializeConfig.ts:15:17
+getInitializeConfigInstructionDat…  function  …app/src/generated/gold-clob-market/instructions/initializeConfig.ts:24:17
+getInitializeConfigInstructionDat…  function  …app/src/generated/gold-clob-market/instructions/initializeConfig.ts:28:17
+getInitializeConfigInstructionDat…  function  …app/src/generated/gold-clob-market/instructions/initializeConfig.ts:32:17
+getInitializeConfigInstructionAsy…  function  …app/src/generated/gold-clob-market/instructions/initializeConfig.ts:50:23
+getInitializeConfigInstruction      function  …app/src/generated/gold-clob-market/instructions/initializeConfig.ts:92:17
+INITIALIZE_MARKET_DISCRIMINATOR               …app/src/generated/gold-clob-market/instructions/initializeMarket.ts:13:14
+getInitializeMarketDiscriminatorB…  function  …app/src/generated/gold-clob-market/instructions/initializeMarket.ts:15:17
+getInitializeMarketInstructionDat…  function  …app/src/generated/gold-clob-market/instructions/initializeMarket.ts:24:17
+getInitializeMarketInstructionDat…  function  …app/src/generated/gold-clob-market/instructions/initializeMarket.ts:28:17
+getInitializeMarketInstructionDat…  function  …app/src/generated/gold-clob-market/instructions/initializeMarket.ts:32:17
+getInitializeMarketInstructionAsy…  function  …app/src/generated/gold-clob-market/instructions/initializeMarket.ts:47:23
+getInitializeMarketInstruction      function  …app/src/generated/gold-clob-market/instructions/initializeMarket.ts:86:17
+PLACE_ORDER_DISCRIMINATOR                     …olana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:13:14
+getPlaceOrderDiscriminatorBytes     function  …olana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:15:17
+getPlaceOrderInstructionDataEncod…  function  …olana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:24:17
+getPlaceOrderInstructionDataDecod…  function  …olana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:28:17
+getPlaceOrderInstructionDataCodec   function  …olana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:32:17
+getPlaceOrderInstructionAsync       function  …olana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:54:23
+getPlaceOrderInstruction            function  …lana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:106:17
+SYNC_MARKET_FROM_DUEL_DISCRIMINAT…            …p/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:13:14
+getSyncMarketFromDuelDiscriminato…  function  …p/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:15:17
+getSyncMarketFromDuelInstructionD…  function  …p/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:24:17
+getSyncMarketFromDuelInstructionD…  function  …p/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:28:17
+getSyncMarketFromDuelInstructionD…  function  …p/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:32:17
+getSyncMarketFromDuelInstruction    function  …p/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:41:17
+UPDATE_CONFIG_DISCRIMINATOR                   …ana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:13:14
+getUpdateConfigDiscriminatorBytes   function  …ana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:15:17
+getUpdateConfigInstructionDataEnc…  function  …ana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:24:17
+getUpdateConfigInstructionDataDec…  function  …ana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:28:17
+getUpdateConfigInstructionDataCod…  function  …ana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:32:17
+getUpdateConfigInstructionAsync     function  …ana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:48:23
+getUpdateConfigInstruction          function  …ana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:82:17
+identifyGoldClobMarketAccount       function  …olana/app/src/generated/gold-clob-market/programs/goldClobMarket.ts:16:17
+identifyGoldClobMarketInstruction   function  …olana/app/src/generated/gold-clob-market/programs/goldClobMarket.ts:29:17
+parseGoldClobMarketInstruction      function  …olana/app/src/generated/gold-clob-market/programs/goldClobMarket.ts:51:25
+expectProgramDerivedAddress         function  …/hyperbet-solana/app/src/generated/gold-clob-market/shared/index.ts:45:17
+expectTransactionSigner             function  …/hyperbet-solana/app/src/generated/gold-clob-market/shared/index.ts:58:17
+isTransactionSigner                 function  …hyperbet-solana/app/src/generated/gold-clob-market/shared/index.ts:107:17
+DEPOSIT_INSURANCE_DISCRIMINATOR               …pp/src/generated/gold-perps-market/instructions/depositInsurance.ts:13:14
+getDepositInsuranceDiscriminatorB…  function  …pp/src/generated/gold-perps-market/instructions/depositInsurance.ts:15:17
+getDepositInsuranceInstructionDat…  function  …pp/src/generated/gold-perps-market/instructions/depositInsurance.ts:24:17
+getDepositInsuranceInstructionDat…  function  …pp/src/generated/gold-perps-market/instructions/depositInsurance.ts:28:17
+getDepositInsuranceInstructionDat…  function  …pp/src/generated/gold-perps-market/instructions/depositInsurance.ts:32:17
+getDepositInsuranceInstructionAsy…  function  …pp/src/generated/gold-perps-market/instructions/depositInsurance.ts:44:23
+getDepositInsuranceInstruction      function  …pp/src/generated/gold-perps-market/instructions/depositInsurance.ts:77:17
+INITIALIZE_CONFIG_DISCRIMINATOR               …pp/src/generated/gold-perps-market/instructions/initializeConfig.ts:13:14
+getInitializeConfigDiscriminatorB…  function  …pp/src/generated/gold-perps-market/instructions/initializeConfig.ts:15:17
+getInitializeConfigInstructionDat…  function  …pp/src/generated/gold-perps-market/instructions/initializeConfig.ts:24:17
+getInitializeConfigInstructionDat…  function  …pp/src/generated/gold-perps-market/instructions/initializeConfig.ts:28:17
+getInitializeConfigInstructionDat…  function  …pp/src/generated/gold-perps-market/instructions/initializeConfig.ts:32:17
+getInitializeConfigInstructionAsy…  function  …pp/src/generated/gold-perps-market/instructions/initializeConfig.ts:61:23
+getInitializeConfigInstruction      function  …p/src/generated/gold-perps-market/instructions/initializeConfig.ts:114:17
+LIQUIDATE_POSITION_DISCRIMINATOR              …p/src/generated/gold-perps-market/instructions/liquidatePosition.ts:13:14
+getLiquidatePositionDiscriminator…  function  …p/src/generated/gold-perps-market/instructions/liquidatePosition.ts:15:17
+getLiquidatePositionInstructionDa…  function  …p/src/generated/gold-perps-market/instructions/liquidatePosition.ts:24:17
+getLiquidatePositionInstructionDa…  function  …p/src/generated/gold-perps-market/instructions/liquidatePosition.ts:28:17
+getLiquidatePositionInstructionDa…  function  …p/src/generated/gold-perps-market/instructions/liquidatePosition.ts:32:17
+getLiquidatePositionInstructionAs…  function  …p/src/generated/gold-perps-market/instructions/liquidatePosition.ts:45:23
+getLiquidatePositionInstruction     function  …p/src/generated/gold-perps-market/instructions/liquidatePosition.ts:79:17
+MODIFY_POSITION_DISCRIMINATOR                 …/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:13:14
+getModifyPositionDiscriminatorByt…  function  …/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:15:17
+getModifyPositionInstructionDataE…  function  …/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:24:17
+getModifyPositionInstructionDataD…  function  …/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:28:17
+getModifyPositionInstructionDataC…  function  …/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:32:17
+getModifyPositionInstructionAsync   function  …/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:48:23
+getModifyPositionInstruction        function  …/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:91:17
+RECYCLE_MARKET_MAKER_FEES_DISCRIM…            …/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:13:14
+getRecycleMarketMakerFeesDiscrimi…  function  …/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:15:17
+getRecycleMarketMakerFeesInstruct…  function  …/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:24:17
+getRecycleMarketMakerFeesInstruct…  function  …/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:28:17
+getRecycleMarketMakerFeesInstruct…  function  …/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:32:17
+getRecycleMarketMakerFeesInstruct…  function  …/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:44:23
+getRecycleMarketMakerFeesInstruct…  function  …/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:77:17
+SET_MARKET_STATUS_DISCRIMINATOR               …app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:13:14
+getSetMarketStatusDiscriminatorBy…  function  …app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:15:17
+getSetMarketStatusInstructionData…  function  …app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:24:17
+getSetMarketStatusInstructionData…  function  …app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:28:17
+getSetMarketStatusInstructionData…  function  …app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:32:17
+getSetMarketStatusInstructionAsync  function  …app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:45:23
+getSetMarketStatusInstruction       function  …app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:79:17
+UPDATE_CONFIG_DISCRIMINATOR                   …na/app/src/generated/gold-perps-market/instructions/updateConfig.ts:13:14
+getUpdateConfigDiscriminatorBytes   function  …na/app/src/generated/gold-perps-market/instructions/updateConfig.ts:15:17
+getUpdateConfigInstructionDataEnc…  function  …na/app/src/generated/gold-perps-market/instructions/updateConfig.ts:24:17
+getUpdateConfigInstructionDataDec…  function  …na/app/src/generated/gold-perps-market/instructions/updateConfig.ts:28:17
+getUpdateConfigInstructionDataCod…  function  …na/app/src/generated/gold-perps-market/instructions/updateConfig.ts:32:17
+getUpdateConfigInstructionAsync     function  …na/app/src/generated/gold-perps-market/instructions/updateConfig.ts:58:23
+getUpdateConfigInstruction          function  …a/app/src/generated/gold-perps-market/instructions/updateConfig.ts:102:17
+UPDATE_MARKET_ORACLE_DISCRIMINATOR            …/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:13:14
+getUpdateMarketOracleDiscriminato…  function  …/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:15:17
+getUpdateMarketOracleInstructionD…  function  …/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:24:17
+getUpdateMarketOracleInstructionD…  function  …/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:28:17
+getUpdateMarketOracleInstructionD…  function  …/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:32:17
+getUpdateMarketOracleInstructionA…  function  …/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:47:23
+getUpdateMarketOracleInstruction    function  …/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:86:17
+WITHDRAW_FEE_BALANCE_DISCRIMINATOR            …/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:13:14
+getWithdrawFeeBalanceDiscriminato…  function  …/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:15:17
+getWithdrawFeeBalanceInstructionD…  function  …/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:24:17
+getWithdrawFeeBalanceInstructionD…  function  …/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:28:17
+getWithdrawFeeBalanceInstructionD…  function  …/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:32:17
+getWithdrawFeeBalanceInstructionA…  function  …/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:46:23
+getWithdrawFeeBalanceInstruction    function  …/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:81:17
+identifyGoldPerpsMarketAccount      function  …ana/app/src/generated/gold-perps-market/programs/goldPerpsMarket.ts:16:17
+identifyGoldPerpsMarketInstruction  function  …ana/app/src/generated/gold-perps-market/programs/goldPerpsMarket.ts:26:17
+parseGoldPerpsMarketInstruction     function  …ana/app/src/generated/gold-perps-market/programs/goldPerpsMarket.ts:52:25
+expectProgramDerivedAddress         function  …hyperbet-solana/app/src/generated/gold-perps-market/shared/index.ts:45:17
+expectTransactionSigner             function  …hyperbet-solana/app/src/generated/gold-perps-market/shared/index.ts:58:17
+isTransactionSigner                 function  …yperbet-solana/app/src/generated/gold-perps-market/shared/index.ts:107:17
+ACTIVE_ENV                                    packages/hyperbet-solana/app/src/lib/config.ts:89:14                      
+RUNTIME_ENV                                   packages/hyperbet-solana/app/src/lib/config.ts:126:14                     
+ENV_CONFIGS                                   packages/hyperbet-solana/app/src/lib/config.ts:206:14                     
+GOLD_MAINNET_MINT                             packages/hyperbet-solana/app/src/lib/config.ts:389:14                     
+SOL_MINT                                      packages/hyperbet-solana/app/src/lib/config.ts:392:14                     
+USDC_MINT                                     packages/hyperbet-solana/app/src/lib/config.ts:395:14                     
+DEFAULT_BET_WINDOW_SECONDS                    packages/hyperbet-solana/app/src/lib/config.ts:398:14                     
+DEFAULT_NEW_ROUND_BET_WINDOW_SECO…            packages/hyperbet-solana/app/src/lib/config.ts:399:14                     
+DEFAULT_AUTO_SEED_DELAY_SECONDS               packages/hyperbet-solana/app/src/lib/config.ts:401:14                     
+DEFAULT_SEED_SOL_AMOUNT                       packages/hyperbet-solana/app/src/lib/config.ts:402:14                     
+DEFAULT_BET_FEE_BPS                           packages/hyperbet-solana/app/src/lib/config.ts:403:14                     
+toBaseUnits                         function  packages/hyperbet-solana/app/src/lib/config.ts:407:17                     
+STREAM_URL                                    packages/hyperbet-solana/app/src/lib/config.ts:411:14                     
+GAME_WS_URL                                   packages/hyperbet-solana/app/src/lib/config.ts:414:14                     
+ENABLE_MANUAL_MARKET_ADMIN_CONTRO…            packages/hyperbet-solana/app/src/lib/config.ts:441:14                     
+buildArenaWriteHeaders              function  packages/hyperbet-solana/app/src/lib/config.ts:445:17                     
+getHeadlessWalletName               function  packages/hyperbet-solana/app/src/lib/headlessWallet.ts:234:17             
+isHeadlessWalletEnabled             function  packages/hyperbet-solana/app/src/lib/headlessWallet.ts:238:17             
+shouldAutoConnectHeadlessWallet     function  packages/hyperbet-solana/app/src/lib/headlessWallet.ts:242:17             
+fightOracleProgramAddress                     packages/hyperbet-solana/app/src/lib/programIds.ts:19:14                  
+goldClobMarketProgramAddress                  packages/hyperbet-solana/app/src/lib/programIds.ts:24:14                  
+goldPerpsMarketProgramAddress                 packages/hyperbet-solana/app/src/lib/programIds.ts:29:14                  
+GOLD_CLOB_MARKET_PROGRAM_ID                   packages/hyperbet-solana/app/src/lib/programIds.ts:38:14                  
+GOLD_PERPS_MARKET_PROGRAM_ID                  packages/hyperbet-solana/app/src/lib/programIds.ts:42:14                  
+DUEL_STATUS_SCHEDULED                         packages/simulation-dashboard/src/helpers.ts:7:14                         
+DUEL_STATUS_LOCKED                            packages/simulation-dashboard/src/helpers.ts:9:14                         
+Unused exported types (114)
+SolanaCluster                    type       packages/hyperbet-avax/app/src/lib/config.ts:10:13                          
+Environment                      type       packages/hyperbet-avax/app/src/lib/config.ts:16:13                          
+EnvConfig                        interface  packages/hyperbet-avax/app/src/lib/config.ts:200:18                         
+SolanaCluster                    type       packages/hyperbet-bsc/app/src/lib/config.ts:10:13                           
+Environment                      type       packages/hyperbet-bsc/app/src/lib/config.ts:16:13                           
+EnvConfig                        interface  packages/hyperbet-bsc/app/src/lib/config.ts:218:18                          
+DuelStateArgs                    type       …/hyperbet-solana/app/src/generated/fight-oracle/accounts/duelState.ts:18:13
+OracleConfig                     type       …perbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:15:13
+OracleConfigArgs                 type       …perbet-solana/app/src/generated/fight-oracle/accounts/oracleConfig.ts:17:13
+CancelDuelInstruction            type       …rbet-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:17:13
+CancelDuelInstructionDataArgs    type       …rbet-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:22:13
+CancelDuelAsyncInput             type       …rbet-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:36:13
+CancelDuelInput                  type       …rbet-solana/app/src/generated/fight-oracle/instructions/cancelDuel.ts:69:13
+InitializeOracleInstruction      type       …olana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:17:13
+InitializeOracleInstructionDat…  type       …olana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:22:13
+InitializeOracleAsyncInput       type       …olana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:36:13
+InitializeOracleInput            type       …olana/app/src/generated/fight-oracle/instructions/initializeOracle.ts:73:13
+ReportResultInstruction          type       …et-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:18:13
+ReportResultInstructionDataArgs  type       …et-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:23:13
+ReportResultAsyncInput           type       …et-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:37:13
+ReportResultInput                type       …et-solana/app/src/generated/fight-oracle/instructions/reportResult.ts:75:13
+UpdateOracleConfigInstruction    type       …ana/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:17:13
+UpdateOracleConfigInstructionD…  type       …ana/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:22:13
+UpdateOracleConfigAsyncInput     type       …ana/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:36:13
+UpdateOracleConfigInput          type       …ana/app/src/generated/fight-oracle/instructions/updateOracleConfig.ts:65:13
+UpsertDuelInstruction            type       …rbet-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:18:13
+UpsertDuelInstructionDataArgs    type       …rbet-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:23:13
+UpsertDuelAsyncInput             type       …rbet-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:37:13
+UpsertDuelInput                  type       …rbet-solana/app/src/generated/fight-oracle/instructions/upsertDuel.ts:80:13
+FightOracleInstruction           enum       …yperbet-solana/app/src/generated/fight-oracle/programs/fightOracle.ts:23:13
+ParsedFightOracleInstruction     type       …yperbet-solana/app/src/generated/fight-oracle/programs/fightOracle.ts:35:13
+InstructionWithByteDelta         type       …ckages/hyperbet-solana/app/src/generated/fight-oracle/shared/index.ts:80:13
+DuelCancelled                    type       …hyperbet-solana/app/src/generated/fight-oracle/types/duelCancelled.ts:11:13
+DuelCancelledArgs                type       …hyperbet-solana/app/src/generated/fight-oracle/types/duelCancelled.ts:13:13
+DuelResolved                     type       …/hyperbet-solana/app/src/generated/fight-oracle/types/duelResolved.ts:12:13
+DuelResolvedArgs                 type       …/hyperbet-solana/app/src/generated/fight-oracle/types/duelResolved.ts:14:13
+DuelUpserted                     type       …/hyperbet-solana/app/src/generated/fight-oracle/types/duelUpserted.ts:12:13
+DuelUpsertedArgs                 type       …/hyperbet-solana/app/src/generated/fight-oracle/types/duelUpserted.ts:14:13
+CancelOrderInstruction           type       …solana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:17:13
+CancelOrderInstructionDataArgs   type       …solana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:22:13
+CancelOrderAsyncInput            type       …solana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:36:13
+CancelOrderInput                 type       …solana/app/src/generated/gold-clob-market/instructions/cancelOrder.ts:77:13
+ClaimInstruction                 type       …erbet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:17:13
+ClaimInstructionDataArgs         type       …erbet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:22:13
+ClaimAsyncInput                  type       …erbet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:36:13
+ClaimInput                       type       …erbet-solana/app/src/generated/gold-clob-market/instructions/claim.ts:74:13
+InitializeConfigInstruction      type       …a/app/src/generated/gold-clob-market/instructions/initializeConfig.ts:17:13
+InitializeConfigInstructionDat…  type       …a/app/src/generated/gold-clob-market/instructions/initializeConfig.ts:22:13
+InitializeConfigAsyncInput       type       …a/app/src/generated/gold-clob-market/instructions/initializeConfig.ts:36:13
+InitializeConfigInput            type       …a/app/src/generated/gold-clob-market/instructions/initializeConfig.ts:78:13
+InitializeMarketInstruction      type       …a/app/src/generated/gold-clob-market/instructions/initializeMarket.ts:17:13
+InitializeMarketInstructionDat…  type       …a/app/src/generated/gold-clob-market/instructions/initializeMarket.ts:22:13
+InitializeMarketAsyncInput       type       …a/app/src/generated/gold-clob-market/instructions/initializeMarket.ts:36:13
+InitializeMarketInput            type       …a/app/src/generated/gold-clob-market/instructions/initializeMarket.ts:75:13
+PlaceOrderInstruction            type       …-solana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:17:13
+PlaceOrderInstructionDataArgs    type       …-solana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:22:13
+PlaceOrderAsyncInput             type       …-solana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:36:13
+PlaceOrderInput                  type       …-solana/app/src/generated/gold-clob-market/instructions/placeOrder.ts:88:13
+SyncMarketFromDuelInstruction    type       …app/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:17:13
+SyncMarketFromDuelInstructionD…  type       …app/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:22:13
+SyncMarketFromDuelInput          type       …app/src/generated/gold-clob-market/instructions/syncMarketFromDuel.ts:36:13
+UpdateConfigInstruction          type       …olana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:17:13
+UpdateConfigInstructionDataArgs  type       …olana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:22:13
+UpdateConfigAsyncInput           type       …olana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:36:13
+UpdateConfigInput                type       …olana/app/src/generated/gold-clob-market/instructions/updateConfig.ts:70:13
+GoldClobMarketAccount            enum       …-solana/app/src/generated/gold-clob-market/programs/goldClobMarket.ts:14:13
+GoldClobMarketInstruction        enum       …-solana/app/src/generated/gold-clob-market/programs/goldClobMarket.ts:27:13
+ParsedGoldClobMarketInstruction  type       …-solana/app/src/generated/gold-clob-market/programs/goldClobMarket.ts:41:13
+InstructionWithByteDelta         type       …es/hyperbet-solana/app/src/generated/gold-clob-market/shared/index.ts:80:13
+DepositInsuranceInstruction      type       …/app/src/generated/gold-perps-market/instructions/depositInsurance.ts:17:13
+DepositInsuranceInstructionDat…  type       …/app/src/generated/gold-perps-market/instructions/depositInsurance.ts:22:13
+DepositInsuranceAsyncInput       type       …/app/src/generated/gold-perps-market/instructions/depositInsurance.ts:36:13
+DepositInsuranceInput            type       …/app/src/generated/gold-perps-market/instructions/depositInsurance.ts:69:13
+InitializeConfigInstruction      type       …/app/src/generated/gold-perps-market/instructions/initializeConfig.ts:17:13
+InitializeConfigInstructionDat…  type       …/app/src/generated/gold-perps-market/instructions/initializeConfig.ts:22:13
+InitializeConfigAsyncInput       type       …/app/src/generated/gold-perps-market/instructions/initializeConfig.ts:36:13
+InitializeConfigInput            type       …/app/src/generated/gold-perps-market/instructions/initializeConfig.ts:89:13
+LiquidatePositionInstruction     type       …app/src/generated/gold-perps-market/instructions/liquidatePosition.ts:17:13
+LiquidatePositionInstructionDa…  type       …app/src/generated/gold-perps-market/instructions/liquidatePosition.ts:22:13
+LiquidatePositionAsyncInput      type       …app/src/generated/gold-perps-market/instructions/liquidatePosition.ts:36:13
+LiquidatePositionInput           type       …app/src/generated/gold-perps-market/instructions/liquidatePosition.ts:70:13
+ModifyPositionInstruction        type       …na/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:17:13
+ModifyPositionInstructionDataA…  type       …na/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:22:13
+ModifyPositionAsyncInput         type       …na/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:36:13
+ModifyPositionInput              type       …na/app/src/generated/gold-perps-market/instructions/modifyPosition.ts:79:13
+RecycleMarketMakerFeesInstruct…  type       …rc/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:17:13
+RecycleMarketMakerFeesInstruct…  type       …rc/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:22:13
+RecycleMarketMakerFeesAsyncInp…  type       …rc/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:36:13
+RecycleMarketMakerFeesInput      type       …rc/generated/gold-perps-market/instructions/recycleMarketMakerFees.ts:69:13
+SetMarketStatusInstruction       type       …a/app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:17:13
+SetMarketStatusInstructionData…  type       …a/app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:22:13
+SetMarketStatusAsyncInput        type       …a/app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:36:13
+SetMarketStatusInput             type       …a/app/src/generated/gold-perps-market/instructions/setMarketStatus.ts:70:13
+UpdateConfigInstruction          type       …lana/app/src/generated/gold-perps-market/instructions/updateConfig.ts:17:13
+UpdateConfigInstructionDataArgs  type       …lana/app/src/generated/gold-perps-market/instructions/updateConfig.ts:22:13
+UpdateConfigAsyncInput           type       …lana/app/src/generated/gold-perps-market/instructions/updateConfig.ts:36:13
+UpdateConfigInput                type       …lana/app/src/generated/gold-perps-market/instructions/updateConfig.ts:80:13
+UpdateMarketOracleInstruction    type       …pp/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:17:13
+UpdateMarketOracleInstructionD…  type       …pp/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:22:13
+UpdateMarketOracleAsyncInput     type       …pp/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:36:13
+UpdateMarketOracleInput          type       …pp/src/generated/gold-perps-market/instructions/updateMarketOracle.ts:75:13
+WithdrawFeeBalanceInstruction    type       …pp/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:17:13
+WithdrawFeeBalanceInstructionD…  type       …pp/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:22:13
+WithdrawFeeBalanceAsyncInput     type       …pp/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:36:13
+WithdrawFeeBalanceInput          type       …pp/src/generated/gold-perps-market/instructions/withdrawFeeBalance.ts:71:13
+GoldPerpsMarketAccount           enum       …olana/app/src/generated/gold-perps-market/programs/goldPerpsMarket.ts:14:13
+GoldPerpsMarketInstruction       enum       …olana/app/src/generated/gold-perps-market/programs/goldPerpsMarket.ts:24:13
+ParsedGoldPerpsMarketInstructi…  type       …olana/app/src/generated/gold-perps-market/programs/goldPerpsMarket.ts:40:13
+InstructionWithByteDelta         type       …s/hyperbet-solana/app/src/generated/gold-perps-market/shared/index.ts:80:13
+Environment                      type       packages/hyperbet-solana/app/src/lib/config.ts:11:13                        
+EnvConfig                        interface  packages/hyperbet-solana/app/src/lib/config.ts:148:18                       
+StreamingPhase                   type       packages/hyperbet-solana/app/src/spectator/types.ts:1:13                    
+AgentInfo                        interface  packages/hyperbet-solana/app/src/spectator/types.ts:8:18                    
+ScenarioPreset                   type       packages/simulation-dashboard/src/agents.ts:519:13                          
+Unused exported enum members (8)
+Scheduled    DuelStatus  packages/hyperbet-solana/app/src/generated/fight-oracle/types/duelStatus.ts:11:26
+BettingOpen  DuelStatus  packages/hyperbet-solana/app/src/generated/fight-oracle/types/duelStatus.ts:11:37
+Locked       DuelStatus  packages/hyperbet-solana/app/src/generated/fight-oracle/types/duelStatus.ts:11:50
+Resolved     DuelStatus  packages/hyperbet-solana/app/src/generated/fight-oracle/types/duelStatus.ts:11:58
+Cancelled    DuelStatus  packages/hyperbet-solana/app/src/generated/fight-oracle/types/duelStatus.ts:11:68
+None         MarketSide  packages/hyperbet-solana/app/src/generated/fight-oracle/types/marketSide.ts:11:26
+A            MarketSide  packages/hyperbet-solana/app/src/generated/fight-oracle/types/marketSide.ts:11:32
+B            MarketSide  packages/hyperbet-solana/app/src/generated/fight-oracle/types/marketSide.ts:11:35
+Configuration hints (13)

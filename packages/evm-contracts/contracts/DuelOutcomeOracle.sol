@@ -103,7 +103,7 @@ contract DuelOutcomeOracle is AccessControl {
 
         DuelState storage duel = duels[duelKey];
         _requireSettleable(duel);
-        require(_statusRank(status) >= _statusRank(duel.status), "invalid transition");
+        require(uint8(status) >= uint8(duel.status), "invalid transition");
 
         duel.duelKey = duelKey;
         duel.participantAHash = participantAHash;
@@ -129,7 +129,6 @@ contract DuelOutcomeOracle is AccessControl {
         require(duel.status != DuelStatus.NULL, "duel missing");
         _requireSettleable(duel);
         duel.status = DuelStatus.CANCELLED;
-        duel.winner = Side.NONE;
         duel.metadataUri = metadataUri;
         emit DuelCancelled(duelKey, metadataUri);
     }
@@ -173,7 +172,5 @@ contract DuelOutcomeOracle is AccessControl {
         require(duel.status != DuelStatus.CANCELLED, "duel cancelled");
     }
 
-    function _statusRank(DuelStatus status) private pure returns (uint8) {
-        return uint8(status);
-    }
 }
+

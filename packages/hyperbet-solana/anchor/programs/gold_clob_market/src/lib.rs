@@ -139,13 +139,9 @@ pub mod gold_clob_market {
         market_state.duel_key = duel_key;
         market_state.market_kind = market_kind;
         market_state.status = map_duel_status(ctx.accounts.duel_state.status);
-        market_state.winner = MarketSide::None;
         market_state.next_order_id = 1;
-        market_state.best_bid = 0;
         market_state.best_ask = 1000;
         market_state.authority = ctx.accounts.operator.key();
-        market_state.bid_bitmap = [0; BITMAP_WORDS];
-        market_state.ask_bitmap = [0; BITMAP_WORDS];
         Ok(())
     }
 
@@ -154,8 +150,7 @@ pub mod gold_clob_market {
             &mut ctx.accounts.market_state,
             &ctx.accounts.duel_state,
             ctx.accounts.duel_state.key(),
-        )?;
-        Ok(())
+        )
     }
 
     pub fn place_order<'info>(
@@ -627,11 +622,7 @@ pub mod gold_clob_market {
             }
             require!(winning_shares > 0, ErrorCode::NothingToClaim);
 
-            let fee = winning_shares
-                .checked_mul(ctx.accounts.config.winnings_market_maker_fee_bps as u64)
-                .ok_or(ErrorCode::MathOverflow)?
-                .checked_div(10_000)
-                .ok_or(ErrorCode::MathOverflow)?;
+            let fee = bps_fee(winning_shares, ctx.accounts.config.winnings_market_maker_fee_bps)?;
             let payout = winning_shares
                 .checked_sub(fee)
                 .ok_or(ErrorCode::MathOverflow)?;

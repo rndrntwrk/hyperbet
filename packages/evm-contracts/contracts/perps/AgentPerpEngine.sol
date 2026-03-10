@@ -27,7 +27,6 @@ contract AgentPerpEngine is Ownable {
         int256 size;
         uint256 margin;
         uint256 entryPrice;
-        int256 lastFundingRate;
     }
 
     mapping(bytes32 => MarketState) public markets;
@@ -241,6 +240,7 @@ contract AgentPerpEngine is Ownable {
         _removeOpenInterest(market, pos.size);
 
         uint256 seizedMargin = pos.margin;
+        int256 liquidatedSize = pos.size;
         pos.size = 0;
         pos.margin = 0;
         pos.entryPrice = 0;
@@ -249,7 +249,7 @@ contract AgentPerpEngine is Ownable {
         insuranceFund += seizedMargin - liquidatorBonus;
         marginToken.safeTransfer(msg.sender, liquidatorBonus);
 
-        emit PositionLiquidated(agentId, trader, 0, execPrice);
+        emit PositionLiquidated(agentId, trader, liquidatedSize, execPrice);
     }
 
     function withdrawInsuranceFund(address to, uint256 amount) external onlyOwner {

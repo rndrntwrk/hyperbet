@@ -21,7 +21,6 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
         int256 size;
         uint256 margin;
         uint256 entryPrice;
-        int256 lastFundingRate;
     }
 
     mapping(bytes32 => MarketState) public markets;
@@ -220,9 +219,8 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
     function withdrawMargin(bytes32 agentId, uint256 amount) external nonReentrant {
         Position storage pos = positions[agentId][msg.sender];
         require(pos.margin >= amount, "Insufficient margin");
-        uint256 remainingMargin = pos.margin - amount;
-        _assertLeverage(agentId, pos.size, remainingMargin);
-        pos.margin = remainingMargin;
+        _assertLeverage(agentId, pos.size, pos.margin - amount);
+        pos.margin -= amount;
         emit MarginWithdrawn(agentId, msg.sender, amount);
         Address.sendValue(payable(msg.sender), amount);
     }
@@ -236,7 +234,7 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
         int256 liquidatedSize = pos.size;
 
         MarketState storage market = markets[agentId];
-        uint256 execPrice = _getExecutionPrice(agentId, pos.size > 0 ? -pos.size : pos.size);
+        uint256 execPrice = _getExecutionPrice(agentId, -pos.size);
         int256 pnl = _realizePnl(pos.size, pos.entryPrice, execPrice, _abs(pos.size));
         int256 equity = int256(pos.margin) + pnl;
 

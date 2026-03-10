@@ -215,7 +215,7 @@ function buildEvmConfig(
   };
 }
 
-export interface EnvConfig {
+interface EnvConfig {
   cluster: SolanaCluster;
   rpcUrl: string;
   wsUrl?: string;
@@ -293,7 +293,7 @@ const baseConfig: Partial<EnvConfig> = {
   ).trim(),
 };
 
-export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
+const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   devnet: {
     ...baseConfig,
     ...buildSolanaProgramConfig("devnet"),

@@ -15,7 +15,6 @@ type PayableOverrides = {
 export type GoldClobMatch = {
   exists: boolean;
   duelKey: string;
-  marketKind: bigint;
   status: bigint;
   winner: bigint;
   nextOrderId: bigint;
@@ -48,7 +47,6 @@ export type PerpPosition = {
   size: bigint;
   margin: bigint;
   entryPrice: bigint;
-  lastFundingRate: bigint;
 };
 
 interface TypedContract<Self extends BaseContract> extends BaseContract {
