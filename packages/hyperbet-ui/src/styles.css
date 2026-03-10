@@ -115,11 +115,17 @@ body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  /* dynamic viewport height: avoids iOS toolbar overlap */
   overflow: hidden;
   background: var(--hm-bg, #0b0c0e);
   font-family: var(--hm-font-body, "Inter", system-ui, sans-serif);
   display: flex;
   flex-direction: column;
+  /* iPhone notch / home-bar safe areas */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .stream-bg {
