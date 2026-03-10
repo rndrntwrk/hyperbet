@@ -3,12 +3,14 @@ import { useMockStreamingEngine } from "./lib/useMockStreamingEngine";
 import { PredictionMarketPanel } from "./components/PredictionMarketPanel";
 import { AgentStats } from "./components/AgentStats";
 import { FightOverlay } from "./components/FightOverlay";
+import { getUiCopy, resolveUiLocale } from "./i18n";
 
 type BetSide = "YES" | "NO";
 
 export function StreamUIApp() {
   const mock = useMockStreamingEngine();
   const appRootRef = useRef<HTMLDivElement | null>(null);
+  const copy = getUiCopy(resolveUiLocale());
 
   const [side, setSide] = useState<BetSide>("YES");
   const [amountInput, setAmountInput] = useState("100");
@@ -145,16 +147,16 @@ export function StreamUIApp() {
                 padding: "6px 14px",
                 borderRadius: 10,
                 background: `linear-gradient(180deg, ${mock.statusColor === "#22c55e"
-                    ? "rgba(34,197,94,0.15)"
-                    : mock.statusColor === "#ef4444"
-                      ? "rgba(239,68,68,0.15)"
-                      : "rgba(234,179,8,0.12)"
+                  ? "rgba(34,197,94,0.15)"
+                  : mock.statusColor === "#ef4444"
+                    ? "rgba(239,68,68,0.15)"
+                    : "rgba(234,179,8,0.12)"
                   } 0%, rgba(0,0,0,0.2) 100%)`,
                 boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 8px ${mock.statusColor === "#22c55e"
-                    ? "rgba(34,197,94,0.12)"
-                    : mock.statusColor === "#ef4444"
-                      ? "rgba(239,68,68,0.12)"
-                      : "rgba(234,179,8,0.1)"
+                  ? "rgba(34,197,94,0.12)"
+                  : mock.statusColor === "#ef4444"
+                    ? "rgba(239,68,68,0.12)"
+                    : "rgba(234,179,8,0.1)"
                   }`,
               }}
             >
@@ -201,7 +203,7 @@ export function StreamUIApp() {
                 className="evm-connect-btn"
                 style={{ opacity: 0.5, cursor: "default", display: "none" }}
               >
-                Mock Wallet
+                {copy.mockWallet}
               </button>
               <div
                 style={{

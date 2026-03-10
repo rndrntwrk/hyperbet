@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { MockAgentContext } from "../lib/useMockStreamingEngine";
 import type { StreamingPhase } from "../spectator/types";
 import { GAME_API_URL } from "../lib/config";
+import { resolveUiLocale, getUiCopy } from "../i18n";
 
 interface FightOverlayProps {
   phase: StreamingPhase;
@@ -113,6 +114,8 @@ function AgentHPBar({
   const hpFillClipPath = isRight
     ? "polygon(10px 0, 100% 0, 100% 100%, 0 100%)"
     : "polygon(0 0, calc(100% - 10px) 0, 100% 100%, 0 100%)";
+  const locale = resolveUiLocale();
+  const copy = getUiCopy(locale);
   const inventoryBySlot = new Map(
     agent.inventory.map((item) => [item.slot, item]),
   );
@@ -243,7 +246,7 @@ function AgentHPBar({
             <span
               style={{ color: "#aaa", fontSize: "0.65rem", fontWeight: 800 }}
             >
-              OVR
+              {copy.overall}
             </span>
             <span
               style={{ color: "#f2d08a", fontSize: "0.9rem", fontWeight: 900 }}
@@ -265,7 +268,7 @@ function AgentHPBar({
             <span
               style={{ color: "#aaa", fontSize: "0.65rem", fontWeight: 800 }}
             >
-              H2H
+              {copy.headToHead}
             </span>
             <span
               style={{ color: "#f2d08a", fontSize: "0.9rem", fontWeight: 900 }}
@@ -382,7 +385,7 @@ function AgentHPBar({
               marginTop: 2,
             }}
           >
-            DMG
+            {copy.damage}
           </div>
         </div>
 
@@ -566,7 +569,9 @@ function AgentHPBar({
 }
 
 function CountdownDisplay({ count }: { count: number }) {
-  const displayText = count === 0 ? "FIGHT!" : count.toString();
+  const locale = resolveUiLocale();
+  const copy = getUiCopy(locale);
+  const displayText = count === 0 ? copy.fight : count.toString();
   const isFight = count === 0;
 
   return (
@@ -606,6 +611,8 @@ function VictoryDisplay({
   winner: MockAgentContext;
   winReason: string;
 }) {
+  const locale = resolveUiLocale();
+  const copy = getUiCopy(locale);
   return (
     <div
       style={{
@@ -638,7 +645,7 @@ function VictoryDisplay({
             marginBottom: 12,
           }}
         >
-          VICTORY
+          {copy.victory}
         </div>
         <div
           style={{
@@ -686,7 +693,7 @@ function VictoryDisplay({
                 letterSpacing: 1,
               }}
             >
-              Wins
+              {copy.wins}
             </div>
           </div>
           <div
@@ -710,7 +717,7 @@ function VictoryDisplay({
                 letterSpacing: 1,
               }}
             >
-              Losses
+              {copy.losses}
             </div>
           </div>
           <div
@@ -737,7 +744,7 @@ function VictoryDisplay({
                 letterSpacing: 1,
               }}
             >
-              Win Rate
+              {copy.winRate}
             </div>
           </div>
         </div>

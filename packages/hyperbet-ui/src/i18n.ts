@@ -24,6 +24,15 @@ type UiCopy = {
   actionLabel: (action: "buy" | "sell") => string;
   betAmountLabel: (symbol: string) => string;
   sellPanelDescription: (mode: "supported" | "evm" | "disabled") => string;
+  overall: string;
+  headToHead: string;
+  damage: string;
+  fight: string;
+  victory: string;
+  wins: string;
+  losses: string;
+  winRate: string;
+  mockWallet: string;
 };
 
 const UI_COPY: Record<UiLocale, UiCopy> = {
@@ -57,6 +66,15 @@ const UI_COPY: Record<UiLocale, UiCopy> = {
       }
       return "Sell disabled until market resolution.";
     },
+    overall: "OVR",
+    headToHead: "H2H",
+    damage: "DMG",
+    fight: "FIGHT!",
+    victory: "VICTORY",
+    wins: "Wins",
+    losses: "Losses",
+    winRate: "Win Rate",
+    mockWallet: "Mock Wallet",
   },
   zh: {
     stats: "数据",
@@ -88,6 +106,15 @@ const UI_COPY: Record<UiLocale, UiCopy> = {
       }
       return "市场结算前暂不支持卖出。";
     },
+    overall: "总计",
+    headToHead: "交手",
+    damage: "伤害",
+    fight: "战斗！",
+    victory: "胜利",
+    wins: "胜场",
+    losses: "败场",
+    winRate: "胜率",
+    mockWallet: "模拟钱包",
   },
 };
 
