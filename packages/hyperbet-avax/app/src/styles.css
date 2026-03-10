@@ -2476,6 +2476,332 @@ select:focus-visible {
   padding: 18px 20px 28px;
 }
 
+/* ================================================================
+   AVAX MODELS MARKET VIEW
+   ================================================================ */
+
+.hm-models-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* Header */
+.hm-models-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--hm-border);
+  margin-bottom: 16px;
+}
+
+.hm-models-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.hm-models-header-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hm-text);
+}
+
+.hm-models-header-count {
+  font-size: 11px;
+  color: var(--hm-text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* LIVE badge */
+.hm-models-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  background: rgba(134, 239, 172, 0.12);
+  border: 1px solid rgba(134, 239, 172, 0.3);
+  color: var(--hm-accent-green);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hm-models-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hm-accent-green);
+  animation: hm-pulse 1.4s ease-in-out infinite;
+}
+
+/* Fight spotlight */
+.hm-models-spotlight {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: var(--hm-radius);
+  background: rgba(134, 239, 172, 0.05);
+  border: 1px solid rgba(134, 239, 172, 0.18);
+  margin-bottom: 16px;
+}
+
+.hm-models-spotlight-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--hm-accent-green);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.hm-models-spotlight-matchup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--hm-text);
+  overflow: hidden;
+}
+
+.hm-models-spotlight-vs {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--hm-accent-gold);
+  flex-shrink: 0;
+}
+
+/* Table */
+.hm-models-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--hm-border);
+  border-radius: var(--hm-radius);
+}
+
+.hm-models-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.hm-models-thead-row {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--hm-border);
+}
+
+.hm-models-th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hm-text-muted);
+  white-space: nowrap;
+}
+
+.hm-models-th--rank { width: 60px; text-align: center; }
+.hm-models-th--winrate { width: 140px; }
+.hm-models-th--record { width: 90px; }
+.hm-models-th--streak { width: 80px; }
+
+.hm-models-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.12s;
+}
+
+.hm-models-row:last-child {
+  border-bottom: none;
+}
+
+.hm-models-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.hm-models-row--live {
+  background: rgba(134, 239, 172, 0.04);
+}
+
+.hm-models-row--live:hover {
+  background: rgba(134, 239, 172, 0.07);
+}
+
+.hm-models-td {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+
+.hm-models-td--rank { text-align: center; }
+
+/* Rank badge */
+.hm-models-rank-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--hm-text-muted);
+}
+
+/* Agent cell */
+.hm-models-agent-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hm-models-agent-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--hm-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hm-models-agent-model {
+  font-size: 10px;
+  color: var(--hm-text-muted);
+  font-family: var(--hm-font-mono);
+}
+
+.hm-models-row-live-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: rgba(134, 239, 172, 0.15);
+  border: 1px solid rgba(134, 239, 172, 0.3);
+  color: var(--hm-accent-green);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+}
+
+/* Provider pill */
+.hm-models-provider-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 2px;
+  border: 1px solid;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--hm-text);
+  background: rgba(255, 255, 255, 0.03);
+  white-space: nowrap;
+}
+
+.hm-models-provider-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Win rate */
+.hm-models-winrate-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hm-models-winrate-pct {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--hm-font-mono);
+  color: var(--hm-text);
+}
+
+.hm-models-winbar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 80px;
+}
+
+.hm-models-winbar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* W/L record */
+.hm-models-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-family: var(--hm-font-mono);
+}
+
+.hm-models-wins { color: var(--hm-accent-green); font-weight: 700; }
+.hm-models-losses { color: var(--hm-accent-red); font-weight: 700; }
+.hm-models-record-sep { color: var(--hm-text-muted); }
+
+/* Streak */
+.hm-models-streak {
+  font-size: 11px;
+  font-family: var(--hm-font-mono);
+}
+
+.hm-models-streak--hot {
+  color: var(--hm-accent-gold);
+  font-weight: 700;
+}
+
+.hm-models-streak--none {
+  color: var(--hm-text-dim);
+}
+
+/* Empty / loading states */
+.hm-models-loading,
+.hm-models-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--hm-text-muted);
+  font-size: 13px;
+}
+
+.hm-models-empty-sub {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--hm-text-dim);
+}
+
+/* Footer note */
+.hm-models-footer-note {
+  margin-top: 16px;
+  font-size: 10px;
+  color: var(--hm-text-dim);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+/* Mobile: stack provider + model into agent cell, hide some columns */
+@media (max-width: 640px) {
+  .hm-models-th--provider,
+  .hm-models-td--provider { display: none; }
+
+  .hm-models-th--streak,
+  .hm-models-td--streak { display: none; }
+
+  .hm-models-table { font-size: 11px; }
+  .hm-models-td { padding: 8px 8px; }
+}
+
 .hm-view-tabs {
   display: inline-flex;
   align-items: center;

@@ -384,9 +384,9 @@ const EvmBettingPanel = lazy(() =>
     default: module.EvmBettingPanel,
   })),
 );
-const ModelsMarketView = lazy(() =>
-  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
-    default: module.ModelsMarketView,
+const AvaxModelsMarketView = lazy(() =>
+  import("./components/AvaxModelsMarketView").then((module) => ({
+    default: module.AvaxModelsMarketView,
   })),
 );
 const PointsLeaderboard = lazy(() =>
@@ -1433,8 +1433,9 @@ const [hmBottomTab, setHmBottomTab] = useState<
                 <PanelFallback label={copy.loadingModelMarkets} minHeight={480} />
               }
             >
-              <ModelsMarketView
+              <AvaxModelsMarketView
                 activeMatchup={`${effA1.name} vs ${effA2.name}`}
+                locale={locale}
               />
             </Suspense>
           </div>

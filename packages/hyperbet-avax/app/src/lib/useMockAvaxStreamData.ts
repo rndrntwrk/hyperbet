@@ -23,9 +23,14 @@ export interface MockAgentSnapshot {
 }
 
 export interface MockLeaderboardEntry {
+  rank: number;
   agentName: string;
+  provider: string;
+  model: string;
   wins: number;
   losses: number;
+  winRate: number;
+  currentStreak: number;
 }
 
 export interface MockStreamingStateBridge {
@@ -79,6 +84,9 @@ export interface MockAvaxStreamData {
 
   /** Recent trade feed */
   recentTrades: MockTrade[];
+
+  /** Full ranked leaderboard of all agents */
+  leaderboard: MockLeaderboardEntry[];
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -150,9 +158,14 @@ function buildStreamingStateBridge(
   };
 
   const mappedLeaderboard: MockLeaderboardEntry[] = leaderboard.map((e) => ({
+    rank: e.rank,
     agentName: e.name,
+    provider: e.provider,
+    model: e.model,
     wins: e.wins,
     losses: e.losses,
+    winRate: e.winRate,
+    currentStreak: e.currentStreak,
   }));
 
   return {
@@ -198,15 +211,21 @@ export function MockDataProvider({ children }: MockDataProviderProps): React.Rea
       .map(([sec, pct]) => ({ time: sec * 1000, pct })); // back to ms for HmChart.toUTC
   })();
 
+  const streamingStateBridge = buildStreamingStateBridge(engine.streamState);
+
+  const leaderboard: MockLeaderboardEntry[] =
+    streamingStateBridge.state?.cycle.leaderboard ?? [];
+
   const value: MockAvaxStreamData = {
     chartData,
-    streamingState: buildStreamingStateBridge(engine.streamState),
+    streamingState: streamingStateBridge,
     mockEvmAddress: MOCK_EVM_ADDRESS,
     yesPct: engine.yesPercent,
     totalPot,
     bids: toMockOrderLevels(engine.bids),
     asks: toMockOrderLevels(engine.asks),
     recentTrades: toMockTrades(engine.recentTrades),
+    leaderboard,
   };
 
   return createElement(MockDataContext.Provider, { value }, children);
