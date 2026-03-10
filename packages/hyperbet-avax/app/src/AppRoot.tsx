@@ -11,7 +11,7 @@ import "@rainbow-me/rainbowkit/styles.css";
 
 import { ChainProvider } from "./lib/ChainContext";
 import { ThemeProvider, useTheme } from "./lib/theme";
-import { wagmiConfig } from "./lib/wagmiConfig";
+import { wagmiConfig } from "@hyperbet/ui/lib/wagmiConfig";
 import { App } from "./App";
 import { StreamUIApp } from "./StreamUIApp";
 

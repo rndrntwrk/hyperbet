@@ -7,11 +7,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-/**
- * @title AgentPerpEngine
- * @notice A perpetual futures engine driven by Agent TrueSkill instead of public spot markets.
- *         Implements oracle-execution with skew-based price impact and funding.
- */
 contract AgentPerpEngine is Ownable {
     using SafeERC20 for IERC20;
 
@@ -19,17 +14,17 @@ contract AgentPerpEngine is Ownable {
     uint256 public constant MAX_LEVERAGE = 5 * ONE;
 
     SkillOracle public immutable oracle;
-    IERC20 public immutable marginToken; // e.g. USDC or Gold
+    IERC20 public immutable marginToken;
 
     struct MarketState {
         uint256 totalLongOI;
         uint256 totalShortOI;
-        int256 currentFundingRate; // rate per second (scaled by 1e18)
+        int256 currentFundingRate;
         uint256 lastUpdateTimestamp;
     }
 
     struct Position {
-        int256 size; // + for Long, - for Short
+        int256 size;
         uint256 margin;
         uint256 entryPrice;
         int256 lastFundingRate;
@@ -38,9 +33,8 @@ contract AgentPerpEngine is Ownable {
     mapping(bytes32 => MarketState) public markets;
     mapping(bytes32 => mapping(address => Position)) public positions;
 
-    // Parameters mapped to Skew limits
-    uint256 public immutable skewScale; // Controls how fast price impact grows (e.g. 1e6)
-    uint256 public immutable fundingVelocity; // How fast the funding rate changes based on skew
+    uint256 public immutable skewScale;
+    uint256 public immutable fundingVelocity;
 
     uint256 public insuranceFund;
 
@@ -62,7 +56,7 @@ contract AgentPerpEngine is Ownable {
         oracle = _oracle;
         marginToken = _marginToken;
         skewScale = _skewScale;
-        fundingVelocity = 1e12; // Modest drift
+        fundingVelocity = 1e12;
     }
 
     // slither-disable-next-line timestamp
@@ -71,7 +65,6 @@ contract AgentPerpEngine is Ownable {
         uint256 timeDelta = block.timestamp - market.lastUpdateTimestamp;
         if (timeDelta != 0) {
             int256 skew = int256(market.totalLongOI) - int256(market.totalShortOI);
-            // Funding velocity pushes the premium based on prolonged skew
             market.currentFundingRate += (skew * int256(fundingVelocity) * int256(timeDelta)) / int256(skewScale);
             market.lastUpdateTimestamp = block.timestamp;
         }
@@ -83,23 +76,17 @@ contract AgentPerpEngine is Ownable {
         MarketState memory market = markets[agentId];
 
         int256 skew = int256(market.totalLongOI) - int256(market.totalShortOI);
-
-        // Simulating price impact: execution price = indexPrice * (1 + (skew + sizeDelta/2) / skewScale)
-        // Note: sizeDelta is added to simulate the impact of the caller's trade pushing the skew.
         int256 premium = ((skew + sizeDelta / 2) * int256(ONE)) / int256(skewScale);
-        uint256 execPrice;
 
         if (premium >= 0) {
-            execPrice = indexPrice + (indexPrice * uint256(premium)) / ONE;
-        } else {
-            uint256 absPremium = uint256(-premium);
-            if (absPremium >= ONE) {
-                execPrice = indexPrice / 10; // Floor execution price drop
-            } else {
-                execPrice = indexPrice - (indexPrice * absPremium) / ONE;
-            }
+            return indexPrice + (indexPrice * uint256(premium)) / ONE;
         }
-        return execPrice;
+
+        uint256 absPremium = uint256(-premium);
+        if (absPremium >= ONE) {
+            return indexPrice / 10;
+        }
+        return indexPrice - (indexPrice * absPremium) / ONE;
     }
 
     function _abs(int256 value) internal pure returns (uint256) {
@@ -111,14 +98,10 @@ contract AgentPerpEngine is Ownable {
         pure
         returns (int256)
     {
-        if (existingSize == 0 || closeSize == 0) {
-            return 0;
-        }
-
+        if (existingSize == 0 || closeSize == 0) return 0;
         if (existingSize > 0) {
             return (int256(execPrice) - int256(entryPrice)) * int256(closeSize) / int256(ONE);
         }
-
         return (int256(entryPrice) - int256(execPrice)) * int256(closeSize) / int256(ONE);
     }
 
@@ -143,10 +126,8 @@ contract AgentPerpEngine is Ownable {
     {
         uint256 oldAbs = _abs(oldSize);
         uint256 addAbs = _abs(sizeDelta);
-        uint256 newAbs = oldAbs + addAbs;
-
         pos.size = oldSize + sizeDelta;
-        pos.entryPrice = ((oldEntryPrice * oldAbs) + (execPrice * addAbs)) / newAbs;
+        pos.entryPrice = ((oldEntryPrice * oldAbs) + (execPrice * addAbs)) / (oldAbs + addAbs);
     }
 
     // slither-disable-next-line timestamp
@@ -183,9 +164,7 @@ contract AgentPerpEngine is Ownable {
     function _applySizeDelta(Position storage pos, int256 oldSize, uint256 oldEntryPrice, int256 sizeDelta, uint256 execPrice)
         internal
     {
-        if (sizeDelta == 0) {
-            return;
-        }
+        if (sizeDelta == 0) return;
 
         if (oldSize == 0) {
             pos.size = sizeDelta;
@@ -214,22 +193,13 @@ contract AgentPerpEngine is Ownable {
 
     // slither-disable-next-line timestamp
     function _assertLeverage(bytes32 agentId, int256 size, uint256 margin) internal view {
-        if (size == 0) {
-            return;
-        }
-
+        if (size == 0) return;
         require(margin > 0, "Position undercollateralized");
         uint256 absSize = _abs(size);
         uint256 markPrice = getExecutionPrice(agentId, 0);
         require(Math.mulDiv(absSize, markPrice, margin) <= MAX_LEVERAGE, "Max leverage exceeded");
     }
 
-    /**
-     * @notice Open or modify a position
-     * @param agentId The underlying asset (Agent ID)
-     * @param marginDelta >0 deposits margin, <0 withdraws
-     * @param sizeDelta + for Long, - for Short
-     */
     function modifyPosition(bytes32 agentId, int256 marginDelta, int256 sizeDelta) external {
         _updateFunding(agentId);
 
@@ -243,7 +213,6 @@ contract AgentPerpEngine is Ownable {
         int256 oldSize = pos.size;
         uint256 oldEntryPrice = pos.entryPrice;
 
-        // Realize funding (skipped complex per-position accumulator for simulation simplicity)
         _removeOpenInterest(market, oldSize);
         _applySizeDelta(pos, oldSize, oldEntryPrice, sizeDelta, execPrice);
         _applyMarginDelta(pos, marginDelta, msg.sender);

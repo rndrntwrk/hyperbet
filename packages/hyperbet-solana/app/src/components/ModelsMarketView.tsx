@@ -13,6 +13,11 @@ import {
 } from "recharts";
 import { Toaster, toast } from "sonner";
 import {
+  resolveUiLocale,
+  type UiLocale,
+} from "@hyperbet/ui/i18n";
+import { getModelsMarketCopy } from "@hyperbet/ui/lib/modelsMarketCopy";
+import {
   useAppConnection,
   useAppWallet,
   useAppWalletModal,
@@ -27,8 +32,8 @@ import {
   type PerpsMarketDirectoryEntry,
   type PerpsOracleHistorySnapshot,
   type PerpsMarketsResponse,
-} from "../lib/modelMarkets";
-import { findProgramAddressSync } from "../lib/programAddress";
+} from "@hyperbet/ui/lib/modelMarkets";
+import { findProgramAddressSync } from "@hyperbet/ui/lib/programAddress";
 import {
   getConfigStateDecoder,
   getMarketStateDecoder,
@@ -275,11 +280,11 @@ function conservativeSkill(mu: number, sigma: number): number {
   return mu - sigma * 3;
 }
 
-function getTradeErrorMessage(error: unknown): string {
+function getTradeErrorMessage(error: unknown, locale: UiLocale): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
-  return "Transaction failed";
+  return getModelsMarketCopy(locale).transactionFailed;
 }
 
 async function fetchMultipleAccounts(
@@ -301,28 +306,28 @@ const E2E_MODEL_CHARACTER_ID = readE2eString(
 const E2E_MODEL_ENTRY: PerpsMarketDirectoryEntry | null =
   IS_E2E_MODE && E2E_MODEL_CHARACTER_ID
     ? {
-        rank: 1,
-        characterId: E2E_MODEL_CHARACTER_ID,
-        marketId: modelMarketIdFromCharacterId(E2E_MODEL_CHARACTER_ID),
-        name: readE2eString(import.meta.env.VITE_E2E_MODEL_NAME) || "E2E Model",
-        provider:
-          readE2eString(import.meta.env.VITE_E2E_MODEL_PROVIDER) ||
-          "Hyperscape",
-        model:
-          readE2eString(import.meta.env.VITE_E2E_MODEL_SLUG) || "e2e-model",
-        wins: readE2eNumber(import.meta.env.VITE_E2E_MODEL_WINS, 10),
-        losses: readE2eNumber(import.meta.env.VITE_E2E_MODEL_LOSSES, 2),
-        winRate: 0,
-        combatLevel: readE2eNumber(
-          import.meta.env.VITE_E2E_MODEL_COMBAT_LEVEL,
-          80,
-        ),
-        currentStreak: readE2eNumber(import.meta.env.VITE_E2E_MODEL_STREAK, 3),
-        status: "ACTIVE",
-        lastSeenAt: Date.now(),
-        deprecatedAt: null,
-        updatedAt: Date.now(),
-      }
+      rank: 1,
+      characterId: E2E_MODEL_CHARACTER_ID,
+      marketId: modelMarketIdFromCharacterId(E2E_MODEL_CHARACTER_ID),
+      name: readE2eString(import.meta.env.VITE_E2E_MODEL_NAME) || "E2E Model",
+      provider:
+        readE2eString(import.meta.env.VITE_E2E_MODEL_PROVIDER) ||
+        "Hyperscape",
+      model:
+        readE2eString(import.meta.env.VITE_E2E_MODEL_SLUG) || "e2e-model",
+      wins: readE2eNumber(import.meta.env.VITE_E2E_MODEL_WINS, 10),
+      losses: readE2eNumber(import.meta.env.VITE_E2E_MODEL_LOSSES, 2),
+      winRate: 0,
+      combatLevel: readE2eNumber(
+        import.meta.env.VITE_E2E_MODEL_COMBAT_LEVEL,
+        80,
+      ),
+      currentStreak: readE2eNumber(import.meta.env.VITE_E2E_MODEL_STREAK, 3),
+      status: "ACTIVE",
+      lastSeenAt: Date.now(),
+      deprecatedAt: null,
+      updatedAt: Date.now(),
+    }
     : null;
 
 if (E2E_MODEL_ENTRY) {
@@ -339,22 +344,22 @@ const E2E_ORACLE_RECORDED_AT = readE2eNumber(
 const E2E_ORACLE_HISTORY: OracleHistoryPoint[] =
   E2E_MODEL_ENTRY && IS_E2E_MODE
     ? [
-        {
-          agentId: E2E_MODEL_ENTRY.characterId,
-          marketId: modelMarketIdFromCharacterId(E2E_MODEL_ENTRY.characterId),
-          spotIndex: readE2eNumber(
-            import.meta.env.VITE_E2E_MODEL_SPOT_INDEX,
-            0,
-          ),
-          conservativeSkill:
-            readE2eNumber(import.meta.env.VITE_E2E_MODEL_MU, 0) -
-            readE2eNumber(import.meta.env.VITE_E2E_MODEL_SIGMA, 0) * 3,
-          mu: readE2eNumber(import.meta.env.VITE_E2E_MODEL_MU, 0),
-          sigma: readE2eNumber(import.meta.env.VITE_E2E_MODEL_SIGMA, 0),
-          recordedAt: E2E_ORACLE_RECORDED_AT,
-          label: buildOracleHistoryLabel(E2E_ORACLE_RECORDED_AT),
-        },
-      ]
+      {
+        agentId: E2E_MODEL_ENTRY.characterId,
+        marketId: modelMarketIdFromCharacterId(E2E_MODEL_ENTRY.characterId),
+        spotIndex: readE2eNumber(
+          import.meta.env.VITE_E2E_MODEL_SPOT_INDEX,
+          0,
+        ),
+        conservativeSkill:
+          readE2eNumber(import.meta.env.VITE_E2E_MODEL_MU, 0) -
+          readE2eNumber(import.meta.env.VITE_E2E_MODEL_SIGMA, 0) * 3,
+        mu: readE2eNumber(import.meta.env.VITE_E2E_MODEL_MU, 0),
+        sigma: readE2eNumber(import.meta.env.VITE_E2E_MODEL_SIGMA, 0),
+        recordedAt: E2E_ORACLE_RECORDED_AT,
+        label: buildOracleHistoryLabel(E2E_ORACLE_RECORDED_AT),
+      },
+    ]
     : [];
 function buildE2eMarketSnapshot(): MarketSnapshot | null {
   if (!E2E_MODEL_ENTRY || !IS_E2E_MODE) {
@@ -409,6 +414,8 @@ function applySignedOi(
 }
 
 export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
+  const locale = resolveUiLocale();
+  const copy = getModelsMarketCopy(locale);
   const { connection } = useAppConnection();
   const client = useSolanaClient();
   const wallet = useAppWallet();
@@ -664,9 +671,9 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
         const decodedConfig = configInfo?.data
           ? decodeAccount<ConfigAccountState>(
-              (data) => getConfigStateDecoder().decode(data) as ConfigState,
-              configInfo.data,
-            )
+            (data) => getConfigStateDecoder().decode(data) as ConfigState,
+            configInfo.data,
+          )
           : null;
 
         const nextMarketSnapshots: Record<string, MarketSnapshot> = {};
@@ -674,9 +681,9 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
           const marketInfo = marketInfos[index];
           const decoded = marketInfo?.data
             ? decodeAccount<MarketAccountState>(
-                (data) => getMarketStateDecoder().decode(data) as MarketState,
-                marketInfo.data,
-              )
+              (data) => getMarketStateDecoder().decode(data) as MarketState,
+              marketInfo.data,
+            )
             : null;
           const marketId = marketIds[index];
           const mu = decoded ? bnToNumber(decoded.mu) / 1_000_000 : null;
@@ -692,36 +699,36 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
           nextMarketSnapshots[entries[index].characterId] = decoded
             ? {
-                marketId,
-                spotIndex: fromLamports(bnToNumber(decoded.spotIndex)),
-                longOi: fromLamports(bnToNumber(decoded.totalLongOi)),
-                shortOi: fromLamports(bnToNumber(decoded.totalShortOi)),
-                fundingRate: fromLamports(
-                  bnToNumber(decoded.currentFundingRate),
-                ),
-                conservativeSkill:
-                  mu !== null && sigma !== null
-                    ? conservativeSkill(mu, sigma)
-                    : null,
-                uncertainty: sigma,
-                lastUpdated: bnToNumber(decoded.oracleLastUpdated) * 1_000,
-                insuranceFund: fromLamports(bnToNumber(decoded.insuranceFund)),
-                skewScale: bnToNumber(decoded.skewScale),
-                skewScaleSol: localSkewScaleSol,
-              }
+              marketId,
+              spotIndex: fromLamports(bnToNumber(decoded.spotIndex)),
+              longOi: fromLamports(bnToNumber(decoded.totalLongOi)),
+              shortOi: fromLamports(bnToNumber(decoded.totalShortOi)),
+              fundingRate: fromLamports(
+                bnToNumber(decoded.currentFundingRate),
+              ),
+              conservativeSkill:
+                mu !== null && sigma !== null
+                  ? conservativeSkill(mu, sigma)
+                  : null,
+              uncertainty: sigma,
+              lastUpdated: bnToNumber(decoded.oracleLastUpdated) * 1_000,
+              insuranceFund: fromLamports(bnToNumber(decoded.insuranceFund)),
+              skewScale: bnToNumber(decoded.skewScale),
+              skewScaleSol: localSkewScaleSol,
+            }
             : (fallbackSnapshot ?? {
-                marketId,
-                spotIndex: null,
-                longOi: 0,
-                shortOi: 0,
-                fundingRate: 0,
-                conservativeSkill: null,
-                uncertainty: null,
-                lastUpdated: null,
-                insuranceFund: 0,
-                skewScale: 0,
-                skewScaleSol: DEFAULT_SKEW_SCALE_SOL,
-              });
+              marketId,
+              spotIndex: null,
+              longOi: 0,
+              shortOi: 0,
+              fundingRate: 0,
+              conservativeSkill: null,
+              uncertainty: null,
+              lastUpdated: null,
+              insuranceFund: 0,
+              skewScale: 0,
+              skewScaleSol: DEFAULT_SKEW_SCALE_SOL,
+            });
         }
 
         const nextPositions: Record<string, PositionSnapshot> = {};
@@ -738,9 +745,9 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
             const positionInfo = positionInfos[index];
             const decoded = positionInfo?.data
               ? decodeAccount<PositionAccountState>(
-                  (data) => getPositionStateDecoder().decode(data) as PositionState,
-                  positionInfo.data,
-                )
+                (data) => getPositionStateDecoder().decode(data) as PositionState,
+                positionInfo.data,
+              )
               : null;
             if (!decoded) continue;
 
@@ -900,34 +907,34 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
   const ensureTradable = (intent: "open" | "close"): boolean => {
     if (!wallet.publicKey || !wallet.connected) {
-      setLastTradeStatus("Connect a Solana wallet to trade model perps.");
+      setLastTradeStatus(copy.connectWalletToTrade);
       setWalletModalVisible(true);
       return false;
     }
 
     if (!wallet.signTransaction || !wallet.signAllTransactions) {
-      setLastTradeStatus("Wallet cannot sign transactions.");
-      toast.error("Wallet cannot sign transactions.");
+      setLastTradeStatus(copy.walletCannotSign);
+      toast.error(copy.walletCannotSign);
       return false;
     }
 
     if (intent === "open" && !selectedMarketActive) {
-      setLastTradeStatus("This model market is not accepting new positions.");
-      toast.error("This model market is not accepting new positions.");
+      setLastTradeStatus(copy.marketNotAccepting);
+      toast.error(copy.marketNotAccepting);
       return false;
     }
 
     if (intent === "open" && !selectedOracleFresh) {
       setLastTradeStatus(
-        "This model market is waiting on a fresh oracle update.",
+        copy.waitingOnOracle,
       );
-      toast.error("This model market is waiting on a fresh oracle update.");
+      toast.error(copy.waitingOnOracle);
       return false;
     }
 
     if (intent === "close" && selectedEntry?.status === "ARCHIVED") {
-      setLastTradeStatus("This model market has been archived.");
-      toast.error("This model market has been archived.");
+      setLastTradeStatus(copy.marketArchived);
+      toast.error(copy.marketArchived);
       return false;
     }
 
@@ -951,17 +958,17 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
     const txId = `model-market-${selectedEntry.characterId}-${direction.toLowerCase()}`;
     setSubmittingTrade(txId);
     setLastTradeStatus(
-      `Submitting ${direction.toLowerCase()} ${selectedEntry.name}`,
+      copy.submitting(direction.toLowerCase(), selectedEntry.name),
     );
     setLastTradeTx("-");
     toast.loading(
-      `Opening ${effectiveLeverage}x ${direction.toLowerCase()} on ${selectedEntry.name}`,
+      copy.opening(effectiveLeverage, direction.toLowerCase(), selectedEntry.name),
       { id: txId },
     );
 
     try {
       if (!wallet.publicKey || !wallet.session) {
-        throw new Error("Connect a Solana wallet to trade model perps.");
+        throw new Error(copy.connectWalletToTrade);
       }
       const walletSigner = createWalletTransactionSigner(wallet.session).signer;
       const traderPublicKey = wallet.publicKey as PublicKey;
@@ -981,10 +988,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
         quotedEntryPrice <= 0
           ? 0
           : toLamports(
-              direction === "LONG"
-                ? quotedEntryPrice * 1.02
-                : quotedEntryPrice * 0.98,
-            );
+            direction === "LONG"
+              ? quotedEntryPrice * 1.02
+              : quotedEntryPrice * 0.98,
+          );
       const marketAddress = deriveMarketPda(marketId);
       const signature = await sendKitInstructions(
         client,
@@ -1045,18 +1052,18 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
           current[selectedEntry.characterId],
       }));
       setLastTradeStatus(
-        `Opened ${direction.toLowerCase()} ${selectedEntry.name}`,
+        copy.opened(direction.toLowerCase(), selectedEntry.name),
       );
       setLastTradeTx(signature);
       toast.success(
-        `Opened ${direction.toLowerCase()} on ${selectedEntry.name}`,
+        copy.openedToast(direction.toLowerCase(), selectedEntry.name),
         {
           id: txId,
         },
       );
       await refreshChainState();
     } catch (tradeError) {
-      const message = getTradeErrorMessage(tradeError);
+      const message = getTradeErrorMessage(tradeError, locale);
       setLastTradeStatus(message);
       toast.error(message, { id: txId });
     } finally {
@@ -1070,13 +1077,13 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
 
     const txId = `close-model-${selectedEntry.characterId}`;
     setSubmittingTrade(txId);
-    setLastTradeStatus(`Closing ${selectedEntry.name} position`);
+    setLastTradeStatus(copy.closingPosition(selectedEntry.name));
     setLastTradeTx("-");
-    toast.loading(`Closing ${selectedEntry.name} position`, { id: txId });
+    toast.loading(copy.closingPosition(selectedEntry.name), { id: txId });
 
     try {
       if (!wallet.publicKey || !wallet.session) {
-        throw new Error("Connect a Solana wallet to trade model perps.");
+        throw new Error(copy.connectWalletToTrade);
       }
       const walletSigner = createWalletTransactionSigner(wallet.session).signer;
       const traderPublicKey = wallet.publicKey as PublicKey;
@@ -1094,10 +1101,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
         quotedClosePrice <= 0
           ? 0
           : toLamports(
-              selectedPosition.direction === "LONG"
-                ? quotedClosePrice * 0.98
-                : quotedClosePrice * 1.02,
-            );
+            selectedPosition.direction === "LONG"
+              ? quotedClosePrice * 0.98
+              : quotedClosePrice * 1.02,
+          );
       const marketAddress = deriveMarketPda(marketId);
       const positionAddress = derivePositionPda(traderPublicKey, marketId);
       const signature = await sendKitInstructions(
@@ -1134,12 +1141,12 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
         delete next[selectedEntry.characterId];
         return next;
       });
-      setLastTradeStatus(`Closed ${selectedEntry.name} position`);
+      setLastTradeStatus(copy.closedPosition(selectedEntry.name));
       setLastTradeTx(signature);
-      toast.success(`Closed ${selectedEntry.name} position`, { id: txId });
+      toast.success(copy.closedPosition(selectedEntry.name), { id: txId });
       await refreshChainState();
     } catch (tradeError) {
-      const message = getTradeErrorMessage(tradeError);
+      const message = getTradeErrorMessage(tradeError, locale);
       setLastTradeStatus(message);
       toast.error(message, { id: txId });
     } finally {
@@ -1261,7 +1268,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                         <strong>{entry.name}</strong>
                         <span>{entry.model || "Unnamed model"}</span>
                       </td>
-                      <td>{entry.provider || "Unknown"}</td>
+                      <td>{entry.provider || copy.unknown}</td>
                       <td>
                         {entry.wins}-{entry.losses}
                         <span>
@@ -1283,11 +1290,10 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                         {market ? `${market.shortOi.toFixed(2)} SOL` : "—"}
                       </td>
                       <td
-                        className={`models-market-mono ${
-                          market && market.fundingRate > 0
-                            ? "is-funding-positive"
-                            : "is-funding-negative"
-                        }`}
+                        className={`models-market-mono ${market && market.fundingRate > 0
+                          ? "is-funding-positive"
+                          : "is-funding-negative"
+                          }`}
                       >
                         {market ? market.fundingRate.toFixed(6) : "—"}
                       </td>
@@ -1328,26 +1334,25 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                 <div>
                   <h3>{selectedEntry.name}</h3>
                   <p>
-                    {selectedEntry.provider || "Unknown provider"} ·{" "}
+                    {selectedEntry.provider || copy.unknownProvider} ·{" "}
                     {selectedEntry.model || "Unnamed model"}
                   </p>
                 </div>
                 <div
-                  className={`models-market-rank-chip ${
-                    selectedOracleFresh || selectedEntry.status !== "ACTIVE"
-                      ? ""
-                      : "is-stale"
-                  }`}
+                  className={`models-market-rank-chip ${selectedOracleFresh || selectedEntry.status !== "ACTIVE"
+                    ? ""
+                    : "is-stale"
+                    }`}
                 >
                   {selectedEntry.status === "ACTIVE"
                     ? selectedOracleFresh
                       ? selectedEntry.rank
                         ? `Rank #${selectedEntry.rank}`
                         : "ACTIVE"
-                      : "Oracle Stale"
+                      : copy.oracleStale
                     : selectedEntry.status === "CLOSE_ONLY"
-                      ? "Close Only"
-                      : "Archived"}
+                      ? copy.closeOnly
+                      : copy.archived}
                 </div>
               </div>
 
@@ -1357,7 +1362,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                   <strong>
                     {selectedMarket?.spotIndex
                       ? `$${selectedMarket.spotIndex.toFixed(2)}`
-                      : "Pending"}
+                      : copy.pending}
                   </strong>
                 </div>
                 <div>
@@ -1539,7 +1544,7 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
                   <span data-testid="models-market-market-id">
                     {selectedMarket
                       ? `Market #${selectedMarket.marketId}`
-                      : "Pending oracle"}
+                      : copy.pendingOracle}
                   </span>
                 </div>
 

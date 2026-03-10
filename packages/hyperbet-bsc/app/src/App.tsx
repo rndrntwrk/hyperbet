@@ -29,14 +29,14 @@ import {
 import {
   captureInviteCodeFromLocation,
   getStoredInviteCode,
-} from "./lib/invite";
-import { StreamPlayer } from "./components/StreamPlayer";
-import { PointsDisplay } from "./components/PointsDisplay";
+} from "@hyperbet/ui/lib/invite";
+import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
+import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
 import { useChain } from "./lib/ChainContext";
-import { useStreamingState } from "./spectator/useStreamingState";
-import { useDuelContext } from "./spectator/useDuelContext";
-import { useResizePanel, useIsMobile } from "./lib/useResizePanel";
-import { ResizeHandle } from "./components/ResizeHandle";
+import { useStreamingState } from "@hyperbet/ui/spectator/useStreamingState";
+import { useDuelContext } from "@hyperbet/ui/spectator/useDuelContext";
+import { useResizePanel, useIsMobile } from "@hyperbet/ui/lib/useResizePanel";
+import { ResizeHandle } from "@hyperbet/ui/components/ResizeHandle";
 import {
   LineChart,
   Line,
@@ -149,11 +149,11 @@ function getAppCopy(locale: UiLocale) {
       trades: "成交",
       orderBook: "订单簿",
       matchLog: "对局日志",
-      agents: "代理",
+      agents: "智能体",
       positions: "仓位",
       pool: "资金池",
       side: "方向",
-      agent: "代理",
+      agent: "智能体",
       price: "价格",
       amount: "数量",
       age: "时间",
@@ -264,7 +264,7 @@ function getAppCopy(locale: UiLocale) {
       wl: "승/패",
       dmg: "피해",
       action: "행동",
-      thought: "사고",
+      thought: "생각",
       result: "결과",
       winner: (name: string, reason: string | null | undefined) =>
         `${name} 승리!${reason ? ` ${reason}` : ""}`,
@@ -273,7 +273,7 @@ function getAppCopy(locale: UiLocale) {
       closeTradingPanel: "거래 패널 닫기",
       openTradingPanel: "거래 패널 열기",
       placeBet: "베팅하기",
-      legalLead: "거래함으로써 다음에 동의합니다:",
+      legalLead: "거래 시 동의한 것으로 간주됩니다:",
       terms: "이용약관",
       privacy: "개인정보",
       round: (value: string) => `${value}라운드`,
@@ -330,7 +330,7 @@ function getAppCopy(locale: UiLocale) {
       waitingForStream: "Aguardando transmissão…",
       trades: "Negociações",
       orderBook: "Livro de Ordens",
-      matchLog: "Log da Partida",
+      matchLog: "Log da Luta",
       agents: "Agentes",
       positions: "Posições",
       pool: "Pool",
@@ -391,7 +391,7 @@ function getAppCopy(locale: UiLocale) {
   if (locale === "es") {
     return {
       points: "Puntos",
-      leaderboard: "Clasificación",
+      leaderboard: "Ranking",
       history: "Historial",
       referral: "Referido",
       loadingLeaderboard: "Cargando clasificación",
@@ -412,16 +412,16 @@ function getAppCopy(locale: UiLocale) {
       duels: "Duelos",
       models: "Modelos",
       modelMarkets: "Mercado de Modelos",
-      leaderboardAndStats: "Clasificación y Estadísticas",
+      leaderboardAndStats: "Ranking y Stats",
       addEvmWallet: "Agregar Billetera EVM",
       switchNetwork: "Cambiar Red",
       unmuteStream: "Activar sonido",
       muteStream: "Silenciar",
       source: "Fuente",
       waitingForStream: "Esperando transmisión…",
-      trades: "Operaciones",
+      trades: "Trades",
       orderBook: "Libro de Órdenes",
-      matchLog: "Registro de Partida",
+      matchLog: "Registro de Pelea",
       agents: "Agentes",
       positions: "Posiciones",
       pool: "Pool",
@@ -430,7 +430,7 @@ function getAppCopy(locale: UiLocale) {
       price: "Precio",
       amount: "Cantidad",
       age: "Tiempo",
-      trader: "Operador",
+      trader: "Trader",
       buy: "COMPRAR",
       sell: "VENDER",
       bids: (name: string) => `COMPRAS (${name})`,
@@ -596,32 +596,32 @@ function getMarketStatusLabel(
 }
 
 const EvmBettingPanel = lazy(() =>
-  import("./components/EvmBettingPanel").then((module) => ({
+  import("@hyperbet/ui/components/EvmBettingPanel").then((module) => ({
     default: module.EvmBettingPanel,
   })),
 );
 const ModelsMarketView = lazy(() =>
-  import("./components/ModelsMarketView").then((module) => ({
+  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
     default: module.ModelsMarketView,
   })),
 );
 const PointsLeaderboard = lazy(() =>
-  import("./components/PointsLeaderboard").then((module) => ({
+  import("@hyperbet/ui/components/PointsLeaderboard").then((module) => ({
     default: module.PointsLeaderboard,
   })),
 );
 const PointsHistory = lazy(() =>
-  import("./components/PointsHistory").then((module) => ({
+  import("@hyperbet/ui/components/PointsHistory").then((module) => ({
     default: module.PointsHistory,
   })),
 );
 const ReferralPanel = lazy(() =>
-  import("./components/ReferralPanel").then((module) => ({
+  import("@hyperbet/ui/components/ReferralPanel").then((module) => ({
     default: module.ReferralPanel,
   })),
 );
 const AgentStats = lazy(() =>
-  import("./components/AgentStats").then((module) => ({
+  import("@hyperbet/ui/components/AgentStats").then((module) => ({
     default: module.AgentStats,
   })),
 );

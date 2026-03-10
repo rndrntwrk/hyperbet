@@ -163,16 +163,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint8 side,
         uint16 price
     ) external view returns (uint64 headOrderId, uint64 tailOrderId, uint128 totalOpen) {
-        return _priceLevelState(marketKey(duelKey, marketKind), side, price);
-    }
-
-    function orderQueues(
-        bytes32 duelKey,
-        uint8 marketKind,
-        uint8 side,
-        uint16 price
-    ) external view returns (uint64 headOrderId, uint64 tailOrderId, uint128 totalOpen) {
-        return _priceLevelState(marketKey(duelKey, marketKind), side, price);
+        PriceLevel storage level = priceLevels[marketKey(duelKey, marketKind)][side][price];
+        return (level.headOrderId, level.tailOrderId, level.totalOpen);
     }
 
     function setOracle(address oracle) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -230,10 +222,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         market.duelKey = duelKey;
         market.marketKind = marketKind;
         market.status = _mapDuelStatus(duel.status);
-        market.winner = Side.NONE;
         market.nextOrderId = 1;
-        market.bestBid = 0;
-        market.bestAsk = 1000;
+        market.bestAsk = MAX_PRICE;
 
         emit MarketCreated(duelKey, key, marketKind);
     }
@@ -447,7 +437,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
                 continue;
             }
 
-            uint128 fillAmount = progress.remainingAmount > makerRemaining
+            uint128 fillAmount = makerRemaining < uint128(progress.remainingAmount)
                 ? makerRemaining
                 : uint128(progress.remainingAmount);
 
@@ -515,7 +505,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
                 continue;
             }
 
-            uint128 fillAmount = progress.remainingAmount > makerRemaining
+            uint128 fillAmount = makerRemaining < uint128(progress.remainingAmount)
                 ? makerRemaining
                 : uint128(progress.remainingAmount);
 
@@ -694,15 +684,6 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         return market.status;
     }
 
-    function _priceLevelState(bytes32 key, uint8 side, uint16 price)
-        internal
-        view
-        returns (uint64 headOrderId, uint64 tailOrderId, uint128 totalOpen)
-    {
-        PriceLevel storage level = priceLevels[key][side][price];
-        return (level.headOrderId, level.tailOrderId, level.totalOpen);
-    }
-
     function _setPriceActive(bytes32 key, uint8 side, uint16 price) internal {
         (uint256 wordIndex, uint256 bitIndex) = _bitmapSlot(price);
         priceBitmaps[key][side][wordIndex] |= uint256(1) << bitIndex;
@@ -763,7 +744,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         if (status == DuelOutcomeOracle.DuelStatus.LOCKED) return MarketStatus.LOCKED;
         if (status == DuelOutcomeOracle.DuelStatus.RESOLVED) return MarketStatus.RESOLVED;
         if (status == DuelOutcomeOracle.DuelStatus.CANCELLED) return MarketStatus.CANCELLED;
-        return MarketStatus.LOCKED;
+        return MarketStatus.NULL;
     }
 
     function _mapWinner(DuelOutcomeOracle.Side winner) internal pure returns (Side) {

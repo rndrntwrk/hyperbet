@@ -121,7 +121,7 @@ const UI_COPY: Record<UiLocale, UiCopy> = {
     buy: "매수",
     sell: "매도",
     connectWallet: "지갑 연결",
-    predictionMarket: "예측 시장",
+    predictionMarket: "예측 마켓",
     orderBook: "호가창",
     recentTrades: "최근 거래",
     price: "가격",
@@ -142,10 +142,10 @@ const UI_COPY: Record<UiLocale, UiCopy> = {
       if (mode === "evm") return "EVM 패널에서 매도 주문을 지원합니다.";
       return "시장 정산 전까지 매도가 비활성화됩니다.";
     },
-    overall: "전체",
-    headToHead: "상대",
+    overall: "종합",
+    headToHead: "상대전적",
     damage: "피해",
-    fight: "싸움!",
+    fight: "파이트!",
     victory: "승리",
     wins: "승",
     losses: "패",
@@ -214,7 +214,7 @@ const UI_COPY: Record<UiLocale, UiCopy> = {
       if (mode === "evm") return "Órdenes de venta EVM soportadas a través del panel EVM.";
       return "Venta deshabilitada hasta la resolución del mercado.";
     },
-    overall: "GRAL",
+    overall: "TOTAL",
     headToHead: "H2H",
     damage: "DAÑO",
     fight: "¡PELEA!",

@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
-import { useMockStreamingEngine } from "./lib/useMockStreamingEngine";
-import { PredictionMarketPanel } from "./components/PredictionMarketPanel";
-import { AgentStats } from "./components/AgentStats";
-import { FightOverlay } from "./components/FightOverlay";
+import { useMockStreamingEngine } from "@hyperbet/ui/lib/useMockStreamingEngine";
+import { PredictionMarketPanel } from "@hyperbet/ui/components/PredictionMarketPanel";
+import { AgentStats } from "@hyperbet/ui/components/AgentStats";
+import { FightOverlay } from "@hyperbet/ui/components/FightOverlay";
 
 type BetSide = "YES" | "NO";
 

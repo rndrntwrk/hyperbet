@@ -4,6 +4,7 @@ import { PredictionMarketPanel } from "./components/PredictionMarketPanel";
 import { AgentStats } from "./components/AgentStats";
 import { FightOverlay } from "./components/FightOverlay";
 import { getUiCopy, resolveUiLocale } from "./i18n";
+import { useIsMobile } from "./lib/useResizePanel";
 
 type BetSide = "YES" | "NO";
 
@@ -11,6 +12,7 @@ export function StreamUIApp() {
   const mock = useMockStreamingEngine();
   const appRootRef = useRef<HTMLDivElement | null>(null);
   const copy = getUiCopy(resolveUiLocale());
+  const isMobile = useIsMobile(768);
 
   const [side, setSide] = useState<BetSide>("YES");
   const [amountInput, setAmountInput] = useState("100");
@@ -307,6 +309,7 @@ export function StreamUIApp() {
                 recentTrades={mock.recentTrades}
                 onViewAgent1={() => handleAgentClick("YES")}
                 onViewAgent2={() => handleAgentClick("NO")}
+                compact={isMobile}
               />
             </div>
           )}

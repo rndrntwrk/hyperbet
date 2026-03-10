@@ -1,6 +1,4 @@
 #![allow(unexpected_cfgs)]
-#![allow(deprecated)]
-#![allow(clippy::too_many_arguments)]
 
 use anchor_lang::prelude::*;
 
@@ -100,11 +98,7 @@ pub mod fight_oracle {
             );
         } else {
             duel_state.bump = ctx.bumps.duel_state;
-            duel_state.duel_end_ts = 0;
             duel_state.winner = MarketSide::None;
-            duel_state.seed = 0;
-            duel_state.result_hash = [0_u8; 32];
-            duel_state.replay_hash = [0_u8; 32];
         }
 
         duel_state.duel_key = duel_key;
@@ -114,16 +108,15 @@ pub mod fight_oracle {
         duel_state.bet_close_ts = bet_close_ts;
         duel_state.duel_start_ts = duel_start_ts;
         duel_state.status = status;
-        duel_state.metadata_uri = metadata_uri.clone();
-
         emit!(DuelUpserted {
             duel_key,
             status,
             bet_open_ts,
             bet_close_ts,
             duel_start_ts,
-            metadata_uri,
+            metadata_uri: metadata_uri.clone(),
         });
+        duel_state.metadata_uri = metadata_uri;
 
         Ok(())
     }
@@ -139,22 +132,12 @@ pub mod fight_oracle {
                 && duel_state.status != DuelStatus::Cancelled,
             ErrorCode::DuelAlreadyFinalized
         );
-        require!(
-            duel_state.status != DuelStatus::Cancelled,
-            ErrorCode::DuelAlreadyCancelled
-        );
         duel_state.status = DuelStatus::Cancelled;
-        duel_state.winner = MarketSide::None;
-        duel_state.seed = 0;
-        duel_state.result_hash = [0_u8; 32];
-        duel_state.replay_hash = [0_u8; 32];
-        duel_state.duel_end_ts = 0;
-        duel_state.metadata_uri = metadata_uri.clone();
-
         emit!(DuelCancelled {
             duel_key: duel_state.duel_key,
-            metadata_uri,
+            metadata_uri: metadata_uri.clone(),
         });
+        duel_state.metadata_uri = metadata_uri;
 
         Ok(())
     }
@@ -196,8 +179,6 @@ pub mod fight_oracle {
         duel_state.result_hash = result_hash;
         duel_state.replay_hash = replay_hash;
         duel_state.duel_end_ts = duel_end_ts;
-        duel_state.metadata_uri = metadata_uri.clone();
-
         emit!(DuelResolved {
             duel_key: duel_state.duel_key,
             winner,
@@ -205,8 +186,9 @@ pub mod fight_oracle {
             duel_end_ts,
             result_hash,
             replay_hash,
-            metadata_uri,
+            metadata_uri: metadata_uri.clone(),
         });
+        duel_state.metadata_uri = metadata_uri;
 
         Ok(())
     }

@@ -1,6 +1,4 @@
 #![allow(unexpected_cfgs)]
-#![allow(deprecated)]
-#![allow(clippy::too_many_arguments)]
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
@@ -189,16 +187,8 @@ pub mod gold_clob_market {
         user_balance.user = ctx.accounts.user.key();
         user_balance.market_state = market_state.key();
 
-        let trade_treasury_fee = cost
-            .checked_mul(ctx.accounts.config.trade_treasury_fee_bps as u64)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(10_000)
-            .ok_or(ErrorCode::MathOverflow)?;
-        let trade_market_maker_fee = cost
-            .checked_mul(ctx.accounts.config.trade_market_maker_fee_bps as u64)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(10_000)
-            .ok_or(ErrorCode::MathOverflow)?;
+        let trade_treasury_fee = bps_fee(cost, ctx.accounts.config.trade_treasury_fee_bps)?;
+        let trade_market_maker_fee = bps_fee(cost, ctx.accounts.config.trade_market_maker_fee_bps)?;
 
         if trade_treasury_fee > 0 {
             system_program::transfer(
@@ -283,7 +273,7 @@ pub mod gold_clob_market {
             require!(level.price == boundary_price, ErrorCode::InvalidRemainingAccount);
 
             if level.total_open == 0 || level.head_order_id == 0 {
-                mark_price_inactive(market_state, opposite_side, boundary_price);
+                set_price_bit(market_state, opposite_side, boundary_price, false);
                 update_best_prices(market_state);
                 level.head_order_id = 0;
                 level.tail_order_id = 0;
@@ -493,7 +483,7 @@ pub mod gold_clob_market {
                 .total_open
                 .checked_add(remaining_amount)
                 .ok_or(ErrorCode::MathOverflow)?;
-            mark_price_active(market_state, side, price);
+            set_price_bit(market_state, side, price, true);
             update_best_prices(market_state);
         } else {
             ctx.accounts
@@ -967,14 +957,20 @@ fn validate_fee_config(
     trade_market_maker_fee_bps: u16,
     winnings_market_maker_fee_bps: u16,
 ) -> Result<()> {
-    require!(trade_treasury_fee_bps <= 10_000, ErrorCode::FeeTooHigh);
-    require!(trade_market_maker_fee_bps <= 10_000, ErrorCode::FeeTooHigh);
     require!(
         trade_treasury_fee_bps + trade_market_maker_fee_bps <= 10_000,
         ErrorCode::FeeTooHigh
     );
     require!(winnings_market_maker_fee_bps <= 10_000, ErrorCode::FeeTooHigh);
     Ok(())
+}
+
+fn bps_fee(amount: u64, fee_bps: u16) -> Result<u64> {
+    amount
+        .checked_mul(fee_bps as u64)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(10_000)
+        .ok_or(ErrorCode::MathOverflow.into())
 }
 
 fn validate_side(side: u8) -> Result<()> {
@@ -1088,18 +1084,15 @@ fn update_best_prices(market_state: &mut MarketState) {
     market_state.best_ask = lowest_set_price(&market_state.ask_bitmap).unwrap_or(1000);
 }
 
-fn mark_price_active(market_state: &mut MarketState, side: u8, price: u16) {
+fn set_price_bit(market_state: &mut MarketState, side: u8, price: u16, active: bool) {
     let bitmap = bitmap_ref_mut(market_state, side);
     let word_idx = (price as usize) / 64;
     let bit_idx = (price as usize) % 64;
-    bitmap[word_idx] |= 1_u64 << bit_idx;
-}
-
-fn mark_price_inactive(market_state: &mut MarketState, side: u8, price: u16) {
-    let bitmap = bitmap_ref_mut(market_state, side);
-    let word_idx = (price as usize) / 64;
-    let bit_idx = (price as usize) % 64;
-    bitmap[word_idx] &= !(1_u64 << bit_idx);
+    if active {
+        bitmap[word_idx] |= 1_u64 << bit_idx;
+    } else {
+        bitmap[word_idx] &= !(1_u64 << bit_idx);
+    }
 }
 
 fn unlink_head_order(
@@ -1110,7 +1103,7 @@ fn unlink_head_order(
     level.head_order_id = order.next_order_id;
     if level.head_order_id == 0 {
         level.tail_order_id = 0;
-        mark_price_inactive(market_state, level.side, level.price);
+        set_price_bit(market_state, level.side, level.price, false);
         update_best_prices(market_state);
     }
     order.active = false;
@@ -1169,7 +1162,7 @@ fn unlink_order(
     }
     if price_level.head_order_id == 0 {
         price_level.tail_order_id = 0;
-        mark_price_inactive(market_state, price_level.side, price_level.price);
+        set_price_bit(market_state, price_level.side, price_level.price, false);
     }
     update_best_prices(market_state);
 

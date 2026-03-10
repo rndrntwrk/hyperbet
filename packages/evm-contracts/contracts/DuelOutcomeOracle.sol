@@ -102,8 +102,7 @@ contract DuelOutcomeOracle is AccessControl {
         require(duelStartTs >= betCloseTs, "invalid duel start");
 
         DuelState storage duel = duels[duelKey];
-        require(duel.status != DuelStatus.RESOLVED, "duel resolved");
-        require(duel.status != DuelStatus.CANCELLED, "duel cancelled");
+        _requireSettleable(duel);
         require(_statusRank(status) >= _statusRank(duel.status), "invalid transition");
 
         duel.duelKey = duelKey;
@@ -128,8 +127,7 @@ contract DuelOutcomeOracle is AccessControl {
     function cancelDuel(bytes32 duelKey, string calldata metadataUri) external onlyRole(REPORTER_ROLE) {
         DuelState storage duel = duels[duelKey];
         require(duel.status != DuelStatus.NULL, "duel missing");
-        require(duel.status != DuelStatus.RESOLVED, "duel resolved");
-        require(duel.status != DuelStatus.CANCELLED, "duel cancelled");
+        _requireSettleable(duel);
         duel.status = DuelStatus.CANCELLED;
         duel.winner = Side.NONE;
         duel.metadataUri = metadataUri;
@@ -147,8 +145,7 @@ contract DuelOutcomeOracle is AccessControl {
     ) external onlyRole(REPORTER_ROLE) {
         DuelState storage duel = duels[duelKey];
         require(duel.status != DuelStatus.NULL, "duel missing");
-        require(duel.status != DuelStatus.RESOLVED, "duel resolved");
-        require(duel.status != DuelStatus.CANCELLED, "duel cancelled");
+        _requireSettleable(duel);
         require(winner == Side.A || winner == Side.B, "invalid winner");
         require(duelEndTs >= duel.betCloseTs, "invalid duel end");
 
@@ -171,12 +168,12 @@ contract DuelOutcomeOracle is AccessControl {
         );
     }
 
+    function _requireSettleable(DuelState storage duel) private view {
+        require(duel.status != DuelStatus.RESOLVED, "duel resolved");
+        require(duel.status != DuelStatus.CANCELLED, "duel cancelled");
+    }
+
     function _statusRank(DuelStatus status) private pure returns (uint8) {
-        if (status == DuelStatus.NULL) return 0;
-        if (status == DuelStatus.SCHEDULED) return 1;
-        if (status == DuelStatus.BETTING_OPEN) return 2;
-        if (status == DuelStatus.LOCKED) return 3;
-        if (status == DuelStatus.RESOLVED) return 4;
-        return 5;
+        return uint8(status);
     }
 }

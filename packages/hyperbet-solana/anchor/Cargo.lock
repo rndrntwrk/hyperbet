@@ -1582,31 +1582,3 @@ checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
 [[package]]
 name = "zmij"
 version = "1.0.20"
-
-[[patch.unused]]
-name = "anchor-lang"
-version = "0.31.1"
-
-[[patch.unused]]
-name = "solana-account"
-version = "2.2.1"
-
-[[patch.unused]]
-name = "solana-address-lookup-table-interface"
-version = "2.2.2"
-
-[[patch.unused]]
-name = "solana-bincode"
-version = "2.2.1"
-
-[[patch.unused]]
-name = "solana-message"
-version = "2.4.0"
-
-[[patch.unused]]
-name = "solana-program"
-version = "2.3.0"
-
-[[patch.unused]]
-name = "solana-vote-interface"
-version = "2.2.6"

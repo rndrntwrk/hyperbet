@@ -24,6 +24,11 @@ const EXPECTED_COMPONENTS = [
   "WalletLinkCard",
 ];
 
+const EXPECTED_FRAMES = [
+  "FullAppLayout",
+  "StreamUIApp",
+];
+
 const baseUrl = "http://127.0.0.1:6006";
 const outputDir = path.resolve(process.cwd(), "storybook-artifacts");
 
@@ -45,12 +50,21 @@ if (!indexResponse.ok) {
 }
 
 const index = await indexResponse.json();
-const componentStories = Object.values(index.entries)
-  .filter((entry) => entry.type === "story" && entry.title.startsWith("Components/"))
-  .sort((left, right) => left.title.localeCompare(right.title));
+
+function filterStories(prefix) {
+  return Object.values(index.entries)
+    .filter((entry) => entry.type === "story" && entry.title.startsWith(`${prefix}/`))
+    .sort((left, right) => left.title.localeCompare(right.title));
+}
+
+const componentStories = filterStories("Components");
+const frameStories = filterStories("Frames");
 
 const renderedComponents = componentStories.map((entry) =>
   entry.title.replace("Components/", ""),
+);
+const renderedFrames = frameStories.map((entry) =>
+  entry.title.replace("Frames/", ""),
 );
 
 if (JSON.stringify(renderedComponents) !== JSON.stringify(EXPECTED_COMPONENTS)) {
@@ -58,6 +72,14 @@ if (JSON.stringify(renderedComponents) !== JSON.stringify(EXPECTED_COMPONENTS)) 
     `Component story coverage mismatch.\nexpected: ${EXPECTED_COMPONENTS.join(", ")}\nactual: ${renderedComponents.join(", ")}`,
   );
 }
+
+if (JSON.stringify(renderedFrames) !== JSON.stringify(EXPECTED_FRAMES)) {
+  throw new Error(
+    `Frame story coverage mismatch.\nexpected: ${EXPECTED_FRAMES.join(", ")}\nactual: ${renderedFrames.join(", ")}`,
+  );
+}
+
+const allStories = [...componentStories, ...frameStories];
 
 await fs.rm(outputDir, { recursive: true, force: true });
 await fs.mkdir(outputDir, { recursive: true });
@@ -68,7 +90,7 @@ const browser = await chromium.launch({
   args: ["--disable-dev-shm-usage"],
 });
 
-for (const entry of componentStories) {
+for (const entry of allStories) {
   const page = await browser.newPage({
     viewport: {
       width: 1440,
@@ -107,7 +129,7 @@ for (const entry of componentStories) {
     throw new Error(`Story failed to render cleanly: ${entry.title}`);
   }
 
-  const safeTitle = entry.title.replace("Components/", "");
+  const safeTitle = entry.title.replace(/^(Components|Frames)\//, "");
   const safeName = entry.name.toLowerCase().replace(/\s+/g, "-");
   await page.screenshot({
     path: path.join(outputDir, `${safeTitle}-${safeName}.png`),
