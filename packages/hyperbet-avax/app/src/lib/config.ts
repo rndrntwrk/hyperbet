@@ -1,13 +1,8 @@
-import { PublicKey } from "@solana/web3.js";
-
 import {
   type BettingAppEnvironment,
   type BettingEvmNetwork,
   resolveBettingEvmDefaults,
-  resolveBettingSolanaDeployment,
 } from "../../../deployments";
-
-export type SolanaCluster = "localnet" | "devnet" | "testnet" | "mainnet-beta";
 
 // ============================================================================
 // Environment Configuration
@@ -78,6 +73,7 @@ function uniqueList(values: string[]): string[] {
 }
 
 function resolveEnvironment(): Environment {
+  // VITE_SOLANA_CLUSTER is used across all chain packages to set the app environment
   const explicitCluster = readEnvString("VITE_SOLANA_CLUSTER")?.toLowerCase();
   if (explicitCluster && ENVIRONMENT_ALIASES[explicitCluster]) {
     return ENVIRONMENT_ALIASES[explicitCluster];
@@ -145,26 +141,6 @@ function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
   }
 }
 
-function buildSolanaProgramConfig(
-  environment: Environment,
-): Pick<
-  EnvConfig,
-  | "fightOracleProgramId"
-  | "goldClobMarketProgramId"
-  | "goldPerpsMarketProgramId"
-  | "goldMint"
-  | "usdcMint"
-> {
-  const deployment = resolveBettingSolanaDeployment(environment);
-  return {
-    fightOracleProgramId: deployment.fightOracleProgramId,
-    goldClobMarketProgramId: deployment.goldClobMarketProgramId,
-    goldPerpsMarketProgramId: deployment.goldPerpsMarketProgramId,
-    goldMint: deployment.goldMint,
-    usdcMint: deployment.usdcMint,
-  };
-}
-
 function buildEvmConfig(
   environment: Environment,
 ): Pick<
@@ -186,14 +162,6 @@ function buildEvmConfig(
 }
 
 export interface EnvConfig {
-  cluster: SolanaCluster;
-  rpcUrl: string;
-  wsUrl?: string;
-  fightOracleProgramId: string;
-  goldClobMarketProgramId: string;
-  goldPerpsMarketProgramId: string;
-  goldMint: string;
-  usdcMint?: string;
   betWindowSeconds: number;
   newRoundBetWindowSeconds: number;
   autoSeedDelaySeconds: number;
@@ -209,19 +177,13 @@ export interface EnvConfig {
   streamUrl: string;
   uiSyncDelayMs: number;
   refreshIntervalMs: number;
-  headlessWalletName: string;
-  headlessWalletAutoConnect: boolean;
-  headlessWalletSecretKey: string;
-  headlessWalletsJson: string;
-  jupiterBaseUrl: string;
+  walletConnectProjectId: string;
 
   // EVM
   avaxRpcUrl: string;
   avaxChainId: number;
   avaxGoldClobAddress: string;
   avaxGoldTokenAddress: string;
-
-  walletConnectProjectId: string;
 }
 
 const DEFAULT_STREAM_URL = "https://www.twitch.tv/hyperscapeai";
@@ -244,11 +206,6 @@ const baseConfig: Partial<EnvConfig> = {
   gameWsUrl: `${DEFAULT_GAME_API_URL.replace(/^http/, "ws")}/ws`,
   streamUrl: DEFAULT_STREAM_URL,
   refreshIntervalMs: 5000,
-  jupiterBaseUrl: "https://lite-api.jup.ag",
-
-  headlessWalletSecretKey:
-    import.meta.env.VITE_HEADLESS_WALLET_SECRET_KEY || "",
-  headlessWalletsJson: import.meta.env.VITE_HEADLESS_WALLETS || "",
 
   walletConnectProjectId: (
     import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || ""
@@ -258,79 +215,42 @@ const baseConfig: Partial<EnvConfig> = {
 export const ENV_CONFIGS: Record<Environment, EnvConfig> = {
   devnet: {
     ...baseConfig,
-    ...buildSolanaProgramConfig("devnet"),
     ...buildEvmConfig("devnet"),
-    cluster: "devnet",
-    rpcUrl: "https://api.devnet.solana.com",
-    wsUrl: "wss://api.devnet.solana.com/",
     uiSyncDelayMs: 0,
-    headlessWalletName: "Headless Test Wallet",
-    headlessWalletAutoConnect: false,
   } as EnvConfig,
   testnet: {
     ...baseConfig,
-    ...buildSolanaProgramConfig("testnet"),
     ...buildEvmConfig("testnet"),
-    cluster: "testnet",
-    rpcUrl: "https://api.testnet.solana.com",
-    wsUrl: "wss://api.testnet.solana.com/",
     uiSyncDelayMs: 0,
-    headlessWalletName: "Headless Test Wallet",
-    headlessWalletAutoConnect: false,
   } as EnvConfig,
   localnet: {
     ...baseConfig,
-    ...buildSolanaProgramConfig("localnet"),
     ...buildEvmConfig("localnet"),
-    cluster: "localnet",
-    rpcUrl: "http://127.0.0.1:8899",
-    wsUrl: "ws://127.0.0.1:8900",
     streamUrl: "",
     uiSyncDelayMs: 0,
-    headlessWalletName: "Headless Test Wallet",
-    headlessWalletAutoConnect: false,
   } as EnvConfig,
   e2e: {
     ...baseConfig,
-    ...buildSolanaProgramConfig("localnet"),
     ...buildEvmConfig("e2e"),
-    cluster: "localnet",
-    rpcUrl: "http://127.0.0.1:8899",
-    wsUrl: "ws://127.0.0.1:8900",
-    goldMint: "XeYyjz6Y351cyYDJAyghh6gJja9NF1ssiAXuem8YDyx",
     streamUrl: "",
     enableAutoSeed: false,
     refreshIntervalMs: 1500,
     uiSyncDelayMs: 0,
-    headlessWalletName: "E2E Wallet",
-    headlessWalletAutoConnect: true,
   } as EnvConfig,
   "stream-ui": {
     ...baseConfig,
-    ...buildSolanaProgramConfig("devnet"),
     ...buildEvmConfig("stream-ui"),
-    cluster: "devnet",
-    rpcUrl: "https://api.devnet.solana.com",
-    fightOracleProgramId: "11111111111111111111111111111111",
     streamUrl: "",
     enableAutoSeed: false,
     refreshIntervalMs: 60000,
     uiSyncDelayMs: 0,
-    headlessWalletName: "Stream UI Dev",
-    headlessWalletAutoConnect: false,
   } as EnvConfig,
   "mainnet-beta": {
     ...baseConfig,
-    ...buildSolanaProgramConfig("mainnet-beta"),
     ...buildEvmConfig("mainnet-beta"),
-    cluster: "mainnet-beta",
-    rpcUrl: "https://api.mainnet-beta.solana.com",
-    wsUrl: "wss://api.mainnet-beta.solana.com/",
     gameApiUrl: DEFAULT_PRODUCTION_GAME_API_URL,
     gameWsUrl: `${DEFAULT_PRODUCTION_GAME_API_URL.replace(/^http/, "ws")}/ws`,
     uiSyncDelayMs: 0,
-    headlessWalletName: "Headless Test Wallet",
-    headlessWalletAutoConnect: false,
   } as EnvConfig,
 };
 
@@ -369,19 +289,6 @@ const resolvedStreamUrl = resolvedStreamSources[0] ?? "";
 
 export const CONFIG: EnvConfig = {
   ...baseEnvConfig,
-  rpcUrl: readEnvString("VITE_SOLANA_RPC_URL") ?? baseEnvConfig.rpcUrl,
-  wsUrl: readEnvString("VITE_SOLANA_WS_URL") ?? baseEnvConfig.wsUrl,
-  fightOracleProgramId:
-    readEnvString("VITE_FIGHT_ORACLE_PROGRAM_ID") ??
-    baseEnvConfig.fightOracleProgramId,
-  goldClobMarketProgramId:
-    readEnvString("VITE_GOLD_CLOB_MARKET_PROGRAM_ID") ??
-    baseEnvConfig.goldClobMarketProgramId,
-  goldPerpsMarketProgramId:
-    readEnvString("VITE_GOLD_PERPS_MARKET_PROGRAM_ID") ??
-    baseEnvConfig.goldPerpsMarketProgramId,
-  goldMint: readEnvString("VITE_GOLD_MINT") ?? baseEnvConfig.goldMint,
-  usdcMint: readEnvString("VITE_USDC_MINT") ?? baseEnvConfig.usdcMint,
   betWindowSeconds: readEnvNumber(
     "VITE_BET_WINDOW_SECONDS",
     baseEnvConfig.betWindowSeconds,
@@ -424,20 +331,6 @@ export const CONFIG: EnvConfig = {
     "VITE_REFRESH_INTERVAL_MS",
     baseEnvConfig.refreshIntervalMs,
   ),
-  headlessWalletName:
-    readEnvString("VITE_HEADLESS_WALLET_NAME") ??
-    baseEnvConfig.headlessWalletName,
-  headlessWalletAutoConnect: readEnvBoolean(
-    "VITE_HEADLESS_WALLET_AUTO_CONNECT",
-    baseEnvConfig.headlessWalletAutoConnect,
-  ),
-  headlessWalletSecretKey:
-    readEnvString("VITE_HEADLESS_WALLET_SECRET_KEY") ??
-    baseEnvConfig.headlessWalletSecretKey,
-  headlessWalletsJson:
-    readEnvString("VITE_HEADLESS_WALLETS") ?? baseEnvConfig.headlessWalletsJson,
-  jupiterBaseUrl:
-    readEnvString("VITE_JUPITER_BASE_URL") ?? baseEnvConfig.jupiterBaseUrl,
   avaxRpcUrl: readEnvString("VITE_AVAX_RPC_URL") ?? baseEnvConfig.avaxRpcUrl,
   avaxChainId: readEnvNumber("VITE_AVAX_CHAIN_ID", baseEnvConfig.avaxChainId),
   avaxGoldClobAddress:
@@ -450,19 +343,6 @@ export const CONFIG: EnvConfig = {
     readEnvString("VITE_WALLETCONNECT_PROJECT_ID") ??
     baseEnvConfig.walletConnectProjectId,
 };
-
-// Legacy Exports mapping to CONFIG
-export const GOLD_MAINNET_MINT = new PublicKey(
-  "DK9nBUMfdu4XprPRWeh8f6KnQiGWD8Z4xz3yzs9gpump",
-);
-
-export const SOL_MINT = new PublicKey(
-  "So11111111111111111111111111111111111111112",
-);
-
-export const USDC_MINT = new PublicKey(
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-);
 
 export const DEFAULT_BET_WINDOW_SECONDS = CONFIG.betWindowSeconds;
 export const DEFAULT_NEW_ROUND_BET_WINDOW_SECONDS =
@@ -482,30 +362,11 @@ export const STREAM_URLS: string[] = resolvedStreamSources;
 export const GAME_API_URL: string = CONFIG.gameApiUrl;
 export const GAME_WS_URL: string = CONFIG.gameWsUrl;
 export const UI_SYNC_DELAY_MS: number = CONFIG.uiSyncDelayMs;
-// Mainnet must route through backend RPC proxy so we can use server-side
-// Helius credentials and avoid browser-origin RPC blocking.
-const USE_GAME_RPC_PROXY =
-  CONFIG.cluster === "mainnet-beta"
-    ? true
-    : readEnvBoolean("VITE_USE_GAME_RPC_PROXY", false);
-const USE_GAME_EVM_RPC_PROXY =
-  CONFIG.cluster === "mainnet-beta"
-    ? true
-    : readEnvBoolean("VITE_USE_GAME_EVM_RPC_PROXY", false);
-const LOCAL_SOLANA_RPC_PROXY_PREFIX = "/__solana";
 
-function isLoopbackRpcUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.hostname === "127.0.0.1" ||
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "::1"
-    );
-  } catch {
-    return false;
-  }
-}
+const USE_GAME_EVM_RPC_PROXY = readEnvBoolean(
+  "VITE_USE_GAME_EVM_RPC_PROXY",
+  RUNTIME_ENV === "mainnet-beta",
+);
 
 const configuredManualMarketControls = readEnvBoolean(
   "VITE_ENABLE_MANUAL_MARKET_ADMIN_CONTROLS",
@@ -528,66 +389,12 @@ export function getFixedMatchId(): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function getCluster(): SolanaCluster {
-  return CONFIG.cluster;
-}
-
-function shouldUseLocalSolanaRpcProxy(): boolean {
-  if (isPublicBrowserRuntime()) return false;
-  const explicitOverride = readEnvString("VITE_USE_LOCAL_SOLANA_RPC_PROXY");
-  if (explicitOverride === "true") return true;
-  if (explicitOverride === "false") return false;
-  if (import.meta.env.MODE === "e2e") return true;
-  return Boolean(import.meta.env.DEV && isLoopbackRpcUrl(CONFIG.rpcUrl));
-}
-
-function buildLocalSolanaProxyUrl(
-  pathname: string,
-  protocol: "http" | "ws",
-): string {
-  if (typeof window === "undefined") {
-    return `${LOCAL_SOLANA_RPC_PROXY_PREFIX}${pathname}`;
-  }
-  const resolvedProtocol =
-    protocol === "ws"
-      ? window.location.protocol === "https:"
-        ? "wss:"
-        : "ws:"
-      : window.location.protocol;
-  return `${resolvedProtocol}//${window.location.host}${LOCAL_SOLANA_RPC_PROXY_PREFIX}${pathname}`;
-}
-
-export function getRpcUrl(): string {
-  if (shouldUseLocalSolanaRpcProxy()) {
-    return buildLocalSolanaProxyUrl("/rpc", "http");
-  }
-  // Non-proxy environments (for example standalone dev) use direct RPC.
-  if (!USE_GAME_RPC_PROXY || CONFIG.cluster === "localnet") {
-    return CONFIG.rpcUrl;
-  }
-  return `${GAME_API_URL}/api/proxy/solana/rpc?cluster=${encodeURIComponent(CONFIG.cluster)}`;
-}
-
-export function getWsUrl(): string | undefined {
-  if (shouldUseLocalSolanaRpcProxy() && typeof window !== "undefined") {
-    return buildLocalSolanaProxyUrl("/ws", "ws");
-  }
-  if (!USE_GAME_RPC_PROXY) {
-    return CONFIG.wsUrl;
-  }
-  if (CONFIG.cluster === "localnet" && CONFIG.wsUrl) {
-    return CONFIG.wsUrl;
-  }
-  // Public builds proxy HTTP RPC through the keeper; websocket stays direct.
-  return undefined;
-}
-
 // ============================================================================
 // EVM Chain Configuration
 // ============================================================================
 
 function shouldUseGameEvmRpcProxy(): boolean {
-  return USE_GAME_EVM_RPC_PROXY && CONFIG.cluster !== "localnet";
+  return USE_GAME_EVM_RPC_PROXY && RUNTIME_ENV !== "localnet";
 }
 
 export function getEvmRpcUrl(chain: "avax"): string {
