@@ -151,7 +151,6 @@ describe("CrossChainMarketMaker", () => {
     mockFromSecretKey.mockClear();
     mockFromSeed.mockClear();
     mockGenerate.mockClear();
-    vi.resetModules();
     ({ CrossChainMarketMaker } = await import("./index.js"));
     mm = new CrossChainMarketMaker();
   });
@@ -192,7 +191,7 @@ describe("CrossChainMarketMaker", () => {
 
   describe("Market Making Cycle", () => {
     it("should execute a full cycle without errors", async () => {
-      await expect(mm.marketMakeCycle()).resolves.not.toThrow();
+      await expect(mm.marketMakeCycle()).resolves.toBeUndefined();
     });
 
     it("should send the payable native value required by the contract", async () => {
