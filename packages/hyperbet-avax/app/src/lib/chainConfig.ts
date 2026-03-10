@@ -15,7 +15,7 @@ import {
 // Types
 // ============================================================================
 
-export type ChainId = "solana" | "avax";
+export type ChainId = "avax";
 
 export type EvmChainConfig = {
   chainId: ChainId;
@@ -130,7 +130,7 @@ export function getEvmChainConfig(chainId: "avax"): EvmChainConfig | null {
 
 /** Get all available chains for wallet login/switching. */
 export function getAvailableChains(): ChainId[] {
-  const chains: ChainId[] = ["solana"];
+  const chains: ChainId[] = [];
   if (hasConfiguredContracts(AVAX_CONFIG)) {
     chains.push("avax");
   }
@@ -147,7 +147,6 @@ export const CHAIN_DISPLAY: Record<
   ChainId,
   { name: string; shortName: string; icon: string; color: string }
 > = {
-  solana: { name: "Solana", shortName: "SOL", icon: "☀️", color: "#9945FF" },
   avax: {
     name: AVAX_CONFIG.name,
     shortName: "AVAX",
