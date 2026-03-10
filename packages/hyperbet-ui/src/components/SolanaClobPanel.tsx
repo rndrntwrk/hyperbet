@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import {
   type CSSProperties,
   useCallback,
@@ -15,6 +16,7 @@ import { BN } from "@coral-xyz/anchor";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
   type AccountMeta,
+  ComputeBudgetProgram,
   LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
@@ -34,8 +36,12 @@ import {
 import { createPrograms, createReadonlyPrograms } from "../lib/programs";
 import {
   confirmSignatureViaRpc,
+  fetchPriorityFeeEstimate,
   getLatestBlockhashViaRpc,
-  sendRawTransactionViaRpc,
+  HELIUS_SENDER_MIN_TIP_LAMPORTS,
+  randomJitoTipAccount,
+  sendViaHeliusSender,
+  startHeliusSenderWarmup,
 } from "../lib/solanaRpc";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
@@ -272,6 +278,9 @@ export function SolanaClobPanel({
   });
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
+  // Warm Helius Sender on mount to avoid first-transaction cold-start latency.
+  useEffect(() => startHeliusSenderWarmup(), []);
+
   const writablePrograms = useMemo(
     () => (walletReady(wallet) ? createPrograms(connection, wallet) : null),
     [connection, wallet],
@@ -429,14 +438,38 @@ export function SolanaClobPanel({
       let stage = copy.stageBlockhash;
       try {
         transaction.feePayer = wallet.publicKey;
-        const latest = await getLatestBlockhashViaRpc(connection);
+
+        // Fetch blockhash and dynamic priority fee in parallel.
+        const [latest, priorityFeeEstimate] = await Promise.all([
+          getLatestBlockhashViaRpc(connection),
+          fetchPriorityFeeEstimate(connection.rpcEndpoint, [
+            wallet.publicKey.toBase58(),
+          ]),
+        ]);
         transaction.recentBlockhash = latest.blockhash;
+
+        // Prepend ComputeBudget instructions so validators correctly budget CUs.
+        // setComputeUnitLimit MUST come before other instructions.
+        transaction.instructions = [
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({
+            microLamports: priorityFeeEstimate,
+          }),
+          // Jito tip transfer — required by Helius Sender dual-routing.
+          SystemProgram.transfer({
+            fromPubkey: wallet.publicKey,
+            toPubkey: new PublicKey(randomJitoTipAccount()),
+            lamports: HELIUS_SENDER_MIN_TIP_LAMPORTS,
+          }),
+          ...transaction.instructions,
+        ];
 
         stage = copy.stageSigning;
         const signed = await wallet.signTransaction(transaction);
 
         stage = copy.stageSending;
-        const signature = await sendRawTransactionViaRpc(connection, signed);
+        const wireBase64 = Buffer.from(signed.serialize()).toString("base64");
+        const signature = await sendViaHeliusSender(wireBase64);
 
         stage = copy.stageConfirming;
         await confirmSignatureViaRpc(connection, signature);

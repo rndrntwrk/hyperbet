@@ -8,6 +8,8 @@ on:
       - "packages/hyperbet-solana/keeper/**"
       - "packages/hyperbet-bsc/app/**"
       - "packages/hyperbet-bsc/keeper/**"
+      - "packages/hyperbet-avax/app/**"
+      - "packages/hyperbet-avax/keeper/**"
       - "docs/hyperbet-production-deploy.md"
       - ".github/workflows/ci.yml"
       - "package.json"
@@ -19,6 +21,8 @@ on:
       - "packages/hyperbet-solana/keeper/**"
       - "packages/hyperbet-bsc/app/**"
       - "packages/hyperbet-bsc/keeper/**"
+      - "packages/hyperbet-avax/app/**"
+      - "packages/hyperbet-avax/keeper/**"
       - "docs/hyperbet-production-deploy.md"
       - ".github/workflows/ci.yml"
       - "package.json"
@@ -35,9 +39,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package:
-          - hyperbet-solana
-          - hyperbet-bsc
+        include:
+          - package: hyperbet-solana
+            build_env: |
+              VITE_SOLANA_CLUSTER=mainnet-beta
+              VITE_GAME_API_URL=https://api.hyperbet.win
+              VITE_GAME_WS_URL=wss://api.hyperbet.win/ws
+              VITE_USE_GAME_RPC_PROXY=true
+              VITE_USE_GAME_EVM_RPC_PROXY=true
+          - package: hyperbet-bsc
+            build_env: |
+              VITE_SOLANA_CLUSTER=mainnet-beta
+              VITE_GAME_API_URL=https://api.hyperbet.win
+              VITE_GAME_WS_URL=wss://api.hyperbet.win/ws
+              VITE_USE_GAME_RPC_PROXY=true
+              VITE_USE_GAME_EVM_RPC_PROXY=true
+              VITE_BSC_CHAIN_ID=56
+              VITE_BSC_GOLD_CLOB_ADDRESS=0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E
+          - package: hyperbet-avax
+            build_env: |
+              VITE_SOLANA_CLUSTER=mainnet-beta
+              VITE_GAME_API_URL=https://api.hyperbet.win
+              VITE_GAME_WS_URL=wss://api.hyperbet.win/ws
+              VITE_USE_GAME_RPC_PROXY=true
+              VITE_USE_GAME_EVM_RPC_PROXY=true
+              VITE_AVAX_CHAIN_ID=43114
+              VITE_AVAX_GOLD_CLOB_ADDRESS=0x0000000000000000000000000000000000000000
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -101,18 +128,13 @@ jobs:
           fi
 
       - name: Build production app
-        run: bun run --cwd packages/${{ matrix.package }}/app build --mode mainnet-beta
+        run: |
+          set -a
+          eval "${{ matrix.build_env }}"
+          set +a
+          bun run --cwd packages/${{ matrix.package }}/app build --mode mainnet-beta
         env:
           CF_PAGES_COMMIT_SHA: ${{ github.sha }}
-          VITE_GAME_API_URL: https://api.hyperbet.win
-          VITE_GAME_WS_URL: wss://api.hyperbet.win/ws
-          VITE_SOLANA_CLUSTER: mainnet-beta
-          VITE_USE_GAME_RPC_PROXY: "true"
-          VITE_USE_GAME_EVM_RPC_PROXY: "true"
-          VITE_BSC_CHAIN_ID: "97"
-          VITE_BASE_CHAIN_ID: "84532"
-          VITE_BSC_GOLD_CLOB_ADDRESS: "0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E"
-          VITE_BASE_GOLD_CLOB_ADDRESS: "0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E"
 
       - name: Verify build artifacts
         run: |

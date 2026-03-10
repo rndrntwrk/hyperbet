@@ -32,7 +32,7 @@ export type CreateHyperbetAppRootOptions = {
   getWsUrl: () => string | undefined;
   createHeadlessWalletsFromEnv: () => HeadlessWalletDescriptor[];
   ChainProvider: ComponentType<{ children: ReactNode }>;
-  wagmiConfig: WagmiConfig;
+  wagmiConfig?: WagmiConfig;
   App: ComponentType;
   StreamUIApp: ComponentType;
   isStreamUi?: boolean;
@@ -73,33 +73,41 @@ export function createHyperbetAppRoot({
       );
     }
 
+    const content = (
+      <ChainProvider>
+        <ConnectionProvider
+          endpoint={endpoint}
+          config={{
+            wsEndpoint,
+            commitment: "confirmed",
+            disableRetryOnRateLimit: true,
+          }}
+        >
+          <WalletProvider wallets={wallets} autoConnect>
+            <WalletModalProvider>
+              {isStreamUi ? <StreamUIApp /> : <App />}
+            </WalletModalProvider>
+          </WalletProvider>
+        </ConnectionProvider>
+      </ChainProvider>
+    );
+
     return (
       <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>
-          <RainbowKitProvider
-            theme={darkTheme({
-              accentColor: "#eab308",
-              borderRadius: "large",
-            })}
-          >
-            <ChainProvider>
-              <ConnectionProvider
-                endpoint={endpoint}
-                config={{
-                  wsEndpoint,
-                  commitment: "confirmed",
-                  disableRetryOnRateLimit: true,
-                }}
-              >
-                <WalletProvider wallets={wallets} autoConnect>
-                  <WalletModalProvider>
-                    {isStreamUi ? <StreamUIApp /> : <App />}
-                  </WalletModalProvider>
-                </WalletProvider>
-              </ConnectionProvider>
-            </ChainProvider>
-          </RainbowKitProvider>
-        </WagmiProvider>
+        {wagmiConfig ? (
+          <WagmiProvider config={wagmiConfig}>
+            <RainbowKitProvider
+              theme={darkTheme({
+                accentColor: "#eab308",
+                borderRadius: "large",
+              })}
+            >
+              {content}
+            </RainbowKitProvider>
+          </WagmiProvider>
+        ) : (
+          content
+        )}
       </QueryClientProvider>
     );
   };
