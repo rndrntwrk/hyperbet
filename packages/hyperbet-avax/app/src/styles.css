@@ -5918,88 +5918,6 @@ select:focus-visible {
   color: var(--hm-text-dim) !important;
 }
 
-/* ── Bottom panel & table ── */
-[data-theme="light"] .hm-bottom-panel {
-  background: var(--hm-surface) !important;
-  border-top: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-bottom-panel-tabs {
-  background: var(--hm-surface) !important;
-  border-bottom: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-trades-table {
-  background: var(--hm-surface) !important;
-}
-[data-theme="light"] .hm-trades-table thead th {
-  background: var(--hm-surface-raised) !important;
-  color: var(--hm-text-dim) !important;
-  border-bottom: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-trades-table tbody tr:hover {
-  background: rgba(232, 65, 66, 0.04) !important;
-}
-[data-theme="light"] .hm-trades-table td {
-  color: var(--hm-text) !important;
-  border-bottom: 1px solid var(--hm-border-subtle) !important;
-}
-
-/* ── Order book ── */
-[data-theme="light"] .orderbook-header,
-[data-theme="light"] .hm-orderbook-header {
-  background: var(--hm-surface-raised) !important;
-  color: var(--hm-text-dim) !important;
-}
-[data-theme="light"] .orderbook-row,
-[data-theme="light"] .hm-orderbook-row {
-  color: var(--hm-text) !important;
-}
-
-/* ── Betting side buttons (YES/NO) ── */
-[data-theme="light"] .betting-side-btn.is-yes {
-  border-color: rgba(22, 163, 74, 0.5) !important;
-  color: #16a34a !important;
-}
-[data-theme="light"] .betting-side-btn.is-no {
-  border-color: rgba(232, 65, 66, 0.5) !important;
-  color: var(--hm-accent-gold) !important;
-}
-[data-theme="light"] .betting-side-btn-value {
-  background: rgba(0, 0, 0, 0.06) !important;
-}
-
-/* ── Sidebar ── */
-[data-theme="light"] .hm-sidebar {
-  background: #ffffff !important;
-  border-left: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-sidebar::before {
-  background: radial-gradient(ellipse 80% 30% at 50% 0%, rgba(232, 65, 66, 0.06) 0%, transparent 100%) !important;
-}
-[data-theme="light"] .hm-sidebar-divider {
-  background: linear-gradient(90deg,
-    transparent,
-    var(--hm-border) 30%,
-    var(--hm-border) 70%,
-    transparent) !important;
-}
-
-/* ── Buy/sell toggle buttons in sidebar ── */
-[data-theme="light"] .hm-buysell-btn {
-  background: var(--hm-surface-raised) !important;
-  color: var(--hm-text-dim) !important;
-  border: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-buysell-btn.is-active-buy {
-  background: rgba(22, 163, 74, 0.12) !important;
-  color: #16a34a !important;
-  border-color: rgba(22, 163, 74, 0.35) !important;
-}
-[data-theme="light"] .hm-buysell-btn.is-active-sell {
-  background: rgba(232, 65, 66, 0.10) !important;
-  color: var(--hm-accent-gold) !important;
-  border-color: rgba(232, 65, 66, 0.35) !important;
-}
-
 /* ── Input fields ── */
 [data-theme="light"] .hm-input,
 [data-theme="light"] input[type="number"],
@@ -6058,21 +5976,6 @@ select:focus-visible {
   color: #ffffff !important;
 }
 
-/* ── Chart panel ── */
-[data-theme="light"] .hm-chart-panel {
-  background: var(--hm-surface) !important;
-  border-bottom: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-chart-toolbar button {
-  background: var(--hm-surface-raised) !important;
-  color: var(--hm-text-dim) !important;
-  border: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-chart-toolbar button:hover,
-[data-theme="light"] .hm-chart-toolbar button.is-active {
-  color: var(--hm-accent-gold) !important;
-  border-color: rgba(232, 65, 66, 0.35) !important;
-}
 [data-theme="light"] .hm-chart-matchup-overlay {
   background: rgba(255, 255, 255, 0.85) !important;
   border: 1px solid var(--hm-border) !important;
@@ -6089,14 +5992,6 @@ select:focus-visible {
   background: var(--hm-bg) !important;
 }
 
-/* ── Market info row ── */
-[data-theme="light"] .hm-market-info {
-  background: var(--hm-surface) !important;
-  border-bottom: 1px solid var(--hm-border) !important;
-}
-[data-theme="light"] .hm-market-name {
-  color: var(--hm-text) !important;
-}
 [data-theme="light"] .hm-market-meta,
 [data-theme="light"] .hm-market-timer {
   color: var(--hm-text-dim) !important;

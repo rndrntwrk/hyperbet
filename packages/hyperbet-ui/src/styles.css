@@ -2906,10 +2906,10 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--hm-stone-dark);
+  background: var(--hm-panel-pill-bg, var(--hm-surface-raised));
+  border: 1px solid var(--hm-panel-pill-border, var(--hm-border));
   border-radius: var(--hm-radius);
-  color: var(--hm-text-dim);
+  color: var(--hm-panel-pill-text, var(--hm-text-dim));
   cursor: pointer;
   font-size: 13px;
   padding: 0;
@@ -2917,8 +2917,8 @@ select:focus-visible {
 }
 
 .hm-chart-tool-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--hm-gold-border-subtle);
+  background: var(--hm-panel-card-bg-elevated, var(--hm-surface-raised));
+  border-color: var(--hm-gold-border-light);
   color: var(--hm-accent-gold);
 }
 
@@ -3271,11 +3271,9 @@ select:focus-visible {
 .hm-buysell-btn {
   flex: 1;
   height: 44px;
-  border: 1px solid var(--hm-stone-dark);
-  background: linear-gradient(180deg,
-      rgba(42, 45, 52, 0.95) 0%,
-      rgba(26, 29, 36, 0.98) 100%);
-  color: var(--hm-text-dim);
+  border: 1px solid var(--hm-border);
+  background: var(--hm-panel-card-bg-elevated, var(--hm-surface-raised));
+  color: var(--hm-panel-muted-text, var(--hm-text-dim));
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -3298,28 +3296,34 @@ select:focus-visible {
 }
 
 .hm-buysell-btn--active.hm-buysell-btn--buy {
-  background: linear-gradient(180deg, #1a7a3a 0%, #145e2c 100%);
-  border-color: rgba(34, 197, 94, 0.5);
-  color: #a8f0c0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--hm-buy) 22%, transparent) 0%,
+    color-mix(in srgb, var(--hm-buy) 12%, transparent) 100%
+  );
+  border-color: color-mix(in srgb, var(--hm-buy) 42%, transparent);
+  color: var(--hm-buy);
   box-shadow:
-    0 2px 8px rgba(34, 197, 94, 0.2),
+    0 2px 8px color-mix(in srgb, var(--hm-buy) 20%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .hm-buysell-btn--active.hm-buysell-btn--sell {
-  background: linear-gradient(180deg, #7a1a1a 0%, #5e1414 100%);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #f0a8a8;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--hm-sell) 20%, transparent) 0%,
+    color-mix(in srgb, var(--hm-sell) 10%, transparent) 100%
+  );
+  border-color: color-mix(in srgb, var(--hm-sell) 42%, transparent);
+  color: var(--hm-sell);
   box-shadow:
-    0 2px 8px rgba(239, 68, 68, 0.2),
+    0 2px 8px color-mix(in srgb, var(--hm-sell) 20%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .hm-buysell-btn:hover:not(.hm-buysell-btn--active) {
-  background: linear-gradient(180deg,
-      rgba(58, 62, 72, 0.95) 0%,
-      rgba(42, 45, 52, 0.98) 100%);
-  border-color: var(--hm-gold-border-subtle);
+  background: var(--hm-panel-card-bg, var(--hm-surface-raised));
+  border-color: var(--hm-gold-border-light);
   color: var(--hm-text);
 }
 
@@ -3408,8 +3412,8 @@ select:focus-visible {
 .hm-input-row {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--hm-stone-dark);
+  background: var(--hm-panel-card-bg-elevated, var(--hm-surface-raised));
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius);
   overflow: hidden;
   transition:
@@ -3447,7 +3451,7 @@ select:focus-visible {
   color: var(--hm-text-muted);
   font-family: var(--hm-font-mono);
   flex-shrink: 0;
-  border-left: 1px solid var(--hm-stone-dark);
+  border-left: 1px solid var(--hm-border);
   height: 100%;
   display: flex;
   align-items: center;
@@ -3464,8 +3468,8 @@ select:focus-visible {
 .hm-quick-btn {
   flex: 1;
   height: 32px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--hm-stone-dark);
+  background: var(--hm-panel-card-bg-elevated, var(--hm-surface-raised));
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius);
   color: var(--hm-text-dim);
   font-size: 11px;
@@ -3477,9 +3481,9 @@ select:focus-visible {
 }
 
 .hm-quick-btn:hover {
-  background: rgba(229, 184, 74, 0.06);
+  background: var(--hm-gold-glow-light);
   color: var(--hm-accent-gold);
-  border-color: var(--hm-gold-border-subtle);
+  border-color: var(--hm-gold-border-light);
 }
 
 .hm-quick-btn--edit {
@@ -3563,8 +3567,8 @@ select:focus-visible {
   height: 1px;
   background: linear-gradient(90deg,
       transparent,
-      var(--hm-gold-border-subtle) 30%,
-      var(--hm-gold-border-subtle) 70%,
+      var(--hm-panel-card-border, var(--hm-border)) 30%,
+      var(--hm-panel-card-border, var(--hm-border)) 70%,
       transparent);
   margin: 14px 0;
 }
@@ -3587,7 +3591,7 @@ select:focus-visible {
 
 .hm-payout-dots {
   flex: 1;
-  border-bottom: 1px dotted var(--hm-stone-dark);
+  border-bottom: 1px dotted var(--hm-border);
 }
 
 .hm-payout-value {
@@ -3605,9 +3609,9 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--hm-panel-card-bg-elevated, var(--hm-surface-raised));
   margin: 0 16px;
-  border: 1px solid var(--hm-stone-dark);
+  border: 1px solid var(--hm-border);
   border-radius: var(--hm-radius);
   padding: 10px 12px;
 }
