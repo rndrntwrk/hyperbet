@@ -122,6 +122,33 @@ export default defineConfig(async ({ mode }) => {
   alias["@noble/curves/ed25519"] = ed25519Path;
   alias["@noble/curves/secp256k1"] = secp256k1Path;
 
+  // Custom Rollup plugin to handle polyfill shim resolution for hoisted deps.
+  // In CI, @coral-xyz/anchor lives in the root node_modules but imports
+  // `vite-plugin-node-polyfills/shims/buffer` which only exists in the app's
+  // local node_modules. Vite's resolve.alias doesn't intercept these cross-
+  // workspace imports reliably, so we use a resolveId hook instead.
+  const shimAliasMap: Record<string, string> = {
+    "vite-plugin-node-polyfills/shims/buffer": path.join(
+      nodePolyfillsRoot, "shims", "buffer", "dist", "index.js",
+    ),
+    "vite-plugin-node-polyfills/shims/global": path.join(
+      nodePolyfillsRoot, "shims", "global", "dist", "index.js",
+    ),
+    "vite-plugin-node-polyfills/shims/process": path.join(
+      nodePolyfillsRoot, "shims", "process", "dist", "index.js",
+    ),
+  };
+  plugins.push({
+    name: "resolve-polyfill-shims",
+    enforce: "pre" as const,
+    resolveId(source: string) {
+      if (shimAliasMap[source]) {
+        return shimAliasMap[source];
+      }
+      return null;
+    },
+  });
+
   const polyfills = nodePolyfills({
     include: ["buffer", "process"],
     globals: { global: true, process: true, Buffer: true },
