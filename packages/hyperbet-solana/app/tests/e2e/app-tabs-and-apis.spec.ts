@@ -101,6 +101,21 @@ type PredictionMarketsResponse = {
   updatedAt: number | null;
 };
 
+type KeeperBotHealthResponse = {
+  ok: boolean;
+  running: boolean;
+  health: {
+    chainKey: string;
+    updatedAtMs: number;
+    running: boolean;
+    recovery: string[];
+    markets: Array<{
+      lifecycleStatus: string;
+      marketRef: string | null;
+    }>;
+  } | null;
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const statePath = path.resolve(__dirname, "./state.json");
 const GAME_API_URL = (process.env.E2E_GAME_API_URL || "http://127.0.0.1:5555")
@@ -268,6 +283,30 @@ test.describe("app tabs and api coverage", () => {
     expect(solanaMarket?.marketRef).toBe(state.clobMarketState || null);
     expect(["OPEN", "LOCKED", "RESOLVED", "CANCELLED", "PENDING", "UNKNOWN"])
       .toContain(solanaMarket?.lifecycleStatus);
+
+    await expect
+      .poll(async () => {
+        const botHealth = await fetchJson<KeeperBotHealthResponse>(
+          request,
+          "/api/keeper/bot-health",
+        );
+        return {
+          ok: botHealth.ok,
+          running: botHealth.running,
+          chainKey: botHealth.health?.chainKey ?? null,
+          updatedAtMs: Number(botHealth.health?.updatedAtMs ?? 0),
+          hasMarkets: (botHealth.health?.markets.length ?? 0) > 0,
+          recovery: Array.isArray(botHealth.health?.recovery),
+        };
+      })
+      .toEqual({
+        ok: true,
+        running: true,
+        chainKey: "solana",
+        updatedAtMs: expect.any(Number),
+        hasMarkets: true,
+        recovery: true,
+      });
 
     const points = await fetchJson<PointsResponse>(
       request,

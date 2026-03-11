@@ -7,11 +7,20 @@ ANCHOR_DIR="$(cd "$DEMO_DIR/../hyperbet-solana/anchor" && pwd)"
 KEEPER_DIR="$DEMO_DIR/keeper"
 EVM_DIR="$(cd "$DEMO_DIR/../evm-contracts" && pwd)"
 STATE_PATH="$APP_DIR/tests/e2e/state.json"
+CONTROL_PATH="$APP_DIR/tests/e2e/control.json"
 VALIDATOR_LOG="$APP_DIR/.e2e-validator.log"
 ANVIL_LOG="$APP_DIR/.e2e-anvil.log"
 APP_LOG="$APP_DIR/.e2e-app.log"
 SOLANA_PROXY_LOG="$APP_DIR/.e2e-solana-proxy.log"
 KEEPER_LOG="$APP_DIR/.e2e-keeper.log"
+APP_PID_FILE="$APP_DIR/.e2e-app.pid"
+VALIDATOR_PID_FILE="$APP_DIR/.e2e-validator.pid"
+SOLANA_PROXY_PID_FILE="$APP_DIR/.e2e-solana-proxy.pid"
+ANVIL_PID_FILE="$APP_DIR/.e2e-anvil.pid"
+KEEPER_PID_FILE="$APP_DIR/.e2e-keeper.pid"
+SOLANA_PROXY_ENV_FILE="$APP_DIR/.e2e-solana-proxy.env"
+ANVIL_ENV_FILE="$APP_DIR/.e2e-anvil.env"
+KEEPER_ENV_FILE="$APP_DIR/.e2e-keeper.env"
 PROGRAM_ORACLE_ID="6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD"
 PROGRAM_MARKET_ID="HbXhqEFevpkfYdZCN6YmJGRmQmj9vsBun2ZHjeeaLRik"
 PROGRAM_CLOB_ID="ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi"
@@ -35,14 +44,118 @@ ANVIL_PORT="${E2E_EVM_PORT:-18545}"
 # Always target the local anvil instance spawned by this script.
 ANVIL_RPC_URL="http://127.0.0.1:${ANVIL_PORT}"
 EVM_CHAIN_ID="${E2E_EVM_CHAIN_ID:-31337}"
+ANVIL_STATE_PATH="${E2E_EVM_STATE_PATH:-$APP_DIR/.e2e-anvil-state.json}"
 RUN_LOCK_DIR="$APP_DIR/.e2e-run.lock"
 RUN_LOCK_PID_FILE="$RUN_LOCK_DIR/pid"
+KEEPER_BOT_FLAG="${E2E_ENABLE_KEEPER_BOT:-true}"
 
 VALIDATOR_PID=""
 ANVIL_PID=""
 APP_PID=""
 SOLANA_PROXY_PID=""
 KEEPER_PID=""
+
+write_pid_file() {
+  local pid_file="$1"
+  local pid="$2"
+  printf '%s\n' "$pid" >"$pid_file"
+}
+
+kill_pid_file_process() {
+  local pid_file="$1"
+  if [[ ! -f "$pid_file" ]]; then
+    return 0
+  fi
+  local pid
+  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+  fi
+}
+
+write_env_file() {
+  local env_file="$1"
+  shift
+  : >"$env_file"
+  while (( "$#" )); do
+    local key="$1"
+    local value="$2"
+    shift 2
+    printf '%s=%q\n' "$key" "$value" >>"$env_file"
+  done
+}
+
+write_control_file() {
+  jq -n \
+    --arg appDir "$APP_DIR" \
+    --arg chainKey "avax" \
+    --arg statePath "$STATE_PATH" \
+    --arg controlPath "$CONTROL_PATH" \
+    --arg appPidFile "$APP_PID_FILE" \
+    --arg appUrl "http://127.0.0.1:${APP_PORT}/" \
+    --arg keeperPidFile "$KEEPER_PID_FILE" \
+    --arg keeperLog "$KEEPER_LOG" \
+    --arg keeperEnv "$KEEPER_ENV_FILE" \
+    --arg keeperCwd "$KEEPER_DIR" \
+    --arg keeperHealthUrl "$GAME_API_URL/status" \
+    --arg keeperBotHealthUrl "$GAME_API_URL/api/keeper/bot-health" \
+    --arg solanaProxyPidFile "$SOLANA_PROXY_PID_FILE" \
+    --arg solanaProxyLog "$SOLANA_PROXY_LOG" \
+    --arg solanaProxyEnv "$SOLANA_PROXY_ENV_FILE" \
+    --arg solanaProxyRpcUrl "$SOLANA_PROXY_URL" \
+    --arg anvilPidFile "$ANVIL_PID_FILE" \
+    --arg anvilLog "$ANVIL_LOG" \
+    --arg anvilEnv "$ANVIL_ENV_FILE" \
+    --arg anvilRpcUrl "$ANVIL_RPC_URL" \
+    --arg validatorPidFile "$VALIDATOR_PID_FILE" \
+    --arg validatorLog "$VALIDATOR_LOG" \
+    --arg solanaRpcUrl "$SOLANA_RPC_URL" \
+    --arg solanaWsUrl "$SOLANA_WS_URL" \
+    '{
+      version: 1,
+      chainKey: $chainKey,
+      appDir: $appDir,
+      statePath: $statePath,
+      controlPath: $controlPath,
+      rpc: {
+        solanaRpcUrl: $solanaRpcUrl,
+        solanaWsUrl: $solanaWsUrl,
+        evmRpcUrl: $anvilRpcUrl
+      },
+      services: {
+        app: {
+          pidFile: $appPidFile,
+          url: $appUrl
+        },
+        keeper: {
+          pidFile: $keeperPidFile,
+          logPath: $keeperLog,
+          envFile: $keeperEnv,
+          cwd: $keeperCwd,
+          healthUrl: $keeperHealthUrl,
+          botHealthUrl: $keeperBotHealthUrl
+        },
+        solanaProxy: {
+          pidFile: $solanaProxyPidFile,
+          logPath: $solanaProxyLog,
+          envFile: $solanaProxyEnv,
+          rpcUrl: $solanaProxyRpcUrl
+        },
+        anvil: {
+          pidFile: $anvilPidFile,
+          logPath: $anvilLog,
+          envFile: $anvilEnv,
+          rpcUrl: $anvilRpcUrl
+        },
+        validator: {
+          pidFile: $validatorPidFile,
+          logPath: $validatorLog,
+          rpcUrl: $solanaRpcUrl
+        }
+      }
+    }' >"$CONTROL_PATH"
+}
 
 resolve_wallet_path() {
   local candidates=()
@@ -76,26 +189,21 @@ cleanup() {
   if [[ -f "$RUN_LOCK_PID_FILE" ]] && [[ "$(cat "$RUN_LOCK_PID_FILE" 2>/dev/null || true)" == "$$" ]]; then
     rm -rf "$RUN_LOCK_DIR"
   fi
-  if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" >/dev/null 2>&1; then
-    kill "$APP_PID" >/dev/null 2>&1 || true
-    wait "$APP_PID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$KEEPER_PID" ]] && kill -0 "$KEEPER_PID" >/dev/null 2>&1; then
-    kill "$KEEPER_PID" >/dev/null 2>&1 || true
-    wait "$KEEPER_PID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$ANVIL_PID" ]] && kill -0 "$ANVIL_PID" >/dev/null 2>&1; then
-    kill "$ANVIL_PID" >/dev/null 2>&1 || true
-    wait "$ANVIL_PID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$SOLANA_PROXY_PID" ]] && kill -0 "$SOLANA_PROXY_PID" >/dev/null 2>&1; then
-    kill "$SOLANA_PROXY_PID" >/dev/null 2>&1 || true
-    wait "$SOLANA_PROXY_PID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$VALIDATOR_PID" ]] && kill -0 "$VALIDATOR_PID" >/dev/null 2>&1; then
-    kill "$VALIDATOR_PID" >/dev/null 2>&1 || true
-    wait "$VALIDATOR_PID" >/dev/null 2>&1 || true
-  fi
+  kill_pid_file_process "$APP_PID_FILE"
+  kill_pid_file_process "$KEEPER_PID_FILE"
+  kill_pid_file_process "$ANVIL_PID_FILE"
+  kill_pid_file_process "$SOLANA_PROXY_PID_FILE"
+  kill_pid_file_process "$VALIDATOR_PID_FILE"
+  rm -f \
+    "$APP_PID_FILE" \
+    "$VALIDATOR_PID_FILE" \
+    "$SOLANA_PROXY_PID_FILE" \
+    "$ANVIL_PID_FILE" \
+    "$KEEPER_PID_FILE" \
+    "$SOLANA_PROXY_ENV_FILE" \
+    "$ANVIL_ENV_FILE" \
+    "$KEEPER_ENV_FILE" \
+    "$CONTROL_PATH"
 }
 trap cleanup EXIT
 
@@ -299,6 +407,17 @@ pkill -f "$APP_DIR/scripts/solana-rpc-proxy.mjs" >/dev/null 2>&1 || true
 kill_listeners "$SOLANA_PROXY_PORT"
 kill_listeners "$ANVIL_PORT"
 rm -f "$KEEPER_DB_PATH" "${KEEPER_DB_PATH}-shm" "${KEEPER_DB_PATH}-wal"
+rm -f "$ANVIL_STATE_PATH"
+rm -f \
+  "$APP_PID_FILE" \
+  "$VALIDATOR_PID_FILE" \
+  "$SOLANA_PROXY_PID_FILE" \
+  "$ANVIL_PID_FILE" \
+  "$KEEPER_PID_FILE" \
+  "$SOLANA_PROXY_ENV_FILE" \
+  "$ANVIL_ENV_FILE" \
+  "$KEEPER_ENV_FILE" \
+  "$CONTROL_PATH"
 
 echo "[e2e] building anchor programs"
 bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-avax-e2e-build.log 2>&1
@@ -335,6 +454,7 @@ solana-test-validator \
   --upgradeable-program "$PROGRAM_CLOB_ID" "$ANCHOR_DIR/target/deploy/gold_clob_market.so" "$SOLANA_BOOTSTRAP_KEYPAIR" \
   >"$VALIDATOR_LOG" 2>&1 &
 VALIDATOR_PID="$!"
+write_pid_file "$VALIDATOR_PID_FILE" "$VALIDATOR_PID"
 
 if ! wait_for_solana_rpc; then
   echo "[e2e] validator did not become ready"
@@ -354,12 +474,18 @@ fi
 sleep 5
 
 echo "[e2e] starting local solana rpc proxy"
+write_env_file \
+  "$SOLANA_PROXY_ENV_FILE" \
+  SOLANA_RPC_TARGET "$SOLANA_RPC_URL" \
+  SOLANA_WS_TARGET "$SOLANA_WS_URL" \
+  SOLANA_PROXY_PORT "$SOLANA_PROXY_PORT"
 env \
   SOLANA_RPC_TARGET="$SOLANA_RPC_URL" \
   SOLANA_WS_TARGET="$SOLANA_WS_URL" \
   SOLANA_PROXY_PORT="$SOLANA_PROXY_PORT" \
   node "$APP_DIR/scripts/solana-rpc-proxy.mjs" >"$SOLANA_PROXY_LOG" 2>&1 < /dev/null &
 SOLANA_PROXY_PID="$!"
+write_pid_file "$SOLANA_PROXY_PID_FILE" "$SOLANA_PROXY_PID"
 
 if ! wait_for_solana_proxy; then
   echo "[e2e] solana proxy did not become ready"
@@ -368,13 +494,20 @@ if ! wait_for_solana_proxy; then
 fi
 
 echo "[e2e] starting local anvil"
+write_env_file \
+  "$ANVIL_ENV_FILE" \
+  ANVIL_PORT "$ANVIL_PORT" \
+  EVM_CHAIN_ID "$EVM_CHAIN_ID" \
+  ANVIL_STATE_PATH "$ANVIL_STATE_PATH"
 anvil \
   --silent \
   --host 127.0.0.1 \
   --port "$ANVIL_PORT" \
   --chain-id "$EVM_CHAIN_ID" \
+  --state "$ANVIL_STATE_PATH" \
   >"$ANVIL_LOG" 2>&1 &
 ANVIL_PID="$!"
+write_pid_file "$ANVIL_PID_FILE" "$ANVIL_PID"
 
 if ! wait_for_anvil_rpc; then
   echo "[e2e] anvil did not become ready"
@@ -424,6 +557,19 @@ env \
   bun run "$APP_DIR/tests/e2e/setup-api-local.ts"
 
 echo "[e2e] starting keeper api on :$GAME_API_PORT"
+write_env_file \
+  "$KEEPER_ENV_FILE" \
+  PORT "$GAME_API_PORT" \
+  KEEPER_DB_PATH "$KEEPER_DB_PATH" \
+  SOLANA_CLUSTER "localnet" \
+  SOLANA_RPC_URL "$SOLANA_RPC_URL" \
+  ORACLE_AUTHORITY_KEYPAIR "$SOLANA_BOOTSTRAP_KEYPAIR" \
+  FIGHT_ORACLE_PROGRAM_ID "$PROGRAM_ORACLE_ID" \
+  GOLD_CLOB_MARKET_PROGRAM_ID "$PROGRAM_CLOB_ID" \
+  GOLD_PERPS_MARKET_PROGRAM_ID "$PROGRAM_MARKET_ID" \
+  AVAX_RPC_URL "$ANVIL_RPC_URL" \
+  AVAX_GOLD_CLOB_ADDRESS "$EVM_GOLD_CLOB_ADDRESS" \
+  ENABLE_KEEPER_BOT "$KEEPER_BOT_FLAG"
 env \
   PORT="$GAME_API_PORT" \
   KEEPER_DB_PATH="$KEEPER_DB_PATH" \
@@ -435,9 +581,10 @@ env \
   GOLD_PERPS_MARKET_PROGRAM_ID="$PROGRAM_MARKET_ID" \
   AVAX_RPC_URL="$ANVIL_RPC_URL" \
   AVAX_GOLD_CLOB_ADDRESS="$EVM_GOLD_CLOB_ADDRESS" \
-  ENABLE_KEEPER_BOT=false \
+  ENABLE_KEEPER_BOT="$KEEPER_BOT_FLAG" \
   bun run --cwd "$KEEPER_DIR" service >"$KEEPER_LOG" 2>&1 < /dev/null &
 KEEPER_PID="$!"
+write_pid_file "$KEEPER_PID_FILE" "$KEEPER_PID"
 
 if ! wait_for_app "$GAME_API_URL/status"; then
   echo "[e2e] keeper api did not become ready"
@@ -467,6 +614,7 @@ echo "[e2e] pre-bundling vite dependencies"
     ./node_modules/.bin/vite --mode e2e --port "$APP_PORT" --strictPort
 ) >"$APP_LOG" 2>&1 < /dev/null &
 APP_PID="$!"
+write_pid_file "$APP_PID_FILE" "$APP_PID"
 
 if ! wait_for_app "http://127.0.0.1:$APP_PORT/" "$APP_PID"; then
   echo "[e2e] app did not become ready"
@@ -474,6 +622,8 @@ if ! wait_for_app "http://127.0.0.1:$APP_PORT/" "$APP_PID"; then
   exit 1
 fi
 sleep 2
+
+write_control_file
 
 echo "[e2e] running playwright tests"
 (

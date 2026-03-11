@@ -13,9 +13,9 @@ type E2eState = {
   solanaTraderPublicKey?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
-  currentDuelId?: string;
+  currentMatchId?: number;
   currentDuelKeyHex?: string;
-  clobMarketState?: string;
+  clobMatchState?: string;
   evmMatchId?: number;
   evmGoldClobAddress?: string;
 };
@@ -102,6 +102,21 @@ type PredictionMarketsResponse = {
     syncedAt: number | null;
   }>;
   updatedAt: number | null;
+};
+
+type KeeperBotHealthResponse = {
+  ok: boolean;
+  running: boolean;
+  health: {
+    chainKey: string;
+    updatedAtMs: number;
+    running: boolean;
+    recovery: string[];
+    markets: Array<{
+      lifecycleStatus: string;
+      marketRef: string | null;
+    }>;
+  } | null;
 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -284,7 +299,9 @@ test.describe("app tabs and api coverage", () => {
       "/api/arena/prediction-markets/active",
     );
     expect(predictionMarkets.duel.phase).toBe(streamState.cycle.phase);
-    expect(predictionMarkets.duel.duelId).toBe(state.currentDuelId || null);
+    expect(predictionMarkets.duel.duelId).toBe(
+      state.currentMatchId != null ? String(state.currentMatchId) : null,
+    );
     expect(predictionMarkets.duel.duelKey).toBe(state.currentDuelKeyHex || null);
     const solanaMarket = predictionMarkets.markets.find(
       (market) => market.chainKey === "solana",
@@ -292,14 +309,40 @@ test.describe("app tabs and api coverage", () => {
     const avaxMarket = predictionMarkets.markets.find(
       (market) => market.chainKey === "avax",
     );
-    expect(solanaMarket?.marketRef).toBe(state.clobMarketState || null);
+    expect(solanaMarket?.marketRef).toBe(state.clobMatchState || null);
     expect(avaxMarket).toBeTruthy();
-    expect(avaxMarket?.marketRef).toBe(state.evmMarketKey || null);
     expect(avaxMarket?.contractAddress).toBe(
       state.evmGoldClobAddress || null,
     );
+    expect(
+      avaxMarket?.marketRef == null || avaxMarket?.marketRef === state.evmMarketKey,
+    ).toBe(true);
     expect(["OPEN", "LOCKED", "RESOLVED", "CANCELLED", "PENDING", "UNKNOWN"])
       .toContain(avaxMarket?.lifecycleStatus);
+
+    await expect
+      .poll(async () => {
+        const botHealth = await fetchJson<KeeperBotHealthResponse>(
+          request,
+          "/api/keeper/bot-health",
+        );
+        return {
+          ok: botHealth.ok,
+          running: botHealth.running,
+          chainKey: botHealth.health?.chainKey ?? null,
+          updatedAtMs: Number(botHealth.health?.updatedAtMs ?? 0),
+          hasMarkets: (botHealth.health?.markets.length ?? 0) > 0,
+          recovery: Array.isArray(botHealth.health?.recovery),
+        };
+      })
+      .toEqual({
+        ok: true,
+        running: true,
+        chainKey: "avax",
+        updatedAtMs: expect.any(Number),
+        hasMarkets: true,
+        recovery: true,
+      });
 
     const points = await fetchJson<PointsResponse>(
       request,

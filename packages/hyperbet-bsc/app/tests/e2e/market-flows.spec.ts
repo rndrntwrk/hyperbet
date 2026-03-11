@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -69,8 +70,32 @@ type PredictionMarketsResponse = {
   updatedAt: number | null;
 };
 
+type KeeperBotHealthResponse = {
+  ok: boolean;
+  running: boolean;
+  health: {
+    chainKey: string;
+    updatedAtMs: number;
+    running: boolean;
+    recovery: string[];
+    markets: Array<{
+      lifecycleStatus: string;
+      marketRef: string | null;
+    }>;
+  } | null;
+};
+
+type HarnessControl = {
+  controlPath: string;
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const statePath = path.resolve(__dirname, "./state.json");
+const controlPath = path.resolve(__dirname, "./control.json");
+const processControlScriptPath = path.resolve(
+  __dirname,
+  "../../../../../scripts/e2e-process-control.sh",
+);
 const GAME_API_URL = (process.env.E2E_GAME_API_URL || "http://127.0.0.1:5555")
   .trim()
   .replace(/\/$/, "");
@@ -119,6 +144,24 @@ function loadState(): E2eState {
   return JSON.parse(fs.readFileSync(statePath, "utf8")) as E2eState;
 }
 
+function loadControl(): HarnessControl {
+  return JSON.parse(fs.readFileSync(controlPath, "utf8")) as HarnessControl;
+}
+
+function runProcessControl(
+  control: HarnessControl,
+  action: "restart",
+  service: "keeper" | "anvil",
+): void {
+  execFileSync(
+    "bash",
+    [processControlScriptPath, action, control.controlPath, service],
+    {
+      stdio: "inherit",
+    },
+  );
+}
+
 function encodeMarketId(marketId: number): Buffer {
   const bytes = Buffer.alloc(8);
   bytes.writeBigUInt64LE(BigInt(marketId), 0);
@@ -165,6 +208,54 @@ async function fetchPredictionMarkets(
     request,
     "/api/arena/prediction-markets/active",
   );
+}
+
+async function fetchBotHealth(
+  request: APIRequestContext,
+): Promise<KeeperBotHealthResponse> {
+  return fetchJson<KeeperBotHealthResponse>(request, "/api/keeper/bot-health");
+}
+
+async function waitForKeeperBotHealth(
+  request: APIRequestContext,
+  chainKey: string,
+  _marketRef: string | null,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        let payload: KeeperBotHealthResponse | null = null;
+        try {
+          payload = await fetchBotHealth(request);
+        } catch {
+          return {
+            ok: false,
+            running: false,
+            chainKey: null,
+            hasRecovery: false,
+            hasSnapshot: false,
+          };
+        }
+        return {
+          ok: payload.ok,
+          running: payload.running,
+          chainKey: payload.health?.chainKey ?? null,
+          hasRecovery: Array.isArray(payload.health?.recovery),
+          hasSnapshot: payload.health != null,
+        };
+      },
+      {
+        timeout: 90_000,
+        intervals: [1_000, 2_000, 5_000],
+      },
+    )
+    .toEqual({
+      ok: true,
+      running: true,
+      chainKey,
+      hasRecovery: true,
+      hasSnapshot: true,
+    });
 }
 
 function findPredictionMarket(
@@ -1142,6 +1233,298 @@ test.describe("market flows", () => {
     );
     expect(finalPosition[0]).toBe(0n);
     expect(finalPosition[1]).toBe(0n);
+  });
+
+  test("bsc prediction markets recover after keeper and anvil restarts", async ({
+    page,
+    request,
+  }) => {
+    const state = loadState();
+    const control = loadControl();
+    const rpcUrl = state.evmRpcUrl || "http://127.0.0.1:8545";
+    const chainId = Number(state.evmChainId || 97);
+    const userAddress = state.evmHeadlessAddress as Address;
+    const contractAddress = state.evmGoldClobAddress as Address;
+    const marketKey = normalizeHex32(state.evmMarketKey, "evmMarketKey");
+    const duelKey = normalizeHex32(state.evmDuelKeyHex, "evmDuelKeyHex");
+    const oracleAddress = state.evmOracleAddress as Address;
+    const adminPrivateKey = state.evmAdminPrivateKey as `0x${string}`;
+    const publicClient = createPublicClient({
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+    const adminAccount = privateKeyToAccount(adminPrivateKey);
+    const adminWalletClient = createWalletClient({
+      account: adminAccount,
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+
+    await waitForKeeperBotHealth(request, "bsc", state.evmMarketKey || null);
+
+    await gotoApp(page);
+    await selectChain(page, "bsc");
+    const evmPanel = page.getByTestId("evm-panel").first();
+    const claimButton = evmPanel.getByTestId("evm-claim-payout");
+    await expect(evmPanel).toBeVisible({ timeout: 60_000 });
+    await expect(evmPanel.getByTestId("prediction-submit")).toBeEnabled({
+      timeout: 60_000,
+    });
+
+    await evmPanel.getByTestId("prediction-amount-input").fill("1");
+    await evmPanel.getByTestId("evm-price-input").fill("600");
+    const previousYesTx = await readText(page, "evm-last-order-tx");
+    await evmPanel.getByTestId("prediction-select-yes").click();
+    await evmPanel.getByTestId("prediction-submit").click();
+    const yesTx = await waitForNewEvmTxText(
+      page,
+      "evm-last-order-tx",
+      previousYesTx,
+      "reliability YES order",
+    );
+    await waitForEvmReceipt(publicClient, yesTx as Hash);
+
+    await expect
+      .poll(async () => {
+        const result = await readEvmPosition(
+          publicClient,
+          contractAddress,
+          marketKey,
+          userAddress,
+        );
+        return result[0];
+      })
+      .toBeGreaterThan(0n);
+
+    runProcessControl(control, "restart", "keeper");
+    await waitForKeeperBotHealth(request, "bsc", state.evmMarketKey || null);
+
+    runProcessControl(control, "restart", "anvil");
+    runProcessControl(control, "restart", "keeper");
+    await waitForKeeperBotHealth(request, "bsc", state.evmMarketKey || null);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await gotoApp(page);
+    await selectChain(page, "bsc");
+    await page.getByTestId("refresh-market").click();
+
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const bscMarket = findPredictionMarket(predictionMarkets, "bsc");
+          return {
+            duelKey: predictionMarkets.duel.duelKey,
+            marketRef: bscMarket?.marketRef ?? null,
+            lifecycleStatus: bscMarket?.lifecycleStatus ?? null,
+          };
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toEqual({
+        duelKey: duelKey.slice(2),
+        marketRef: state.evmMarketKey || null,
+        lifecycleStatus: "OPEN",
+      });
+
+    const latestEvmBlock = await publicClient.getBlock({ blockTag: "latest" });
+    const reportResultTx = await adminWalletClient.writeContract({
+      address: oracleAddress,
+      abi: duelOutcomeOracleArtifact.abi,
+      functionName: "reportResult",
+      args: [
+        duelKey,
+        1,
+        42n,
+        `0x${"33".repeat(32)}`,
+        `0x${"44".repeat(32)}`,
+        latestEvmBlock.timestamp + 360n,
+        "e2e-resolved-restart",
+      ],
+    });
+    await waitForEvmReceipt(publicClient, reportResultTx);
+    const resolveTx = await adminWalletClient.writeContract({
+      address: contractAddress,
+      abi: GOLD_CLOB_ABI,
+      functionName: "syncMarketFromOracle",
+      args: [duelKey, MARKET_KIND_DUEL_WINNER],
+    });
+    await waitForEvmReceipt(publicClient, resolveTx);
+
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const bscMarket = findPredictionMarket(predictionMarkets, "bsc");
+          return `${bscMarket?.lifecycleStatus || "missing"}:${bscMarket?.winner || "missing"}`;
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toBe("RESOLVED:A");
+
+    runProcessControl(control, "restart", "keeper");
+    await waitForKeeperBotHealth(request, "bsc", state.evmMarketKey || null);
+
+    await page.getByTestId("refresh-market").click();
+    await expect(claimButton).toBeEnabled({ timeout: 30_000 });
+    const previousClaimTx = await readText(page, "evm-last-claim-tx");
+    await claimButton.click();
+    const claimTx = await waitForNewEvmTxText(
+      page,
+      "evm-last-claim-tx",
+      previousClaimTx,
+      "reliability claim",
+    );
+    await waitForEvmReceipt(publicClient, claimTx as Hash);
+
+    const finalPosition = await readEvmPosition(
+      publicClient,
+      contractAddress,
+      marketKey,
+      userAddress,
+    );
+    expect(finalPosition[0]).toBe(0n);
+    expect(finalPosition[1]).toBe(0n);
+  });
+
+  test("bsc cancelled prediction markets refund and clear positions", async ({
+    page,
+    request,
+  }) => {
+    const state = loadState();
+    const rpcUrl = state.evmRpcUrl || "http://127.0.0.1:8545";
+    const chainId = Number(state.evmChainId || 97);
+    const userAddress = state.evmHeadlessAddress as Address;
+    const contractAddress = state.evmGoldClobAddress as Address;
+    const marketKey = normalizeHex32(state.evmMarketKey, "evmMarketKey");
+    const duelKey = normalizeHex32(state.evmDuelKeyHex, "evmDuelKeyHex");
+    const oracleAddress = state.evmOracleAddress as Address;
+    const adminPrivateKey = state.evmAdminPrivateKey as `0x${string}`;
+    const publicClient = createPublicClient({
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+    const adminAccount = privateKeyToAccount(adminPrivateKey);
+    const adminWalletClient = createWalletClient({
+      account: adminAccount,
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+
+    await gotoApp(page);
+    await selectChain(page, "bsc");
+    const evmPanel = page.getByTestId("evm-panel").first();
+    const claimButton = evmPanel.getByTestId("evm-claim-payout");
+    await expect(evmPanel).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("refresh-market").click();
+    await expect(page.getByTestId("market-status")).toContainText(/open/i, {
+      timeout: 60_000,
+    });
+    await expect(evmPanel.getByTestId("prediction-submit")).toBeEnabled({
+      timeout: 60_000,
+    });
+
+    await evmPanel.getByTestId("prediction-amount-input").fill("1");
+    await evmPanel.getByTestId("evm-price-input").fill("600");
+    const previousYesTx = await readText(page, "evm-last-order-tx");
+    await evmPanel.getByTestId("prediction-select-yes").click();
+    await evmPanel.getByTestId("prediction-submit").click();
+    const yesTx = await waitForNewEvmTxText(
+      page,
+      "evm-last-order-tx",
+      previousYesTx,
+      "cancel YES order",
+    );
+    await waitForEvmReceipt(publicClient, yesTx as Hash);
+
+    const cancelTx = await adminWalletClient.writeContract({
+      address: oracleAddress,
+      abi: duelOutcomeOracleArtifact.abi,
+      functionName: "cancelDuel",
+      args: [duelKey, "e2e-cancelled"],
+    });
+    await waitForEvmReceipt(publicClient, cancelTx);
+    const cancelSyncTx = await adminWalletClient.writeContract({
+      address: contractAddress,
+      abi: GOLD_CLOB_ABI,
+      functionName: "syncMarketFromOracle",
+      args: [duelKey, MARKET_KIND_DUEL_WINNER],
+    });
+    await waitForEvmReceipt(publicClient, cancelSyncTx);
+
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const bscMarket = findPredictionMarket(predictionMarkets, "bsc");
+          return bscMarket?.lifecycleStatus || "missing";
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toBe("CANCELLED");
+
+    await page.getByTestId("refresh-market").click();
+    await expect(claimButton).toBeEnabled({ timeout: 30_000 });
+    const previousClaimTx = await readText(page, "evm-last-claim-tx");
+    await claimButton.click();
+    const claimTx = await waitForNewEvmTxText(
+      page,
+      "evm-last-claim-tx",
+      previousClaimTx,
+      "cancel claim",
+    );
+    await waitForEvmReceipt(publicClient, claimTx as Hash);
+
+    const finalPosition = await readEvmPosition(
+      publicClient,
+      contractAddress,
+      marketKey,
+      userAddress,
+    );
+    expect(finalPosition[0]).toBe(0n);
+    expect(finalPosition[1]).toBe(0n);
+    expect(finalPosition[2]).toBe(0n);
+    expect(finalPosition[3]).toBe(0n);
   });
 
   test("solana perps open and close LONG and SHORT positions on-chain", async ({
