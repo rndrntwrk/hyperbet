@@ -576,7 +576,7 @@ export class StressTestAgent extends BaseAgent {
 
     decide(ctx: SimContext): AgentAction[] {
         const actions: AgentAction[] = [];
-        const count = randomInt(3, 8);
+        const count = randomInt(2, 4);
 
         for (let i = 0; i < count; i++) {
             const isBuy = random() > 0.5;
@@ -729,7 +729,7 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
             "cabal",
             "arbitrageur",
         ],
-        defaultTicks: 30,
+        defaultTicks: 10,
         defaultWinner: "B",
     },
     {
@@ -758,7 +758,7 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
             "arbitrageur",
             "stress_test",
         ],
-        defaultTicks: 32,
+        defaultTicks: 8,
         defaultWinner: "B",
     },
 ];

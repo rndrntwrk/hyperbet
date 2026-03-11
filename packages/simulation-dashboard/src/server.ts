@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -58,6 +59,52 @@ const WS_PORT = 3400;
 const HTTP_PORT = 3401;
 const PUBLIC_DIR = join(__dirname, "..", "public");
 const CONTRACTS_DIR = join(__dirname, "..", "..", "evm-contracts");
+const SCENARIO_HISTORY_LIMIT = 50;
+const SCENARIO_HISTORY_PATH =
+    process.env.SIM_SCENARIO_HISTORY_PATH?.trim() ||
+    join(tmpdir(), "hyperbet", "simulation-dashboard-history.json");
+const RESOLVE_CLAIM_BUDGET_MS = Number(
+    process.env.SIM_RESOLVE_CLAIM_BUDGET_MS ?? "45000",
+);
+const SCENARIO_RESOLVE_TIMEOUT_MS = Number(
+    process.env.SIM_SCENARIO_RESOLVE_TIMEOUT_MS ?? "60000",
+);
+
+type ScenarioRunStatus = "queued" | "running" | "succeeded" | "failed";
+
+type ScenarioRunRecord = {
+    runId: string;
+    scenarioId: string;
+    scenarioName: string;
+    seed: string;
+    ticks: number;
+    winner: "A" | "B";
+    status: ScenarioRunStatus;
+    stage: string | null;
+    requestedAt: number;
+    startedAt: number | null;
+    finishedAt: number | null;
+    error: string | null;
+    result: ScenarioResult | null;
+};
+
+type PersistedScenarioState = {
+    history: ScenarioResult[];
+    runs: ScenarioRunRecord[];
+};
+
+type CachedPosition = {
+    aShares: bigint;
+    bShares: bigint;
+    aStake: bigint;
+    bStake: bigint;
+};
+
+type ClaimCandidate = {
+    agent: BaseAgent;
+    address: string;
+    position: CachedPosition;
+};
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let anvilProcess: ChildProcess | null = null;
@@ -78,6 +125,13 @@ let duelCounter = 0;
 let currentScenarioId = "manual";
 let treasuryAddr = "";
 let mmAddr = "";
+let oracleAddr = "";
+let clobAddr = "";
+let feeConfig = {
+    treasuryBps: 0n,
+    mmBps: 0n,
+    winningsMmBps: 0n,
+};
 const eventLog: any[] = [];
 const initialBalances: Map<string, string> = new Map();
 const wsClients = new Set<WebSocket>();
@@ -103,6 +157,9 @@ let lastResolveLatencyMs: number | null = null;
 let lastComputedState: Record<string, any> | null = null;
 let scenarioRunInFlight = false;
 let scenarioHistory: ScenarioResult[] = [];
+let scenarioRuns: ScenarioRunRecord[] = [];
+let activeScenarioRunId: string | null = null;
+let scenarioRunSequence = 0;
 let baselineSnapshotId: string | null = null;
 let baselineRuntimeState:
     | {
@@ -112,6 +169,181 @@ let baselineRuntimeState:
           currentMarketKey: string;
       }
     | null = null;
+const agentAddressCache = new Map<BaseAgent, string>();
+const agentPositionCache = new Map<string, CachedPosition>();
+const ZERO_POSITION: CachedPosition = {
+    aShares: 0n,
+    bShares: 0n,
+    aStake: 0n,
+    bStake: 0n,
+};
+
+function loadScenarioState(): void {
+    if (!existsSync(SCENARIO_HISTORY_PATH)) {
+        return;
+    }
+    try {
+        const parsed = JSON.parse(
+            readFileSync(SCENARIO_HISTORY_PATH, "utf8"),
+        ) as Partial<PersistedScenarioState>;
+        scenarioHistory = Array.isArray(parsed.history)
+            ? parsed.history.slice(0, SCENARIO_HISTORY_LIMIT)
+            : [];
+        scenarioRuns = Array.isArray(parsed.runs)
+            ? parsed.runs.slice(0, SCENARIO_HISTORY_LIMIT)
+            : [];
+    } catch (error) {
+        console.warn(
+            `[history] Failed to load ${SCENARIO_HISTORY_PATH}: ${
+                error instanceof Error ? error.message : String(error)
+            }`,
+        );
+    }
+}
+
+function persistScenarioState(): void {
+    try {
+        mkdirSync(dirname(SCENARIO_HISTORY_PATH), { recursive: true });
+        writeFileSync(
+            SCENARIO_HISTORY_PATH,
+            JSON.stringify(
+                {
+                    history: scenarioHistory.slice(0, SCENARIO_HISTORY_LIMIT),
+                    runs: scenarioRuns.slice(0, SCENARIO_HISTORY_LIMIT),
+                } satisfies PersistedScenarioState,
+                null,
+                2,
+            ),
+            "utf8",
+        );
+    } catch (error) {
+        console.warn(
+            `[history] Failed to persist ${SCENARIO_HISTORY_PATH}: ${
+                error instanceof Error ? error.message : String(error)
+            }`,
+        );
+    }
+}
+
+function getActiveScenarioRun(): ScenarioRunRecord | null {
+    if (!activeScenarioRunId) {
+        return null;
+    }
+    return scenarioRuns.find((run) => run.runId === activeScenarioRunId) ?? null;
+}
+
+function updateScenarioRun(
+    runId: string,
+    mutator: (run: ScenarioRunRecord) => void,
+): ScenarioRunRecord | null {
+    const run = scenarioRuns.find((entry) => entry.runId === runId) ?? null;
+    if (!run) {
+        return null;
+    }
+    mutator(run);
+    persistScenarioState();
+    return run;
+}
+
+function countEnabledAgents(): number {
+    return agents.reduce(
+        (count, agent) => count + (agent.config.enabled ? 1 : 0),
+        0,
+    );
+}
+
+async function getAgentAddress(agent: BaseAgent): Promise<string> {
+    const cached = agentAddressCache.get(agent);
+    if (cached) {
+        return cached;
+    }
+    const address = await agent.signer.getAddress();
+    agentAddressCache.set(agent, address);
+    return address;
+}
+
+function getCachedPosition(address: string): CachedPosition {
+    return agentPositionCache.get(address) ?? ZERO_POSITION;
+}
+
+function hasPosition(position: CachedPosition): boolean {
+    return (
+        position.aShares > 0n ||
+        position.bShares > 0n ||
+        position.aStake > 0n ||
+        position.bStake > 0n
+    );
+}
+
+function updateActiveRunStage(stage: string): void {
+    const activeRun = getActiveScenarioRun();
+    if (!activeRun) {
+        return;
+    }
+    updateScenarioRun(activeRun.runId, (entry) => {
+        entry.stage = stage;
+    });
+}
+
+async function withReadRetry<T>(
+    label: string,
+    load: () => Promise<T>,
+    options: {
+        attempts?: number;
+        timeoutMs?: number;
+        backoffMs?: number;
+    } = {},
+): Promise<T> {
+    const attempts = Math.max(1, options.attempts ?? 2);
+    const timeoutMs = Math.max(2_000, options.timeoutMs ?? 12_000);
+    const backoffMs = Math.max(10, options.backoffMs ?? 100);
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+            return await withTimeout(
+                load(),
+                timeoutMs,
+                `${label} attempt ${attempt}`,
+            );
+        } catch (error) {
+            lastError = error;
+            if (attempt < attempts) {
+                await sleep(backoffMs * attempt);
+            }
+        }
+    }
+
+    throw lastError instanceof Error
+        ? lastError
+        : new Error(`${label} failed after ${attempts} attempts`);
+}
+
+function createScenarioRunRecord(
+    preset: ScenarioPreset,
+    options: {
+        seed?: string;
+        ticks?: number;
+        winner?: "A" | "B";
+    },
+): ScenarioRunRecord {
+    scenarioRunSequence += 1;
+    return {
+        runId: `${preset.id}-${Date.now()}-${scenarioRunSequence}`,
+        scenarioId: preset.id,
+        scenarioName: preset.name,
+        seed: options.seed?.trim() || `${preset.id}-seed`,
+        ticks: Math.max(1, Math.min(200, options.ticks ?? preset.defaultTicks)),
+        winner: options.winner ?? preset.defaultWinner,
+        status: "queued",
+        stage: "queued",
+        requestedAt: Date.now(),
+        startedAt: null,
+        finishedAt: null,
+        error: null,
+        result: null,
+    };
+}
 
 function resetScenarioMetrics(): void {
     peakInventorySeen = 0;
@@ -157,6 +389,10 @@ async function restoreScenarioBaseline(): Promise<void> {
     for (const agent of agents) {
         agent.activeOrderIds = [];
         agent.tradeCount = 0;
+        const address = agentAddressCache.get(agent);
+        if (address) {
+            agentPositionCache.set(address, { ...ZERO_POSITION });
+        }
     }
     resetScenarioMetrics();
 }
@@ -265,10 +501,15 @@ async function deployContracts(): Promise<void> {
     )) as unknown as Contract;
     await clob.waitForDeployment();
 
-    const oracleAddr = await oracle.getAddress();
-    const clobAddr = await clob.getAddress();
+    oracleAddr = await oracle.getAddress();
+    clobAddr = await clob.getAddress();
     oracleRead = oracle.connect(readProvider) as unknown as Contract;
     clobRead = clob.connect(readProvider) as unknown as Contract;
+    feeConfig = {
+        treasuryBps: BigInt(await clob.tradeTreasuryFeeBps()),
+        mmBps: BigInt(await clob.tradeMarketMakerFeeBps()),
+        winningsMmBps: BigInt(await clob.winningsMarketMakerFeeBps()),
+    };
     console.log(`[deploy] Oracle: ${oracleAddr}`);
     console.log(`[deploy] CLOB:   ${clobAddr}`);
 
@@ -354,6 +595,8 @@ async function createAgents(signers: any[]): Promise<void> {
     // Set balances via anvil_setBalance
     for (let i = 0; i < agents.length; i++) {
         const addr = await agents[i].signer.getAddress();
+        agentAddressCache.set(agents[i], addr);
+        agentPositionCache.set(addr, { ...ZERO_POSITION });
         const balWei = ethers.parseEther(agentDefs[i].balance);
         await provider.send("anvil_setBalance", [addr, "0x" + balWei.toString(16)]);
         initialBalances.set(addr, agentDefs[i].balance);
@@ -399,34 +642,25 @@ async function openNewDuel(): Promise<void> {
 
 async function simulationTick(): Promise<void> {
     simTick++;
-    const treasuryFeeBps = await withTimeout(
-        clobRead.tradeTreasuryFeeBps(),
-        5_000,
-        `tick ${simTick} treasuryFeeBps`,
-    );
-    const mmFeeBps = await withTimeout(
-        clobRead.tradeMarketMakerFeeBps(),
-        5_000,
-        `tick ${simTick} mmFeeBps`,
+    const scenarioMode = scenarioRunInFlight;
+    const treasuryFeeBps = feeConfig.treasuryBps;
+    const mmFeeBps = feeConfig.mmBps;
+    let market = await withReadRetry(
+        `tick ${simTick} initial getMarket`,
+        () => clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
     );
 
     for (const agent of agents) {
         if (!agent.config.enabled) continue;
 
+        if (scenarioMode) {
+            updateActiveRunStage(`tick-${simTick}-agent-${agent.config.strategy}`);
+        }
         try {
             await withTimeout(
                 (async () => {
-                    // Build context
-                    const market = await withTimeout(
-                        clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
-                        5_000,
-                        `tick ${simTick} agent ${agent.config.name} getMarket`,
-                    );
-                    const position = await withTimeout(
-                        clobRead.positions(currentMarketKey, await agent.signer.getAddress()),
-                        5_000,
-                        `tick ${simTick} agent ${agent.config.name} getPosition`,
-                    );
+                    const address = await getAgentAddress(agent);
+                    const position = getCachedPosition(address);
                     const ctx: SimContext = {
                         duelKey: currentDuelKey,
                         marketKey: currentMarketKey,
@@ -460,7 +694,9 @@ async function simulationTick(): Promise<void> {
                     if (actions.length > 0) {
                         const logs = await withTimeout(
                             agent.executeActions(actions, ctx),
-                            Math.max(12_000, actions.length * 12_000),
+                            scenarioMode
+                                ? Math.max(8_000, actions.length * 6_000)
+                                : Math.max(20_000, actions.length * 20_000),
                             `tick ${simTick} agent ${agent.config.name} executeActions`,
                         );
                         for (const msg of logs) {
@@ -468,7 +704,7 @@ async function simulationTick(): Promise<void> {
                         }
                     }
                 })(),
-                30_000,
+                scenarioMode ? 15_000 : 120_000,
                 `tick ${simTick} agent ${agent.config.name}`,
             );
         } catch (err: any) {
@@ -477,18 +713,22 @@ async function simulationTick(): Promise<void> {
                 type: "log",
                 data: { message: `[${agent.config.name}] ERROR: ${message}`, tick: simTick },
             });
-            if (message.includes("timed out after")) {
+            if (message.includes("timed out after") && !scenarioMode) {
                 throw err;
             }
         }
 
-        await sleep(25);
+        await sleep(5);
     }
 
-    // Broadcast full state update
+    if (scenarioRunInFlight) {
+        return;
+    }
+
+    // Broadcast full state update for interactive/manual mode.
     await withTimeout(
         broadcastState(),
-        10_000,
+        30_000,
         `tick ${simTick} broadcastState`,
     );
 }
@@ -505,55 +745,77 @@ function calculateMid(bestBid: number, bestAsk: number): number {
 
 async function broadcastState(): Promise<void> {
     try {
-        const market = await clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER);
-
-        // Gather agent states
-        const agentSnapshots = [];
-        for (const agent of agents) {
-            const addr = await agent.signer.getAddress();
-            const balance = await readProvider.getBalance(addr);
-            const position = await clobRead.positions(currentMarketKey, addr);
-            const balanceFormatted = formatEth(balance);
-            const initBal = initialBalances.get(addr) || "10000";
-            const pnlValue = Number(balanceFormatted) - Number(initBal);
-            const inventoryUnits = Number(position.aShares + position.bShares);
-
-            agentSnapshots.push({
-                name: agent.config.name,
-                strategy: agent.config.strategy,
-                description: agent.config.description,
-                enabled: agent.config.enabled,
-                color: agent.config.color,
-                address: addr,
-                balance: balanceFormatted,
-                pnl: pnlValue.toFixed(4),
-                pnlValue,
-                tradeCount: agent.tradeCount,
-                activeOrders: agent.activeOrderIds.length,
-                inventoryUnits,
-                positionRaw: {
-                    aShares: position.aShares.toString(),
-                    bShares: position.bShares.toString(),
-                    aStake: position.aStake.toString(),
-                    bStake: position.bStake.toString(),
-                },
-                position: {
-                    aShares: position.aShares.toString(),
-                    bShares: position.bShares.toString(),
-                    aStake: formatEth(position.aStake),
-                    bStake: formatEth(position.bStake),
-                },
+        const [
+            market,
+            agentSnapshots,
+            book,
+            treasuryBalance,
+            mmBalance,
+        ] = await Promise.all([
+            withReadRetry(
+                "broadcast getMarket",
+                () => clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
+            ),
+            Promise.all(
+                agents.map(async (agent) => {
+                    const addr = await getAgentAddress(agent);
+                    const [balance, position] = await Promise.all([
+                        withReadRetry(
+                            `broadcast ${agent.config.name} getBalance`,
+                            () => readProvider.getBalance(addr),
+                        ),
+                        withReadRetry(
+                            `broadcast ${agent.config.name} getPosition`,
+                            () => clobRead.positions(currentMarketKey, addr),
+                        ),
+                    ]);
+                    const balanceFormatted = formatEth(balance);
+                    const initBal = initialBalances.get(addr) || "10000";
+                    const pnlValue = Number(balanceFormatted) - Number(initBal);
+                    const inventoryUnits = Number(position.aShares + position.bShares);
+                    return {
+                        name: agent.config.name,
+                        strategy: agent.config.strategy,
+                        description: agent.config.description,
+                        enabled: agent.config.enabled,
+                        color: agent.config.color,
+                        address: addr,
+                        balance: balanceFormatted,
+                        pnl: pnlValue.toFixed(4),
+                        pnlValue,
+                        tradeCount: agent.tradeCount,
+                        activeOrders: agent.activeOrderIds.length,
+                        inventoryUnits,
+                        positionRaw: {
+                            aShares: position.aShares.toString(),
+                            bShares: position.bShares.toString(),
+                            aStake: position.aStake.toString(),
+                            bStake: position.bStake.toString(),
+                        },
+                        position: {
+                            aShares: position.aShares.toString(),
+                            bShares: position.bShares.toString(),
+                            aStake: formatEth(position.aStake),
+                            bStake: formatEth(position.bStake),
+                        },
+                        };
+                    }),
+            ),
+            buildOrderBook(),
+            withReadRetry("broadcast treasury getBalance", () => readProvider.getBalance(treasuryAddr)),
+            withReadRetry("broadcast mm getBalance", () => readProvider.getBalance(mmAddr)),
+        ]);
+        for (const snapshot of agentSnapshots) {
+            agentPositionCache.set(snapshot.address, {
+                aShares: BigInt(snapshot.positionRaw.aShares),
+                bShares: BigInt(snapshot.positionRaw.bShares),
+                aStake: BigInt(snapshot.positionRaw.aStake),
+                bStake: BigInt(snapshot.positionRaw.bStake),
             });
         }
         const agentStates = agentSnapshots.map(
             ({ pnlValue, inventoryUnits, positionRaw, ...agentState }) => agentState,
         );
-
-        // Build order book snapshot (scan populated price levels)
-        const book = await buildOrderBook();
-
-        const treasuryBalance = await readProvider.getBalance(treasuryAddr);
-        const mmBalance = await readProvider.getBalance(mmAddr);
         const marketStatus = Number(market.status);
         const bestBid = Number(market.bestBid);
         const bestAsk = Number(market.bestAsk);
@@ -683,16 +945,17 @@ async function broadcastState(): Promise<void> {
                     totalBShares: market.totalBShares.toString(),
                 },
                 contracts: {
-                    oracle: await oracle.getAddress(),
-                    clob: await clob.getAddress(),
+                    oracle: oracleAddr,
+                    clob: clobAddr,
                 },
                 fees: {
-                    treasuryBps: (await clobRead.tradeTreasuryFeeBps()).toString(),
-                    mmBps: (await clobRead.tradeMarketMakerFeeBps()).toString(),
-                    winningsMmBps: (await clobRead.winningsMarketMakerFeeBps()).toString(),
+                    treasuryBps: feeConfig.treasuryBps.toString(),
+                    mmBps: feeConfig.mmBps.toString(),
+                    winningsMmBps: feeConfig.winningsMmBps.toString(),
                     treasuryAccruedWei: (treasuryBalance - ethers.parseEther(initialBalances.get(treasuryAddr) || "10000")).toString(),
                     mmAccruedWei: (mmBalance - ethers.parseEther(initialBalances.get(mmAddr) || "10000")).toString(),
                 },
+                activeRun: getActiveScenarioRun(),
                 agents: agentStates,
                 book,
                 mitigation: {
@@ -728,32 +991,77 @@ async function buildOrderBook(): Promise<{ bids: any[]; asks: any[] }> {
     const asks: { price: number; total: string }[] = [];
 
     // Sample price levels around the interesting range
-    const market = await clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER);
+    const market = await withReadRetry(
+        "order-book getMarket",
+        () => clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
+    );
     const bestBid = Number(market.bestBid);
     const bestAsk = Number(market.bestAsk);
 
     // Scan bid side downward from bestBid
     if (bestBid > 0) {
+        const prices: number[] = [];
         for (let p = bestBid; p >= Math.max(1, bestBid - 100); p -= 5) {
-            try {
-                const level = await clobRead.getPriceLevel(currentDuelKey, MARKET_KIND_DUEL_WINNER, BUY_SIDE, p);
-                if (level[2] > 0n) {
-                    bids.push({ price: p, total: level[2].toString() });
-                }
-            } catch { /* skip */ }
+            prices.push(p);
         }
+        const levels = await Promise.all(
+            prices.map(async (price) => {
+                try {
+                    const level = await withReadRetry(
+                        `order-book bid level ${price}`,
+                        () => clobRead.getPriceLevel(
+                            currentDuelKey,
+                            MARKET_KIND_DUEL_WINNER,
+                            BUY_SIDE,
+                            price,
+                        ),
+                    );
+                    return level[2] > 0n
+                        ? { price, total: level[2].toString() }
+                        : null;
+                } catch {
+                    return null;
+                }
+            }),
+        );
+        bids.push(
+            ...levels.filter(
+                (level): level is { price: number; total: string } => level != null,
+            ),
+        );
     }
 
     // Scan ask side upward from bestAsk
     if (bestAsk > 0 && bestAsk < MAX_PRICE) {
+        const prices: number[] = [];
         for (let p = bestAsk; p <= Math.min(999, bestAsk + 100); p += 5) {
-            try {
-                const level = await clobRead.getPriceLevel(currentDuelKey, MARKET_KIND_DUEL_WINNER, SELL_SIDE, p);
-                if (level[2] > 0n) {
-                    asks.push({ price: p, total: level[2].toString() });
-                }
-            } catch { /* skip */ }
+            prices.push(p);
         }
+        const levels = await Promise.all(
+            prices.map(async (price) => {
+                try {
+                    const level = await withReadRetry(
+                        `order-book ask level ${price}`,
+                        () => clobRead.getPriceLevel(
+                            currentDuelKey,
+                            MARKET_KIND_DUEL_WINNER,
+                            SELL_SIDE,
+                            price,
+                        ),
+                    );
+                    return level[2] > 0n
+                        ? { price, total: level[2].toString() }
+                        : null;
+                } catch {
+                    return null;
+                }
+            }),
+        );
+        asks.push(
+            ...levels.filter(
+                (level): level is { price: number; total: string } => level != null,
+            ),
+        );
     }
 
     return { bids, asks };
@@ -792,55 +1100,137 @@ function buildScenarioTraces(limit = 80): AgentActionTrace[] {
 function buildScenarioResult(
     preset: ScenarioPreset,
     seed: string,
+    options: {
+        degradedReasons?: Array<{
+            name: string;
+            reason: string;
+        }>;
+    } = {},
 ): ScenarioResult {
+    const fallbackGates = [...(options.degradedReasons ?? [])].reverse().map(
+        (degradedReason) =>
+            ({
+                name: degradedReason.name,
+                passed: false,
+                reason: degradedReason.reason,
+            }) satisfies MitigationGate,
+    );
     if (!lastComputedState) {
-        throw new Error("Scenario finished without a computed state snapshot");
+        fallbackGates.unshift({
+            name: "stateCaptured",
+            passed: false,
+            reason: "Scenario finished without a computed state snapshot",
+        });
+        const marketMakerPnl = worstMarketMakerPnl;
+        return {
+            name: preset.name,
+            seed,
+            chainKey: "bsc",
+            attackerPnl: bestAttackerPnlSeen,
+            marketMakerPnl,
+            maxDrawdownBps: Math.round(
+                (Math.abs(Math.min(0, marketMakerPnl)) / 1) * 10_000,
+            ),
+            peakInventory: peakInventorySeen,
+            quoteUptimeRatio:
+                scenarioObservedTicks > 0
+                    ? scenarioQuotedTicks / scenarioObservedTicks
+                    : 0,
+            spreadWidthBps:
+                scenarioSpreadSamples > 0
+                    ? Math.round(scenarioSpreadBpsTotal / scenarioSpreadSamples)
+                    : 0,
+            orderChurn: eventLog.filter((entry) =>
+                entry.event === "OrderPlaced" ||
+                entry.event === "OrderCancelled" ||
+                entry.event === "OrderMatched",
+            ).length,
+            lockTransitionLatencyMs: lastResolveLatencyMs,
+            resolvedCorrectly: false,
+            claimCorrectly: false,
+            gates: fallbackGates,
+            traces: buildScenarioTraces(),
+        };
     }
+
+    const gates = [
+        ...(lastComputedState.mitigation.gates as MitigationGate[]),
+    ];
+    gates.unshift(...fallbackGates);
+
+    const marketMakerSnapshotPnl = Number(
+        lastComputedState.mitigation.metrics.marketMakerPnl ?? 0,
+    );
+    const marketMakerPnl =
+        marketMakerSnapshotPnl !== 0 ? marketMakerSnapshotPnl : worstMarketMakerPnl;
+    const maxDrawdownBps = Math.round(
+        (Math.abs(Math.min(0, marketMakerPnl)) / 1) * 10_000,
+    );
 
     return {
         name: preset.name,
         seed,
         chainKey: "bsc",
-        attackerPnl: Number(lastComputedState.mitigation.metrics.attackerPnlPeak ?? 0),
-        marketMakerPnl: Number(lastComputedState.mitigation.metrics.marketMakerPnl ?? 0),
-        maxDrawdownBps: Number(lastComputedState.mitigation.metrics.marketMakerDrawdownBps ?? 0),
-        peakInventory: Number(lastComputedState.mitigation.metrics.peakInventory ?? 0),
+        attackerPnl: bestAttackerPnlSeen,
+        marketMakerPnl,
+        maxDrawdownBps,
+        peakInventory: peakInventorySeen,
         quoteUptimeRatio:
             scenarioObservedTicks > 0 ? scenarioQuotedTicks / scenarioObservedTicks : 0,
         spreadWidthBps:
             scenarioSpreadSamples > 0
                 ? Math.round(scenarioSpreadBpsTotal / scenarioSpreadSamples)
                 : Number(lastComputedState.mitigation.metrics.spreadWidthBps ?? 0),
-        orderChurn: Number(lastComputedState.mitigation.metrics.orderChurn ?? 0),
+        orderChurn: eventLog.filter((entry) =>
+            entry.event === "OrderPlaced" ||
+            entry.event === "OrderCancelled" ||
+            entry.event === "OrderMatched",
+        ).length,
         lockTransitionLatencyMs: lastResolveLatencyMs,
-        resolvedCorrectly:
-            Boolean(lastComputedState.mitigation.metrics.settlementConsistent) &&
-            Number(lastComputedState.market.status) === MARKET_STATUS_RESOLVED,
-        claimCorrectly: Boolean(lastComputedState.mitigation.metrics.claimsProcessed),
-        gates: lastComputedState.mitigation.gates as MitigationGate[],
+        resolvedCorrectly: (options.degradedReasons?.length ?? 0) > 0
+            ? false
+            : Boolean(lastComputedState.mitigation.metrics.settlementConsistent) &&
+              Number(lastComputedState.market.status) === MARKET_STATUS_RESOLVED,
+        claimCorrectly: (options.degradedReasons?.length ?? 0) > 0
+            ? false
+            : Boolean(lastComputedState.mitigation.metrics.claimsProcessed),
+        gates,
         traces: buildScenarioTraces(),
     };
 }
 
 async function runScenarioPreset(
-    scenarioName: string,
-    options: {
-        seed?: string;
-        ticks?: number;
-        winner?: "A" | "B";
-    } = {},
+    run: ScenarioRunRecord,
 ): Promise<ScenarioResult> {
     if (scenarioRunInFlight) {
         throw new Error("A scenario run is already in progress");
     }
 
+    const preset = SCENARIO_PRESETS.find((entry) => entry.id === run.scenarioId);
+    if (!preset) {
+        throw new Error(`Unknown scenario preset: ${run.scenarioId}`);
+    }
+
     scenarioRunInFlight = true;
+    activeScenarioRunId = run.runId;
     try {
-        await restoreScenarioBaseline();
-        const preset = applyScenarioPresetByName(scenarioName);
-        const seed = options.seed?.trim() || `${preset.id}-seed`;
-        const ticks = Math.max(1, Math.min(200, options.ticks ?? preset.defaultTicks));
-        const winner = options.winner ?? preset.defaultWinner;
+        updateScenarioRun(run.runId, (entry) => {
+            entry.status = "running";
+            entry.stage = "restore-baseline";
+            entry.startedAt = Date.now();
+            entry.finishedAt = null;
+            entry.error = null;
+            entry.result = null;
+        });
+        await withTimeout(
+            restoreScenarioBaseline(),
+            20_000,
+            `scenario ${preset.id} restore baseline`,
+        );
+        applyScenarioPresetByName(run.scenarioId);
+        const seed = run.seed;
+        const ticks = run.ticks;
+        const winner = run.winner;
 
         setRandomSeed(seed);
         broadcast({
@@ -850,26 +1240,131 @@ async function runScenarioPreset(
                 tick: simTick,
             },
         });
-        await broadcastState();
 
+        const degradedReasons: Array<{ name: string; reason: string }> = [];
+        const tickTimeoutMs = Math.max(20_000, countEnabledAgents() * 4_000);
         for (let i = 0; i < ticks; i += 1) {
-            await withTimeout(
-                simulationTick(),
-                25_000,
-                `scenario ${preset.id} tick ${i + 1}`,
-            );
+            updateScenarioRun(run.runId, (entry) => {
+                entry.stage = `tick-${i + 1}-of-${ticks}`;
+            });
+            try {
+                await withTimeout(
+                    simulationTick(),
+                    tickTimeoutMs,
+                    `scenario ${preset.id} tick ${i + 1}`,
+                );
+            } catch (error) {
+                const reason =
+                    error instanceof Error ? error.message : String(error);
+                degradedReasons.push({
+                    name: "tickCompleted",
+                    reason,
+                });
+                broadcast({
+                    type: "log",
+                    data: {
+                        message: `⚠️ Scenario tick degraded: ${reason.slice(0, 140)}`,
+                        tick: simTick,
+                    },
+                });
+                break;
+            }
         }
 
-        const resolveStartedAt = Date.now();
-        await withTimeout(
-            resolveDuel(winner === "B" ? SIDE_B : SIDE_A),
-            30_000,
-            `scenario ${preset.id} resolve`,
-        );
-        lastResolveLatencyMs = Date.now() - resolveStartedAt;
+        if (degradedReasons.length === 0) {
+            updateScenarioRun(run.runId, (entry) => {
+                entry.stage = "resolve";
+            });
+            try {
+                const resolveStartedAt = Date.now();
+                await withTimeout(
+                    resolveDuel(winner === "B" ? SIDE_B : SIDE_A),
+                    SCENARIO_RESOLVE_TIMEOUT_MS,
+                    `scenario ${preset.id} resolve`,
+                );
+                lastResolveLatencyMs = Date.now() - resolveStartedAt;
+            } catch (error) {
+                const reason =
+                    error instanceof Error ? error.message : String(error);
+                degradedReasons.push({
+                    name: "resolveCompleted",
+                    reason,
+                });
+                broadcast({
+                    type: "log",
+                    data: {
+                        message: `⚠️ Scenario resolve degraded: ${reason.slice(0, 140)}`,
+                        tick: simTick,
+                    },
+                });
+            }
+        }
 
-        const result = buildScenarioResult(preset, seed);
-        scenarioHistory = [result, ...scenarioHistory].slice(0, 50);
+        if (degradedReasons.length > 0) {
+            try {
+                await withTimeout(
+                    broadcastState(),
+                    45_000,
+                    `scenario ${preset.id} final degraded broadcastState`,
+                );
+            } catch (refreshError) {
+                broadcast({
+                    type: "log",
+                    data: {
+                        message: `⚠️ Final degraded state refresh failed: ${
+                            refreshError instanceof Error
+                                ? refreshError.message.slice(0, 140)
+                                : String(refreshError).slice(0, 140)
+                        }`,
+                        tick: simTick,
+                    },
+                });
+            }
+        }
+
+        const result = buildScenarioResult(preset, seed, {
+            degradedReasons,
+        });
+        scenarioHistory = [result, ...scenarioHistory].slice(0, SCENARIO_HISTORY_LIMIT);
+        updateScenarioRun(run.runId, (entry) => {
+            entry.status = "succeeded";
+            entry.stage = degradedReasons.length > 0 ? "completed-degraded" : "completed";
+            entry.finishedAt = Date.now();
+            entry.error = degradedReasons.length > 0
+                ? degradedReasons.map((reason) => `${reason.name}: ${reason.reason}`).join("; ")
+                : null;
+            entry.result = result;
+        });
+        broadcast({
+            type: "scenario_result",
+            data: result,
+        });
+        return result;
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const activeStage = getActiveScenarioRun()?.stage ?? "scenario";
+        const degradedGateName = activeStage === "restore-baseline"
+            ? "baselineRestored"
+            : activeStage.startsWith("resolve")
+              ? "resolveCompleted"
+              : activeStage.startsWith("tick-")
+                ? "tickCompleted"
+                : "scenarioCompleted";
+        const result = buildScenarioResult(preset, run.seed, {
+            degradedReasons: [
+                {
+                    name: degradedGateName,
+                    reason,
+                },
+            ],
+        });
+        updateScenarioRun(run.runId, (entry) => {
+            entry.status = "succeeded";
+            entry.stage = "completed-degraded";
+            entry.finishedAt = Date.now();
+            entry.error = `${degradedGateName}: ${reason}`;
+            entry.result = result;
+        });
         broadcast({
             type: "scenario_result",
             data: result,
@@ -878,6 +1373,8 @@ async function runScenarioPreset(
     } finally {
         resetRandomSource();
         scenarioRunInFlight = false;
+        activeScenarioRunId = null;
+        persistScenarioState();
     }
 }
 
@@ -887,6 +1384,7 @@ async function resolveDuel(winnerSide: number): Promise<void> {
   try {
     const reporter = await provider.getSigner(2);
     const operator = await provider.getSigner(1);
+    updateActiveRunStage("resolve-advance-time");
 
     // Advance Anvil's block time past the betting window (1 week forward)
     await provider.send("evm_increaseTime", [604800]);
@@ -895,6 +1393,7 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     const block = await provider.getBlock("latest");
     const now = BigInt(block?.timestamp ?? Math.floor(Date.now() / 1000));
 
+    updateActiveRunStage("resolve-report-result");
     const tx1: any = await withTimeout(
         (oracle.connect(reporter) as any).reportResult(
             currentDuelKey,
@@ -910,6 +1409,7 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     );
     await withTimeout(tx1.wait(), 10_000, "resolve reportResult receipt");
 
+    updateActiveRunStage("resolve-sync-market");
     const tx2: any = await withTimeout(
         (clob.connect(operator) as any).syncMarketFromOracle(currentDuelKey, MARKET_KIND_DUEL_WINNER),
         10_000,
@@ -929,39 +1429,90 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     simRunning = false;
     broadcast({ type: "log", data: { message: "⏸️ Simulation auto-paused after resolution. Click 'New Duel' then 'Start' to continue.", tick: simTick } });
 
-    // Auto-claim for all agents
-    for (const agent of agents) {
+    updateActiveRunStage("resolve-scan-claims");
+    const claimCandidates = (
+        await Promise.all(
+            agents.map(async (agent): Promise<ClaimCandidate | null> => {
+                const address = await getAgentAddress(agent);
+                const positionRaw = await withReadRetry(
+                    `${agent.config.name} claim position lookup`,
+                    () => clobRead.positions(currentMarketKey, address),
+                    { timeoutMs: 15_000 },
+                );
+                const position: CachedPosition = {
+                    aShares: BigInt(positionRaw.aShares),
+                    bShares: BigInt(positionRaw.bShares),
+                    aStake: BigInt(positionRaw.aStake),
+                    bStake: BigInt(positionRaw.bStake),
+                };
+                agentPositionCache.set(address, position);
+                return hasPosition(position)
+                    ? {
+                          agent,
+                          address,
+                          position,
+                      }
+                    : null;
+            }),
+        )
+    ).filter((candidate): candidate is ClaimCandidate => candidate != null);
+
+    updateActiveRunStage(`resolve-claims-${claimCandidates.length}`);
+    const claimDeadline = Date.now() + RESOLVE_CLAIM_BUDGET_MS;
+    for (const [index, candidate] of claimCandidates.entries()) {
+        if (Date.now() >= claimDeadline) {
+            updateActiveRunStage("resolve-claims-budget-exhausted");
+            broadcast({
+                type: "log",
+                data: {
+                    message: `⏭️ Claim budget exhausted after ${index}/${claimCandidates.length} claims; continuing with partial settlement state`,
+                    tick: simTick,
+                },
+            });
+            break;
+        }
         try {
-            const position = await withTimeout(
-                clobRead.positions(currentMarketKey, await agent.signer.getAddress()),
-                5_000,
-                `${agent.config.name} claim position lookup`,
+            updateActiveRunStage(
+                `resolve-claim-${index + 1}-of-${claimCandidates.length}`,
             );
-            if (position.aShares > 0n || position.bShares > 0n) {
-                const txClaim: any = await withTimeout(
-                    (clob.connect(agent.signer) as any).claim(currentDuelKey, MARKET_KIND_DUEL_WINNER),
-                    10_000,
-                    `${agent.config.name} claim`,
-                );
-                await withTimeout(
-                    txClaim.wait(),
-                    10_000,
-                    `${agent.config.name} claim receipt`,
-                );
-                broadcast({
-                    type: "log",
-                    data: { message: `[${agent.config.name}] Claimed winnings`, tick: simTick },
-                });
-            }
+            const txClaim: any = await withTimeout(
+                (clob.connect(candidate.agent.signer) as any).claim(
+                    currentDuelKey,
+                    MARKET_KIND_DUEL_WINNER,
+                ),
+                20_000,
+                `${candidate.agent.config.name} claim`,
+            );
+            await withTimeout(
+                txClaim.wait(),
+                20_000,
+                `${candidate.agent.config.name} claim receipt`,
+            );
+            agentPositionCache.set(candidate.address, { ...ZERO_POSITION });
+            broadcast({
+                type: "log",
+                data: {
+                    message: `[${candidate.agent.config.name}] Claimed winnings`,
+                    tick: simTick,
+                },
+            });
         } catch (err: any) {
             broadcast({
                 type: "log",
-                data: { message: `[${agent.config.name}] Claim: ${err.message?.slice(0, 80)}`, tick: simTick },
+                data: {
+                    message: `[${candidate.agent.config.name}] Claim: ${err.message?.slice(0, 80)}`,
+                    tick: simTick,
+                },
             });
         }
     }
 
-    await broadcastState();
+    updateActiveRunStage("resolve-final-state");
+    await withTimeout(
+        broadcastState(),
+        60_000,
+        "resolve final broadcastState",
+    );
   } catch (err: any) {
     broadcast({
         type: "log",
@@ -1133,20 +1684,42 @@ async function handleHttpRequest(
             ok: true,
             scenarios: SCENARIO_PRESETS,
             latest: scenarioHistory[0] ?? null,
+            activeRun: getActiveScenarioRun(),
+            runs: scenarioRuns.slice(0, SCENARIO_HISTORY_LIMIT),
             historyCount: scenarioHistory.length,
         });
         return;
     }
 
     if (requestUrl.pathname === "/api/scenarios/results") {
+        const runId = requestUrl.searchParams.get("runId");
+        if (runId) {
+            const run = scenarioRuns.find((entry) => entry.runId === runId) ?? null;
+            writeJson(res, run ? 200 : 404, {
+                ok: run != null,
+                run,
+                error: run ? null : `Unknown runId: ${runId}`,
+            });
+            return;
+        }
         writeJson(res, 200, {
             ok: true,
+            activeRun: getActiveScenarioRun(),
+            runs: scenarioRuns.slice(0, SCENARIO_HISTORY_LIMIT),
             results: scenarioHistory,
         });
         return;
     }
 
     if (requestUrl.pathname === "/api/scenarios/run") {
+        if (scenarioRunInFlight) {
+            writeJson(res, 409, {
+                ok: false,
+                error: "A scenario run is already in progress",
+                run: getActiveScenarioRun(),
+            });
+            return;
+        }
         const scenarioName =
             requestUrl.searchParams.get("name") ??
             requestUrl.searchParams.get("id");
@@ -1159,9 +1732,19 @@ async function handleHttpRequest(
         }
 
         try {
+            const preset = SCENARIO_PRESETS.find(
+                (entry) => entry.name === scenarioName || entry.id === scenarioName,
+            );
+            if (!preset) {
+                writeJson(res, 404, {
+                    ok: false,
+                    error: `Unknown scenario: ${scenarioName}`,
+                });
+                return;
+            }
             const ticksParam = requestUrl.searchParams.get("ticks");
             const winnerParam = requestUrl.searchParams.get("winner");
-            const result = await runScenarioPreset(scenarioName, {
+            const run = createScenarioRunRecord(preset, {
                 seed: requestUrl.searchParams.get("seed") ?? undefined,
                 ticks:
                     ticksParam == null || ticksParam === ""
@@ -1172,9 +1755,18 @@ async function handleHttpRequest(
                         ? winnerParam
                         : undefined,
             });
-            writeJson(res, 200, {
+            scenarioRuns = [run, ...scenarioRuns].slice(0, SCENARIO_HISTORY_LIMIT);
+            persistScenarioState();
+            void runScenarioPreset(run).catch((error) => {
+                console.error(
+                    `[scenario] ${run.runId} failed: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`,
+                );
+            });
+            writeJson(res, 202, {
                 ok: true,
-                result,
+                run,
             });
         } catch (error) {
             writeJson(res, 500, {
@@ -1194,6 +1786,7 @@ async function main(): Promise<void> {
     console.log("╔══════════════════════════════════════════════════════════╗");
     console.log("║   Hyperbet Simulation Dashboard                        ║");
     console.log("╚══════════════════════════════════════════════════════════╝");
+    loadScenarioState();
 
     // 1. Start Anvil
     await startAnvil();

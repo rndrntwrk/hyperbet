@@ -5,7 +5,8 @@
     "type": "module",
     "scripts": {
         "dev": "tsx src/server.ts",
-        "build": "tsc --noEmit"
+        "build": "tsc --noEmit",
+        "scenario": "tsx src/cli.ts"
     },
     "dependencies": {
         "@hyperbet/mm-core": "workspace:*",
