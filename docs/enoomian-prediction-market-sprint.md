@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `dc05370`
+- Latest recorded gate merged into base: `70e1bd4`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-06-frontend-settlement`
+- Active gate branch: `enoomian/pm-08-solana-sim-backend`
 
 ## Gate Status
 
@@ -26,7 +26,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 04 | `enoomian/pm-04-keeper-health-recovery` | Complete | Yes | Keeper bots now persist market health/recovery snapshots and all three keeper services expose merged bot health via `/status` and `/api/keeper/bot-health` |
 | 05 | `enoomian/pm-05-runtime-parity` | Complete | Yes | External bot and EVM keepers now share chain-registry runtime assembly, quote refresh behavior, and direct local quote lifecycle smokes for BSC and AVAX |
 | 06 | `enoomian/pm-06-frontend-settlement` | Pending | No | Make the frontend lifecycle and claim handling fully canonical on normalized market state |
-| 07 | `enoomian/pm-07-solana-bot-execution` | Pending | No | Finish real Solana execution in the external market-maker bot |
+| 07 | `enoomian/pm-07-solana-bot-execution` | Complete | Yes | External market-maker bot now executes real Solana quote, cancel, refresh, and claim flows with validator-backed smoke coverage |
 | 08 | `enoomian/pm-08-solana-sim-backend` | Pending | No | Build validator-backed Solana scenario execution |
 | 09 | `enoomian/pm-09-solana-scenario-gates` | Pending | No | Add Solana exploit families and deterministic gate coverage |
 | 10 | `enoomian/pm-10-cross-chain-e2e` | Pending | No | Stabilize create -> seed -> trade -> lock -> resolve -> claim across Solana, BSC, and AVAX |
@@ -187,6 +187,34 @@ Known remaining risk:
 - The BSC and AVAX app shells still have UI-level drift relative to the shared canonical lifecycle panels, so frontend claim/settlement parity remains open for Gate 06 and full cross-chain product reliability remains open for Gate 10.
 - The direct runtime smokes currently log a benign cancel failure when the bot tries to cancel an order that was already fully filled before lock; the tracked-order state still clears correctly, but the noisy log path should eventually be tightened.
 - Solana execution in the external bot is still incomplete, so runtime parity is only closed for the EVM side of the external market maker.
+
+### Gate 07
+
+- Branch: `enoomian/pm-07-solana-bot-execution`
+- Base commit after merge: `70e1bd4`
+- Commits:
+  - `19bb8e6` `market-maker-bot: implement Solana execution runtime`
+  - `d0997ae` `tests: add Solana bot smoke coverage`
+  - `70e1bd4` `docs: document Solana bot runtime requirements`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Replaced the external bot's readiness-only Solana path with an Anchor-backed runtime that resolves Solana deployment defaults from `@hyperbet/chain-registry`, loads config PDA state, and disables only Solana when signer, program, or config prerequisites are unusable.
+- Added real Solana duel-to-market sync, on-chain order reconciliation, shared mm-core quote planning, refresh-window keep behavior, stale and lifecycle-driven cancellation, resolved claim handling, and richer Solana status/config reporting.
+- Added focused Solana unit coverage plus a validator-backed `bun run smoke:runtime:solana` path reused from the local Anchor workspace.
+- Documented the Solana signer, program-id, and wallet-config requirements in the market-maker bot package examples and README.
+
+Targeted verification:
+
+- `bun test` in `packages/market-maker-bot`
+- `bunx tsc --noEmit -p tsconfig.json` in `packages/market-maker-bot`
+- `ANCHOR_TEST_RPC_PORT=18999 ANCHOR_TEST_WS_PORT=19000 ANCHOR_TEST_FAUCET_PORT=19900 bun run smoke:runtime:solana` in `packages/market-maker-bot`
+
+Known remaining risk:
+
+- The validator smoke proves quote placement, fill, resolve, and claim. Stale-order cancellation and lock-triggered cancellation remain primarily covered by unit tests and should be re-exercised in Gate 10 cross-chain E2E.
+- Production Solana execution now depends on a funded signer plus live fight-oracle / gold-CLOB deployments and config PDA state, so env validation and operator runbooks remain Gate 11 work.
 
 ## Update Template
 
