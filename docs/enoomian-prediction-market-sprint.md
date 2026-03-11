@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `70e1bd4`
+- Latest recorded gate merged into base: `e709eac`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-08-solana-sim-backend`
+- Active gate branch: `enoomian/pm-06-frontend-settlement`
 
 ## Gate Status
 
@@ -27,7 +27,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 05 | `enoomian/pm-05-runtime-parity` | Complete | Yes | External bot and EVM keepers now share chain-registry runtime assembly, quote refresh behavior, and direct local quote lifecycle smokes for BSC and AVAX |
 | 06 | `enoomian/pm-06-frontend-settlement` | Pending | No | Make the frontend lifecycle and claim handling fully canonical on normalized market state |
 | 07 | `enoomian/pm-07-solana-bot-execution` | Complete | Yes | External market-maker bot now executes real Solana quote, cancel, refresh, and claim flows with validator-backed smoke coverage |
-| 08 | `enoomian/pm-08-solana-sim-backend` | Pending | No | Build validator-backed Solana scenario execution |
+| 08 | `enoomian/pm-08-solana-sim-backend` | Complete | Yes | Validator-backed Solana proof scenarios now run through the shared scenario backend contract |
 | 09 | `enoomian/pm-09-solana-scenario-gates` | Pending | No | Add Solana exploit families and deterministic gate coverage |
 | 10 | `enoomian/pm-10-cross-chain-e2e` | Pending | No | Stabilize create -> seed -> trade -> lock -> resolve -> claim across Solana, BSC, and AVAX |
 | 11 | `enoomian/pm-11-ci-ops` | Pending | No | Wire gates into CI, add env safety checks, add-chain proof, and runbooks |
@@ -215,6 +215,37 @@ Known remaining risk:
 
 - The validator smoke proves quote placement, fill, resolve, and claim. Stale-order cancellation and lock-triggered cancellation remain primarily covered by unit tests and should be re-exercised in Gate 10 cross-chain E2E.
 - Production Solana execution now depends on a funded signer plus live fight-oracle / gold-CLOB deployments and config PDA state, so env validation and operator runbooks remain Gate 11 work.
+
+### Gate 08
+
+- Branch: `enoomian/pm-08-solana-sim-backend`
+- Base commit after merge: `e709eac`
+- Commits:
+  - `8d8ae2a` `simulation-dashboard: add chain-aware scenario metadata`
+  - `067ee7a` `simulation-dashboard: add validator-backed Solana scenarios`
+  - `e709eac` `simulation-dashboard: harden backend split runtime`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Added backend selection and shared backend contracts so simulation scenarios can run on EVM or validator-backed Solana without changing the public HTTP surface.
+- Added a full Solana backend with validator bootstrapping, program runtime wiring, proof scenario execution, and normalization into the shared `ScenarioResult` contract.
+- Added chain-aware scenario run records and unit coverage for backend routing and Solana result normalization.
+- Hardened the EVM backend path with managed MM quote refresh behavior, read-provider fallback to the write client, and env-configurable simulation ports for isolated verification runs.
+
+Targeted verification:
+
+- `bunx tsc --noEmit -p tsconfig.json` in `packages/simulation-dashboard`
+- `bun test` in `packages/simulation-dashboard`
+- `SIM_API_URL=http://127.0.0.1:3501 node --import tsx src/cli.ts canonical solana-happy-path`
+- `SIM_API_URL=http://127.0.0.1:3501 node --import tsx src/cli.ts canonical solana-unauthorized-oracle-attack`
+- `SIM_API_URL=http://127.0.0.1:3501 node --import tsx src/cli.ts canonical stale-oracle-sniping --fresh`
+
+Known remaining risk:
+
+- The long diagnostic EVM `normal-market` preset still degrades under extended tick counts; Gate 08 closes the backend abstraction and proof path, but not the remaining diagnostic-performance issue.
+- Solana proof runs still leave noisy websocket reconnect logs from validator teardown in the long-lived dashboard process; they do not invalidate results, but the cleanup path should be tightened.
+- Gate 09 must now add real Solana exploit families on top of this backend rather than relying only on proof scenarios.
 
 ## Update Template
 
