@@ -38,3 +38,4 @@ Deployment runbook:
 
 - `docs/hyperbet-production-deploy.md`
 - `docs/development-setup.md`
+- `docs/enoomian-prediction-market-sprint.md`
