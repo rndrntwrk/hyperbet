@@ -17,6 +17,7 @@ export {
   DEFAULT_INVARIANT_LIMITS,
   evaluateInvariantBreaches,
 } from "./invariants.js";
+export { DEFAULT_CHAIN_POLICIES, evaluatePolicyBreaches } from "./policy.js";
 export type {
   ChainId,
   ChainReport,
@@ -31,3 +32,4 @@ export type {
   RegressionFinding,
 } from "./baseline.js";
 export type { InvariantBreach, InvariantLimits } from "./invariants.js";
+export type { ChainPolicy, PolicyBreach } from "./policy.js";

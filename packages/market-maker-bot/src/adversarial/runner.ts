@@ -10,6 +10,7 @@ import {
   writeBaselineSnapshot,
 } from "./baseline.js";
 import { DEFAULT_INVARIANT_LIMITS, evaluateInvariantBreaches } from "./invariants.js";
+import { evaluatePolicyBreaches } from "./policy.js";
 import { runAdversarialSuite, toMarkdownSummary } from "./suite.js";
 import type { ChainId, SuiteReport } from "./types.js";
 
@@ -118,6 +119,15 @@ export function runGate(
         message: `baseline regression ${first.chain}/${first.scenario} ${first.metric}: baseline=${first.baseline} candidate=${first.candidate} threshold=${first.threshold}`,
       };
     }
+  }
+
+  const policyBreaches = evaluatePolicyBreaches(report);
+  if (policyBreaches.length > 0) {
+    const first = policyBreaches[0]!;
+    return {
+      ok: false,
+      message: `policy breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
+    };
   }
 
   return {
