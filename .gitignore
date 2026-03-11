@@ -33,3 +33,7 @@ packages/evm-contracts/deployments
 keys/
 wallets.generated.json
 packages/market-maker-bot/test.out
+__pycache__/
+*.pyc
+.venv/
+poetry.lock
