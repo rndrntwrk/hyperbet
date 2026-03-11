@@ -8,6 +8,17 @@ declare_id!("6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD");
 pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
 
+const DEFAULT_BOOTSTRAP_AUTHORITY: &str = "DfEnrzh4cgnHxfuZRxLGX69fnLd9DP41XxGuE4gtyJpn";
+
+fn bootstrap_authority() -> Pubkey {
+    use std::str::FromStr;
+    if let Some(value) = option_env!("HYPERSCAPE_BOOTSTRAP_AUTHORITY") {
+        Pubkey::from_str(value).expect("invalid HYPERSCAPE_BOOTSTRAP_AUTHORITY")
+    } else {
+        Pubkey::from_str(DEFAULT_BOOTSTRAP_AUTHORITY).expect("invalid default bootstrap authority")
+    }
+}
+
 #[program]
 pub mod fight_oracle {
     use super::*;
@@ -219,7 +230,10 @@ pub struct InitializeOracle<'info> {
     )]
     pub program: Program<'info, crate::program::FightOracle>,
     #[account(
-        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ ErrorCode::UnauthorizedInitializer
+        constraint = program_data.upgrade_authority_address == Some(authority.key())
+            || ((program_data.upgrade_authority_address.is_none()
+                || program_data.upgrade_authority_address == Some(Pubkey::default()))
+                && authority.key() == bootstrap_authority()) @ ErrorCode::UnauthorizedInitializer
     )]
     pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,

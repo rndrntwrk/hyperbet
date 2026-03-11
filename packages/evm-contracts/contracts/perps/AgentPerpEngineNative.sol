@@ -10,6 +10,18 @@ import "./SkillOracle.sol";
 contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
     SkillOracle public immutable oracle;
 
+    error InvalidOracle();
+    error InvalidSkewScale();
+    error InvalidMaxLeverage();
+    error Underwater();
+    error Undercollateralized();
+    error MaxLeverageExceeded();
+    error InsufficientMargin();
+    error NoPosition();
+    error NotLiquidatable();
+    error InvalidRecipient();
+    error InsufficientInsuranceFund();
+
     struct MarketState {
         uint256 totalLongOI;
         uint256 totalShortOI;
@@ -51,8 +63,8 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
     event MaxLeverageUpdated(uint256 newMaxLeverage);
 
     constructor(SkillOracle _oracle, uint256 _skewScale) Ownable(msg.sender) {
-        require(address(_oracle) != address(0), "Invalid oracle");
-        require(_skewScale > 0, "Invalid skew scale");
+        if (address(_oracle) == address(0)) revert InvalidOracle();
+        if (_skewScale == 0) revert InvalidSkewScale();
         oracle = _oracle;
         skewScale = _skewScale;
         fundingVelocity = 1e12;
@@ -148,7 +160,7 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
             pos.margin += uint256(realizedPnl);
         } else {
             uint256 loss = uint256(-realizedPnl);
-            require(pos.margin >= loss, "Underwater: margin < loss");
+            if (pos.margin < loss) revert Underwater();
             pos.margin -= loss;
         }
 
@@ -185,10 +197,10 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
     // slither-disable-next-line timestamp
     function _assertLeverage(bytes32 agentId, int256 size, uint256 margin) internal view {
         if (size == 0) return;
-        require(margin > 0, "Position undercollateralized");
+        if (margin == 0) revert Undercollateralized();
         uint256 absSize = _abs(size);
         uint256 execPrice = _getExecutionPrice(agentId, 0);
-        require(Math.mulDiv(absSize, execPrice, margin) <= maxLeverage, "Max leverage exceeded");
+        if (Math.mulDiv(absSize, execPrice, margin) > maxLeverage) revert MaxLeverageExceeded();
     }
 
     function modifyPosition(bytes32 agentId, int256 sizeDelta) external payable nonReentrant {
@@ -218,7 +230,7 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
 
     function withdrawMargin(bytes32 agentId, uint256 amount) external nonReentrant {
         Position storage pos = positions[agentId][msg.sender];
-        require(pos.margin >= amount, "Insufficient margin");
+        if (pos.margin < amount) revert InsufficientMargin();
         _assertLeverage(agentId, pos.size, pos.margin - amount);
         pos.margin -= amount;
         emit MarginWithdrawn(agentId, msg.sender, amount);
@@ -230,7 +242,7 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
         _updateFunding(agentId);
 
         Position storage pos = positions[agentId][trader];
-        require(pos.size != 0, "No position");
+        if (pos.size == 0) revert NoPosition();
         int256 liquidatedSize = pos.size;
 
         MarketState storage market = markets[agentId];
@@ -238,7 +250,7 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
         int256 pnl = _realizePnl(pos.size, pos.entryPrice, execPrice, _abs(pos.size));
         int256 equity = int256(pos.margin) + pnl;
 
-        require(equity < int256(pos.margin) / 10, "Not liquidatable");
+        if (equity >= int256(pos.margin) / 10) revert NotLiquidatable();
 
         _removeOpenInterest(market, pos.size);
 
@@ -254,15 +266,15 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
     }
 
     function withdrawInsuranceFund(address payable to, uint256 amount) external onlyOwner nonReentrant {
-        require(to != address(0), "Invalid recipient");
-        require(insuranceFund >= amount, "Insufficient insurance fund");
+        if (to == address(0)) revert InvalidRecipient();
+        if (insuranceFund < amount) revert InsufficientInsuranceFund();
         insuranceFund -= amount;
         emit InsuranceFundWithdrawn(to, amount);
         Address.sendValue(to, amount);
     }
 
     function setSkewScale(uint256 newSkewScale) external onlyOwner {
-        require(newSkewScale > 0, "Invalid skew scale");
+        if (newSkewScale == 0) revert InvalidSkewScale();
         skewScale = newSkewScale;
         emit SkewScaleUpdated(newSkewScale);
     }
@@ -273,7 +285,7 @@ contract AgentPerpEngineNative is Ownable, ReentrancyGuard {
     }
 
     function setMaxLeverage(uint256 newMaxLeverage) external onlyOwner {
-        require(newMaxLeverage > 0, "Invalid max leverage");
+        if (newMaxLeverage == 0) revert InvalidMaxLeverage();
         maxLeverage = newMaxLeverage;
         emit MaxLeverageUpdated(newMaxLeverage);
     }

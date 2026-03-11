@@ -19,7 +19,6 @@ contract SkillOracle is Ownable {
     }
 
     mapping(bytes32 => AgentSkill) public agentSkills;
-    mapping(bytes32 => bool) public agentExists;
     bytes32[] public activeAgents;
 
     uint256 public globalMeanMu;
@@ -34,8 +33,7 @@ contract SkillOracle is Ownable {
     }
 
     function updateAgentSkill(bytes32 agentId, uint256 mu, uint256 sigma) external onlyOwner {
-        if (!agentExists[agentId]) {
-            agentExists[agentId] = true;
+        if (agentSkills[agentId].lastUpdate == 0) {
             activeAgents.push(agentId);
             totalMu += mu;
         } else {
@@ -47,7 +45,7 @@ contract SkillOracle is Ownable {
     }
 
     function getConservativeSkill(bytes32 agentId) public view returns (int256) {
-        require(agentExists[agentId], "Agent not found");
+        require(agentSkills[agentId].lastUpdate != 0, "Agent not found");
         AgentSkill memory skill = agentSkills[agentId];
         return int256(skill.mu) - int256(Z_SCORE * skill.sigma);
     }

@@ -157,7 +157,7 @@ export class RetailAgent extends BaseAgent {
         const isBuy = Math.random() > 0.5;
         const noise = randomInt(-50, 50);
         const price = clamp(ctx.mid + noise, 10, 990);
-        const amount = BigInt(randomInt(1, 5)) * 1000n;
+        const amount = BigInt(randomInt(1, 5)) * 100000000000000n;
 
         return [
             {
@@ -206,7 +206,7 @@ export class MarketMakerAgent extends BaseAgent {
         );
         const bidPrice = clamp(Math.floor(ctx.mid - quoteWidth / 2), 10, 990);
         const askPrice = clamp(Math.ceil(ctx.mid + quoteWidth / 2), 10, 990);
-        const amount = BigInt(randomInt(2, 8)) * 1000n;
+        const amount = BigInt(randomInt(2, 8)) * 100000000000000n;
 
         actions.push(
             { type: "placeOrder", side: BUY_SIDE, price: bidPrice, amount, label: "MM bid" },
@@ -240,7 +240,7 @@ export class WhaleAgent extends BaseAgent {
         const price = isBuy
             ? clamp(ctx.mid + randomInt(10, 40), 10, 990)
             : clamp(ctx.mid - randomInt(10, 40), 10, 990);
-        const amount = BigInt(randomInt(5, 20)) * 1000n;
+        const amount = BigInt(randomInt(5, 20)) * 100000000000000n;
 
         return [
             {
@@ -281,7 +281,7 @@ export class MevFrontrunnerAgent extends BaseAgent {
         const price = isBuy
             ? clamp(ctx.bestAsk > 0 && ctx.bestAsk < MAX_PRICE ? ctx.bestAsk : ctx.mid + 20, 10, 990)
             : clamp(ctx.bestBid > 0 ? ctx.bestBid : ctx.mid - 20, 10, 990);
-        const amount = BigInt(randomInt(1, 5)) * 1000n;
+        const amount = BigInt(randomInt(1, 5)) * 100000000000000n;
 
         return [
             {
@@ -314,7 +314,7 @@ export class SandwichAgent extends BaseAgent {
     decide(ctx: SimContext): AgentAction[] {
         if (Math.random() < 0.7) return [];
 
-        const amount = BigInt(randomInt(1, 5)) * 1000n;
+        const amount = BigInt(randomInt(1, 5)) * 100000000000000n;
         // Buy before and sell after — in sim, these are sequential
         return [
             {
@@ -355,7 +355,7 @@ export class WashTraderAgent extends BaseAgent {
         if (Math.random() < 0.5) return [];
 
         const price = clamp(ctx.mid, 10, 990);
-        const amount = BigInt(randomInt(1, 3)) * 1000n;
+        const amount = BigInt(randomInt(1, 3)) * 100000000000000n;
 
         // Place both sides at the same price to self-trade
         return [
@@ -436,7 +436,7 @@ export class CabalAgent extends BaseAgent {
         const price = side === BUY_SIDE
             ? clamp(ctx.mid + randomInt(20, 60), 10, 990)
             : clamp(ctx.mid - randomInt(20, 60), 10, 990);
-        const amount = BigInt(randomInt(1, 5)) * 1000n;
+        const amount = BigInt(randomInt(1, 5)) * 100000000000000n;
 
         return [
             { type: "placeOrder", side, price, amount, label: "cabal push" },
@@ -465,7 +465,7 @@ export class ArbitrageurAgent extends BaseAgent {
         if (ctx.bestBid <= 0 || ctx.bestAsk >= MAX_PRICE) return [];
         if (ctx.bestBid < ctx.bestAsk - 20) return []; // needs tight/crossed spread
 
-        const amount = BigInt(randomInt(1, 3)) * 1000n;
+        const amount = BigInt(randomInt(1, 3)) * 100000000000000n;
 
         return [
             {
@@ -509,7 +509,7 @@ export class StressTestAgent extends BaseAgent {
         for (let i = 0; i < count; i++) {
             const isBuy = Math.random() > 0.5;
             const price = clamp(ctx.mid + randomInt(-100, 100), 10, 990);
-            const amount = BigInt(randomInt(1, 3)) * 1000n;
+            const amount = BigInt(randomInt(1, 3)) * 100000000000000n;
             actions.push({
                 type: "placeOrder",
                 side: isBuy ? BUY_SIDE : SELL_SIDE,

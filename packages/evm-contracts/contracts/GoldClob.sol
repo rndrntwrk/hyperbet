@@ -27,6 +27,32 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint256 public tradeMarketMakerFeeBps;
     uint256 public winningsMarketMakerFeeBps;
 
+    error InvalidAdmin();
+    error InvalidOperator();
+    error InvalidOracle();
+    error InvalidTreasury();
+    error InvalidMarketMaker();
+    error TreasuryFeeTooHigh();
+    error MarketMakerFeeTooHigh();
+    error TotalTradeFeeTooHigh();
+    error WinningsFeeTooHigh();
+    error InvalidMarketKind();
+    error MarketExists();
+    error DuelNotMarketable();
+    error MarketMissing();
+    error InvalidSide();
+    error InvalidPrice();
+    error InvalidAmountShape();
+    error MarketNotOpen();
+    error BettingClosed();
+    error NotMaker();
+    error OrderInactive();
+    error AlreadyFilled();
+    error NothingToClaim();
+    error MarketNotSettled();
+    error InsufficientNativeValue();
+    error CostTooLow();
+
     enum MarketStatus {
         NULL,
         OPEN,
@@ -79,7 +105,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     }
 
     struct MatchProgress {
-        uint256 remainingAmount;
+        uint128 remainingAmount;
         uint16 boundaryPrice;
         uint8 matchesCount;
         uint256 totalImprovement;
@@ -125,11 +151,11 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         address treasury_,
         address marketMaker_
     ) {
-        require(admin != address(0), "invalid admin");
-        require(marketOperator != address(0), "invalid operator");
-        require(oracle != address(0), "invalid oracle");
-        require(treasury_ != address(0), "invalid treasury");
-        require(marketMaker_ != address(0), "invalid market maker");
+        if (admin == address(0)) revert InvalidAdmin();
+        if (marketOperator == address(0)) revert InvalidOperator();
+        if (oracle == address(0)) revert InvalidOracle();
+        if (treasury_ == address(0)) revert InvalidTreasury();
+        if (marketMaker_ == address(0)) revert InvalidMarketMaker();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MARKET_OPERATOR_ROLE, marketOperator);
@@ -159,19 +185,19 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     }
 
     function setOracle(address oracle) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(oracle != address(0), "invalid oracle");
+        if (oracle == address(0)) revert InvalidOracle();
         duelOracle = DuelOutcomeOracle(oracle);
         emit OracleUpdated(oracle);
     }
 
     function setTreasury(address treasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(treasury_ != address(0), "invalid treasury");
+        if (treasury_ == address(0)) revert InvalidTreasury();
         treasury = treasury_;
         emit TreasuryUpdated(treasury_);
     }
 
     function setMarketMaker(address marketMaker_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(marketMaker_ != address(0), "invalid market maker");
+        if (marketMaker_ == address(0)) revert InvalidMarketMaker();
         marketMaker = marketMaker_;
         emit MarketMakerUpdated(marketMaker_);
     }
@@ -181,13 +207,10 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 tradeMarketMakerFeeBps_,
         uint256 winningsMarketMakerFeeBps_
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(tradeTreasuryFeeBps_ <= MAX_FEE_BPS, "treasury fee too high");
-        require(tradeMarketMakerFeeBps_ <= MAX_FEE_BPS, "mm fee too high");
-        require(
-            tradeTreasuryFeeBps_ + tradeMarketMakerFeeBps_ <= MAX_FEE_BPS,
-            "total trade fee too high"
-        );
-        require(winningsMarketMakerFeeBps_ <= MAX_FEE_BPS, "winnings fee too high");
+        if (tradeTreasuryFeeBps_ > MAX_FEE_BPS) revert TreasuryFeeTooHigh();
+        if (tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert MarketMakerFeeTooHigh();
+        if (tradeTreasuryFeeBps_ + tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert TotalTradeFeeTooHigh();
+        if (winningsMarketMakerFeeBps_ > MAX_FEE_BPS) revert WinningsFeeTooHigh();
 
         tradeTreasuryFeeBps = tradeTreasuryFeeBps_;
         tradeMarketMakerFeeBps = tradeMarketMakerFeeBps_;
@@ -209,17 +232,16 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         onlyRole(MARKET_OPERATOR_ROLE)
         returns (bytes32 key)
     {
-        require(marketKind == MARKET_KIND_DUEL_WINNER, "invalid market kind");
+        if (marketKind != MARKET_KIND_DUEL_WINNER) revert InvalidMarketKind();
         key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
-        require(!market.exists, "market exists");
+        if (market.exists) revert MarketExists();
 
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
-        require(
-            duel.status == DuelOutcomeOracle.DuelStatus.BETTING_OPEN
-                || duel.status == DuelOutcomeOracle.DuelStatus.LOCKED,
-            "duel not marketable"
-        );
+        if (
+            duel.status != DuelOutcomeOracle.DuelStatus.BETTING_OPEN
+                && duel.status != DuelOutcomeOracle.DuelStatus.LOCKED
+        ) revert DuelNotMarketable();
 
         market.exists = true;
         market.duelKey = duelKey;
@@ -233,7 +255,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     function syncMarketFromOracle(bytes32 duelKey, uint8 marketKind) public returns (MarketStatus) {
         bytes32 key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
-        require(market.exists, "market missing");
+        if (!market.exists) revert MarketMissing();
 
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
         return _syncMarketFromOracle(duelKey, key, market, duel);
@@ -246,16 +268,16 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint16 price,
         uint128 amount
     ) external payable nonReentrant {
-        require(side == BUY_SIDE || side == SELL_SIDE, "invalid side");
-        require(price > 0 && price < MAX_PRICE, "invalid price");
-        require(amount > 0, "invalid amount");
+        if (side != BUY_SIDE && side != SELL_SIDE) revert InvalidSide();
+        if (price == 0 || price >= MAX_PRICE) revert InvalidPrice();
+        if (amount == 0 || amount % MAX_PRICE != 0) revert InvalidAmountShape();
 
         bytes32 key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
-        require(market.exists, "market missing");
+        if (!market.exists) revert MarketMissing();
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
-        require(_syncMarketFromOracle(duelKey, key, market, duel) == MarketStatus.OPEN, "market not open");
-        require(block.timestamp < duel.betCloseTs, "betting closed");
+        if (_syncMarketFromOracle(duelKey, key, market, duel) != MarketStatus.OPEN) revert MarketNotOpen();
+        if (block.timestamp >= duel.betCloseTs) revert BettingClosed();
 
         uint64 takerOrderId = market.nextOrderId;
         market.nextOrderId += 1;
@@ -292,15 +314,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     function cancelOrder(bytes32 duelKey, uint8 marketKind, uint64 orderId) external nonReentrant {
         bytes32 key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
-        require(market.exists, "market missing");
+        if (!market.exists) revert MarketMissing();
 
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
         _syncMarketFromOracle(duelKey, key, market, duel);
 
         Order storage order = orders[key][orderId];
-        require(order.maker == msg.sender, "not maker");
-        require(order.active, "order inactive");
-        require(order.filled < order.amount, "already filled");
+        if (order.maker != msg.sender) revert NotMaker();
+        if (!order.active) revert OrderInactive();
+        if (order.filled >= order.amount) revert AlreadyFilled();
 
         uint128 remaining = order.amount - order.filled;
         PriceLevel storage level = priceLevels[key][order.side][order.price];
@@ -321,7 +343,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     function claim(bytes32 duelKey, uint8 marketKind) external nonReentrant {
         bytes32 key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
-        require(market.exists, "market missing");
+        if (!market.exists) revert MarketMissing();
 
         MarketStatus status = syncMarketFromOracle(duelKey, marketKind);
         Position storage position = positions[key][msg.sender];
@@ -329,7 +351,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 payout = 0;
         if (status == MarketStatus.RESOLVED) {
             uint256 winningShares = market.winner == Side.A ? position.aShares : position.bShares;
-            require(winningShares > 0, "nothing to claim");
+            if (winningShares == 0) revert NothingToClaim();
 
             uint256 fee = (winningShares * winningsMarketMakerFeeBps) / MAX_FEE_BPS;
             payout = winningShares - fee;
@@ -338,10 +360,10 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             if (fee > 0) payable(marketMaker).sendValue(fee);
         } else if (status == MarketStatus.CANCELLED) {
             payout = uint256(position.aStake) + uint256(position.bStake);
-            require(payout > 0, "nothing to claim");
+            if (payout == 0) revert NothingToClaim();
             _clearPosition(position);
         } else {
-            revert("market not settled");
+            revert MarketNotSettled();
         }
 
         payable(msg.sender).sendValue(payout);
@@ -359,13 +381,10 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 tradeMarketMakerFeeBps_,
         uint256 winningsMarketMakerFeeBps_
     ) internal {
-        require(tradeTreasuryFeeBps_ <= MAX_FEE_BPS, "treasury fee too high");
-        require(tradeMarketMakerFeeBps_ <= MAX_FEE_BPS, "mm fee too high");
-        require(
-            tradeTreasuryFeeBps_ + tradeMarketMakerFeeBps_ <= MAX_FEE_BPS,
-            "total trade fee too high"
-        );
-        require(winningsMarketMakerFeeBps_ <= MAX_FEE_BPS, "winnings fee too high");
+        if (tradeTreasuryFeeBps_ > MAX_FEE_BPS) revert TreasuryFeeTooHigh();
+        if (tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert MarketMakerFeeTooHigh();
+        if (tradeTreasuryFeeBps_ + tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert TotalTradeFeeTooHigh();
+        if (winningsMarketMakerFeeBps_ > MAX_FEE_BPS) revert WinningsFeeTooHigh();
 
         tradeTreasuryFeeBps = tradeTreasuryFeeBps_;
         tradeMarketMakerFeeBps = tradeMarketMakerFeeBps_;
@@ -387,16 +406,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         tradeTreasuryFee = (cost * tradeTreasuryFeeBps) / MAX_FEE_BPS;
         tradeMarketMakerFee = (cost * tradeMarketMakerFeeBps) / MAX_FEE_BPS;
         uint256 totalRequired = cost + tradeTreasuryFee + tradeMarketMakerFee;
-        require(value >= totalRequired, "insufficient native value");
+        if (value < totalRequired) revert InsufficientNativeValue();
         excess = value - totalRequired;
     }
 
     function _quoteCost(uint8 side, uint16 price, uint128 amount) internal pure returns (uint256) {
         uint256 priceComponent = side == BUY_SIDE ? price : MAX_PRICE - price;
         uint256 quoteValue = uint256(amount) * priceComponent;
-        require(quoteValue % MAX_PRICE == 0, "precision error");
         uint256 cost = quoteValue / MAX_PRICE;
-        require(cost > 0, "cost too low");
+        if (cost == 0) revert CostTooLow();
         return cost;
     }
 
@@ -438,9 +456,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
                 continue;
             }
 
-            uint128 fillAmount = makerRemaining < uint128(progress.remainingAmount)
+            uint128 fillAmount = makerRemaining < progress.remainingAmount
                 ? makerRemaining
-                : uint128(progress.remainingAmount);
+                : progress.remainingAmount;
 
             makerOrder.filled += fillAmount;
             progress.remainingAmount -= fillAmount;
@@ -505,9 +523,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
                 continue;
             }
 
-            uint128 fillAmount = makerRemaining < uint128(progress.remainingAmount)
+            uint128 fillAmount = makerRemaining < progress.remainingAmount
                 ? makerRemaining
-                : uint128(progress.remainingAmount);
+                : progress.remainingAmount;
 
             makerOrder.filled += fillAmount;
             progress.remainingAmount -= fillAmount;

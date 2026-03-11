@@ -94,6 +94,11 @@ export interface GoldClobContract extends TypedContract<GoldClobContract> {
   tradeTreasuryFeeBps(): Promise<bigint>;
   tradeMarketMakerFeeBps(): Promise<bigint>;
   winningsMarketMakerFeeBps(): Promise<bigint>;
+  setFeeConfig(
+    tradeTreasuryFeeBps: BigNumberish,
+    tradeMarketMakerFeeBps: BigNumberish,
+    winningsMarketMakerFeeBps: BigNumberish,
+  ): Promise<ContractTransactionResponse>;
 }
 
 export interface DuelOutcomeOracleContract

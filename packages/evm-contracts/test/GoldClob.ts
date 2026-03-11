@@ -111,7 +111,7 @@ describe("GoldClob", function () {
 
     await expect(
       clob.connect(operator).createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER),
-    ).to.be.revertedWith("market exists");
+    ).to.be.revertedWithCustomError(clob, "MarketExists");
   });
 
   it("matches FIFO orders and unlinks cancellations immediately", async function () {
@@ -375,5 +375,87 @@ describe("GoldClob", function () {
     const bAfter = await clob.positions(marketKey, traderB.address);
     expect(aAfter.bStake).to.equal(0n);
     expect(bAfter.aStake).to.equal(0n);
+  });
+
+  it("deducts and routes trade fees correctly on order placement", async function () {
+    const { clob, oracle, operator, reporter, treasury, marketMaker, traderA } = await deployFixture();
+    const duel = duelKey("duel-fee-test-1");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob.connect(operator).createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    // Initial balances
+    const treasuryBefore = await ethers.provider.getBalance(treasury.address);
+    const mmBefore = await ethers.provider.getBalance(marketMaker.address);
+
+    const amount = 2000n;
+    const price = 600;
+    const cost = quoteCost(BUY_SIDE, price, amount); // 2000 * 600 / 1000 = 1200n
+
+    // Default fee config set in constructor: tradeTreasuryFeeBps = 100 (1%), tradeMarketMakerFeeBps = 100 (1%)
+    const expectedTreasuryFee = cost * 100n / 10000n; // 12
+    const expectedMmFee = cost * 100n / 10000n; // 12
+
+    const requiredValue = cost + expectedTreasuryFee + expectedMmFee;
+
+    await expectTxSuccess(
+      clob.connect(traderA).placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, price, amount, {
+        value: requiredValue
+      })
+    );
+
+    const treasuryAfter = await ethers.provider.getBalance(treasury.address);
+    const mmAfter = await ethers.provider.getBalance(marketMaker.address);
+
+    expect(treasuryAfter - treasuryBefore).to.equal(expectedTreasuryFee);
+    expect(mmAfter - mmBefore).to.equal(expectedMmFee);
+  });
+
+  it("handles maximum fees, zero fees, and edge limit prices correctly", async function () {
+    const { clob, oracle, operator, reporter, admin, treasury, marketMaker, traderA } = await deployFixture();
+    const duel = duelKey("duel-fee-test-2");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob.connect(operator).createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    // Test zero fees
+    await clob.connect(admin).setFeeConfig(0, 0, 0);
+
+    let treasuryBefore = await ethers.provider.getBalance(treasury.address);
+    let mmBefore = await ethers.provider.getBalance(marketMaker.address);
+    let cost = quoteCost(SELL_SIDE, 999, 1000n); // extreme limit price 999. cost = 1000 * 1 / 1000 = 1
+    
+    await clob.connect(traderA).placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 999, 1000n, {
+      value: cost
+    });
+
+    let treasuryAfter = await ethers.provider.getBalance(treasury.address);
+    let mmAfter = await ethers.provider.getBalance(marketMaker.address);
+
+    expect(treasuryAfter - treasuryBefore).to.equal(0n);
+    expect(mmAfter - mmBefore).to.equal(0n);
+
+    // Test max fees: 9000 BPS treasury, 1000 BPS MM (Total 10000 = 100%)
+    await clob.connect(admin).setFeeConfig(9000, 1000, 0);
+
+    treasuryBefore = await ethers.provider.getBalance(treasury.address);
+    mmBefore = await ethers.provider.getBalance(marketMaker.address);
+    cost = quoteCost(BUY_SIDE, 1, 10000n); // extreme limit price 1. cost = 10000 * 1 / 1000 = 10
+    
+    const expectedTreasuryFee = cost * 9000n / 10000n; // 9
+    const expectedMmFee = cost * 1000n / 10000n; // 1
+
+    await clob.connect(traderA).placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 1, 10000n, {
+      value: cost + expectedTreasuryFee + expectedMmFee
+    });
+
+    treasuryAfter = await ethers.provider.getBalance(treasury.address);
+    mmAfter = await ethers.provider.getBalance(marketMaker.address);
+
+    expect(treasuryAfter - treasuryBefore).to.equal(expectedTreasuryFee);
+    expect(mmAfter - mmBefore).to.equal(expectedMmFee);
+
+    // Test fee config reversion
+    await expect(clob.connect(admin).setFeeConfig(5000, 5001, 0)).to.be.revertedWithCustomError(clob, "TotalTradeFeeTooHigh");
   });
 });

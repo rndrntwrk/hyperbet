@@ -70,6 +70,6 @@ describe("AgentPerpEngineNative — security regressions", function () {
 
     await expect(
       engine.connect(trader).withdrawMargin(agentId, ethers.parseEther("80")),
-    ).to.be.revertedWith("Max leverage exceeded");
+    ).to.be.revertedWithCustomError(engine, "MaxLeverageExceeded");
   });
 });

@@ -23,6 +23,18 @@ contract AgentPerpEngine is Ownable {
         uint256 lastUpdateTimestamp;
     }
 
+    error InvalidOracle();
+    error InvalidMarginToken();
+    error InvalidSkewScale();
+    error Underwater();
+    error Undercollateralized();
+    error MaxLeverageExceeded();
+    error InsufficientMargin();
+    error NoPosition();
+    error NotLiquidatable();
+    error InvalidRecipient();
+    error InsufficientInsuranceFund();
+
     struct Position {
         int256 size;
         uint256 margin;
@@ -49,9 +61,9 @@ contract AgentPerpEngine is Ownable {
     event InsuranceFundWithdrawn(address indexed to, uint256 amount);
 
     constructor(SkillOracle _oracle, IERC20 _marginToken, uint256 _skewScale) Ownable(msg.sender) {
-        require(address(_oracle) != address(0), "Invalid oracle");
-        require(address(_marginToken) != address(0), "Invalid margin token");
-        require(_skewScale > 0, "Invalid skew scale");
+        if (address(_oracle) == address(0)) revert InvalidOracle();
+        if (address(_marginToken) == address(0)) revert InvalidMarginToken();
+        if (_skewScale == 0) revert InvalidSkewScale();
         oracle = _oracle;
         marginToken = _marginToken;
         skewScale = _skewScale;
@@ -146,7 +158,7 @@ contract AgentPerpEngine is Ownable {
             pos.margin += uint256(pnl);
         } else {
             uint256 loss = uint256(-pnl);
-            require(pos.margin >= loss, "Liquidatable due to PNL");
+            if (pos.margin < loss) revert Underwater();
             pos.margin -= loss;
         }
 
@@ -182,7 +194,7 @@ contract AgentPerpEngine is Ownable {
     function _applyMarginDelta(Position storage pos, int256 marginDelta, address trader) internal {
         if (marginDelta < 0) {
             uint256 withdrawAmount = uint256(-marginDelta);
-            require(pos.margin >= withdrawAmount, "Insufficient margin");
+            if (pos.margin < withdrawAmount) revert InsufficientMargin();
             pos.margin -= withdrawAmount;
             marginToken.safeTransfer(trader, withdrawAmount);
         } else if (marginDelta > 0) {
@@ -193,10 +205,10 @@ contract AgentPerpEngine is Ownable {
     // slither-disable-next-line timestamp
     function _assertLeverage(bytes32 agentId, int256 size, uint256 margin) internal view {
         if (size == 0) return;
-        require(margin > 0, "Position undercollateralized");
+        if (margin == 0) revert Undercollateralized();
         uint256 absSize = _abs(size);
         uint256 markPrice = getExecutionPrice(agentId, 0);
-        require(Math.mulDiv(absSize, markPrice, margin) <= MAX_LEVERAGE, "Max leverage exceeded");
+        if (Math.mulDiv(absSize, markPrice, margin) > MAX_LEVERAGE) revert MaxLeverageExceeded();
     }
 
     function modifyPosition(bytes32 agentId, int256 marginDelta, int256 sizeDelta) external {
@@ -227,15 +239,15 @@ contract AgentPerpEngine is Ownable {
         _updateFunding(agentId);
 
         Position storage pos = positions[agentId][trader];
-        require(pos.size != 0, "No position");
+        if (pos.size == 0) revert NoPosition();
 
         MarketState storage market = markets[agentId];
-        uint256 execPrice = getExecutionPrice(agentId, pos.size > 0 ? -pos.size : pos.size);
+        uint256 execPrice = getExecutionPrice(agentId, -pos.size);
         int256 pnl = _realizePnl(pos.size, pos.entryPrice, execPrice, _abs(pos.size));
         int256 equity = int256(pos.margin) + pnl;
         int256 maintenanceMargin = int256(pos.margin) / 10;
 
-        require(equity < maintenanceMargin, "Not liquidatable");
+        if (equity >= maintenanceMargin) revert NotLiquidatable();
 
         _removeOpenInterest(market, pos.size);
 
@@ -253,8 +265,8 @@ contract AgentPerpEngine is Ownable {
     }
 
     function withdrawInsuranceFund(address to, uint256 amount) external onlyOwner {
-        require(to != address(0), "Invalid recipient");
-        require(insuranceFund >= amount, "Insufficient insurance fund");
+        if (to == address(0)) revert InvalidRecipient();
+        if (insuranceFund < amount) revert InsufficientInsuranceFund();
         insuranceFund -= amount;
         marginToken.safeTransfer(to, amount);
         emit InsuranceFundWithdrawn(to, amount);

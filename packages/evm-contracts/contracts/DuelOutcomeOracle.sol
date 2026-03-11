@@ -6,6 +6,21 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 contract DuelOutcomeOracle is AccessControl {
     bytes32 public constant REPORTER_ROLE = keccak256("REPORTER_ROLE");
 
+    error InvalidAdmin();
+    error InvalidReporter();
+    error InvalidDuelKey();
+    error InvalidParticipant();
+    error DuplicateParticipants();
+    error InvalidStatus();
+    error InvalidBettingWindow();
+    error InvalidDuelStart();
+    error InvalidTransition();
+    error DuelMissing();
+    error InvalidWinner();
+    error InvalidDuelEnd();
+    error DuelAlreadyResolved();
+    error DuelAlreadyCancelled();
+
     enum DuelStatus {
         NULL,
         SCHEDULED,
@@ -59,14 +74,14 @@ contract DuelOutcomeOracle is AccessControl {
     );
 
     constructor(address admin, address reporter) {
-        require(admin != address(0), "invalid admin");
-        require(reporter != address(0), "invalid reporter");
+        if (admin == address(0)) revert InvalidAdmin();
+        if (reporter == address(0)) revert InvalidReporter();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REPORTER_ROLE, reporter);
     }
 
     function setReporter(address reporter, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(reporter != address(0), "invalid reporter");
+        if (reporter == address(0)) revert InvalidReporter();
         if (enabled) {
             _grantRole(REPORTER_ROLE, reporter);
         } else {
@@ -88,22 +103,21 @@ contract DuelOutcomeOracle is AccessControl {
         string calldata metadataUri,
         DuelStatus status
     ) external onlyRole(REPORTER_ROLE) {
-        require(duelKey != bytes32(0), "invalid duel key");
-        require(participantAHash != bytes32(0), "invalid participant A");
-        require(participantBHash != bytes32(0), "invalid participant B");
-        require(participantAHash != participantBHash, "duplicate participants");
-        require(
-            status == DuelStatus.SCHEDULED
-                || status == DuelStatus.BETTING_OPEN
-                || status == DuelStatus.LOCKED,
-            "invalid status"
-        );
-        require(betOpenTs > 0 && betCloseTs > betOpenTs, "invalid betting window");
-        require(duelStartTs >= betCloseTs, "invalid duel start");
+        if (duelKey == bytes32(0)) revert InvalidDuelKey();
+        if (participantAHash == bytes32(0)) revert InvalidParticipant();
+        if (participantBHash == bytes32(0)) revert InvalidParticipant();
+        if (participantAHash == participantBHash) revert DuplicateParticipants();
+        if (
+            status != DuelStatus.SCHEDULED
+                && status != DuelStatus.BETTING_OPEN
+                && status != DuelStatus.LOCKED
+        ) revert InvalidStatus();
+        if (betOpenTs == 0 || betCloseTs <= betOpenTs) revert InvalidBettingWindow();
+        if (duelStartTs < betCloseTs) revert InvalidDuelStart();
 
         DuelState storage duel = duels[duelKey];
         _requireSettleable(duel);
-        require(uint8(status) >= uint8(duel.status), "invalid transition");
+        if (uint8(status) < uint8(duel.status)) revert InvalidTransition();
 
         duel.duelKey = duelKey;
         duel.participantAHash = participantAHash;
@@ -126,7 +140,7 @@ contract DuelOutcomeOracle is AccessControl {
 
     function cancelDuel(bytes32 duelKey, string calldata metadataUri) external onlyRole(REPORTER_ROLE) {
         DuelState storage duel = duels[duelKey];
-        require(duel.status != DuelStatus.NULL, "duel missing");
+        if (duel.status == DuelStatus.NULL) revert DuelMissing();
         _requireSettleable(duel);
         duel.status = DuelStatus.CANCELLED;
         duel.metadataUri = metadataUri;
@@ -143,10 +157,10 @@ contract DuelOutcomeOracle is AccessControl {
         string calldata metadataUri
     ) external onlyRole(REPORTER_ROLE) {
         DuelState storage duel = duels[duelKey];
-        require(duel.status != DuelStatus.NULL, "duel missing");
+        if (duel.status == DuelStatus.NULL) revert DuelMissing();
         _requireSettleable(duel);
-        require(winner == Side.A || winner == Side.B, "invalid winner");
-        require(duelEndTs >= duel.betCloseTs, "invalid duel end");
+        if (winner != Side.A && winner != Side.B) revert InvalidWinner();
+        if (duelEndTs < duel.betCloseTs) revert InvalidDuelEnd();
 
         duel.status = DuelStatus.RESOLVED;
         duel.winner = winner;
@@ -168,8 +182,8 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
     function _requireSettleable(DuelState storage duel) private view {
-        require(duel.status != DuelStatus.RESOLVED, "duel resolved");
-        require(duel.status != DuelStatus.CANCELLED, "duel cancelled");
+        if (duel.status == DuelStatus.RESOLVED) revert DuelAlreadyResolved();
+        if (duel.status == DuelStatus.CANCELLED) revert DuelAlreadyCancelled();
     }
 
 }

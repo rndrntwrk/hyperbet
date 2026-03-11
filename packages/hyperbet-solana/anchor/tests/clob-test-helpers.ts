@@ -200,6 +200,19 @@ export async function ensureOracleReady(
     await program.account.oracleConfig.fetchNullable(oracleConfig);
 
   if (!existingConfig) {
+    const pdata = await program.provider.connection.getAccountInfo(deriveProgramDataAddress(program.programId));
+    console.log("ProgramData exists:", !!pdata);
+    if (pdata) {
+        const upgradeAuthOffset = 13;
+        const upgradeAuthHasKey = pdata.data[12];
+        console.log("Upgrade Auth exists byte:", upgradeAuthHasKey);
+        if (upgradeAuthHasKey === 1) {
+            const authBytes = pdata.data.slice(upgradeAuthOffset, upgradeAuthOffset + 32);
+            console.log("Upgrade Auth Address:", new anchor.web3.PublicKey(authBytes).toBase58());
+        }
+    }
+    console.log("Wanted Authority:", authority.publicKey.toBase58());
+
     await program.methods
       .initializeOracle(reporter)
       .accountsPartial({
