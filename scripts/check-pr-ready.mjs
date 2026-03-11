@@ -81,7 +81,7 @@ for (const chain of mmChains) {
   ], {
     env: {
       MM_ADVERSARIAL_CHAIN: chain,
-      MM_ADVERSARIAL_MIN_PASSES: "6",
+      MM_ADVERSARIAL_MIN_PASSES: "9",
       MM_ADVERSARIAL_OUTPUT_DIR: `simulations/ci-${chain}`,
     },
   });

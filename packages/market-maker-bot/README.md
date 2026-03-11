@@ -52,6 +52,9 @@ Scenarios covered per chain (Solana, BSC, AVAX):
 - `stale_signal_arbitrage`
 - `liquidation_cascade`
 - `gas_auction_backrun`
+- `sybil_wash_trading`
+- `rebate_farming_ring`
+- `coordinated_resolution_push`
 
 Outputs:
 
@@ -71,11 +74,11 @@ Gate env controls:
 
 - `MM_ADVERSARIAL_SEED` (default `20260311`)
 - `MM_ADVERSARIAL_CHAIN` (`solana` | `bsc` | `avax`, optional; unset means all chains)
-- `MM_ADVERSARIAL_MIN_PASSES` (default is all scenarios in scope: `18` for all chains, `6` for one chain)
+- `MM_ADVERSARIAL_MIN_PASSES` (default is all scenarios in scope: `27` for all chains, `9` for one chain)
 - `MM_ADVERSARIAL_OUTPUT_DIR` (default `simulations`)
 - `MM_ADVERSARIAL_ENFORCE_BASELINE` (`1` by default, set `0` to skip baseline regression checks)
 
-Gate behavior now enforces six layers:
+Gate behavior now enforces seven layers:
 
 - mitigation pass threshold
 - hard invariants (`max mitigated attacker pnl`, `max exploit events`, `max inventory peak`, `max toxic fill rate`, `max adverse slippage`, `min loss reduction`)
@@ -83,6 +86,7 @@ Gate behavior now enforces six layers:
 - oracle/finality/dispute policy controls (max stale oracle age, confidence bounds, same-slot round-trip pressure, finalized-only settlement reads, minimum dispute liveness window)
 - bounded-loss budgets (scenario-level and chain-aggregate mitigated attacker PnL caps)
 - settlement state-machine checks (`open -> resolve_proposed -> dispute_window -> finalized`) including minimum dispute-window time before finalization
+- sybil/collusion controls (cluster concentration ceiling, circular-flow ratio ceiling, coordinated-resolution push score cap, minimum independent participant floor)
 
 Refresh baseline snapshot after intentional model changes:
 

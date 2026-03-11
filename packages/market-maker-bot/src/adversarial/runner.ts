@@ -13,6 +13,7 @@ import { DEFAULT_INVARIANT_LIMITS, evaluateInvariantBreaches } from "./invariant
 import { evaluateBoundedLossBreaches } from "./bounded-loss.js";
 import { evaluatePolicyBreaches } from "./policy.js";
 import { evaluateSettlementBreaches } from "./settlement.js";
+import { evaluateSybilBreaches } from "./sybil.js";
 import { runAdversarialSuite, toMarkdownSummary } from "./suite.js";
 import type { ChainId, SuiteReport } from "./types.js";
 
@@ -147,6 +148,15 @@ export function runGate(
     return {
       ok: false,
       message: `settlement breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
+    };
+  }
+
+  const sybilBreaches = evaluateSybilBreaches(report);
+  if (sybilBreaches.length > 0) {
+    const first = sybilBreaches[0]!;
+    return {
+      ok: false,
+      message: `sybil breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
     };
   }
 

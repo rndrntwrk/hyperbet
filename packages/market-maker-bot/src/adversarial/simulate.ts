@@ -48,6 +48,12 @@ function defenseStrength(input: {
     scenarioBias = chain.oracleLagAmplifier * 0.3;
   } else if (scenario === "spoof_pressure") {
     scenarioBias = chain.mempoolFriction * 0.22;
+  } else if (scenario === "sybil_wash_trading") {
+    scenarioBias = chain.mempoolFriction * 0.18;
+  } else if (scenario === "rebate_farming_ring") {
+    scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.11;
+  } else if (scenario === "coordinated_resolution_push") {
+    scenarioBias = (chain.oracleLagAmplifier + chain.mevRisk) * 0.14;
   }
 
   return clamp(0.18 + guardQuality * 0.72 - chainHeadwind * 0.22 - stress * 0.08 - scenarioBias, 0.02, 0.96);
@@ -382,6 +388,109 @@ export function simulateScenario(input: {
           bid,
           ask,
         });
+      }
+    }
+
+    if (scenario === "sybil_wash_trading") {
+      const sybilSusceptibility = clamp((vuln.cancel + vuln.toxic) / 2, 0.05, 1);
+      const sybilBurstChance = clamp(
+        intensity * sybilSusceptibility * (0.38 + chain.mempoolFriction * 0.18),
+        0,
+        0.9,
+      );
+      if (rng.next() < sybilBurstChance) {
+        const burstRounds = 1 + Math.round(intensity * 2 + sybilSusceptibility);
+        for (let round = 0; round < burstRounds; round += 1) {
+          const side: "buy" | "sell" = round % 2 === 0 ? "buy" : "sell";
+          const qty = Math.max(
+            1,
+            Math.round(1 + intensity * 1.6 + sybilSusceptibility + chain.mempoolFriction),
+          );
+          tryExploitFill({
+            rng,
+            guards,
+            chain,
+            vuln,
+            scenario,
+            state,
+            divergence,
+            staleTicks,
+            quotePrice: side === "buy" ? bid : ask,
+            truePrice,
+            side,
+            qty,
+            feeBps: chain.feeBps,
+            bid,
+            ask,
+          });
+        }
+      }
+    }
+
+    if (scenario === "rebate_farming_ring") {
+      const rebatePressure = clamp(
+        intensity *
+          clamp(vuln.toxic, 0.08, 1) *
+          (0.24 + chain.feeBps / 55 + chain.mempoolFriction * 0.12),
+        0,
+        0.8,
+      );
+      if (rng.next() < rebatePressure) {
+        const side: "buy" | "sell" = rng.next() > 0.5 ? "buy" : "sell";
+        const tinyQty = Math.max(1, Math.round(1 + intensity));
+        const nearMidPrice =
+          side === "buy"
+            ? quotePrice - spread * (0.1 + rng.next() * 0.2)
+            : quotePrice + spread * (0.1 + rng.next() * 0.2);
+        tryExploitFill({
+          rng,
+          guards,
+          chain,
+          vuln,
+          scenario,
+          state,
+          divergence,
+          staleTicks,
+          quotePrice: clamp(nearMidPrice, 0.03, 0.97),
+          truePrice,
+          side,
+          qty: tinyQty,
+          feeBps: chain.feeBps,
+          bid,
+          ask,
+        });
+      }
+    }
+
+    if (scenario === "coordinated_resolution_push") {
+      const inResolutionWindow = tick > ticks - 45;
+      if (inResolutionWindow) {
+        const resolutionChance = clamp(
+          intensity * (0.5 + chain.oracleLagAmplifier * 0.25 + chain.mevRisk * 0.2),
+          0,
+          0.99,
+        );
+        if (rng.next() < resolutionChance) {
+          const pushSide: "buy" | "sell" = truePrice > signalPrice ? "buy" : "sell";
+          const qty = Math.round(3 + intensity * 5 + chain.mempoolFriction * 3);
+          tryExploitFill({
+            rng,
+            guards,
+            chain,
+            vuln,
+            scenario,
+            state,
+            divergence,
+            staleTicks,
+            quotePrice: pushSide === "buy" ? ask : bid,
+            truePrice,
+            side: pushSide,
+            qty,
+            feeBps: chain.feeBps,
+            bid,
+            ask,
+          });
+        }
       }
     }
 

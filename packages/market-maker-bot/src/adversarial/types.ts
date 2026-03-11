@@ -6,7 +6,10 @@ export type ScenarioId =
   | "toxic_flow_poisoning"
   | "stale_signal_arbitrage"
   | "liquidation_cascade"
-  | "gas_auction_backrun";
+  | "gas_auction_backrun"
+  | "sybil_wash_trading"
+  | "rebate_farming_ring"
+  | "coordinated_resolution_push";
 
 export type GuardProfile = {
   name: "baseline" | "mitigated";

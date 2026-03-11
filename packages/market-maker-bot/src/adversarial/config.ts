@@ -9,6 +9,9 @@ export const SCENARIOS: ScenarioId[] = [
   "stale_signal_arbitrage",
   "liquidation_cascade",
   "gas_auction_backrun",
+  "sybil_wash_trading",
+  "rebate_farming_ring",
+  "coordinated_resolution_push",
 ];
 
 export const CHAIN_PROFILES: ChainProfile[] = [
