@@ -77,8 +77,9 @@ Gate env controls:
 - `MM_ADVERSARIAL_MIN_PASSES` (default is all scenarios in scope: `27` for all chains, `9` for one chain)
 - `MM_ADVERSARIAL_OUTPUT_DIR` (default `simulations`)
 - `MM_ADVERSARIAL_ENFORCE_BASELINE` (`1` by default, set `0` to skip baseline regression checks)
+- `MM_ADVERSARIAL_SEED_CORPUS` (optional path override for regression-seed corpus used by `--seed-corpus`)
 
-Gate behavior now enforces eight layers:
+Gate behavior now enforces ten layers:
 
 - mitigation pass threshold
 - hard invariants (`max mitigated attacker pnl`, `max exploit events`, `max inventory peak`, `max toxic fill rate`, `max adverse slippage`, `min loss reduction`)
@@ -88,6 +89,32 @@ Gate behavior now enforces eight layers:
 - settlement state-machine checks (`open -> resolve_proposed -> dispute_window -> finalized`) including minimum dispute-window time before finalization
 - sybil/collusion controls (cluster concentration ceiling, circular-flow ratio ceiling, coordinated-resolution push score cap, minimum independent participant floor)
 - chaos-resilience controls (oracle outage damage cap, finality jitter damage cap, liquidity-cliff inventory stress cap)
+- deterministic abuse-matrix budgets (chain aggregate and scenario-specific attacker-pnl/exploit/toxicity/slippage envelopes)
+- regression seed corpus replay checks (known-bad seeds must remain mitigated across all enabled gates)
+
+Run the seed corpus gate:
+
+```bash
+bun run simulate:adversarial:seed-corpus
+```
+
+Run chain-specific seed corpus replay:
+
+```bash
+MM_ADVERSARIAL_CHAIN=solana bun run simulate:adversarial:seed-corpus
+MM_ADVERSARIAL_CHAIN=bsc bun run simulate:adversarial:seed-corpus
+MM_ADVERSARIAL_CHAIN=avax bun run simulate:adversarial:seed-corpus
+```
+
+Optional fork integration harness (executes only when fork RPC env vars are set):
+
+```bash
+bun run verify:forks
+```
+
+Formal safety specification:
+
+- `docs/safety-spec.md`
 
 Refresh baseline snapshot after intentional model changes:
 

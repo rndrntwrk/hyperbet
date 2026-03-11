@@ -15,6 +15,12 @@ import { evaluatePolicyBreaches } from "./policy.js";
 import { evaluateSettlementBreaches } from "./settlement.js";
 import { evaluateSybilBreaches } from "./sybil.js";
 import { evaluateChaosBreaches } from "./chaos.js";
+import { evaluateMatrixBreaches } from "./matrix.js";
+import {
+  DEFAULT_REGRESSION_SEEDS_PATH,
+  evaluateRegressionSeeds,
+  readRegressionSeeds,
+} from "./regression-seeds.js";
 import { runAdversarialSuite, toMarkdownSummary } from "./suite.js";
 import type { ChainId, SuiteReport } from "./types.js";
 
@@ -170,6 +176,15 @@ export function runGate(
     };
   }
 
+  const matrixBreaches = evaluateMatrixBreaches(report);
+  if (matrixBreaches.length > 0) {
+    const first = matrixBreaches[0]!;
+    return {
+      ok: false,
+      message: `matrix breach ${first.chain}/${first.scenario} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
+    };
+  }
+
   return {
     ok: true,
     message: `all gates satisfied (${report.summary.mitigationPasses}/${report.summary.totalScenarios})`,
@@ -198,6 +213,23 @@ export function runCli() {
       throw new Error(verdict.message);
     }
     console.log(`[simulate-adversarial-mm:gate] ${verdict.message}`);
+    return;
+  }
+
+  if (process.argv.includes("--seed-corpus")) {
+    const seedsPath =
+      process.env.MM_ADVERSARIAL_SEED_CORPUS || DEFAULT_REGRESSION_SEEDS_PATH;
+    const seeds = readRegressionSeeds(seedsPath, chainFilter);
+    const failures = evaluateRegressionSeeds(seeds, chainFilter);
+    if (failures.length > 0) {
+      const first = failures[0]!;
+      throw new Error(
+        `[simulate-adversarial-mm:seed-corpus] seed=${first.seed} chain=${first.chainScope} ${first.message}`,
+      );
+    }
+    console.log(
+      `[simulate-adversarial-mm:seed-corpus] seeds=${seeds.length} chain=${chainFilter ?? "all"} passed`,
+    );
     return;
   }
 

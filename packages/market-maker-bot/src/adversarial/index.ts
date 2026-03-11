@@ -22,6 +22,17 @@ export { evaluateBoundedLossBreaches } from "./bounded-loss.js";
 export { evaluateSettlementBreaches, validateSettlementTrace } from "./settlement.js";
 export { evaluateSybilBreaches } from "./sybil.js";
 export { evaluateChaosBreaches } from "./chaos.js";
+export { evaluateMatrixBreaches } from "./matrix.js";
+export {
+  DEFAULT_REGRESSION_SEEDS_PATH,
+  evaluateRegressionSeeds,
+  readRegressionSeeds,
+} from "./regression-seeds.js";
+export {
+  CHAIN_RISK_BUDGETS,
+  SAFETY_SPEC_VERSION,
+  SCENARIO_RISK_BUDGETS,
+} from "./spec.js";
 export type {
   ChainId,
   ChainReport,
@@ -45,3 +56,6 @@ export type {
 } from "./settlement.js";
 export type { SybilBreach } from "./sybil.js";
 export type { ChaosBreach } from "./chaos.js";
+export type { MatrixBreach } from "./matrix.js";
+export type { ChainRiskBudget, ScenarioRiskBudget } from "./spec.js";
+export type { RegressionSeedBreach } from "./regression-seeds.js";

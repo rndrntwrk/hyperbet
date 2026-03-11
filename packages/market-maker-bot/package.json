@@ -9,12 +9,14 @@
     "simulate:adversarial": "tsx src/simulate-adversarial.ts",
     "simulate:adversarial:gate": "tsx src/simulate-adversarial.ts --gate",
     "simulate:adversarial:baseline:update": "tsx src/simulate-adversarial.ts --update-baseline",
+    "simulate:adversarial:seed-corpus": "tsx src/simulate-adversarial.ts --seed-corpus",
     "simulate:adversarial:ci": "bun run simulate:adversarial && bun run simulate:adversarial:gate",
     "wallets:generate": "tsx src/generate-wallets.ts",
     "wallets:ui-env": "tsx src/export-ui-wallets.ts",
     "test": "vitest run",
     "verify:chains": "tsx src/verify-chains.ts",
-    "verify:chains:env": "SOLANA_VERIFY_RPC_URL=$SOLANA_RPC_URL SOLANA_VERIFY_PROGRAM_ID=$SOLANA_ARENA_MARKET_PROGRAM_ID tsx src/verify-chains.ts"
+    "verify:chains:env": "SOLANA_VERIFY_RPC_URL=$SOLANA_RPC_URL SOLANA_VERIFY_PROGRAM_ID=$SOLANA_ARENA_MARKET_PROGRAM_ID tsx src/verify-chains.ts",
+    "verify:forks": "tsx src/fork-harness.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

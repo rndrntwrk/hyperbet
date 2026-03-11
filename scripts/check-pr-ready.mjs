@@ -71,6 +71,30 @@ runStep("market-maker frozen install", [
   "--frozen-lockfile",
 ]);
 runStep("market-maker tests", ["run", "--cwd", "packages/market-maker-bot", "test"]);
+runStep("market-maker regression seed corpus", [
+  "run",
+  "--cwd",
+  "packages/market-maker-bot",
+  "simulate:adversarial:seed-corpus",
+]);
+for (const chain of mmChains) {
+  runStep(`market-maker regression seed corpus (${chain})`, [
+    "run",
+    "--cwd",
+    "packages/market-maker-bot",
+    "simulate:adversarial:seed-corpus",
+  ], {
+    env: {
+      MM_ADVERSARIAL_CHAIN: chain,
+    },
+  });
+}
+runStep("market-maker fork harness (optional)", [
+  "run",
+  "--cwd",
+  "packages/market-maker-bot",
+  "verify:forks",
+]);
 
 for (const chain of mmChains) {
   runStep(`market-maker adversarial gate (${chain})`, [
