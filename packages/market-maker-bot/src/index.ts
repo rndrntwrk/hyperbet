@@ -1,7 +1,21 @@
 import { ethers } from "ethers";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import bs58 from "bs58";
+import BN from "bn.js";
 import dotenv from "dotenv";
+import fs from "fs";
+
+import goldClobMarketIdl from "./idl/gold_clob_market.json" assert { type: "json" };
+import {
+  duelKeyHexToBytes,
+  findDuelStatePda,
+  findMarketPda,
+  findMarketConfigPda,
+  findClobVaultPda,
+  SIDE_BID,
+  SIDE_ASK
+} from "./solana-helpers.js";
 
 dotenv.config();
 
@@ -169,6 +183,7 @@ type DuelSignal = {
   midPrice: number;
   phase: string;
   weight: number;
+  duelKeyHex: string | null;
 };
 
 const normalizeAddress = (value: string): string => {
@@ -200,6 +215,10 @@ class CrossChainMarketMaker {
   private solanaConnection: Connection;
   private solanaWallet: Keypair;
   private solanaProgramId: PublicKey;
+  private solanaProvider: AnchorProvider;
+  private solanaClobConfigPda: PublicKey;
+  private solanaFightOracleId: PublicKey;
+  private solanaClob: Program;
   private solanaEnabled = true;
   private solanaHealthcheckWarned = false;
   private lastSolanaHealthcheckAt = 0;
@@ -277,6 +296,36 @@ class CrossChainMarketMaker {
       );
     }
     this.solanaProgramId = new PublicKey(SOLANA_PROGRAM_ID);
+    this.solanaFightOracleId = new PublicKey(
+      process.env.SOLANA_FIGHT_ORACLE_PROGRAM_ID || "F1ghtOrac1e11111111111111111111111111111111"
+    );
+
+    const anchorWallet = {
+      publicKey: this.solanaWallet.publicKey,
+      signTransaction: async (tx: Transaction | VersionedTransaction) => {
+        if (tx instanceof VersionedTransaction) tx.sign([this.solanaWallet]);
+        else tx.partialSign(this.solanaWallet);
+        return tx;
+      },
+      signAllTransactions: async (txs: (Transaction | VersionedTransaction)[]) => {
+        txs.forEach((tx) => {
+          if (tx instanceof VersionedTransaction) tx.sign([this.solanaWallet]);
+          else tx.partialSign(this.solanaWallet);
+        });
+        return txs;
+      },
+      payer: this.solanaWallet,
+    } as unknown as Wallet;
+
+    this.solanaProvider = new AnchorProvider(this.solanaConnection, anchorWallet, {
+      commitment: "confirmed",
+      preflightCommitment: "confirmed",
+    });
+
+    this.solanaClobConfigPda = findMarketConfigPda(this.solanaProgramId);
+    
+    // Create the generic Program (typing as any since we don't strictly have typegen)
+    this.solanaClob = new Program(goldClobMarketIdl as any, this.solanaProvider);
     this.solanaEnabled = MM_ENABLE_SOLANA;
   }
 
@@ -813,39 +862,149 @@ class CrossChainMarketMaker {
 
   // ─── Solana Market Making ───────────────────────────────────────────────────
   async solanaMarketMake() {
-    if (!this.solanaEnabled) {
-      return;
-    }
-
-    const now = Date.now();
-    if (now - this.lastSolanaHealthcheckAt < SOLANA_HEALTHCHECK_INTERVAL_MS) {
-      return;
-    }
-
-    this.lastSolanaHealthcheckAt = now;
+    if (!this.solanaEnabled) return;
     try {
-      const [latest, account] = await Promise.all([
-        this.solanaConnection.getLatestBlockhash("confirmed"),
-        this.solanaConnection.getAccountInfo(this.solanaProgramId, "confirmed"),
-      ]);
-      if (!account?.executable) {
-        this.solanaEnabled = false;
-        console.warn(
-          `[SOLANA] Disabled: program ${this.solanaProgramId.toBase58()} missing or not executable.`,
-        );
+      const duelSignal = await this.getDuelSignal();
+      if (!duelSignal || !duelSignal.duelKeyHex) return;
+
+      const duelKey = duelKeyHexToBytes(duelSignal.duelKeyHex);
+      const duelStatePda = findDuelStatePda(this.solanaFightOracleId, duelKey);
+      const marketStatePda = findMarketPda(this.solanaProgramId, duelStatePda);
+
+      let marketState: any;
+      try {
+        marketState = await (this.solanaClob as any).account.marketState.fetch(marketStatePda);
+      } catch (e: any) {
+        if (this.cycleCount % 10 === 0) console.warn(`[SOLANA] Market state not found for ${duelSignal.duelKeyHex}.`);
         return;
       }
 
-      if (!this.solanaHealthcheckWarned) {
-        this.solanaHealthcheckWarned = true;
-        console.warn(
-          "[SOLANA] Health-check mode only in this bot. No synthetic/fake Solana orders are emitted.",
-        );
+      if (Object.keys(marketState.status)[0] !== "open") {
+        if (this.cycleCount % 10 === 0) console.log(`[SOLANA] Market is not open (status=${Object.keys(marketState.status)[0]}).`);
+        return;
       }
-      console.log(`[SOLANA] ✓ RPC healthy at slot hash ${latest.blockhash}`);
+
+      const bestBid = marketState.bestBid;
+      const bestAsk = marketState.bestAsk;
+
+      const hasBookMid = bestBid > 0 && bestAsk > 0 && bestAsk >= bestBid && bestAsk < 1000;
+      const bookMid = hasBookMid ? (bestBid + bestAsk) / 2 : NaN;
+      let mid = Number.isFinite(bookMid) ? bookMid : 500;
+      
+      const signalWeight = Number.isFinite(bookMid) ? duelSignal.weight : 1;
+      mid = clamp(Math.round(mid * (1 - signalWeight) + duelSignal.midPrice * signalWeight), 1, 999);
+
+      if (this.cycleCount % 12 === 0) {
+        console.log(`[SOLANA] duel signal phase=${duelSignal.phase} mid=${duelSignal.midPrice} weight=${signalWeight.toFixed(2)} -> quoteMid=${mid}`);
+      }
+
+      const spread = hasBookMid ? bestAsk - bestBid : 0;
+      const spreadBps = mid > 0 ? (spread * 10000) / mid : 10000;
+
+      let quoteWidth = Math.max(Math.ceil((TARGET_SPREAD_BPS * mid) / 10000), 5);
+      if (spreadBps > TOXICITY_THRESHOLD_BPS) {
+        quoteWidth *= 2;
+      }
+
+      const bidPrice = Math.max(1, Math.floor(mid - quoteWidth / 2));
+      const askPrice = Math.min(999, Math.ceil(mid + quoteWidth / 2));
+      const orderSizeRaw = this.computeOrderSize(); 
+      // Size in real Solana config is native SOL. Let's just use native units with orderSize matching the nominal size * 1M
+      // e.g. 25 "amount" = 25_000_000 lamports for nominal units, or whatever the contract expects.
+      // Wait, the SOL contract expects raw lamport amount equivalent for the total value? No, amount is the quantity of shares!
+      // In SOL clob, amount is shares. And total cost = amount * price / 1000. 
+      // Since amount * price must be multiple of 1000, we should ensure amount is a multiple of 1000!
+      // Let's make amount a multiple of 1000 to be safe!
+      const orderSize = Math.max(1000, Math.floor(orderSizeRaw) * 1000); 
+
+      // Inventory-aware quoting
+      const existingBuys = this.activeOrders.filter(o => o.chain === "solana" && o.isBuy).length;
+      const existingSells = this.activeOrders.filter(o => o.chain === "solana" && !o.isBuy).length;
+      const solanaMatchId = duelSignal.duelKeyHex; // track by hex
+
+      if (this.inventoryYes < MAX_INVENTORY_CAP && existingBuys < MAX_ORDERS_PER_SIDE) {
+        await this.placeSolanaOrder(marketStatePda, duelStatePda, solanaMatchId, true, bidPrice, orderSize);
+      }
+
+      if (this.inventoryNo < MAX_INVENTORY_CAP && existingSells < MAX_ORDERS_PER_SIDE) {
+        await this.placeSolanaOrder(marketStatePda, duelStatePda, solanaMatchId, false, askPrice, orderSize);
+      }
+      
+      // Note: Taker flow on Solana is skipped for now because building the crossed order accounts tree is complex for a standalone bot.
     } catch (e: any) {
-      this.solanaEnabled = false;
       console.error("[SOLANA] Market make error:", e.message);
+    }
+  }
+
+  async placeSolanaOrder(
+    marketStatePda: PublicKey,
+    duelStatePda: PublicKey,
+    matchIdHex: string,
+    isBuy: boolean,
+    price: number,
+    amount: number
+  ) {
+    try {
+      // First, get the config and nextOrderId from marketState
+      const marketState = await (this.solanaClob as any).account.marketState.fetch(marketStatePda);
+      const nextOrderId = marketState.nextOrderId;
+      
+      const vaultPda = findClobVaultPda(this.solanaProgramId, marketStatePda);
+      
+      // Calculate native fee cost
+      const priceComponent = BigInt(isBuy ? price : 1000 - price);
+      const onChainAmount = BigInt(amount);
+      const quoteValue = onChainAmount * priceComponent;
+      if (quoteValue % 1000n !== 0n) {
+        console.warn(`[SOLANA] Skipping order with invalid precision amount=${amount} price=${price}`);
+        return;
+      }
+      const cost = Number(quoteValue / 1000n);
+      
+      const config = await (this.solanaClob as any).account.marketConfig.fetch(this.solanaClobConfigPda);
+      const treasuryFee = Math.floor(cost * config.tradeTreasuryFeeBps / 10000);
+      const mmFee = Math.floor(cost * config.tradeMarketMakerFeeBps / 10000);
+      const nativeValue = cost + treasuryFee + mmFee;
+
+      // We must add priority fee!
+      // Add compute budget
+      // Wait, Anchor methods builder automatically includes compute budget if configured, or we can just send it manually.
+      const rpcResult = await (this.solanaClob as any).methods.placeOrder(
+          isBuy ? SIDE_BID : SIDE_ASK,
+          price,
+          new BN(amount) // fallback since BN isn't directly exposed
+      ).accountsPartial({
+        marketState: marketStatePda,
+        duelState: duelStatePda,
+        config: this.solanaClobConfigPda,
+        treasury: config.treasury,
+        marketMaker: config.marketMaker,
+        vault: vaultPda,
+        user: this.solanaWallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      }).remainingAccounts([]).rpc();
+
+      this.activeOrders.push({
+        orderId: Number(nextOrderId),
+        chain: "solana",
+        isBuy,
+        price,
+        amount,
+        placedAt: Date.now(),
+        matchId: matchIdHex,
+      });
+
+      if (isBuy) this.inventoryYes += amount;
+      else this.inventoryNo += amount;
+
+      console.log(`[SOLANA] ✓ BID @ ${price} x${amount} (value=${nativeValue}) (orderId: ${nextOrderId}) tx: ${rpcResult.slice(0, 15)}`);
+    } catch (e: any) {
+      if (e.message && e.message.includes("custom program error: 0x")) {
+         // Anchor error
+         console.warn(`[SOLANA] Order failed with anchor error: ${e.message}`);
+      } else {
+         console.error(`[SOLANA] Order failed:`, e.message);
+      }
     }
   }
 
@@ -1023,6 +1182,7 @@ class CrossChainMarketMaker {
         midPrice: clamp(implied, 1, 999),
         phase,
         weight: clamp(signalWeight, 0, 1),
+        duelKeyHex: cycle.duelKeyHex ? String(cycle.duelKeyHex) : null,
       };
 
       this.lastDuelSignal = signal;

@@ -113,11 +113,55 @@ vi.mock("@solana/web3.js", () => {
       toBase58() {
         return this.value;
       }
+      toBuffer() {
+        return Buffer.from(this.value);
+      }
+      static findProgramAddressSync() {
+        return [new MockPublicKey("MockPda1111111111111111111111111111111111"), 255];
+      }
     },
   };
 });
 
-vi.mock("@coral-xyz/anchor", () => ({}));
+vi.mock("@coral-xyz/anchor", () => {
+  class MockAnchorProvider {
+    constructor() {}
+  }
+  class MockProgram {
+    account = {
+      marketConfig: {
+        fetch: vi.fn().mockResolvedValue({
+          tradeTreasuryFeeBps: 100,
+          tradeMarketMakerFeeBps: 100,
+          treasury: { toBase58: () => "Treasury" },
+          marketMaker: { toBase58: () => "MarketMaker" },
+        }),
+      },
+      marketState: {
+        fetch: vi.fn().mockResolvedValue({
+          status: { open: {} },
+          bestBid: 450,
+          bestAsk: 550,
+          nextOrderId: 100n,
+        }),
+      },
+    };
+    methods = {
+      placeOrder: vi.fn(() => ({
+        accountsPartial: vi.fn(() => ({
+          remainingAccounts: vi.fn(() => ({
+            rpc: vi.fn().mockResolvedValue("mock-tx-signature"),
+            transaction: vi.fn().mockResolvedValue({}),
+          })),
+        })),
+      })),
+    };
+  }
+  return {
+    AnchorProvider: MockAnchorProvider,
+    Program: MockProgram,
+  };
+});
 
 type MarketMakerCtor = typeof import("./index.js").CrossChainMarketMaker;
 
