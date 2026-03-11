@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `d4323e4`
+- Latest recorded gate merged into base: `79d0101`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-04-keeper-health-recovery`
+- Active gate branch: `enoomian/pm-05-runtime-parity`
 
 ## Gate Status
 
@@ -23,7 +23,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 01 | `enoomian/pm-01-evm-sim-stability` | Complete | Yes | Async simulation runs, persisted scenario history, scenario CLI, deterministic degraded `ScenarioResult` output for heavy presets |
 | 02 | `enoomian/pm-02-evm-scenario-gates` | Complete | Yes | Explicit gate-family catalog, scenario-specific policy evaluation, fresh-baseline scenario runs, and canonical/matrix verification coverage |
 | 03 | `enoomian/pm-03-mm-risk-engine` | Complete | Yes | Shared quote sizing, gross-exposure and imbalance caps, and keeper quote refresh decisions now come from `@hyperbet/mm-core` |
-| 04 | `enoomian/pm-04-keeper-health-recovery` | Pending | No | Normalize keeper health output and restart/recovery behavior |
+| 04 | `enoomian/pm-04-keeper-health-recovery` | Complete | Yes | Keeper bots now persist market health/recovery snapshots and all three keeper services expose merged bot health via `/status` and `/api/keeper/bot-health` |
 | 05 | `enoomian/pm-05-runtime-parity` | Pending | No | Align external bot and EVM keepers on the same runtime and strategy inputs |
 | 06 | `enoomian/pm-06-frontend-settlement` | Pending | No | Make the frontend lifecycle and claim handling fully canonical on normalized market state |
 | 07 | `enoomian/pm-07-solana-bot-execution` | Pending | No | Finish real Solana execution in the external market-maker bot |
@@ -121,6 +121,40 @@ Known remaining risk:
 - Keeper quote contexts still feed placeholder freshness timestamps into the shared risk engine, so stale-stream / stale-oracle / stale-rpc halts are structurally available but not yet backed by real keeper health telemetry.
 - Gross exposure and imbalance policy are now centralized, but keeper `/status` does not yet expose the resulting per-market health model for operators.
 - Gate 04 should focus on surfacing that health state and adding restart/recovery behavior around missed sync, stale RPC, partial claim, and restart-with-open-orders.
+
+### Gate 04
+
+- Branch: `enoomian/pm-04-keeper-health-recovery`
+- Base commit after merge: `79d0101`
+- Commit: `79d0101` `keeper: add health and recovery surfaces`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Added shared keeper market-health and recovery snapshot types to `@hyperbet/mm-core`, plus merge helpers for lifecycle records and keeper health.
+- Extended Solana, BSC, and AVAX keeper bots to persist restart/recovery state, per-market quote health, stream/oracle/RPC freshness timestamps, and settled-market retention snapshots.
+- Added startup restart reconciliation detection for prior open-order state and serialized bot health snapshots so operators can inspect recovery state even when the bot is disabled.
+- Updated all three keeper services to load bot health snapshots, merge them into normalized prediction-market status output, and expose a dedicated `/api/keeper/bot-health` endpoint.
+- Added mm-core unit coverage for lifecycle-to-health merging so the status merge path is tested independently of live keeper state.
+
+Targeted verification:
+
+- `bun test` in `packages/hyperbet-mm-core`
+- `bunx tsc --noEmit -p tsconfig.json` in `packages/hyperbet-solana/keeper`
+- `bunx tsc --noEmit -p tsconfig.json` in `packages/hyperbet-bsc/keeper`
+- `bunx tsc --noEmit -p tsconfig.json` in `packages/hyperbet-avax/keeper`
+- `curl -s http://127.0.0.1:5611/status`
+- `curl -s http://127.0.0.1:5611/api/keeper/bot-health`
+- `curl -s http://127.0.0.1:5612/status`
+- `curl -s http://127.0.0.1:5612/api/keeper/bot-health`
+- `curl -s http://127.0.0.1:5613/status`
+- `curl -s http://127.0.0.1:5613/api/keeper/bot-health`
+
+Known remaining risk:
+
+- Keeper health is now visible and durable, but the external market-maker bot and EVM keeper runtimes still diverge in runtime assembly, env handling, and refresh/recovery behavior.
+- `predictionMarkets.chains[].health` depends on live lifecycle records existing in the current keeper snapshot, so the merge path is covered by tests while idle `/status` responses can still show an empty `chains` array.
+- Gate 05 should align the external bot and EVM keepers on the same chain-registry-driven runtime selection, fair-value inputs, halt logic, and refresh rules.
 
 ## Update Template
 
