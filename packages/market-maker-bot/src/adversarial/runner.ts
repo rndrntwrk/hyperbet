@@ -10,7 +10,9 @@ import {
   writeBaselineSnapshot,
 } from "./baseline.js";
 import { DEFAULT_INVARIANT_LIMITS, evaluateInvariantBreaches } from "./invariants.js";
+import { evaluateBoundedLossBreaches } from "./bounded-loss.js";
 import { evaluatePolicyBreaches } from "./policy.js";
+import { evaluateSettlementBreaches } from "./settlement.js";
 import { runAdversarialSuite, toMarkdownSummary } from "./suite.js";
 import type { ChainId, SuiteReport } from "./types.js";
 
@@ -127,6 +129,24 @@ export function runGate(
     return {
       ok: false,
       message: `policy breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
+    };
+  }
+
+  const boundedLossBreaches = evaluateBoundedLossBreaches(report);
+  if (boundedLossBreaches.length > 0) {
+    const first = boundedLossBreaches[0]!;
+    return {
+      ok: false,
+      message: `bounded-loss breach ${first.chain} ${first.scope}${first.scenario ? `/${first.scenario}` : ""}: expected ${first.expected}, actual=${first.actual}`,
+    };
+  }
+
+  const settlementBreaches = evaluateSettlementBreaches(report);
+  if (settlementBreaches.length > 0) {
+    const first = settlementBreaches[0]!;
+    return {
+      ok: false,
+      message: `settlement breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
     };
   }
 

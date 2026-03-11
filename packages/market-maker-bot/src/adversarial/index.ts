@@ -18,6 +18,8 @@ export {
   evaluateInvariantBreaches,
 } from "./invariants.js";
 export { DEFAULT_CHAIN_POLICIES, evaluatePolicyBreaches } from "./policy.js";
+export { evaluateBoundedLossBreaches } from "./bounded-loss.js";
+export { evaluateSettlementBreaches, validateSettlementTrace } from "./settlement.js";
 export type {
   ChainId,
   ChainReport,
@@ -33,3 +35,9 @@ export type {
 } from "./baseline.js";
 export type { InvariantBreach, InvariantLimits } from "./invariants.js";
 export type { ChainPolicy, PolicyBreach } from "./policy.js";
+export type { BoundedLossBreach, BoundedLossBudget } from "./bounded-loss.js";
+export type {
+  SettlementBreach,
+  SettlementEvent,
+  SettlementState,
+} from "./settlement.js";

@@ -75,12 +75,14 @@ Gate env controls:
 - `MM_ADVERSARIAL_OUTPUT_DIR` (default `simulations`)
 - `MM_ADVERSARIAL_ENFORCE_BASELINE` (`1` by default, set `0` to skip baseline regression checks)
 
-Gate behavior now enforces four layers:
+Gate behavior now enforces six layers:
 
 - mitigation pass threshold
 - hard invariants (`max mitigated attacker pnl`, `max exploit events`, `max inventory peak`, `max toxic fill rate`, `max adverse slippage`, `min loss reduction`)
 - baseline regression deltas from `src/adversarial/baseline.snapshot.json`
 - oracle/finality/dispute policy controls (max stale oracle age, confidence bounds, same-slot round-trip pressure, finalized-only settlement reads, minimum dispute liveness window)
+- bounded-loss budgets (scenario-level and chain-aggregate mitigated attacker PnL caps)
+- settlement state-machine checks (`open -> resolve_proposed -> dispute_window -> finalized`) including minimum dispute-window time before finalization
 
 Refresh baseline snapshot after intentional model changes:
 
