@@ -6,12 +6,21 @@ import { fileURLToPath } from "node:url";
 
 import { ContractFactory, JsonRpcProvider, ethers, type Contract } from "ethers";
 import { WebSocketServer, WebSocket } from "ws";
+import {
+    computeToxicityBps,
+    type AgentActionTrace,
+    type MitigationGate,
+    type ScenarioResult,
+} from "@hyperbet/mm-core";
 
 import {
     loadArtifact,
     duelKey,
     hashParticipant,
     sleep,
+    random,
+    setRandomSeed,
+    resetRandomSource,
     MARKET_KIND_DUEL_WINNER,
     DUEL_STATUS_BETTING_OPEN,
     SIDE_A,
@@ -21,6 +30,7 @@ import {
     MAX_PRICE,
     shortAddr,
     formatEth,
+    withTimeout,
 } from "./helpers.js";
 
 import {
@@ -37,6 +47,7 @@ import {
     StressTestAgent,
     SCENARIO_PRESETS,
     type SimContext,
+    type ScenarioPreset,
 } from "./agents.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -51,8 +62,11 @@ const CONTRACTS_DIR = join(__dirname, "..", "..", "evm-contracts");
 // ─── State ───────────────────────────────────────────────────────────────────
 let anvilProcess: ChildProcess | null = null;
 let provider: JsonRpcProvider;
+let readProvider: JsonRpcProvider;
 let oracle: Contract;
+let oracleRead: Contract;
 let clob: Contract;
+let clobRead: Contract;
 let agents: BaseAgent[] = [];
 let simRunning = false;
 let simSpeed = 500; // ms between ticks
@@ -61,11 +75,91 @@ let currentDuelKey = "";
 let currentMarketKey = "";
 let currentDuelLabel = "";
 let duelCounter = 0;
+let currentScenarioId = "manual";
 let treasuryAddr = "";
 let mmAddr = "";
 const eventLog: any[] = [];
 const initialBalances: Map<string, string> = new Map();
 const wsClients = new Set<WebSocket>();
+const ATTACKER_STRATEGIES = new Set([
+    "mev_frontrunner",
+    "sandwich",
+    "wash_trader",
+    "oracle_attack",
+    "cabal",
+    "arbitrageur",
+    "stress_test",
+]);
+const MARKET_STATUS_RESOLVED = 3;
+const MARKET_STATUS_CANCELLED = 4;
+let peakInventorySeen = 0;
+let worstMarketMakerPnl = 0;
+let bestAttackerPnlSeen = 0;
+let scenarioObservedTicks = 0;
+let scenarioQuotedTicks = 0;
+let scenarioSpreadBpsTotal = 0;
+let scenarioSpreadSamples = 0;
+let lastResolveLatencyMs: number | null = null;
+let lastComputedState: Record<string, any> | null = null;
+let scenarioRunInFlight = false;
+let scenarioHistory: ScenarioResult[] = [];
+let baselineSnapshotId: string | null = null;
+let baselineRuntimeState:
+    | {
+          duelCounter: number;
+          currentDuelLabel: string;
+          currentDuelKey: string;
+          currentMarketKey: string;
+      }
+    | null = null;
+
+function resetScenarioMetrics(): void {
+    peakInventorySeen = 0;
+    worstMarketMakerPnl = 0;
+    bestAttackerPnlSeen = 0;
+    scenarioObservedTicks = 0;
+    scenarioQuotedTicks = 0;
+    scenarioSpreadBpsTotal = 0;
+    scenarioSpreadSamples = 0;
+    lastResolveLatencyMs = null;
+    lastComputedState = null;
+    simTick = 0;
+}
+
+function applyScenarioPresetByName(name: string): ScenarioPreset {
+    const preset = SCENARIO_PRESETS.find((entry) => entry.name === name || entry.id === name);
+    if (!preset) {
+        throw new Error(`Unknown scenario preset: ${name}`);
+    }
+
+    currentScenarioId = preset.id;
+    for (const agent of agents) {
+        agent.config.enabled = preset.enabledStrategies.includes(agent.config.strategy);
+    }
+    return preset;
+}
+
+async function restoreScenarioBaseline(): Promise<void> {
+    if (!provider || !baselineSnapshotId || !baselineRuntimeState) {
+        throw new Error("Scenario baseline is not initialized");
+    }
+
+    simRunning = false;
+    await provider.send("evm_revert", [baselineSnapshotId]);
+    baselineSnapshotId = await provider.send("evm_snapshot", []);
+
+    duelCounter = baselineRuntimeState.duelCounter;
+    currentDuelLabel = baselineRuntimeState.currentDuelLabel;
+    currentDuelKey = baselineRuntimeState.currentDuelKey;
+    currentMarketKey = baselineRuntimeState.currentMarketKey;
+    currentScenarioId = "manual";
+    eventLog.length = 0;
+    for (const agent of agents) {
+        agent.activeOrderIds = [];
+        agent.tradeCount = 0;
+    }
+    resetScenarioMetrics();
+}
 
 // ─── Anvil Management ────────────────────────────────────────────────────────
 
@@ -125,6 +219,7 @@ function stopAnvil(): void {
 
 async function deployContracts(): Promise<void> {
     provider = new JsonRpcProvider(`http://127.0.0.1:${ANVIL_PORT}`, 31337);
+    readProvider = new JsonRpcProvider(`http://127.0.0.1:${ANVIL_PORT}`, 31337);
 
     const signers = await Promise.all(
         Array.from({ length: 20 }, (_, i) => provider.getSigner(i)),
@@ -135,17 +230,21 @@ async function deployContracts(): Promise<void> {
     const treasury = signers[3];
     const marketMaker = signers[4];
 
-    // Compile contracts if needed
-    if (!existsSync(join(CONTRACTS_DIR, "artifacts", "contracts", "GoldClob.sol", "GoldClob.json"))) {
-        console.log("[deploy] Artifacts not found. Run `npx hardhat compile` in packages/evm-contracts first.");
-        process.exit(1);
-    }
-    
     treasuryAddr = await treasury.getAddress();
     mmAddr = await marketMaker.getAddress();
 
-    const oracleArtifact = loadArtifact(CONTRACTS_DIR, "DuelOutcomeOracle");
-    const clobArtifact = loadArtifact(CONTRACTS_DIR, "GoldClob");
+    let oracleArtifact;
+    let clobArtifact;
+    try {
+        oracleArtifact = loadArtifact(CONTRACTS_DIR, "DuelOutcomeOracle");
+        clobArtifact = loadArtifact(CONTRACTS_DIR, "GoldClob");
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(
+            `[deploy] Contract artifacts not found. Build packages/evm-contracts first. (${message})`,
+        );
+        process.exit(1);
+    }
 
     console.log("[deploy] Deploying DuelOutcomeOracle...");
     const oracleFactory = new ContractFactory(oracleArtifact.abi as any, oracleArtifact.bytecode, admin);
@@ -168,6 +267,8 @@ async function deployContracts(): Promise<void> {
 
     const oracleAddr = await oracle.getAddress();
     const clobAddr = await clob.getAddress();
+    oracleRead = oracle.connect(readProvider) as unknown as Contract;
+    clobRead = clob.connect(readProvider) as unknown as Contract;
     console.log(`[deploy] Oracle: ${oracleAddr}`);
     console.log(`[deploy] CLOB:   ${clobAddr}`);
 
@@ -264,6 +365,8 @@ async function openNewDuel(): Promise<void> {
     duelCounter++;
     currentDuelLabel = `sim-duel-${duelCounter}`;
     currentDuelKey = duelKey(currentDuelLabel);
+    currentScenarioId = "manual";
+    resetScenarioMetrics();
 
     const reporter = await provider.getSigner(2);
     const operator = await provider.getSigner(1);
@@ -296,61 +399,98 @@ async function openNewDuel(): Promise<void> {
 
 async function simulationTick(): Promise<void> {
     simTick++;
+    const treasuryFeeBps = await withTimeout(
+        clobRead.tradeTreasuryFeeBps(),
+        5_000,
+        `tick ${simTick} treasuryFeeBps`,
+    );
+    const mmFeeBps = await withTimeout(
+        clobRead.tradeMarketMakerFeeBps(),
+        5_000,
+        `tick ${simTick} mmFeeBps`,
+    );
 
     for (const agent of agents) {
         if (!agent.config.enabled) continue;
 
         try {
-            // Build context
-            const market = await clob.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER);
-            const position = await clob.positions(currentMarketKey, await agent.signer.getAddress());
+            await withTimeout(
+                (async () => {
+                    // Build context
+                    const market = await withTimeout(
+                        clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
+                        5_000,
+                        `tick ${simTick} agent ${agent.config.name} getMarket`,
+                    );
+                    const position = await withTimeout(
+                        clobRead.positions(currentMarketKey, await agent.signer.getAddress()),
+                        5_000,
+                        `tick ${simTick} agent ${agent.config.name} getPosition`,
+                    );
+                    const ctx: SimContext = {
+                        duelKey: currentDuelKey,
+                        marketKey: currentMarketKey,
+                        bestBid: Number(market.bestBid),
+                        bestAsk: Number(market.bestAsk) >= MAX_PRICE ? 0 : Number(market.bestAsk),
+                        mid: calculateMid(Number(market.bestBid), Number(market.bestAsk)),
+                        totalAShares: market.totalAShares,
+                        totalBShares: market.totalBShares,
+                        tick: simTick,
+                        treasuryFeeBps,
+                        mmFeeBps,
+                        agentActiveOrderIds: agent.activeOrderIds,
+                        agentPosition: {
+                            aShares: position.aShares,
+                            bShares: position.bShares,
+                            aStake: position.aStake,
+                            bStake: position.bStake,
+                        },
+                    };
 
-            const ctx: SimContext = {
-                duelKey: currentDuelKey,
-                marketKey: currentMarketKey,
-                bestBid: Number(market.bestBid),
-                bestAsk: Number(market.bestAsk) >= MAX_PRICE ? 0 : Number(market.bestAsk),
-                mid: calculateMid(Number(market.bestBid), Number(market.bestAsk)),
-                totalAShares: market.totalAShares,
-                totalBShares: market.totalBShares,
-                tick: simTick,
-                treasuryFeeBps: await clob.tradeTreasuryFeeBps(),
-                mmFeeBps: await clob.tradeMarketMakerFeeBps(),
-                agentActiveOrderIds: agent.activeOrderIds,
-                agentPosition: {
-                    aShares: position.aShares,
-                    bShares: position.bShares,
-                    aStake: position.aStake,
-                    bStake: position.bStake,
-                },
-            };
+                    // Special handling for oracle attack agent
+                    if (agent instanceof OracleAttackAgent && agent.config.enabled) {
+                        if (simTick % 10 === 0) {
+                            const msg = await agent.executeOracleAttack(currentDuelKey);
+                            broadcast({ type: "log", data: { message: msg, tick: simTick } });
+                        }
+                        return;
+                    }
 
-            // Special handling for oracle attack agent
-            if (agent instanceof OracleAttackAgent && agent.config.enabled) {
-                if (simTick % 10 === 0) {
-                    const msg = await agent.executeOracleAttack(currentDuelKey);
-                    broadcast({ type: "log", data: { message: msg, tick: simTick } });
-                }
-                continue;
-            }
-
-            const actions = agent.decide(ctx);
-            if (actions.length > 0) {
-                const logs = await agent.executeActions(actions, ctx);
-                for (const msg of logs) {
-                    broadcast({ type: "log", data: { message: msg, tick: simTick } });
-                }
-            }
+                    const actions = agent.decide(ctx);
+                    if (actions.length > 0) {
+                        const logs = await withTimeout(
+                            agent.executeActions(actions, ctx),
+                            Math.max(12_000, actions.length * 12_000),
+                            `tick ${simTick} agent ${agent.config.name} executeActions`,
+                        );
+                        for (const msg of logs) {
+                            broadcast({ type: "log", data: { message: msg, tick: simTick } });
+                        }
+                    }
+                })(),
+                30_000,
+                `tick ${simTick} agent ${agent.config.name}`,
+            );
         } catch (err: any) {
+            const message = err.message?.slice(0, 150) ?? "unknown simulation error";
             broadcast({
                 type: "log",
-                data: { message: `[${agent.config.name}] ERROR: ${err.message?.slice(0, 150)}`, tick: simTick },
+                data: { message: `[${agent.config.name}] ERROR: ${message}`, tick: simTick },
             });
+            if (message.includes("timed out after")) {
+                throw err;
+            }
         }
+
+        await sleep(25);
     }
 
     // Broadcast full state update
-    await broadcastState();
+    await withTimeout(
+        broadcastState(),
+        10_000,
+        `tick ${simTick} broadcastState`,
+    );
 }
 
 function calculateMid(bestBid: number, bestAsk: number): number {
@@ -365,44 +505,159 @@ function calculateMid(bestBid: number, bestAsk: number): number {
 
 async function broadcastState(): Promise<void> {
     try {
-        const market = await clob.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER);
+        const market = await clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER);
 
         // Gather agent states
-        const agentStates = await Promise.all(
-            agents.map(async (agent) => {
-                const addr = await agent.signer.getAddress();
-                const balance = await provider.getBalance(addr);
-                const position = await clob.positions(currentMarketKey, addr);
-                const balanceFormatted = formatEth(balance);
-                const initBal = initialBalances.get(addr) || "10000";
-                const pnl = (Number(balanceFormatted) - Number(initBal)).toFixed(4);
+        const agentSnapshots = [];
+        for (const agent of agents) {
+            const addr = await agent.signer.getAddress();
+            const balance = await readProvider.getBalance(addr);
+            const position = await clobRead.positions(currentMarketKey, addr);
+            const balanceFormatted = formatEth(balance);
+            const initBal = initialBalances.get(addr) || "10000";
+            const pnlValue = Number(balanceFormatted) - Number(initBal);
+            const inventoryUnits = Number(position.aShares + position.bShares);
 
-                return {
-                    name: agent.config.name,
-                    strategy: agent.config.strategy,
-                    description: agent.config.description,
-                    enabled: agent.config.enabled,
-                    color: agent.config.color,
-                    address: addr,
-                    balance: balanceFormatted,
-                    pnl,
-                    tradeCount: agent.tradeCount,
-                    activeOrders: agent.activeOrderIds.length,
-                    position: {
-                        aShares: position.aShares.toString(),
-                        bShares: position.bShares.toString(),
-                        aStake: formatEth(position.aStake),
-                        bStake: formatEth(position.bStake),
-                    },
-                };
-            }),
+            agentSnapshots.push({
+                name: agent.config.name,
+                strategy: agent.config.strategy,
+                description: agent.config.description,
+                enabled: agent.config.enabled,
+                color: agent.config.color,
+                address: addr,
+                balance: balanceFormatted,
+                pnl: pnlValue.toFixed(4),
+                pnlValue,
+                tradeCount: agent.tradeCount,
+                activeOrders: agent.activeOrderIds.length,
+                inventoryUnits,
+                positionRaw: {
+                    aShares: position.aShares.toString(),
+                    bShares: position.bShares.toString(),
+                    aStake: position.aStake.toString(),
+                    bStake: position.bStake.toString(),
+                },
+                position: {
+                    aShares: position.aShares.toString(),
+                    bShares: position.bShares.toString(),
+                    aStake: formatEth(position.aStake),
+                    bStake: formatEth(position.bStake),
+                },
+            });
+        }
+        const agentStates = agentSnapshots.map(
+            ({ pnlValue, inventoryUnits, positionRaw, ...agentState }) => agentState,
         );
 
         // Build order book snapshot (scan populated price levels)
         const book = await buildOrderBook();
 
-        const treasuryBalance = await provider.getBalance(treasuryAddr);
-        const mmBalance = await provider.getBalance(mmAddr);
+        const treasuryBalance = await readProvider.getBalance(treasuryAddr);
+        const mmBalance = await readProvider.getBalance(mmAddr);
+        const marketStatus = Number(market.status);
+        const bestBid = Number(market.bestBid);
+        const bestAsk = Number(market.bestAsk);
+        const boundedBestAsk = bestAsk > 0 && bestAsk < MAX_PRICE ? bestAsk : null;
+        const spreadWidthBps = computeToxicityBps(
+            bestBid > 0 ? bestBid : null,
+            boundedBestAsk,
+        );
+        const orderChurn = eventLog.filter((entry) =>
+            entry.event === "OrderPlaced" ||
+            entry.event === "OrderCancelled" ||
+            entry.event === "OrderMatched",
+        ).length;
+        const attackerPnl = agentSnapshots
+            .filter((agent) => ATTACKER_STRATEGIES.has(agent.strategy))
+            .reduce((max, agent) => Math.max(max, agent.pnlValue), 0);
+        bestAttackerPnlSeen = Math.max(bestAttackerPnlSeen, attackerPnl);
+
+        const marketMakerAgent = agentSnapshots.find(
+            (agent) => agent.strategy === "market_maker",
+        );
+        if (marketMakerAgent) {
+            worstMarketMakerPnl = Math.min(
+                worstMarketMakerPnl,
+                marketMakerAgent.pnlValue,
+            );
+        }
+        peakInventorySeen = Math.max(
+            peakInventorySeen,
+            ...agentSnapshots.map((agent) => agent.inventoryUnits),
+        );
+
+        const marketMakerDrawdownBps = marketMakerAgent
+            ? Math.round(
+                (Math.abs(Math.min(0, worstMarketMakerPnl)) /
+                    Math.max(
+                        0.0001,
+                        Number(initialBalances.get(marketMakerAgent.address) || "1"),
+                    )) *
+                    10_000,
+            )
+            : 0;
+        const claimsProcessed =
+            marketStatus < MARKET_STATUS_RESOLVED ||
+            agentSnapshots.every(
+                (agent) =>
+                    BigInt(agent.positionRaw.aShares) === 0n &&
+                    BigInt(agent.positionRaw.bShares) === 0n &&
+                    BigInt(agent.positionRaw.aStake) === 0n &&
+                    BigInt(agent.positionRaw.bStake) === 0n,
+            );
+        const settlementConsistent =
+            marketStatus === MARKET_STATUS_RESOLVED
+                ? Number(market.winner) === SIDE_A || Number(market.winner) === SIDE_B
+                : marketStatus === MARKET_STATUS_CANCELLED
+                  ? Number(market.winner) === 0
+                  : true;
+        const bookNotCrossed = boundedBestAsk == null || bestBid <= 0 || bestBid < boundedBestAsk;
+        const mmSolvent =
+            (marketMakerAgent ? Number(marketMakerAgent.balance) > 0 : true) &&
+            mmBalance > 0n;
+        const mitigationGates: MitigationGate[] = [
+            {
+                name: "mmSolvent",
+                passed: mmSolvent,
+                reason: mmSolvent ? null : "market-maker wallet depleted",
+            },
+            {
+                name: "bookNotCrossed",
+                passed: bookNotCrossed,
+                reason: bookNotCrossed ? null : "best bid crosses best ask",
+            },
+            {
+                name: "noPositiveAttackerPnl",
+                passed: bestAttackerPnlSeen <= 0,
+                reason:
+                    bestAttackerPnlSeen <= 0
+                        ? null
+                        : `attacker pnl peaked at ${bestAttackerPnlSeen.toFixed(4)} ETH`,
+            },
+            {
+                name: "settlementConsistent",
+                passed: settlementConsistent,
+                reason: settlementConsistent ? null : "winner/status mismatch after settlement",
+            },
+            {
+                name: "claimsProcessed",
+                passed: claimsProcessed,
+                reason: claimsProcessed ? null : "settled market still has residual positions",
+            },
+        ];
+        const protocolMmPnl = Number(
+            formatEth(
+                mmBalance - ethers.parseEther(initialBalances.get(mmAddr) || "10000"),
+            ),
+        );
+        if (marketStatus === 1) {
+            scenarioObservedTicks += 1;
+            if ((marketMakerAgent?.activeOrders ?? 0) > 0) {
+                scenarioQuotedTicks += 1;
+            }
+            scenarioSpreadBpsTotal += spreadWidthBps;
+            scenarioSpreadSamples += 1;
+        }
 
         const state = {
             type: "state",
@@ -410,6 +665,9 @@ async function broadcastState(): Promise<void> {
                 tick: simTick,
                 running: simRunning,
                 speed: simSpeed,
+                scenario: {
+                    id: currentScenarioId,
+                },
                 duel: {
                     label: currentDuelLabel,
                     key: currentDuelKey,
@@ -417,10 +675,10 @@ async function broadcastState(): Promise<void> {
                 },
                 market: {
                     exists: market.exists,
-                    status: Number(market.status),
+                    status: marketStatus,
                     winner: Number(market.winner),
-                    bestBid: Number(market.bestBid),
-                    bestAsk: Number(market.bestAsk),
+                    bestBid,
+                    bestAsk,
                     totalAShares: market.totalAShares.toString(),
                     totalBShares: market.totalBShares.toString(),
                 },
@@ -429,19 +687,36 @@ async function broadcastState(): Promise<void> {
                     clob: await clob.getAddress(),
                 },
                 fees: {
-                    treasuryBps: (await clob.tradeTreasuryFeeBps()).toString(),
-                    mmBps: (await clob.tradeMarketMakerFeeBps()).toString(),
-                    winningsMmBps: (await clob.winningsMarketMakerFeeBps()).toString(),
+                    treasuryBps: (await clobRead.tradeTreasuryFeeBps()).toString(),
+                    mmBps: (await clobRead.tradeMarketMakerFeeBps()).toString(),
+                    winningsMmBps: (await clobRead.winningsMarketMakerFeeBps()).toString(),
                     treasuryAccruedWei: (treasuryBalance - ethers.parseEther(initialBalances.get(treasuryAddr) || "10000")).toString(),
                     mmAccruedWei: (mmBalance - ethers.parseEther(initialBalances.get(mmAddr) || "10000")).toString(),
                 },
                 agents: agentStates,
                 book,
+                mitigation: {
+                    gates: mitigationGates,
+                    metrics: {
+                        attackerPnlCurrent: attackerPnl,
+                        attackerPnlPeak: bestAttackerPnlSeen,
+                        marketMakerPnl:
+                            marketMakerAgent?.pnlValue ?? 0,
+                        protocolMarketMakerPnl: protocolMmPnl,
+                        marketMakerDrawdownBps,
+                        peakInventory: peakInventorySeen,
+                        spreadWidthBps,
+                        orderChurn,
+                        settlementConsistent,
+                        claimsProcessed,
+                    },
+                },
                 scenarios: SCENARIO_PRESETS,
                 eventLogCount: eventLog.length,
             },
         };
 
+        lastComputedState = state.data;
         broadcast(state);
     } catch (err: any) {
         console.error("[state] Error building state:", err.message);
@@ -453,7 +728,7 @@ async function buildOrderBook(): Promise<{ bids: any[]; asks: any[] }> {
     const asks: { price: number; total: string }[] = [];
 
     // Sample price levels around the interesting range
-    const market = await clob.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER);
+    const market = await clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER);
     const bestBid = Number(market.bestBid);
     const bestAsk = Number(market.bestAsk);
 
@@ -461,7 +736,7 @@ async function buildOrderBook(): Promise<{ bids: any[]; asks: any[] }> {
     if (bestBid > 0) {
         for (let p = bestBid; p >= Math.max(1, bestBid - 100); p -= 5) {
             try {
-                const level = await clob.getPriceLevel(currentDuelKey, MARKET_KIND_DUEL_WINNER, BUY_SIDE, p);
+                const level = await clobRead.getPriceLevel(currentDuelKey, MARKET_KIND_DUEL_WINNER, BUY_SIDE, p);
                 if (level[2] > 0n) {
                     bids.push({ price: p, total: level[2].toString() });
                 }
@@ -473,7 +748,7 @@ async function buildOrderBook(): Promise<{ bids: any[]; asks: any[] }> {
     if (bestAsk > 0 && bestAsk < MAX_PRICE) {
         for (let p = bestAsk; p <= Math.min(999, bestAsk + 100); p += 5) {
             try {
-                const level = await clob.getPriceLevel(currentDuelKey, MARKET_KIND_DUEL_WINNER, SELL_SIDE, p);
+                const level = await clobRead.getPriceLevel(currentDuelKey, MARKET_KIND_DUEL_WINNER, SELL_SIDE, p);
                 if (level[2] > 0n) {
                     asks.push({ price: p, total: level[2].toString() });
                 }
@@ -491,6 +766,121 @@ async function runSimLoop(): Promise<void> {
     }
 }
 
+function buildScenarioTraces(limit = 80): AgentActionTrace[] {
+    return eventLog.slice(-limit).map((entry) => ({
+        actor: String(entry.args?.maker ?? "protocol"),
+        action: String(entry.event ?? "unknown"),
+        chainKey: "bsc",
+        duelKey: currentDuelKey,
+        marketRef: currentMarketKey,
+        price:
+            entry.args?.price == null
+                ? null
+                : Number(entry.args.price),
+        units:
+            entry.args?.amount != null
+                ? Number(entry.args.amount)
+                : entry.args?.matchedAmount != null
+                  ? Number(entry.args.matchedAmount)
+                  : null,
+        txRef: entry.txHash ?? null,
+        ok: true,
+        message: entry.event,
+    }));
+}
+
+function buildScenarioResult(
+    preset: ScenarioPreset,
+    seed: string,
+): ScenarioResult {
+    if (!lastComputedState) {
+        throw new Error("Scenario finished without a computed state snapshot");
+    }
+
+    return {
+        name: preset.name,
+        seed,
+        chainKey: "bsc",
+        attackerPnl: Number(lastComputedState.mitigation.metrics.attackerPnlPeak ?? 0),
+        marketMakerPnl: Number(lastComputedState.mitigation.metrics.marketMakerPnl ?? 0),
+        maxDrawdownBps: Number(lastComputedState.mitigation.metrics.marketMakerDrawdownBps ?? 0),
+        peakInventory: Number(lastComputedState.mitigation.metrics.peakInventory ?? 0),
+        quoteUptimeRatio:
+            scenarioObservedTicks > 0 ? scenarioQuotedTicks / scenarioObservedTicks : 0,
+        spreadWidthBps:
+            scenarioSpreadSamples > 0
+                ? Math.round(scenarioSpreadBpsTotal / scenarioSpreadSamples)
+                : Number(lastComputedState.mitigation.metrics.spreadWidthBps ?? 0),
+        orderChurn: Number(lastComputedState.mitigation.metrics.orderChurn ?? 0),
+        lockTransitionLatencyMs: lastResolveLatencyMs,
+        resolvedCorrectly:
+            Boolean(lastComputedState.mitigation.metrics.settlementConsistent) &&
+            Number(lastComputedState.market.status) === MARKET_STATUS_RESOLVED,
+        claimCorrectly: Boolean(lastComputedState.mitigation.metrics.claimsProcessed),
+        gates: lastComputedState.mitigation.gates as MitigationGate[],
+        traces: buildScenarioTraces(),
+    };
+}
+
+async function runScenarioPreset(
+    scenarioName: string,
+    options: {
+        seed?: string;
+        ticks?: number;
+        winner?: "A" | "B";
+    } = {},
+): Promise<ScenarioResult> {
+    if (scenarioRunInFlight) {
+        throw new Error("A scenario run is already in progress");
+    }
+
+    scenarioRunInFlight = true;
+    try {
+        await restoreScenarioBaseline();
+        const preset = applyScenarioPresetByName(scenarioName);
+        const seed = options.seed?.trim() || `${preset.id}-seed`;
+        const ticks = Math.max(1, Math.min(200, options.ticks ?? preset.defaultTicks));
+        const winner = options.winner ?? preset.defaultWinner;
+
+        setRandomSeed(seed);
+        broadcast({
+            type: "log",
+            data: {
+                message: `🧪 Scenario run starting: ${preset.name} seed=${seed} ticks=${ticks}`,
+                tick: simTick,
+            },
+        });
+        await broadcastState();
+
+        for (let i = 0; i < ticks; i += 1) {
+            await withTimeout(
+                simulationTick(),
+                25_000,
+                `scenario ${preset.id} tick ${i + 1}`,
+            );
+        }
+
+        const resolveStartedAt = Date.now();
+        await withTimeout(
+            resolveDuel(winner === "B" ? SIDE_B : SIDE_A),
+            30_000,
+            `scenario ${preset.id} resolve`,
+        );
+        lastResolveLatencyMs = Date.now() - resolveStartedAt;
+
+        const result = buildScenarioResult(preset, seed);
+        scenarioHistory = [result, ...scenarioHistory].slice(0, 50);
+        broadcast({
+            type: "scenario_result",
+            data: result,
+        });
+        return result;
+    } finally {
+        resetRandomSource();
+        scenarioRunInFlight = false;
+    }
+}
+
 // ─── Resolve Duel ────────────────────────────────────────────────────────────
 
 async function resolveDuel(winnerSide: number): Promise<void> {
@@ -505,19 +895,27 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     const block = await provider.getBlock("latest");
     const now = BigInt(block?.timestamp ?? Math.floor(Date.now() / 1000));
 
-    const tx1 = await (oracle.connect(reporter) as any).reportResult(
-      currentDuelKey,
-      winnerSide,
-      BigInt(Math.floor(Math.random() * 1000000)),
-      ethers.keccak256(ethers.toUtf8Bytes(`replay-${currentDuelLabel}`)),
-      ethers.keccak256(ethers.toUtf8Bytes(`result-${currentDuelLabel}`)),
-      now,
-      `resolved-${currentDuelLabel}`,
+    const tx1: any = await withTimeout(
+        (oracle.connect(reporter) as any).reportResult(
+            currentDuelKey,
+            winnerSide,
+            BigInt(Math.floor(random() * 1000000)),
+            ethers.keccak256(ethers.toUtf8Bytes(`replay-${currentDuelLabel}`)),
+            ethers.keccak256(ethers.toUtf8Bytes(`result-${currentDuelLabel}`)),
+            now,
+            `resolved-${currentDuelLabel}`,
+        ),
+        10_000,
+        "resolve reportResult",
     );
-    await tx1.wait();
+    await withTimeout(tx1.wait(), 10_000, "resolve reportResult receipt");
 
-    const tx2 = await (clob.connect(operator) as any).syncMarketFromOracle(currentDuelKey, MARKET_KIND_DUEL_WINNER);
-    await tx2.wait();
+    const tx2: any = await withTimeout(
+        (clob.connect(operator) as any).syncMarketFromOracle(currentDuelKey, MARKET_KIND_DUEL_WINNER),
+        10_000,
+        "resolve syncMarketFromOracle",
+    );
+    await withTimeout(tx2.wait(), 10_000, "resolve syncMarketFromOracle receipt");
 
     broadcast({
         type: "log",
@@ -534,10 +932,22 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     // Auto-claim for all agents
     for (const agent of agents) {
         try {
-            const position = await clob.positions(currentMarketKey, await agent.signer.getAddress());
+            const position = await withTimeout(
+                clobRead.positions(currentMarketKey, await agent.signer.getAddress()),
+                5_000,
+                `${agent.config.name} claim position lookup`,
+            );
             if (position.aShares > 0n || position.bShares > 0n) {
-                const txClaim = await (clob.connect(agent.signer) as any).claim(currentDuelKey, MARKET_KIND_DUEL_WINNER);
-                await txClaim.wait();
+                const txClaim: any = await withTimeout(
+                    (clob.connect(agent.signer) as any).claim(currentDuelKey, MARKET_KIND_DUEL_WINNER),
+                    10_000,
+                    `${agent.config.name} claim`,
+                );
+                await withTimeout(
+                    txClaim.wait(),
+                    10_000,
+                    `${agent.config.name} claim receipt`,
+                );
                 broadcast({
                     type: "log",
                     data: { message: `[${agent.config.name}] Claimed winnings`, tick: simTick },
@@ -558,6 +968,7 @@ async function resolveDuel(winnerSide: number): Promise<void> {
         data: { message: `⚠️ Resolution error: ${err.message?.slice(0, 120)}`, tick: simTick },
     });
     console.error("[resolve] Error:", err.shortMessage || err.message);
+    throw err;
   }
 }
 
@@ -601,16 +1012,16 @@ function handleWsMessage(data: string): void {
                 break;
 
             case "scenario": {
-                const preset = SCENARIO_PRESETS.find((p) => p.name === msg.value);
+                const preset = SCENARIO_PRESETS.find(
+                    (p) => p.name === msg.value || p.id === msg.value,
+                );
                 if (preset) {
-                    for (const agent of agents) {
-                        agent.config.enabled = preset.enabledStrategies.includes(agent.config.strategy);
-                    }
+                    applyScenarioPresetByName(preset.id);
                     broadcast({
                         type: "log",
                         data: { message: `🎯 Scenario: ${preset.name}`, tick: simTick },
                     });
-                    broadcastState();
+                    void broadcastState();
                 }
                 break;
             }
@@ -688,6 +1099,95 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     }
 }
 
+function writeJson(
+    res: ServerResponse,
+    statusCode: number,
+    payload: unknown,
+): void {
+    res.writeHead(statusCode, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+    });
+    res.end(JSON.stringify(payload, null, 2));
+}
+
+async function handleHttpRequest(
+    req: IncomingMessage,
+    res: ServerResponse,
+): Promise<void> {
+    const requestUrl = new URL(
+        req.url ?? "/",
+        `http://${req.headers.host ?? `127.0.0.1:${HTTP_PORT}`}`,
+    );
+
+    if (requestUrl.pathname === "/api/state") {
+        writeJson(res, 200, {
+            ok: true,
+            state: lastComputedState,
+        });
+        return;
+    }
+
+    if (requestUrl.pathname === "/api/scenarios") {
+        writeJson(res, 200, {
+            ok: true,
+            scenarios: SCENARIO_PRESETS,
+            latest: scenarioHistory[0] ?? null,
+            historyCount: scenarioHistory.length,
+        });
+        return;
+    }
+
+    if (requestUrl.pathname === "/api/scenarios/results") {
+        writeJson(res, 200, {
+            ok: true,
+            results: scenarioHistory,
+        });
+        return;
+    }
+
+    if (requestUrl.pathname === "/api/scenarios/run") {
+        const scenarioName =
+            requestUrl.searchParams.get("name") ??
+            requestUrl.searchParams.get("id");
+        if (!scenarioName) {
+            writeJson(res, 400, {
+                ok: false,
+                error: "Missing scenario name or id",
+            });
+            return;
+        }
+
+        try {
+            const ticksParam = requestUrl.searchParams.get("ticks");
+            const winnerParam = requestUrl.searchParams.get("winner");
+            const result = await runScenarioPreset(scenarioName, {
+                seed: requestUrl.searchParams.get("seed") ?? undefined,
+                ticks:
+                    ticksParam == null || ticksParam === ""
+                        ? undefined
+                        : Number(ticksParam),
+                winner:
+                    winnerParam === "A" || winnerParam === "B"
+                        ? winnerParam
+                        : undefined,
+            });
+            writeJson(res, 200, {
+                ok: true,
+                result,
+            });
+        } catch (error) {
+            writeJson(res, 500, {
+                ok: false,
+                error: (error as Error).message,
+            });
+        }
+        return;
+    }
+
+    serveStatic(req, res);
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -700,9 +1200,20 @@ async function main(): Promise<void> {
 
     // 2. Deploy contracts
     await deployContracts();
+    baselineRuntimeState = {
+        duelCounter,
+        currentDuelLabel,
+        currentDuelKey,
+        currentMarketKey,
+    };
+    baselineSnapshotId = await provider.send("evm_snapshot", []);
+    eventLog.length = 0;
+    await broadcastState();
 
     // 3. Start HTTP server
-    const httpServer = createServer(serveStatic);
+    const httpServer = createServer((req, res) => {
+        void handleHttpRequest(req, res);
+    });
     httpServer.listen(HTTP_PORT, () => {
         console.log(`[http] Dashboard at http://localhost:${HTTP_PORT}`);
     });
