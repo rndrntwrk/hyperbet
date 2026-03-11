@@ -190,6 +190,36 @@ function formatCompactTokenAmount(value: bigint, decimals: number): string {
   return Number(formatUnits(value, decimals)).toFixed(3);
 }
 
+function maxBigInt(a: bigint, b: bigint): bigint {
+  return a > b ? a : b;
+}
+
+function addPositionDelta(
+  base: Position | null,
+  delta: Position,
+): Position {
+  return {
+    aShares: (base?.aShares ?? 0n) + delta.aShares,
+    bShares: (base?.bShares ?? 0n) + delta.bShares,
+    aStake: (base?.aStake ?? 0n) + delta.aStake,
+    bStake: (base?.bStake ?? 0n) + delta.bStake,
+  };
+}
+
+function mergePositionSnapshots(
+  primary: Position | null,
+  fallback: Position | null,
+): Position | null {
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+  return {
+    aShares: maxBigInt(primary.aShares, fallback.aShares),
+    bShares: maxBigInt(primary.bShares, fallback.bShares),
+    aStake: maxBigInt(primary.aStake, fallback.aStake),
+    bStake: maxBigInt(primary.bStake, fallback.bStake),
+  };
+}
+
 function getFallbackLifecycleStatus(
   status: MarketStatus | null | undefined,
 ) {
@@ -341,9 +371,12 @@ export function EvmBettingPanel({
   const [side, setSide] = useState<BetSide>("YES");
   const [amountInput, setAmountInput] = useState("1");
   const [priceInput, setPriceInput] = useState("500");
-  const [showAdvancedPricing, setShowAdvancedPricing] = useState(false);
+  const [showAdvancedPricing, setShowAdvancedPricing] = useState(isE2eMode);
   const [marketMeta, setMarketMeta] = useState<MarketMeta | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
+  const [optimisticPosition, setOptimisticPosition] = useState<Position | null>(
+    null,
+  );
   const [nativeBalance, setNativeBalance] = useState<bigint>(0n);
   const [tradeFeeBps, setTradeFeeBps] = useState(200);
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
@@ -381,13 +414,18 @@ export function EvmBettingPanel({
   );
   const duelId =
     lifecycleMarket?.duelId ?? lifecycleDuel?.duelId ?? streamedDuelId;
+  const effectivePosition = useMemo(
+    () => mergePositionSnapshots(position, optimisticPosition),
+    [optimisticPosition, position],
+  );
   const walletSnapshot = useMemo<PredictionMarketWalletSnapshot>(
     () => ({
-      aShares: position?.aShares ?? 0n,
-      bShares: position?.bShares ?? 0n,
-      refundableAmount: (position?.aStake ?? 0n) + (position?.bStake ?? 0n),
+      aShares: effectivePosition?.aShares ?? 0n,
+      bShares: effectivePosition?.bShares ?? 0n,
+      refundableAmount:
+        (effectivePosition?.aStake ?? 0n) + (effectivePosition?.bStake ?? 0n),
     }),
-    [position],
+    [effectivePosition],
   );
   const uiState = useMemo(
     () =>
@@ -572,6 +610,15 @@ export function EvmBettingPanel({
           getNativeBalance(publicClient, effectiveAddress),
         ]);
         setPosition(userPosition);
+        setOptimisticPosition((current) => {
+          if (!current) return null;
+          const hasCaughtUp =
+            userPosition.aShares >= current.aShares &&
+            userPosition.bShares >= current.bShares &&
+            userPosition.aStake >= current.aStake &&
+            userPosition.bStake >= current.bStake;
+          return hasCaughtUp ? null : current;
+        });
         setNativeBalance(balance);
         const nextUiState = derivePredictionMarketUiState(
           lifecycleMarket,
@@ -637,6 +684,10 @@ export function EvmBettingPanel({
     return () => clearInterval(id);
   }, [refreshData]);
 
+  useEffect(() => {
+    setOptimisticPosition(null);
+  }, [activeChain, duelKeyHex, effectiveAddress]);
+
 
 
   const handlePlaceOrder = useCallback(async () => {
@@ -666,6 +717,20 @@ export function EvmBettingPanel({
       const cost = (amount * priceComponent) / 1000n;
       const tradeFee = (cost * BigInt(Math.max(0, tradeFeeBps))) / 10_000n;
       const totalValue = cost + tradeFee;
+      const optimisticDelta: Position =
+        side === "YES"
+          ? {
+              aShares: amount,
+              bShares: 0n,
+              aStake: cost,
+              bStake: 0n,
+            }
+          : {
+              aShares: 0n,
+              bShares: amount,
+              aStake: 0n,
+              bStake: cost,
+            };
 
       setStatus(copy.placingOrder);
       const tx = await placeOrder(
@@ -693,6 +758,12 @@ export function EvmBettingPanel({
         duelKey: duelKeyHex,
         duelId,
       });
+      setOptimisticPosition((current) =>
+        addPositionDelta(
+          mergePositionSnapshots(position, current),
+          optimisticDelta,
+        ),
+      );
       setStatus(copy.orderPlaced);
       await refreshData();
     } catch (error) {
@@ -742,6 +813,7 @@ export function EvmBettingPanel({
       );
       setLastClaimTx(tx);
       await publicClient?.waitForTransactionReceipt({ hash: tx });
+      setOptimisticPosition(null);
       setStatus(copy.claimComplete);
       await refreshData();
     } catch (error) {
@@ -790,14 +862,14 @@ export function EvmBettingPanel({
   const totalPool =
     (marketMeta?.totalAShares ?? 0n) + (marketMeta?.totalBShares ?? 0n);
   const selectedStake = side === "YES"
-    ? (position?.aStake ?? 0n)
-    : (position?.bStake ?? 0n);
+    ? (effectivePosition?.aStake ?? 0n)
+    : (effectivePosition?.bStake ?? 0n);
   const selectedShares = side === "YES"
-    ? (position?.aShares ?? 0n)
-    : (position?.bShares ?? 0n);
+    ? (effectivePosition?.aShares ?? 0n)
+    : (effectivePosition?.bShares ?? 0n);
   const canClaim = uiState.canClaim;
   const programsReady = Boolean(
-    chainConfig && duelKeyHex && marketMeta?.exists && uiState.canTrade,
+    chainConfig && duelKeyHex && uiState.canTrade,
   );
   const e2eWalletDebug = isE2eMode
     ? [
