@@ -1,13 +1,25 @@
 # Hyperbet Market Maker Bot
 
+Real quote-lifecycle bot for BSC, Base, AVAX, and Solana. The bot discovers active prediction markets from the lifecycle API and feeds both EVM and Solana execution through the shared `@hyperbet/mm-core` quote planner.
+
 ## Single instance
 
 ```bash
 bun run start
 ```
 
-Uses `.env` values in this package. You can provide one shared EVM key via `EVM_PRIVATE_KEY`, or chain-specific keys via `EVM_PRIVATE_KEY_BSC` and `EVM_PRIVATE_KEY_BASE`.
-The bot now discovers active prediction markets from the keeper lifecycle endpoint and quotes against the current `GoldClob` `duelKey` / `marketKey` model on BSC, Base, and AVAX.
+Uses `.env` values in this package. You can provide one shared EVM key via `EVM_PRIVATE_KEY`, or chain-specific keys via `EVM_PRIVATE_KEY_BSC`, `EVM_PRIVATE_KEY_BASE`, and `EVM_PRIVATE_KEY_AVAX`.
+
+Solana execution now requires all of the following:
+
+- `SOLANA_PRIVATE_KEY` for a real funded signer
+- `SOLANA_RPC_URL`
+- `FIGHT_ORACLE_PROGRAM_ID`
+- `GOLD_CLOB_MARKET_PROGRAM_ID`
+
+`SOLANA_ARENA_MARKET_PROGRAM_ID` is still accepted as a deprecated alias for `GOLD_CLOB_MARKET_PROGRAM_ID`.
+
+If the Solana signer, program, or config PDA is unavailable, the bot disables only Solana execution and continues quoting on the enabled EVM chains.
 
 ## Generate multiple wallet configs
 
@@ -22,6 +34,8 @@ This writes wallet key material to `wallets.generated.json`. Keep that file priv
 ```bash
 bun run start:multi -- --config wallets.generated.json --stagger-ms 1200
 ```
+
+Any wallet with `MM_ENABLE_SOLANA=true` needs a funded `solanaPrivateKey`. Shared Solana env such as `SOLANA_RPC_URL`, `FIGHT_ORACLE_PROGRAM_ID`, and `GOLD_CLOB_MARKET_PROGRAM_ID` can live under `defaults`.
 
 Optional:
 
@@ -141,3 +155,13 @@ Refresh baseline snapshot after intentional model changes:
 ```bash
 bun run simulate:adversarial:baseline:update
 ```
+
+## Verification
+
+```bash
+bun test
+bunx tsc --noEmit -p tsconfig.json
+bun run smoke:runtime:solana
+```
+
+`SOLANA_HEALTHCHECK_INTERVAL_MS` controls readiness checks only. Normal Solana quote reconciliation runs on the main market-maker loop.
