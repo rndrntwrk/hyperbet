@@ -1,20 +1,60 @@
-import { createHyperbetAppRoot } from "@hyperbet/ui";
+import { type ReactNode, useMemo } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  RainbowKitProvider,
+  darkTheme,
+  lightTheme,
+} from "@rainbow-me/rainbowkit";
+import { WagmiProvider } from "wagmi";
+
+import "@rainbow-me/rainbowkit/styles.css";
 
 
 import { ChainProvider } from "./lib/ChainContext";
+import { ThemeProvider, useTheme } from "./lib/theme";
 import { wagmiConfig } from "@hyperbet/ui/lib/wagmiConfig";
 import { App } from "./App";
 import { StreamUIApp } from "./StreamUIApp";
 
-export default createHyperbetAppRoot({
-  // AVAX is EVM-only — no Solana RPC or headless wallets needed
-  getRpcUrl: () => "",
-  getWsUrl: () => "",
-  createHeadlessWalletsFromEnv: () => [],
-  ChainProvider: ChainProvider as any,
-  // Cast needed: lockfile resolves two viem versions (local 2.46 vs hoisted 2.47)
-  // causing deep chain-type structural incompatibility. Identical at runtime.
-  wagmiConfig: wagmiConfig as any,
-  App,
-  StreamUIApp,
-});
+
+function AvaxProviders({ children }: { children: ReactNode }) {
+  const { theme } = useTheme();
+  const queryClient = useMemo(() => new QueryClient(), []);
+  const rainbowTheme = useMemo(
+    () =>
+      theme === "light"
+        ? lightTheme({
+            accentColor: "#E84142",
+            accentColorForeground: "#ffffff",
+            borderRadius: "large",
+            overlayBlur: "small",
+          })
+        : darkTheme({
+            accentColor: "#E84142",
+            accentColorForeground: "#ffffff",
+            borderRadius: "large",
+            overlayBlur: "small",
+          }),
+    [theme],
+  );
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WagmiProvider config={wagmiConfig as any}>
+        <RainbowKitProvider theme={rainbowTheme}>
+          <ChainProvider>{children}</ChainProvider>
+        </RainbowKitProvider>
+      </WagmiProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default function AppRoot() {
+  const isStreamUi = import.meta.env.MODE === "stream-ui";
+
+  return (
+    <ThemeProvider>
+      <AvaxProviders>{isStreamUi ? <StreamUIApp /> : <App />}</AvaxProviders>
+    </ThemeProvider>
+  );
+}

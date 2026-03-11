@@ -7,6 +7,28 @@ import { type ChainId } from "../lib/chainConfig";
 import { getLocalizedChainDisplay } from "@hyperbet/ui/tokens";
 import { resolveUiLocale } from "@hyperbet/ui/i18n";
 
+function ChainIcon({
+  icon,
+  name,
+}: {
+  icon: string;
+  name: string;
+}) {
+  const isUrl = icon.startsWith("http://") || icon.startsWith("https://");
+  if (isUrl) {
+    return (
+      <img
+        src={icon}
+        alt={name}
+        width={24}
+        height={24}
+        style={{ display: "block", width: 24, height: 24, objectFit: "contain" }}
+      />
+    );
+  }
+  return <>{icon}</>;
+}
+
 export function ChainSelector() {
   const { activeChain, setActiveChain, availableChains } = useChain();
   const locale = resolveUiLocale();
@@ -15,7 +37,9 @@ export function ChainSelector() {
     const display = getLocalizedChainDisplay(activeChain, locale);
     return (
       <div className="chain-badge">
-        <span className="chain-badge-icon">{display.icon}</span>
+        <span className="chain-badge-icon">
+          <ChainIcon icon={display.icon} name={display.name} />
+        </span>
         <span className="chain-badge-name">{display.shortName}</span>
       </div>
     );
@@ -31,9 +55,15 @@ export function ChainSelector() {
       >
         {availableChains.map((chain) => {
           const display = getLocalizedChainDisplay(chain, locale);
+          // <option> can't render images — fall back to emoji or short name
+          const optionIcon =
+            display.icon.startsWith("http://") ||
+            display.icon.startsWith("https://")
+              ? display.shortName
+              : display.icon;
           return (
             <option key={chain} value={chain} style={{ background: "#111" }}>
-              {display.icon} {display.name}
+              {optionIcon} {display.name}
             </option>
           );
         })}

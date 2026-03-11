@@ -183,7 +183,7 @@ function AgentHPBar({
           alignItems: "flex-end",
           width: "100%",
           padding: "0 6px",
-          fontFamily: "'Teko', 'Arial Black', sans-serif",
+          fontFamily: "var(--hm-font-display)",
           textTransform: "uppercase",
           flexDirection: isRight ? "row-reverse" : "row",
         }}
@@ -327,7 +327,7 @@ function AgentHPBar({
             color: "#fff",
             fontSize: "1.2rem",
             fontWeight: 900,
-            fontFamily: "monospace",
+            fontFamily: "var(--hm-font-mono)",
             textShadow:
               "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000",
             pointerEvents: "none",
@@ -589,7 +589,7 @@ function CountdownDisplay({ count }: { count: number }) {
         style={{
           fontSize: "clamp(4rem, 12vw, 10rem)",
           fontWeight: "bold",
-          fontFamily: "Impact, sans-serif",
+          fontFamily: "var(--hm-font-display)",
           letterSpacing: -5,
           color: isFight ? "#ff6b6b" : "#f2d08a",
           textShadow: isFight
@@ -833,7 +833,7 @@ export function FightOverlay({
                   color: "rgba(232,243,255,0.95)",
                   fontSize: "clamp(1.28rem, 2.7vw, 2rem)",
                   fontWeight: 900,
-                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontFamily: "var(--hm-font-mono)",
                   letterSpacing: 1.2,
                   textShadow: "0 0 12px rgba(96,165,250,0.25)",
                   background:

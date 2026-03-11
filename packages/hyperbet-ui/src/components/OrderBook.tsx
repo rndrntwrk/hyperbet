@@ -51,14 +51,18 @@ function LevelRow({
     return () => clearTimeout(timer);
   }, [level.amount]);
 
-  const color = type === "bid" ? "#00ffcc" : "#ff0d3c";
-  const bg = type === "bid" ? "rgba(0,255,204,0.15)" : "rgba(255,13,60,0.15)";
+  const color = type === "bid" ? "var(--hm-buy)" : "var(--hm-sell)";
+  const bg = type === "bid"
+    ? "var(--hm-orderbook-bid-bg, rgba(34,197,94,0.15))"
+    : "var(--hm-orderbook-ask-bg, rgba(232,65,66,0.15))";
   const borderColor =
-    type === "bid" ? "rgba(0,255,204,0.4)" : "rgba(255,13,60,0.4)";
+    type === "bid"
+      ? "var(--hm-orderbook-bid-border, rgba(34,197,94,0.4))"
+      : "var(--hm-orderbook-ask-border, rgba(232,65,66,0.4))";
 
   let rowBg = "transparent";
-  if (flash === "up") rowBg = "rgba(255,255,255,0.15)";
-  if (flash === "down") rowBg = "rgba(255,0,0,0.15)";
+  if (flash === "up") rowBg = "var(--hm-flash-up-bg, rgba(255,255,255,0.15))";
+  if (flash === "down") rowBg = "var(--hm-flash-down-bg, rgba(232,65,66,0.15))";
 
   return (
     <div
@@ -93,7 +97,7 @@ function LevelRow({
           fontWeight: 700,
           zIndex: 1,
           textShadow: `0 0 6px ${color}44`,
-          fontFamily: "'IBM Plex Mono', monospace",
+          fontFamily: "var(--hm-font-mono)",
           fontSize: 11,
         }}
       >
@@ -103,9 +107,9 @@ function LevelRow({
         style={{
           flex: 1,
           textAlign: "right",
-          color: "rgba(255,255,255,0.75)",
+          color: "var(--hm-text, rgba(255,255,255,0.75))",
           zIndex: 1,
-          fontFamily: "'IBM Plex Mono', monospace",
+          fontFamily: "var(--hm-font-mono)",
           fontSize: 11,
         }}
       >
@@ -115,9 +119,9 @@ function LevelRow({
         style={{
           flex: 1,
           textAlign: "right",
-          color: "rgba(255,255,255,0.4)",
+          color: "var(--hm-text-muted, rgba(255,255,255,0.4))",
           zIndex: 1,
-          fontFamily: "'IBM Plex Mono', monospace",
+          fontFamily: "var(--hm-font-mono)",
           fontSize: 11,
         }}
       >
@@ -154,7 +158,7 @@ export function OrderBook({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid var(--hm-border-subtle, rgba(255,255,255,0.05))",
           paddingBottom: 4,
         }}
       >
@@ -164,8 +168,8 @@ export function OrderBook({
             fontWeight: 800,
             textTransform: "uppercase",
             letterSpacing: 2,
-            color: "rgba(255,255,255,0.4)",
-            fontFamily: "'Teko', sans-serif",
+            color: "var(--hm-text-dim, rgba(255,255,255,0.4))",
+            fontFamily: "var(--hm-font-display)",
           }}
         >
           {copy.orderBook}
@@ -179,11 +183,11 @@ export function OrderBook({
           display: "flex",
           fontSize: 9,
           fontWeight: 900,
-          color: "rgba(255,255,255,0.35)",
+          color: "var(--hm-text-muted, rgba(255,255,255,0.35))",
           padding: "2px 8px",
           textTransform: "uppercase",
           letterSpacing: 1.5,
-          fontFamily: "'Teko', sans-serif",
+          fontFamily: "var(--hm-font-display)",
         }}
       >
         <div style={{ flex: 1 }}>{copy.price}</div>
@@ -228,21 +232,21 @@ export function OrderBook({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            background: "rgba(0,0,0,0.4)",
+            background: "var(--hm-chip-bg-strong, rgba(0,0,0,0.4))",
             padding: "4px 12px",
             borderRadius: 6,
-            border: "1px solid rgba(242,208,138,0.2)",
+            border: "1px solid var(--hm-chip-border, rgba(232,65,66,0.2))",
             boxShadow:
-              "0 0 8px rgba(242,208,138,0.08), inset 0 1px 0 rgba(255,255,255,0.05)",
+              "0 0 8px var(--hm-chip-shadow, rgba(232,65,66,0.08)), inset 0 1px 0 rgba(255,255,255,0.05)",
           }}
         >
           <div
             style={{
               fontSize: 16,
               fontWeight: 900,
-              color: "#f2d08a",
-              fontFamily: "'IBM Plex Mono', monospace",
-              textShadow: "0 0 8px rgba(242,208,138,0.3)",
+              color: "var(--hm-accent-gold)",
+              fontFamily: "var(--hm-font-mono)",
+              textShadow: "0 0 8px var(--hm-chip-highlight, rgba(232,65,66,0.3))",
             }}
           >
             {displayMid.toFixed(3)}
@@ -250,8 +254,8 @@ export function OrderBook({
           <div
             style={{
               fontSize: 10,
-              color: "rgba(255,255,255,0.35)",
-              fontFamily: "'Inter', sans-serif",
+              color: "var(--hm-text-muted, rgba(255,255,255,0.35))",
+              fontFamily: "var(--hm-font-body)",
             }}
           >
             {copy.spread}: {displaySpread.toFixed(3)}

@@ -60,7 +60,7 @@ export function RecentTrades({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid var(--hm-border-subtle, rgba(255,255,255,0.05))",
           paddingBottom: 4,
         }}
       >
@@ -70,8 +70,8 @@ export function RecentTrades({
             fontWeight: 800,
             textTransform: "uppercase",
             letterSpacing: 2,
-            color: "rgba(255,255,255,0.4)",
-            fontFamily: "'Teko', sans-serif",
+            color: "var(--hm-text-dim, rgba(255,255,255,0.4))",
+            fontFamily: "var(--hm-font-display)",
           }}
         >
           {copy.recentTrades}
@@ -85,11 +85,11 @@ export function RecentTrades({
           display: "flex",
           fontSize: 9,
           fontWeight: 900,
-          color: "rgba(255,255,255,0.35)",
+          color: "var(--hm-text-muted, rgba(255,255,255,0.35))",
           padding: "2px 4px",
           textTransform: "uppercase",
           letterSpacing: 1.5,
-          fontFamily: "'Teko', sans-serif",
+          fontFamily: "var(--hm-font-display)",
         }}
       >
         <div style={{ flex: 1 }}>{copy.side}</div>
@@ -113,7 +113,7 @@ export function RecentTrades({
             style={{
               textAlign: "center",
               padding: "16px 0",
-              color: "rgba(255,255,255,0.2)",
+              color: "var(--hm-text-muted, rgba(255,255,255,0.2))",
               fontSize: 12,
               flex: 1,
               display: "flex",
@@ -138,7 +138,7 @@ export function RecentTrades({
                   borderRadius: 4,
                   borderBottom:
                     i < trades.length - 1
-                      ? "1px solid rgba(255,255,255,0.03)"
+                      ? "1px solid var(--hm-border-subtle, rgba(255,255,255,0.03))"
                       : "none",
                   transition: "background 0.3s",
                 }}
@@ -146,9 +146,9 @@ export function RecentTrades({
                 <div
                   style={{
                     flex: 1,
-                    color: trade.side === "YES" ? "#00ffcc" : "#ff0d3c",
+                    color: trade.side === "YES" ? "var(--hm-buy)" : "var(--hm-sell)",
                     fontWeight: 900,
-                    fontFamily: "'Teko', sans-serif",
+                    fontFamily: "var(--hm-font-display)",
                     letterSpacing: 1,
                     fontSize: 13,
                     display: "flex",
@@ -161,11 +161,11 @@ export function RecentTrades({
                       width: 6,
                       height: 6,
                       borderRadius: "50%",
-                      background: trade.side === "YES" ? "#00ffcc" : "#ff0d3c",
+                      background: trade.side === "YES" ? "var(--hm-buy)" : "var(--hm-sell)",
                       boxShadow:
                         trade.side === "YES"
-                          ? "0 0 6px rgba(0,255,204,0.5)"
-                          : "0 0 6px rgba(255,13,60,0.5)",
+                          ? "0 0 6px var(--hm-trade-buy-glow, rgba(34,197,94,0.5))"
+                          : "0 0 6px var(--hm-trade-sell-glow, rgba(232,65,66,0.5))",
                       flexShrink: 0,
                     }}
                   />
@@ -175,7 +175,7 @@ export function RecentTrades({
                   style={{
                     flex: 1,
                     textAlign: "right",
-                    color: "rgba(255,255,255,0.7)",
+                    color: "var(--hm-text, rgba(255,255,255,0.7))",
                   }}
                 >
                   {formatLocaleAmount(trade.amount, resolvedLocale)}
@@ -184,7 +184,7 @@ export function RecentTrades({
                   style={{
                     flex: 1,
                     textAlign: "right",
-                    color: "rgba(255,255,255,0.35)",
+                    color: "var(--hm-text-muted, rgba(255,255,255,0.35))",
                     fontSize: 11,
                   }}
                 >

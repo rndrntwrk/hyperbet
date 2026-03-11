@@ -595,7 +595,7 @@ export function SpectatorPanel({
         border: "1px solid rgba(255,255,255,0.08)",
         backdropFilter: "blur(12px)",
         color: "#fff",
-        fontFamily: "'Inter', system-ui, sans-serif",
+        fontFamily: "var(--hm-font-body)",
         display: "flex",
         flexDirection: "column",
         gap: 16,

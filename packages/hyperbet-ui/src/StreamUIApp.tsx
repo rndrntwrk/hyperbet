@@ -179,7 +179,7 @@ export function StreamUIApp() {
                   fontWeight: 900,
                   letterSpacing: 2,
                   textTransform: "uppercase",
-                  fontFamily: "'Orbitron', 'Inter', system-ui, sans-serif",
+                  fontFamily: "var(--hm-font-display)",
                   textShadow: `0 0 10px ${mock.statusColor}40, 0 1px 2px rgba(0,0,0,0.4)`,
                 }}
               >
@@ -191,7 +191,7 @@ export function StreamUIApp() {
                     color: "rgba(255,255,255,0.5)",
                     fontSize: 12,
                     fontWeight: 700,
-                    fontFamily: "monospace",
+                    fontFamily: "var(--hm-font-mono)",
                   }}
                 >
                   {countdownText}

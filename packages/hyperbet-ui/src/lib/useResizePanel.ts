@@ -59,9 +59,18 @@ export function useResizePanel(options: {
       e.preventDefault();
       const startPos = axis === "x" ? e.clientX : e.clientY;
       const startSize = sizeRef.current;
+      const dragCursor = axis === "x" ? "col-resize" : "row-resize";
+      const dragShield = document.createElement("div");
 
-      document.body.style.cursor = axis === "x" ? "col-resize" : "row-resize";
+      dragShield.style.position = "fixed";
+      dragShield.style.inset = "0";
+      dragShield.style.zIndex = "2147483647";
+      dragShield.style.cursor = dragCursor;
+      dragShield.style.background = "transparent";
+
+      document.body.style.cursor = dragCursor;
       document.body.style.userSelect = "none";
+      document.body.appendChild(dragShield);
 
       const onMove = (ev: MouseEvent) => {
         const raw = (axis === "x" ? ev.clientX : ev.clientY) - startPos;
@@ -78,6 +87,7 @@ export function useResizePanel(options: {
       const onUp = () => {
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+        dragShield.remove();
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
       };

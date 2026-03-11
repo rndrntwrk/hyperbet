@@ -21,6 +21,8 @@ type ChainContextValue = {
 
 type ChainProviderOptions = {
   e2eDefaultChain?: ChainId;
+  /** Pin the available chains instead of deriving from env/config. */
+  chains?: ChainId[];
 };
 
 const ChainCtx = createContext<ChainContextValue>({
@@ -29,8 +31,8 @@ const ChainCtx = createContext<ChainContextValue>({
   availableChains: ["solana"],
 });
 
-function getDefaultChain(e2eDefaultChain?: ChainId): ChainId {
-  const available = getAvailableChains();
+function getDefaultChain(e2eDefaultChain?: ChainId, chains?: ChainId[]): ChainId {
+  const available = chains ?? getAvailableChains();
 
   try {
     const selected = localStorage.getItem(SELECTED_CHAIN_STORAGE_KEY);
@@ -59,6 +61,7 @@ function getDefaultChain(e2eDefaultChain?: ChainId): ChainId {
 
   if (available.includes("base")) return "base";
   if (available.includes("bsc")) return "bsc";
+  if (available.includes("avax")) return "avax";
 
   return available[0] ?? "solana";
 }
@@ -66,13 +69,15 @@ function getDefaultChain(e2eDefaultChain?: ChainId): ChainId {
 function ChainProviderBase({
   children,
   e2eDefaultChain,
+  chains,
 }: {
   children: ReactNode;
   e2eDefaultChain?: ChainId;
+  chains?: ChainId[];
 }) {
-  const availableChains = useMemo(() => getAvailableChains(), []);
+  const availableChains = useMemo(() => chains ?? getAvailableChains(), [chains]);
   const [activeChain, setActiveChainRaw] = useState<ChainId>(() =>
-    getDefaultChain(e2eDefaultChain),
+    getDefaultChain(e2eDefaultChain, chains),
   );
 
   const setActiveChain = useCallback(
@@ -110,7 +115,7 @@ function ChainProviderBase({
 export function createChainProvider(options: ChainProviderOptions = {}) {
   function ChainProvider({ children }: { children: ReactNode }) {
     return (
-      <ChainProviderBase e2eDefaultChain={options.e2eDefaultChain}>
+      <ChainProviderBase e2eDefaultChain={options.e2eDefaultChain} chains={options.chains}>
         {children}
       </ChainProviderBase>
     );

@@ -47,6 +47,7 @@ interface PredictionMarketPanelProps {
   marketAssetSymbol?: string;
   onViewAgent1?: () => void;
   onViewAgent2?: () => void;
+  compactHeader?: ReactNode;
   /** Sidebar compact mode: single-column layout, hm-* gold theme, hides chart/orderbook/trades cols */
   compact?: boolean;
 }
@@ -79,6 +80,7 @@ export function PredictionMarketPanel({
   marketAssetSymbol = "GOLD",
   onViewAgent1,
   onViewAgent2,
+  compactHeader,
   compact = false,
 }: PredictionMarketPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
@@ -89,25 +91,34 @@ export function PredictionMarketPanel({
   const noSelected = side === "NO";
   const canBet = isWalletReady && programsReady;
   const sellSupported = isEvm || supportsSell;
+  const selectedAccent = side === "YES" ? "var(--hm-buy)" : "var(--hm-sell)";
+  const selectedGlow =
+    side === "YES"
+      ? "var(--hm-buy-glow-soft, rgba(34,197,94,0.24))"
+      : "var(--hm-sell-glow-soft, rgba(232,65,66,0.24))";
+  const selectedCardBg =
+    side === "YES"
+      ? "linear-gradient(180deg, var(--hm-buy-soft, rgba(34,197,94,0.18)) 0%, var(--hm-buy-soft-fade, rgba(34,197,94,0.05)) 100%)"
+      : "linear-gradient(180deg, var(--hm-sell-soft, rgba(232,65,66,0.18)) 0%, var(--hm-sell-soft-fade, rgba(232,65,66,0.05)) 100%)";
 
   // Compact mode colour tokens (hm-* theme)
   const C_YES_ACTIVE_BG = compact
-    ? "linear-gradient(180deg, rgba(34,197,94,0.22) 0%, rgba(34,197,94,0.06) 100%)"
-    : "linear-gradient(180deg, rgba(0,255,204,0.22) 0%, rgba(0,255,204,0.06) 100%)";
+    ? "linear-gradient(180deg, var(--hm-buy-soft, rgba(34,197,94,0.22)) 0%, var(--hm-buy-soft-fade, rgba(34,197,94,0.06)) 100%)"
+    : "linear-gradient(180deg, var(--hm-buy-soft, rgba(34,197,94,0.22)) 0%, var(--hm-buy-soft-fade, rgba(34,197,94,0.06)) 100%)";
   const C_YES_ACTIVE_BORDER = compact
-    ? "1px solid rgba(34,197,94,0.4)"
-    : "1px solid rgba(0,255,204,0.4)";
+    ? "1px solid var(--hm-buy-border, rgba(34,197,94,0.4))"
+    : "1px solid var(--hm-buy-border, rgba(34,197,94,0.4))";
   const C_YES_ACTIVE_SHADOW = compact
-    ? "0 4px 20px rgba(34,197,94,0.2), inset 0 1px 0 rgba(255,255,255,0.18)"
-    : "0 4px 20px rgba(0,255,204,0.2), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 0 16px rgba(0,255,204,0.08)";
-  const C_YES_TEXT = compact ? "#22c55e" : "#00ffcc";
-  const C_YES_GLOW = compact ? "rgba(34,197,94,0.6)" : "rgba(0,255,204,0.6)";
+    ? "0 4px 20px var(--hm-buy-glow-soft, rgba(34,197,94,0.2)), inset 0 1px 0 rgba(255,255,255,0.18)"
+    : "0 4px 20px var(--hm-buy-glow-soft, rgba(34,197,94,0.2)), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 0 16px var(--hm-buy-glow-subtle, rgba(34,197,94,0.08))";
+  const C_YES_TEXT = "var(--hm-buy)";
+  const C_YES_GLOW = "var(--hm-buy-glow-strong, rgba(34,197,94,0.6))";
   const C_YES_BAR = compact
-    ? "linear-gradient(90deg, rgba(34,197,94,0.2), #22c55e, rgba(34,197,94,0.2))"
-    : "linear-gradient(90deg, rgba(0,255,204,0.2), #00ffcc, rgba(0,255,204,0.2))";
+    ? "linear-gradient(90deg, var(--hm-buy-soft, rgba(34,197,94,0.2)), var(--hm-buy), var(--hm-buy-soft, rgba(34,197,94,0.2)))"
+    : "linear-gradient(90deg, var(--hm-buy-soft, rgba(34,197,94,0.2)), var(--hm-buy), var(--hm-buy-soft, rgba(34,197,94,0.2)))";
   const C_YES_BAR_SHADOW = compact
-    ? "0 0 8px rgba(34,197,94,0.5)"
-    : "0 0 8px rgba(0,255,204,0.5)";
+    ? "0 0 8px var(--hm-buy-glow-strong, rgba(34,197,94,0.5))"
+    : "0 0 8px var(--hm-buy-glow-strong, rgba(34,197,94,0.5))";
   const numericYesPool =
     typeof yesPool === "number"
       ? yesPool
@@ -129,12 +140,24 @@ export function PredictionMarketPanel({
             display: "flex",
             flexDirection: "column",
             gap: compact ? 8 : 10,
-            padding: compact ? "14px 16px" : 0,
+            padding: compact ? "12px 12px 14px" : 0,
+            borderRadius: compact ? 14 : 0,
+            background: compact
+              ? "var(--hm-panel-shell-bg, linear-gradient(180deg, rgba(16,18,24,0.96) 0%, rgba(11,12,16,0.98) 100%))"
+              : "transparent",
+            border: compact
+              ? "1px solid var(--hm-panel-shell-border, rgba(255,255,255,0.08))"
+              : "none",
+            boxShadow: compact
+              ? "0 18px 40px var(--hm-panel-shell-shadow, rgba(0,0,0,0.34)), inset 0 1px 0 rgba(255,255,255,0.05)"
+              : "none",
           }}
         >
+          {compact && compactHeader ? <div>{compactHeader}</div> : null}
+
           {/* Agent buttons side by side */}
           <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: compact ? 6 : 8 }}
           >
             {/* Agent 1 */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -146,11 +169,11 @@ export function PredictionMarketPanel({
                 className="gm-btn gm-btn-agent1"
                 style={{
                   position: "relative",
-                  padding: "8px 10px",
-                  borderRadius: 10,
+                  padding: compact ? "10px 10px 12px" : "8px 10px",
+                  borderRadius: compact ? 14 : 10,
                   border: yesSelected
                     ? C_YES_ACTIVE_BORDER
-                    : "1px solid rgba(255,255,255,0.1)",
+                    : "1px solid var(--hm-panel-card-border, rgba(255,255,255,0.1))",
                   color: "#fff",
                   cursor: "pointer",
                   textAlign: "center",
@@ -158,10 +181,10 @@ export function PredictionMarketPanel({
                   overflow: "hidden",
                   background: yesSelected
                     ? C_YES_ACTIVE_BG
-                    : "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)",
+                    : "var(--hm-panel-card-bg, linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%))",
                   boxShadow: yesSelected
                     ? C_YES_ACTIVE_SHADOW
-                    : "inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.2)",
+                    : "inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px var(--hm-panel-card-shadow, rgba(0,0,0,0.2))",
                   backdropFilter: "blur(16px)",
                   WebkitBackdropFilter: "blur(16px)",
                 }}
@@ -172,8 +195,8 @@ export function PredictionMarketPanel({
                     fontWeight: 900,
                     letterSpacing: 1.5,
                     textTransform: "uppercase",
-                    fontFamily: "'Teko', sans-serif",
-                    color: yesSelected ? C_YES_TEXT : "rgba(255,255,255,0.5)",
+                    fontFamily: "var(--hm-font-display)",
+                    color: yesSelected ? C_YES_TEXT : "var(--hm-text-dim, rgba(255,255,255,0.5))",
                     textShadow: yesSelected ? `0 0 10px ${C_YES_GLOW}` : "none",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -186,8 +209,9 @@ export function PredictionMarketPanel({
                   style={{
                     fontSize: 22,
                     fontWeight: 900,
-                    color: yesSelected ? "#fff" : "rgba(255,255,255,0.25)",
-                    fontFamily: "'Teko', sans-serif",
+                    color: yesSelected ? "var(--hm-text, #fff)" : "var(--hm-text-muted, rgba(255,255,255,0.25))",
+                    fontFamily: "var(--hm-font-display)",
+                    fontVariantNumeric: "tabular-nums",
                     lineHeight: 1,
                     marginTop: 1,
                     textShadow: yesSelected
@@ -197,6 +221,23 @@ export function PredictionMarketPanel({
                 >
                   {yesPercent}%
                 </div>
+                {compact ? (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: yesSelected
+                        ? "var(--hm-text, rgba(255,255,255,0.8))"
+                        : "var(--hm-text-muted, rgba(255,255,255,0.42))",
+                      fontFamily: "var(--hm-font-mono)",
+                      letterSpacing: 0.2,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {yesPool}
+                  </div>
+                ) : null}
                 {yesSelected && (
                   <div
                     style={{
@@ -218,19 +259,19 @@ export function PredictionMarketPanel({
                   style={{
                     padding: "5px 4px",
                     borderRadius: 8,
-                    border: "1px solid rgba(0, 255, 204, 0.15)",
+                    border: "1px solid var(--hm-buy-soft, rgba(34,197,94,0.15))",
                     cursor: "pointer",
                     fontSize: 10,
                     fontWeight: 800,
                     letterSpacing: 1.5,
                     textTransform: "uppercase",
                     transition: "all 0.15s ease",
-                    fontFamily: "'Teko', sans-serif",
+                    fontFamily: "var(--hm-font-display)",
                     background:
-                      "linear-gradient(180deg, rgba(0,255,204,0.06) 0%, rgba(0,255,204,0.02) 100%)",
-                    color: "#00ffcc",
+                      "linear-gradient(180deg, var(--hm-buy-soft-faint, rgba(34,197,94,0.06)) 0%, rgba(34,197,94,0.02) 100%)",
+                    color: "var(--hm-buy)",
                     boxShadow:
-                      "inset 0 1px 0 rgba(0,255,204,0.06), 0 2px 4px rgba(0,0,0,0.15)",
+                      "inset 0 1px 0 var(--hm-buy-soft-faint, rgba(34,197,94,0.06)), 0 2px 4px rgba(0,0,0,0.15)",
                     backdropFilter: "blur(12px)",
                     WebkitBackdropFilter: "blur(12px)",
                   }}
@@ -250,22 +291,22 @@ export function PredictionMarketPanel({
                 className="gm-btn gm-btn-agent2"
                 style={{
                   position: "relative",
-                  padding: "8px 10px",
-                  borderRadius: 10,
+                  padding: compact ? "10px 10px 12px" : "8px 10px",
+                  borderRadius: compact ? 14 : 10,
                   border: noSelected
-                    ? "1px solid rgba(255,13,60,0.4)"
-                    : "1px solid rgba(255,255,255,0.1)",
+                    ? "1px solid var(--hm-sell-border, rgba(232,65,66,0.4))"
+                    : "1px solid var(--hm-panel-card-border, rgba(255,255,255,0.1))",
                   color: "#fff",
                   cursor: "pointer",
                   textAlign: "center",
                   transition: "all 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
                   overflow: "hidden",
                   background: noSelected
-                    ? "linear-gradient(180deg, rgba(255,13,60,0.22) 0%, rgba(255,13,60,0.06) 100%)"
-                    : "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)",
+                    ? "linear-gradient(180deg, var(--hm-sell-soft, rgba(232,65,66,0.22)) 0%, var(--hm-sell-soft-fade, rgba(232,65,66,0.06)) 100%)"
+                    : "var(--hm-panel-card-bg, linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%))",
                   boxShadow: noSelected
-                    ? "0 4px 20px rgba(255,13,60,0.2), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 0 16px rgba(255,13,60,0.08)"
-                    : "inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.2)",
+                    ? "0 4px 20px var(--hm-sell-glow-soft, rgba(232,65,66,0.2)), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 0 16px var(--hm-sell-glow-subtle, rgba(232,65,66,0.08))"
+                    : "inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px var(--hm-panel-card-shadow, rgba(0,0,0,0.2))",
                   backdropFilter: "blur(16px)",
                   WebkitBackdropFilter: "blur(16px)",
                 }}
@@ -276,10 +317,10 @@ export function PredictionMarketPanel({
                     fontWeight: 900,
                     letterSpacing: 1.5,
                     textTransform: "uppercase",
-                    fontFamily: "'Teko', sans-serif",
-                    color: noSelected ? "#ff0d3c" : "rgba(255,255,255,0.5)",
+                    fontFamily: "var(--hm-font-display)",
+                    color: noSelected ? "var(--hm-sell)" : "var(--hm-text-dim, rgba(255,255,255,0.5))",
                     textShadow: noSelected
-                      ? "0 0 10px rgba(255,13,60,0.6)"
+                      ? "0 0 10px var(--hm-sell-glow-strong, rgba(232,65,66,0.6))"
                       : "none",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -292,8 +333,9 @@ export function PredictionMarketPanel({
                   style={{
                     fontSize: 22,
                     fontWeight: 900,
-                    color: noSelected ? "#fff" : "rgba(255,255,255,0.25)",
-                    fontFamily: "'Teko', sans-serif",
+                    color: noSelected ? "var(--hm-text, #fff)" : "var(--hm-text-muted, rgba(255,255,255,0.25))",
+                    fontFamily: "var(--hm-font-display)",
+                    fontVariantNumeric: "tabular-nums",
                     lineHeight: 1,
                     marginTop: 1,
                     textShadow: noSelected
@@ -303,6 +345,23 @@ export function PredictionMarketPanel({
                 >
                   {noPercent}%
                 </div>
+                {compact ? (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: noSelected
+                        ? "var(--hm-text, rgba(255,255,255,0.8))"
+                        : "var(--hm-text-muted, rgba(255,255,255,0.42))",
+                      fontFamily: "var(--hm-font-mono)",
+                      letterSpacing: 0.2,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {noPool}
+                  </div>
+                ) : null}
                 {noSelected && (
                   <div
                     style={{
@@ -312,8 +371,8 @@ export function PredictionMarketPanel({
                       right: 0,
                       height: 2,
                       background:
-                        "linear-gradient(90deg, rgba(255,13,60,0.2), #ff0d3c, rgba(255,13,60,0.2))",
-                      boxShadow: "0 0 8px rgba(255,13,60,0.5)",
+                        "linear-gradient(90deg, var(--hm-sell-soft, rgba(232,65,66,0.2)), var(--hm-sell), var(--hm-sell-soft, rgba(232,65,66,0.2)))",
+                      boxShadow: "0 0 8px var(--hm-sell-glow-strong, rgba(232,65,66,0.5))",
                     }}
                   />
                 )}
@@ -325,19 +384,19 @@ export function PredictionMarketPanel({
                   style={{
                     padding: "5px 4px",
                     borderRadius: 8,
-                    border: "1px solid rgba(255, 13, 60, 0.15)",
+                    border: "1px solid var(--hm-sell-soft, rgba(232,65,66,0.15))",
                     cursor: "pointer",
                     fontSize: 10,
                     fontWeight: 800,
                     letterSpacing: 1.5,
                     textTransform: "uppercase",
                     transition: "all 0.15s ease",
-                    fontFamily: "'Teko', sans-serif",
+                    fontFamily: "var(--hm-font-display)",
                     background:
-                      "linear-gradient(180deg, rgba(255,13,60,0.06) 0%, rgba(255,13,60,0.02) 100%)",
-                    color: "#ff0d3c",
+                      "linear-gradient(180deg, var(--hm-sell-soft-faint, rgba(232,65,66,0.06)) 0%, rgba(232,65,66,0.02) 100%)",
+                    color: "var(--hm-sell)",
                     boxShadow:
-                      "inset 0 1px 0 rgba(255,13,60,0.06), 0 2px 4px rgba(0,0,0,0.15)",
+                      "inset 0 1px 0 var(--hm-sell-soft-faint, rgba(232,65,66,0.06)), 0 2px 4px rgba(0,0,0,0.15)",
                     backdropFilter: "blur(12px)",
                     WebkitBackdropFilter: "blur(12px)",
                   }}
@@ -353,7 +412,7 @@ export function PredictionMarketPanel({
             style={{
               height: 1,
               background:
-                "linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)",
+                "linear-gradient(90deg, transparent, var(--hm-border-subtle, rgba(255,255,255,0.08)), transparent)",
             }}
           />
 
@@ -366,12 +425,16 @@ export function PredictionMarketPanel({
             style={{
               display: "flex",
               gap: compact ? 6 : 4,
-              background: compact ? "transparent" : "rgba(0,0,0,0.25)",
-              borderRadius: compact ? 2 : 12,
-              padding: compact ? 0 : 3,
-              border: compact ? "none" : "1px solid rgba(255,255,255,0.08)",
+              background: compact
+                ? "var(--hm-segmented-bg, rgba(255,255,255,0.03))"
+                : "var(--hm-segmented-bg-strong, rgba(0,0,0,0.25))",
+              borderRadius: compact ? 14 : 12,
+              padding: compact ? 4 : 3,
+              border: compact
+                ? "1px solid var(--hm-border-subtle, rgba(255,255,255,0.06))"
+                : "1px solid var(--hm-border-subtle, rgba(255,255,255,0.08))",
               boxShadow: compact
-                ? "none"
+                ? "inset 0 1px 0 rgba(255,255,255,0.04)"
                 : "inset 0 2px 6px rgba(0,0,0,0.3), inset 0 0 0 0.5px rgba(255,255,255,0.04)",
               backdropFilter: compact ? "none" : "blur(12px)",
               WebkitBackdropFilter: compact ? "none" : "blur(12px)",
@@ -388,23 +451,25 @@ export function PredictionMarketPanel({
                 border: "none",
                 cursor: "pointer",
                 fontWeight: 900,
-                fontSize: 13,
-                letterSpacing: 2,
+                fontSize: compact ? 12 : 13,
+                letterSpacing: compact ? 1.2 : 2,
                 textTransform: "uppercase",
                 transition: "all 0.15s ease",
-                fontFamily: "'Teko', sans-serif",
+                fontFamily: "var(--hm-font-display)",
                 background:
                   activeTab === "buy"
                     ? compact
-                      ? "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)"
-                      : "linear-gradient(180deg, #00ffcc 0%, #00d4aa 100%)"
+                      ? "linear-gradient(180deg, var(--hm-buy) 0%, var(--hm-buy-strong, #15803d) 100%)"
+                      : "linear-gradient(180deg, var(--hm-buy) 0%, var(--hm-buy-strong, #15803d) 100%)"
                     : "transparent",
-                color: activeTab === "buy" ? "#fff" : "rgba(255,255,255,0.35)",
+                color: activeTab === "buy"
+                  ? "var(--hm-tab-active-text, #fff)"
+                  : "var(--hm-text-muted, rgba(255,255,255,0.35))",
                 boxShadow:
                   activeTab === "buy"
                     ? compact
                       ? "0 2px 8px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.25)"
-                      : "0 2px 12px rgba(0,255,204,0.4), inset 0 1px 0 rgba(255,255,255,0.3)"
+                      : "0 2px 12px var(--hm-buy-glow-soft, rgba(34,197,94,0.4)), inset 0 1px 0 rgba(255,255,255,0.3)"
                     : "none",
               }}
             >
@@ -422,23 +487,23 @@ export function PredictionMarketPanel({
                 border: "none",
                 cursor: sellSupported ? "pointer" : "not-allowed",
                 fontWeight: 900,
-                fontSize: 13,
-                letterSpacing: 2,
+                fontSize: compact ? 12 : 13,
+                letterSpacing: compact ? 1.2 : 2,
                 textTransform: "uppercase",
                 transition: "all 0.15s ease",
-                fontFamily: "'Teko', sans-serif",
+                fontFamily: "var(--hm-font-display)",
                 background:
                   activeTab === "sell"
-                    ? "linear-gradient(180deg, #ff0d3c 0%, #cc0a30 100%)"
+                    ? "linear-gradient(180deg, var(--hm-sell) 0%, var(--hm-sell-strong, #b91c1c) 100%)"
                     : "transparent",
                 color: !sellSupported
-                  ? "rgba(255,255,255,0.2)"
+                  ? "var(--hm-text-muted, rgba(255,255,255,0.2))"
                   : activeTab === "sell"
-                    ? "#fff"
-                    : "rgba(255,255,255,0.35)",
+                    ? "var(--hm-tab-active-text, #fff)"
+                    : "var(--hm-text-muted, rgba(255,255,255,0.35))",
                 boxShadow:
                   activeTab === "sell"
-                    ? "0 2px 12px rgba(255,13,60,0.4), inset 0 1px 0 rgba(255,255,255,0.2)"
+                    ? "0 2px 12px var(--hm-sell-glow-soft, rgba(232,65,66,0.4)), inset 0 1px 0 rgba(255,255,255,0.2)"
                     : "none",
               }}
             >
@@ -452,54 +517,76 @@ export function PredictionMarketPanel({
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: 8,
+                gap: compact ? 7 : 8,
                 flex: 1,
               }}
             >
-              <div style={{ position: "relative" }}>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.000001"
-                  inputMode="decimal"
-                  aria-label={copy.betAmountLabel(currencySymbol)}
-                  data-testid="prediction-amount-input"
-                  placeholder="0.00"
-                  value={amountInput}
-                  onChange={(event) => setAmountInput(event.target.value)}
-                  className="gm-amount-input"
-                  style={{
-                    width: "100%",
-                    padding: "9px 44px 9px 12px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(242, 208, 138, 0.18)",
-                    color: "#f2d08a",
-                    boxSizing: "border-box",
-                    fontSize: 15,
-                    fontWeight: 900,
-                    fontFamily: "'IBM Plex Mono', monospace",
-                    letterSpacing: 1,
-                    background: "rgba(0,0,0,0.3)",
-                    boxShadow:
-                      "inset 0 2px 8px rgba(0,0,0,0.4), inset 0 0 0 0.5px rgba(242,208,138,0.06), 0 1px 0 rgba(255,255,255,0.04)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    fontSize: 9,
-                    fontWeight: 900,
-                    color: "rgba(242, 208, 138, 0.45)",
-                    fontFamily: "'Orbitron', sans-serif",
-                    letterSpacing: 1.5,
-                  }}
-                >
-                  {currencySymbol}
+              <div>
+                {compact ? (
+                  <div
+                    style={{
+                      marginBottom: 5,
+                      fontSize: 9,
+                      fontWeight: 800,
+                      letterSpacing: 0.9,
+                      textTransform: "uppercase",
+                      color: "var(--hm-text-muted, rgba(255,255,255,0.48))",
+                      fontFamily: "var(--hm-font-display)",
+                    }}
+                  >
+                    {copy.betAmountLabel(currencySymbol)}
+                  </div>
+                ) : null}
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    inputMode="decimal"
+                    aria-label={copy.betAmountLabel(currencySymbol)}
+                    data-testid="prediction-amount-input"
+                    placeholder="0.00"
+                    value={amountInput}
+                    onChange={(event) => setAmountInput(event.target.value)}
+                    className="gm-amount-input"
+                    style={{
+                      width: "100%",
+                      padding: compact ? "8px 52px 8px 11px" : "9px 44px 9px 12px",
+                      borderRadius: 10,
+                      border: "1px solid var(--hm-chip-border, rgba(232,65,66,0.18))",
+                      color: "var(--hm-accent-gold)",
+                      boxSizing: "border-box",
+                      fontSize: compact ? 14 : 15,
+                      fontWeight: 900,
+                      fontFamily: "var(--hm-font-mono)",
+                      fontVariantNumeric: "tabular-nums",
+                      letterSpacing: compact ? 0.4 : 1,
+                      background: "var(--hm-chip-bg-strong, rgba(0,0,0,0.3))",
+                      boxShadow:
+                        "inset 0 2px 8px rgba(0,0,0,0.24), inset 0 0 0 0.5px var(--hm-chip-highlight, rgba(232,65,66,0.06)), 0 1px 0 rgba(255,255,255,0.04)",
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: compact ? 11 : 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      height: "100%",
+                      fontSize: compact ? 10 : 9,
+                      fontWeight: 900,
+                      color: "var(--hm-text-muted, rgba(232,65,66,0.45))",
+                      fontFamily: "var(--hm-font-display)",
+                      fontVariantNumeric: "tabular-nums",
+                      letterSpacing: compact ? 1 : 1.5,
+                    }}
+                  >
+                    {currencySymbol}
+                  </div>
                 </div>
               </div>
               <button
@@ -509,24 +596,32 @@ export function PredictionMarketPanel({
                 className="gm-btn-submit"
                 style={{
                   width: "100%",
-                  padding: "10px 6px",
-                  borderRadius: 10,
+                  padding: compact ? "10px 10px" : "10px 6px",
+                  borderRadius: compact ? 12 : 10,
                   border: canBet
-                    ? "1px solid rgba(242,208,138,0.5)"
-                    : "1px solid rgba(255,255,255,0.08)",
+                    ? `1px solid ${compact ? selectedAccent : "var(--hm-chip-border, rgba(232,65,66,0.5))"}`
+                    : "1px solid var(--hm-border-subtle, rgba(255,255,255,0.08))",
                   fontWeight: 900,
-                  fontSize: 14,
-                  letterSpacing: 3,
+                  fontSize: compact ? 13 : 14,
+                  letterSpacing: compact ? 1.8 : 3,
                   textTransform: "uppercase",
                   cursor: canBet ? "pointer" : "not-allowed",
                   transition: "all 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
-                  fontFamily: "'Teko', sans-serif",
+                  fontFamily: "var(--hm-font-display)",
                   background: canBet
-                    ? "linear-gradient(180deg, rgba(242,208,138,0.95) 0%, rgba(212,168,78,0.9) 50%, rgba(196,154,58,0.95) 100%)"
-                    : "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
-                  color: canBet ? "#0a0a0a" : "rgba(255,255,255,0.15)",
+                    ? compact
+                      ? selectedCardBg
+                      : "linear-gradient(180deg, var(--hm-cta-bg-from, #f05252) 0%, var(--hm-cta-bg-mid, #E84142) 50%, var(--hm-cta-bg-to, #b91c1c) 100%)"
+                    : "var(--hm-panel-card-bg, linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%))",
+                  color: canBet
+                    ? compact
+                      ? "var(--hm-cta-text, #ffffff)"
+                      : "var(--hm-cta-text, #ffffff)"
+                    : "var(--hm-text-muted, rgba(255,255,255,0.15))",
                   boxShadow: canBet
-                    ? "0 4px 24px rgba(242,208,138,0.2), inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.1)"
+                    ? compact
+                      ? `0 10px 28px ${selectedGlow}, inset 0 1px 0 rgba(255,255,255,0.12)`
+                      : "0 4px 24px var(--hm-chip-shadow, rgba(232,65,66,0.2)), inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.1)"
                     : "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.15)",
                   position: "relative",
                   overflow: "hidden",
@@ -695,7 +790,7 @@ export function PredictionMarketPanel({
                     letterSpacing: 2,
                     textTransform: "uppercase",
                     color: "rgba(255,255,255,0.4)",
-                    fontFamily: "'Teko', sans-serif",
+                    fontFamily: "var(--hm-font-display)",
                   }}
                 >
                   {copy.predictionMarket && false /* Hidden — chart is self-evident */}
@@ -706,9 +801,10 @@ export function PredictionMarketPanel({
                       style={{
                         fontSize: 8,
                         fontWeight: 900,
-                        color: "#00ffcc",
+                        color: "var(--hm-buy)",
                         letterSpacing: 1,
-                        textShadow: "0 0 8px rgba(0,255,204,0.6)",
+                        textShadow:
+                          "0 0 8px var(--hm-buy-glow-strong, rgba(34,197,94,0.6))",
                       }}
                     >
                       {agent1Name.toUpperCase()}
@@ -718,7 +814,7 @@ export function PredictionMarketPanel({
                         fontSize: 15,
                         fontWeight: 900,
                         color: "#fff",
-                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontFamily: "var(--hm-font-mono)",
                       }}
                     >
                       {yesPercent}%
@@ -736,9 +832,10 @@ export function PredictionMarketPanel({
                       style={{
                         fontSize: 8,
                         fontWeight: 900,
-                        color: "#ff0d3c",
+                        color: "var(--hm-sell)",
                         letterSpacing: 1,
-                        textShadow: "0 0 8px rgba(255,13,60,0.6)",
+                        textShadow:
+                          "0 0 8px var(--hm-sell-glow-strong, rgba(232,65,66,0.6))",
                       }}
                     >
                       {agent2Name.toUpperCase()}
@@ -748,7 +845,7 @@ export function PredictionMarketPanel({
                         fontSize: 15,
                         fontWeight: 900,
                         color: "#fff",
-                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontFamily: "var(--hm-font-mono)",
                       }}
                     >
                       {noPercent}%
@@ -764,8 +861,8 @@ export function PredictionMarketPanel({
                   display: "flex",
                   overflow: "hidden",
                   marginBottom: 6,
-                  background: "rgba(0,0,0,0.3)",
-                  border: "1px solid rgba(255,255,255,0.05)",
+                  background: "var(--hm-chip-bg-strong, rgba(0,0,0,0.3))",
+                  border: "1px solid var(--hm-border-subtle, rgba(255,255,255,0.05))",
                 }}
               >
                 <div
@@ -773,8 +870,9 @@ export function PredictionMarketPanel({
                     width: `${yesPercent}%`,
                     height: "100%",
                     background:
-                      "linear-gradient(90deg, #00ffcc, rgba(0,255,204,0.6))",
-                    boxShadow: "0 0 8px rgba(0,255,204,0.4)",
+                      "linear-gradient(90deg, var(--hm-buy), var(--hm-buy-glow-soft, rgba(34,197,94,0.6)))",
+                    boxShadow:
+                      "0 0 8px var(--hm-buy-glow-soft, rgba(34,197,94,0.4))",
                     transition: "width 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
                     borderRadius: "2px 0 0 2px",
                   }}
@@ -784,8 +882,9 @@ export function PredictionMarketPanel({
                     width: `${noPercent}%`,
                     height: "100%",
                     background:
-                      "linear-gradient(90deg, rgba(255,13,60,0.6), #ff0d3c)",
-                    boxShadow: "0 0 8px rgba(255,13,60,0.4)",
+                      "linear-gradient(90deg, var(--hm-sell-glow-soft, rgba(232,65,66,0.6)), var(--hm-sell))",
+                    boxShadow:
+                      "0 0 8px var(--hm-sell-glow-soft, rgba(232,65,66,0.4))",
                     transition: "width 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
                     borderRadius: "0 2px 2px 0",
                   }}
@@ -830,16 +929,16 @@ export function PredictionMarketPanel({
                                 WebkitBackdropFilter: "blur(20px)",
                                 padding: "6px 12px",
                                 borderRadius: 8,
-                                border: "1px solid rgba(242,208,138,0.3)",
+                                border: "1px solid var(--hm-chip-border, rgba(232,65,66,0.3))",
                                 fontSize: 13,
-                                fontFamily: "monospace",
+                                fontFamily: "var(--hm-font-mono)",
                                 fontWeight: 900,
                                 color: "#fff",
                                 boxShadow:
                                   "0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)",
                               }}
                             >
-                              <span style={{ color: "#f2d08a" }}>
+                              <span style={{ color: "var(--hm-accent-gold)" }}>
                                 {payload[0].value}%
                               </span>
                             </div>
@@ -856,7 +955,7 @@ export function PredictionMarketPanel({
                     <Line
                       type="monotone"
                       dataKey="pct"
-                      stroke="#00ffcc"
+                      stroke="var(--hm-buy)"
                       strokeWidth={3}
                       dot={false}
                       isAnimationActive={true}
@@ -883,7 +982,7 @@ export function PredictionMarketPanel({
                 display: "flex",
                 flexDirection: "column",
                 gap: 4,
-                fontFamily: "'Inter', system-ui, sans-serif",
+                fontFamily: "var(--hm-font-body)",
                 overflow: "hidden",
                 minHeight: 0,
               }}
@@ -917,7 +1016,7 @@ export function PredictionMarketPanel({
                 display: "flex",
                 flexDirection: "column",
                 gap: 4,
-                fontFamily: "'Inter', system-ui, sans-serif",
+                fontFamily: "var(--hm-font-body)",
                 overflow: "hidden",
                 minHeight: 0,
               }}
@@ -984,6 +1083,7 @@ export function PredictionMarketPanel({
         /* ═══ COMPACT / HYPERSCAPE SIDEBAR THEME ═══════════════════════════ */
         /* Square corners everywhere */
         .pm-compact * { border-radius: 2px !important; }
+        .pm-compact { font-variant-numeric: tabular-nums; }
 
         /* Full-width fluid layout so compact mode never overflows sidebar */
         .pm-compact { width: 100%; box-sizing: border-box; }
@@ -992,11 +1092,18 @@ export function PredictionMarketPanel({
         /* Agent selector buttons — chunky stone panels, fluid */
         .pm-compact .gm-btn {
           border-radius: 2px !important;
-          padding: 10px 6px !important;
+          padding: 8px 6px !important;
           border-width: 1px !important;
-          font-family: var(--hm-font-display, 'Orbitron', monospace) !important;
+          font-family: var(--hm-font-display, 'Geist Sans', system-ui, sans-serif) !important;
           min-width: 0;
           overflow: hidden;
+        }
+        .pm-compact .gm-btn > div:first-child {
+          font-size: 9px !important;
+          letter-spacing: 0.12em !important;
+        }
+        .pm-compact .gm-btn > div:nth-child(2) {
+          font-size: 18px !important;
         }
         .pm-compact .gm-btn-agent1:hover {
           box-shadow: 0 0 12px rgba(34,197,94,0.3), inset 0 1px 0 rgba(255,255,255,0.1) !important;
@@ -1013,11 +1120,11 @@ export function PredictionMarketPanel({
         /* BUY/SELL toggle container — flat stone bar */
         .pm-compact .gm-tab-btn {
           border-radius: 2px !important;
-          font-family: var(--hm-font-display, 'Orbitron', monospace) !important;
-          font-size: 11px !important;
-          letter-spacing: 0.1em !important;
+          font-family: var(--hm-font-display, 'Geist Sans', system-ui, sans-serif) !important;
+          font-size: 10px !important;
+          letter-spacing: 0.08em !important;
           font-weight: 800 !important;
-          min-height: 40px;
+          min-height: 36px;
         }
         .pm-compact .gm-tab-btn:hover { filter: brightness(1.15); }
 
@@ -1025,9 +1132,9 @@ export function PredictionMarketPanel({
         .pm-compact .gm-amount-input {
           border-radius: 2px !important;
           border: 1px solid rgba(229,184,74,0.25) !important;
-          font-family: var(--hm-font-mono, 'IBM Plex Mono', monospace) !important;
+          font-family: var(--hm-font-mono, 'Geist Mono', monospace) !important;
           background: rgba(0,0,0,0.4) !important;
-          font-size: max(16px, 15px) !important;
+          font-size: 14px !important;
           width: 100% !important;
           box-sizing: border-box !important;
         }
@@ -1039,12 +1146,12 @@ export function PredictionMarketPanel({
         /* Submit button — matches hm-trade-btn gold, touch-friendly */
         .pm-compact .gm-btn-submit {
           border-radius: 2px !important;
-          font-family: var(--hm-font-display, 'Orbitron', monospace) !important;
-          font-size: 12px !important;
-          letter-spacing: 0.08em !important;
+          font-family: var(--hm-font-display, 'Geist Sans', system-ui, sans-serif) !important;
+          font-size: 11px !important;
+          letter-spacing: 0.06em !important;
           font-weight: 800 !important;
-          height: 46px !important;
-          min-height: 44px !important;
+          height: 40px !important;
+          min-height: 40px !important;
           text-shadow: 0 1px 0 rgba(255,255,255,0.2) !important;
           width: 100% !important;
           touch-action: manipulation;

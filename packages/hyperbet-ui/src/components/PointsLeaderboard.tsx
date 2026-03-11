@@ -290,7 +290,7 @@ export function PointsLeaderboard({ locale }: { locale?: UiLocale } = {}) {
               <div
                 style={{
                   flex: 1,
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "var(--hm-font-mono)",
                   fontSize: 12,
                   color: "rgba(255,255,255,0.7)",
                 }}
