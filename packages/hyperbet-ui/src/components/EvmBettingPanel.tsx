@@ -33,13 +33,20 @@ import {
   placeOrder,
   toDuelKeyHex,
   type MarketMeta,
+  type MarketStatus,
   type Position,
+  type Side,
   SIDE_ENUM,
 } from "../lib/evmClient";
 import {
   normalizePredictionMarketDuelKeyHex,
   usePredictionMarketLifecycle,
 } from "../lib/predictionMarkets";
+import {
+  derivePredictionMarketUiState,
+  EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
+  type PredictionMarketWalletSnapshot,
+} from "../lib/predictionMarketUiState";
 import { recordPredictionMarketTrade } from "../lib/predictionMarketTracking";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
@@ -181,6 +188,34 @@ function getEvmPanelCopy(locale: UiLocale) {
 
 function formatCompactTokenAmount(value: bigint, decimals: number): string {
   return Number(formatUnits(value, decimals)).toFixed(3);
+}
+
+function getFallbackLifecycleStatus(
+  status: MarketStatus | null | undefined,
+) {
+  switch (status) {
+    case "OPEN":
+      return "OPEN";
+    case "LOCKED":
+      return "LOCKED";
+    case "RESOLVED":
+      return "RESOLVED";
+    case "CANCELLED":
+      return "CANCELLED";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function getFallbackWinner(winner: Side | null | undefined) {
+  switch (winner) {
+    case "A":
+      return "A";
+    case "B":
+      return "B";
+    default:
+      return "NONE";
+  }
 }
 
 function getLifecycleStatusLabel(
@@ -346,22 +381,38 @@ export function EvmBettingPanel({
   );
   const duelId =
     lifecycleMarket?.duelId ?? lifecycleDuel?.duelId ?? streamedDuelId;
+  const walletSnapshot = useMemo<PredictionMarketWalletSnapshot>(
+    () => ({
+      aShares: position?.aShares ?? 0n,
+      bShares: position?.bShares ?? 0n,
+      refundableAmount: (position?.aStake ?? 0n) + (position?.bStake ?? 0n),
+    }),
+    [position],
+  );
+  const uiState = useMemo(
+    () =>
+      derivePredictionMarketUiState(
+        lifecycleMarket,
+        walletSnapshot,
+        marketMeta
+          ? {
+              lifecycleStatus: getFallbackLifecycleStatus(marketMeta.status),
+              winner: getFallbackWinner(marketMeta.winner),
+            }
+          : null,
+      ),
+    [lifecycleMarket, marketMeta, walletSnapshot],
+  );
   const lifecycleStatusLabel = useMemo(
     () =>
       getLifecycleStatusLabel(
-        lifecycleMarket?.lifecycleStatus,
-        lifecycleMarket?.winner,
+        uiState.lifecycleStatus,
+        uiState.winner,
         cycleAgent1,
         cycleAgent2,
         copy,
       ),
-    [
-      copy,
-      cycleAgent1,
-      cycleAgent2,
-      lifecycleMarket?.lifecycleStatus,
-      lifecycleMarket?.winner,
-    ],
+    [copy, cycleAgent1, cycleAgent2, uiState.lifecycleStatus, uiState.winner],
   );
 
   const publicClient = useMemo(() => {
@@ -522,25 +573,47 @@ export function EvmBettingPanel({
         ]);
         setPosition(userPosition);
         setNativeBalance(balance);
+        const nextUiState = derivePredictionMarketUiState(
+          lifecycleMarket,
+          {
+            aShares: userPosition.aShares,
+            bShares: userPosition.bShares,
+            refundableAmount: userPosition.aStake + userPosition.bStake,
+          },
+          {
+            lifecycleStatus: getFallbackLifecycleStatus(market.status),
+            winner: getFallbackWinner(market.winner),
+          },
+        );
+        setStatus(
+          getLifecycleStatusLabel(
+            nextUiState.lifecycleStatus,
+            nextUiState.winner,
+            cycleAgent1,
+            cycleAgent2,
+            copy,
+          ) ?? copy.waitingForMarketOperator,
+        );
       } else {
         setPosition(null);
         setNativeBalance(0n);
-      }
-
-      if (market.status === "RESOLVED") {
-        setStatus(
-          market.winner === "A"
-            ? copy.resolvedFor(cycleAgent1)
-            : market.winner === "B"
-              ? copy.resolvedFor(cycleAgent2)
-              : copy.resolved,
+        const nextUiState = derivePredictionMarketUiState(
+          lifecycleMarket,
+          EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
+          {
+            lifecycleStatus: getFallbackLifecycleStatus(market.status),
+            winner: getFallbackWinner(market.winner),
+          },
         );
-      } else if (market.status === "LOCKED") {
-        setStatus(copy.bettingLocked);
-      } else if (market.status === "OPEN") {
-        setStatus(copy.marketOpen);
-      } else {
-        setStatus(lifecycleStatusLabel ?? copy.waitingForMarketOperator);
+        setStatus(
+          getLifecycleStatusLabel(
+            nextUiState.lifecycleStatus,
+            nextUiState.winner,
+            cycleAgent1,
+            cycleAgent2,
+            copy,
+          ) ?? copy.waitingForMarketOperator,
+        );
       }
     } catch (error) {
       setStatus(copy.refreshFailed((error as Error).message));
@@ -552,7 +625,7 @@ export function EvmBettingPanel({
     cycleAgent2,
     duelKeyHex,
     effectiveAddress,
-    lifecycleStatusLabel,
+    lifecycleMarket,
     nativeDecimals,
     publicClient,
     updateChartAndTrades,
@@ -722,27 +795,10 @@ export function EvmBettingPanel({
   const selectedShares = side === "YES"
     ? (position?.aShares ?? 0n)
     : (position?.bShares ?? 0n);
-  const claimableShares =
-    marketMeta?.status === "RESOLVED"
-      ? marketMeta.winner === "A"
-        ? (position?.aShares ?? 0n)
-        : marketMeta.winner === "B"
-          ? (position?.bShares ?? 0n)
-          : 0n
-      : marketMeta?.status === "CANCELLED"
-        ? (position?.aStake ?? 0n) + (position?.bStake ?? 0n)
-        : 0n;
-  const canClaim = claimableShares > 0n;
-  const marketOpen = marketMeta?.status === "OPEN";
-  const programsReady = Boolean(chainConfig && duelKeyHex && marketOpen);
-  const statusTone =
-    marketMeta?.status === "RESOLVED" || canClaim
-      ? "#86efac"
-      : marketMeta?.status === "LOCKED"
-        ? "#fcd34d"
-        : /failed|error/i.test(status)
-          ? "#fca5a5"
-          : "#93c5fd";
+  const canClaim = uiState.canClaim;
+  const programsReady = Boolean(
+    chainConfig && duelKeyHex && marketMeta?.exists && uiState.canTrade,
+  );
   const e2eWalletDebug = isE2eMode
     ? [
       `key=${configuredHeadlessPrivateKey ? "yes" : "no"}`,

@@ -174,6 +174,49 @@ function findPredictionMarket(
   return payload.markets.find((market) => market.chainKey === chainKey) ?? null;
 }
 
+function buildMockEvmPredictionMarketsResponse(
+  state: E2eState,
+  chainKey: "bsc" | "avax",
+  lifecycleStatus: string,
+  winner: string,
+): PredictionMarketsResponse {
+  const duelKey = normalizeHex32(state.evmDuelKeyHex, "evmDuelKeyHex").slice(2);
+  const duelId = state.evmMatchId != null ? String(state.evmMatchId) : null;
+  const phase =
+    lifecycleStatus === "OPEN"
+      ? "ANNOUNCEMENT"
+      : lifecycleStatus === "LOCKED"
+        ? "COUNTDOWN"
+        : "RESOLUTION";
+
+  return {
+    duel: {
+      duelKey,
+      duelId,
+      phase,
+      winner,
+      betCloseTime: Date.now(),
+    },
+    markets: [
+      {
+        chainKey,
+        duelKey,
+        duelId,
+        marketId: state.evmMarketKey ?? null,
+        marketRef: state.evmMarketKey ?? null,
+        lifecycleStatus,
+        winner,
+        betCloseTime: Date.now(),
+        contractAddress: state.evmGoldClobAddress ?? null,
+        programId: null,
+        txRef: null,
+        syncedAt: Date.now(),
+      },
+    ],
+    updatedAt: Date.now(),
+  };
+}
+
 async function readText(page: Page, testId: string): Promise<string> {
   const locator = page.getByTestId(testId).first();
   const count = await locator.count().catch(() => 0);
@@ -778,6 +821,109 @@ test.describe("market flows", () => {
     await expectSolanaTxSuccess(connection, noTx, "Solana NO order");
 
     await waitForSolanaUiPosition(page, "NO");
+  });
+
+  test("evm lifecycle shell and claim CTA follow the normalized lifecycle API", async ({
+    page,
+  }) => {
+    const state = loadState();
+    const rpcUrl = state.evmRpcUrl || "http://127.0.0.1:8545";
+    const chainId = Number(state.evmChainId || 97);
+    const userAddress = state.evmHeadlessAddress as Address;
+    const contractAddress = state.evmGoldClobAddress as Address;
+    const marketKey = normalizeHex32(state.evmMarketKey, "evmMarketKey");
+    let lifecycleStatus = "OPEN";
+    let lifecycleWinner = "NONE";
+
+    await page.route("**/api/arena/prediction-markets/active", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          buildMockEvmPredictionMarketsResponse(
+            state,
+            "avax",
+            lifecycleStatus,
+            lifecycleWinner,
+          ),
+        ),
+      });
+    });
+
+    const publicClient = createPublicClient({
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+
+    await gotoApp(page);
+    await selectChain(page, "avax");
+
+    const evmPanel = page.getByTestId("evm-panel").first();
+    const submitButton = evmPanel.getByTestId("prediction-submit");
+    const claimButton = evmPanel.getByTestId("evm-claim-payout");
+
+    await expect(evmPanel).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("market-status")).toContainText(/open/i, {
+      timeout: 30_000,
+    });
+    await expect(submitButton).toBeEnabled({ timeout: 30_000 });
+    await expect(claimButton).toBeDisabled();
+
+    lifecycleStatus = "LOCKED";
+    await expect(page.getByTestId("market-status")).toContainText(/locked/i, {
+      timeout: 15_000,
+    });
+    await expect(submitButton).toBeDisabled({ timeout: 15_000 });
+    await expect(claimButton).toBeDisabled();
+
+    lifecycleStatus = "OPEN";
+    await expect(page.getByTestId("market-status")).toContainText(/open/i, {
+      timeout: 15_000,
+    });
+    await expect(submitButton).toBeEnabled({ timeout: 15_000 });
+
+    await evmPanel.getByTestId("prediction-amount-input").fill("1");
+    await evmPanel.getByTestId("evm-price-input").fill("600");
+    const previousYesTx = await readText(page, "evm-last-order-tx");
+    await evmPanel.getByTestId("prediction-select-yes").click();
+    await submitButton.click();
+    const yesTx = await waitForNewEvmTxText(
+      page,
+      "evm-last-order-tx",
+      previousYesTx,
+      "lifecycle YES order",
+    );
+    await waitForEvmReceipt(publicClient, yesTx as Hash);
+    await expect
+      .poll(async () => {
+        const result = await readEvmPosition(
+          publicClient,
+          contractAddress,
+          marketKey,
+          userAddress,
+        );
+        return result[0];
+      })
+      .toBeGreaterThan(0n);
+
+    lifecycleStatus = "RESOLVED";
+    lifecycleWinner = "A";
+    await expect(page.getByTestId("market-status")).toContainText(
+      /resolved/i,
+      {
+        timeout: 15_000,
+      },
+    );
+    await expect(claimButton).toBeEnabled({ timeout: 15_000 });
+    await expect(claimButton).toContainText(/claim available/i);
   });
 
   test("evm predictions place YES and NO orders, resolve, and claim", async ({

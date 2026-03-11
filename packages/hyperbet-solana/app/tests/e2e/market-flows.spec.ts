@@ -177,6 +177,48 @@ function findPredictionMarket(
   return payload.markets.find((market) => market.chainKey === chainKey) ?? null;
 }
 
+function buildMockSolanaPredictionMarketsResponse(
+  state: E2eState,
+  lifecycleStatus: string,
+  winner: string,
+): PredictionMarketsResponse {
+  const duelKey = state.currentDuelKeyHex ?? null;
+  const duelId = state.currentDuelId ?? null;
+  const phase =
+    lifecycleStatus === "OPEN"
+      ? "ANNOUNCEMENT"
+      : lifecycleStatus === "LOCKED"
+        ? "COUNTDOWN"
+        : "RESOLUTION";
+
+  return {
+    duel: {
+      duelKey,
+      duelId,
+      phase,
+      winner,
+      betCloseTime: Date.now(),
+    },
+    markets: [
+      {
+        chainKey: "solana",
+        duelKey,
+        duelId,
+        marketId: state.clobMarketState ?? null,
+        marketRef: state.clobMarketState ?? null,
+        lifecycleStatus,
+        winner,
+        betCloseTime: Date.now(),
+        contractAddress: null,
+        programId: null,
+        txRef: null,
+        syncedAt: Date.now(),
+      },
+    ],
+    updatedAt: Date.now(),
+  };
+}
+
 function toWallet(keypair: Keypair): AnchorLikeWallet {
   const sign = <T extends SignableTx>(tx: T): T => {
     if (tx instanceof VersionedTransaction) tx.sign([keypair]);
@@ -518,6 +560,95 @@ async function submitModelsTrade(
 
 test.describe("market flows", () => {
   test.setTimeout(600_000);
+
+  test("solana lifecycle shell and claim CTA follow the normalized lifecycle API", async ({
+    page,
+  }) => {
+    const state = loadState();
+    const connection = new Connection(
+      state.solanaRpcUrl || "http://127.0.0.1:8899",
+      "confirmed",
+    );
+    const userBalanceAddress = new PublicKey(state.clobUserBalance || "");
+    const clobProgram = createReadonlyClobProgram(connection, state);
+    let lifecycleStatus = "OPEN";
+    let lifecycleWinner = "NONE";
+
+    await page.route("**/api/arena/prediction-markets/active", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          buildMockSolanaPredictionMarketsResponse(
+            state,
+            lifecycleStatus,
+            lifecycleWinner,
+          ),
+        ),
+      });
+    });
+
+    await gotoApp(page);
+    await selectChain(page, "solana");
+    const expandButton = page.locator('button[title="Expand panel"]').first();
+    if (await expandButton.isVisible().catch(() => false)) {
+      await expandButton.click();
+    }
+    await ensureWalletConnected(page);
+
+    await seedClobLiquidity(connection, state, SIDE_ASK);
+    await page.getByTestId("refresh-market").click();
+
+    const submitButton = page.getByTestId("prediction-submit");
+    const claimButton = page.getByTestId("solana-clob-claim-payout");
+
+    await expect(page.getByTestId("market-status")).toContainText(/open/i, {
+      timeout: 30_000,
+    });
+    await expect(submitButton).toBeEnabled({ timeout: 30_000 });
+    await expect(claimButton).toBeDisabled();
+
+    lifecycleStatus = "LOCKED";
+    await expect(page.getByTestId("market-status")).toContainText(/locked/i, {
+      timeout: 15_000,
+    });
+    await expect(submitButton).toBeDisabled({ timeout: 15_000 });
+    await expect(claimButton).toBeDisabled();
+
+    lifecycleStatus = "OPEN";
+    await expect(page.getByTestId("market-status")).toContainText(/open/i, {
+      timeout: 15_000,
+    });
+    await expect(submitButton).toBeEnabled({ timeout: 15_000 });
+
+    await page.getByTestId("prediction-amount-input").fill("1");
+    await page.getByTestId("prediction-select-yes").click({ force: true });
+    const beforeBalance = (await clobProgram.account.userBalance.fetchNullable(
+      userBalanceAddress,
+    )) as UserBalanceAccount | null;
+    const beforeYes = bnLikeToBigInt(beforeBalance?.aShares);
+    await submitButton.click({ force: true });
+
+    await expect
+      .poll(async () => {
+        const balance = (await clobProgram.account.userBalance.fetchNullable(
+          userBalanceAddress,
+        )) as UserBalanceAccount | null;
+        return Number(bnLikeToBigInt(balance?.aShares) - beforeYes);
+      })
+      .toBeGreaterThan(0);
+
+    lifecycleStatus = "RESOLVED";
+    lifecycleWinner = "A";
+    await expect(page.getByTestId("market-status")).toContainText(
+      /resolved/i,
+      {
+        timeout: 15_000,
+      },
+    );
+    await expect(claimButton).toBeEnabled({ timeout: 15_000 });
+    await expect(claimButton).toContainText(/claim available/i);
+  });
 
   test("solana predictions place YES and NO orders, resolve, and claim", async ({
     page,

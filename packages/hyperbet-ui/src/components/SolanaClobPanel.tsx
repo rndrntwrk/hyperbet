@@ -53,6 +53,11 @@ import {
   normalizePredictionMarketDuelKeyHex,
   usePredictionMarketLifecycle,
 } from "../lib/predictionMarkets";
+import {
+  derivePredictionMarketUiState,
+  EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
+  type PredictionMarketWalletSnapshot,
+} from "../lib/predictionMarketUiState";
 import { recordPredictionMarketTrade } from "../lib/predictionMarketTracking";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
@@ -68,6 +73,8 @@ type BetSide = "YES" | "NO";
 type UserPosition = {
   aShares: bigint;
   bShares: bigint;
+  aLockedLamports: bigint;
+  bLockedLamports: bigint;
 };
 
 type MarketSnapshot = {
@@ -119,6 +126,8 @@ type BalanceAccount = {
     marketState: PublicKey;
     aShares: BN | bigint | number;
     bShares: BN | bigint | number;
+    aLockedLamports: BN | bigint | number;
+    bLockedLamports: BN | bigint | number;
   };
 };
 
@@ -192,6 +201,32 @@ function isRetryableRefreshError(error: unknown): boolean {
   return /failed to fetch|fetch failed|networkerror|load failed|429/i.test(
     message,
   );
+}
+
+function getFallbackLifecycleStatus(status: string | null | undefined) {
+  switch (status?.trim().toLowerCase()) {
+    case "open":
+      return "OPEN";
+    case "locked":
+      return "LOCKED";
+    case "resolved":
+      return "RESOLVED";
+    case "cancelled":
+      return "CANCELLED";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function getFallbackWinner(winner: string | null | undefined) {
+  switch (winner?.trim().toLowerCase()) {
+    case "a":
+      return "A";
+    case "b":
+      return "B";
+    default:
+      return "NONE";
+  }
 }
 
 function getCycleDuelStatusLabel(
@@ -288,6 +323,8 @@ export function SolanaClobPanel({
   const [position, setPosition] = useState<UserPosition>({
     aShares: 0n,
     bShares: 0n,
+    aLockedLamports: 0n,
+    bLockedLamports: 0n,
   });
   const [yesPool, setYesPool] = useState<bigint>(0n);
   const [noPool, setNoPool] = useState<bigint>(0n);
@@ -364,7 +401,9 @@ export function SolanaClobPanel({
         connectWalletToClaim: "连接钱包后即可领取",
         claimComplete: "领取完成",
         claimFailed: (message: string) => `领取失败：${message}`,
-        claim: "领取",
+        claimReady: "可领取结算",
+        claimLocked: "暂无可领取结算",
+        claimHelp: "对局结算后，可在这里领取胜出份额或取消退款。",
         limitPrice: "限价",
         hideAdminPanel: "隐藏管理面板",
         showAdminPanel: "显示管理面板",
@@ -401,7 +440,10 @@ export function SolanaClobPanel({
         connectWalletToClaim: "Connect wallet to claim",
         claimComplete: "Claim complete",
         claimFailed: (message: string) => `Claim failed: ${message}`,
-        claim: "Claim",
+        claimReady: "Claim available",
+        claimLocked: "Nothing claimable yet",
+        claimHelp:
+          "Once the duel resolves, claim winning shares or cancelled refunds here.",
         limitPrice: "Limit price",
         hideAdminPanel: "Hide Admin Panel",
         showAdminPanel: "Show Admin Panel",
@@ -418,11 +460,33 @@ export function SolanaClobPanel({
         placingOrderContext: "placing order",
         claimingWinningsContext: "claiming winnings",
       };
+  const walletSnapshot = useMemo<PredictionMarketWalletSnapshot>(
+    () => ({
+      aShares: position.aShares,
+      bShares: position.bShares,
+      refundableAmount: position.aLockedLamports + position.bLockedLamports,
+    }),
+    [position],
+  );
+  const uiState = useMemo(
+    () =>
+      derivePredictionMarketUiState(
+        lifecycleMarket,
+        walletSnapshot,
+        activeMarket
+          ? {
+              lifecycleStatus: getFallbackLifecycleStatus(activeMarket.marketStatus),
+              winner: getFallbackWinner(activeMarket.winner),
+            }
+          : null,
+      ),
+    [activeMarket, lifecycleMarket, walletSnapshot],
+  );
   const lifecycleStatusLabel = useMemo(() => {
-    switch (lifecycleMarket?.lifecycleStatus) {
+    switch (uiState.lifecycleStatus) {
       case "RESOLVED":
-        if (lifecycleMarket.winner === "A") return copy.resolvedFor(effectiveAgent1);
-        if (lifecycleMarket.winner === "B") return copy.resolvedFor(effectiveAgent2);
+        if (uiState.winner === "A") return copy.resolvedFor(effectiveAgent1);
+        if (uiState.winner === "B") return copy.resolvedFor(effectiveAgent2);
         return copy.resolved;
       case "CANCELLED":
         return copy.marketCancelled;
@@ -440,8 +504,8 @@ export function SolanaClobPanel({
     copy,
     effectiveAgent1,
     effectiveAgent2,
-    lifecycleMarket?.lifecycleStatus,
-    lifecycleMarket?.winner,
+    uiState.lifecycleStatus,
+    uiState.winner,
   ]);
 
   const updateChartAndTrades = useCallback(
@@ -619,7 +683,12 @@ export function SolanaClobPanel({
       setAsks([]);
       setYesPool(0n);
       setNoPool(0n);
-      setPosition({ aShares: 0n, bShares: 0n });
+      setPosition({
+        aShares: 0n,
+        bShares: 0n,
+        aLockedLamports: 0n,
+        bLockedLamports: 0n,
+      });
       setStatus(
         lifecycleStatusLabel ??
           getCycleDuelStatusLabel(cycle?.phase, duelKeyHex, resolvedLocale),
@@ -711,17 +780,24 @@ export function SolanaClobPanel({
 
     let nextYesPool = 0n;
     let nextNoPool = 0n;
-    let userPosition: UserPosition = { aShares: 0n, bShares: 0n };
+    let userPosition: UserPosition = {
+      aShares: 0n,
+      bShares: 0n,
+      aLockedLamports: 0n,
+      bLockedLamports: 0n,
+    };
     for (const balance of balances) {
       const aShares = asBigInt(balance.account.aShares);
       const bShares = asBigInt(balance.account.bShares);
+      const aLockedLamports = asBigInt(balance.account.aLockedLamports);
+      const bLockedLamports = asBigInt(balance.account.bLockedLamports);
       nextYesPool += aShares;
       nextNoPool += bShares;
       if (
         wallet.publicKey &&
         (balance.account.user as PublicKey).equals(wallet.publicKey)
       ) {
-        userPosition = { aShares, bShares };
+        userPosition = { aShares, bShares, aLockedLamports, bLockedLamports };
       }
     }
 
@@ -761,8 +837,41 @@ export function SolanaClobPanel({
         : null,
     );
     updateChartAndTrades(nextYesPool, nextNoPool);
-
-    if (marketStatus === "resolved") {
+    const nextUiState = derivePredictionMarketUiState(
+      lifecycleMarket,
+      {
+        aShares: userPosition.aShares,
+        bShares: userPosition.bShares,
+        refundableAmount:
+          userPosition.aLockedLamports + userPosition.bLockedLamports,
+      },
+      {
+        lifecycleStatus: getFallbackLifecycleStatus(marketStatus),
+        winner: getFallbackWinner(winner),
+      },
+    );
+    const nextStatusLabel = (() => {
+      switch (nextUiState.lifecycleStatus) {
+        case "RESOLVED":
+          if (nextUiState.winner === "A") return copy.resolvedFor(effectiveAgent1);
+          if (nextUiState.winner === "B") return copy.resolvedFor(effectiveAgent2);
+          return copy.resolved;
+        case "CANCELLED":
+          return copy.marketCancelled;
+        case "LOCKED":
+          return copy.bettingLocked;
+        case "OPEN":
+          return copy.marketOpen;
+        case "PENDING":
+        case "UNKNOWN":
+          return copy.waitingMarketOperator;
+        default:
+          return null;
+      }
+    })();
+    if (nextStatusLabel) {
+      setStatus(nextStatusLabel);
+    } else if (marketStatus === "resolved") {
       setStatus(
         winner === "a"
           ? copy.resolvedFor(effectiveAgent1)
@@ -1172,9 +1281,7 @@ export function SolanaClobPanel({
   const yesPercent =
     yesPool + noPool > 0n ? Number((yesPool * 100n) / (yesPool + noPool)) : 50;
   const noPercent = 100 - yesPercent;
-  const canClaim =
-    activeMarket?.marketStatus === "resolved" ||
-    activeMarket?.marketStatus === "cancelled";
+  const canClaim = uiState.canClaim;
   const marketStateText = activeMarket?.marketState.toBase58() ?? "-";
   const adminPanelText = [
     `${copy.adminStatus} ${status}`,
@@ -1198,7 +1305,7 @@ export function SolanaClobPanel({
         setAmountInput={setAmountInput}
         onPlaceBet={() => void handlePlaceOrder()}
         isWalletReady={walletReady(wallet)}
-        programsReady={Boolean(activeMarket)}
+        programsReady={Boolean(activeMarket) && uiState.canTrade}
         agent1Name={effectiveAgent1}
         agent2Name={effectiveAgent2}
         isEvm={false}
@@ -1241,17 +1348,31 @@ export function SolanaClobPanel({
           </div>
 
           <button
+            data-testid={isE2eMode ? "solana-clob-claim-payout" : undefined}
             type="button"
             onClick={() => void handleClaim()}
             disabled={!canClaim}
             style={buttonStyle(
-              "#0f3f2b",
-              "rgba(34,197,94,0.35)",
+              canClaim
+                ? "#0f3f2b"
+                : "var(--hm-panel-claim-idle-bg, linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%))",
+              canClaim
+                ? "rgba(34,197,94,0.35)"
+                : "var(--hm-panel-claim-idle-border, rgba(255,255,255,0.08))",
               !canClaim,
             )}
           >
-            {copy.claim}
+            {canClaim ? copy.claimReady : copy.claimLocked}
           </button>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--hm-panel-subtle-text, rgba(255,255,255,0.48))",
+              lineHeight: 1.45,
+            }}
+          >
+            {copy.claimHelp}
+          </div>
         </div>
       </PredictionMarketPanel>
       <div

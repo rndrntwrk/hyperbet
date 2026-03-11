@@ -30,6 +30,7 @@ import {
   captureInviteCodeFromLocation,
   getStoredInviteCode,
 } from "@hyperbet/ui/lib/invite";
+import { usePredictionMarketLifecycle } from "@hyperbet/ui/lib/predictionMarkets";
 import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
 import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
 import { useChain } from "./lib/ChainContext";
@@ -708,6 +709,13 @@ export function App() {
   const { state: streamingState } = useStreamingState();
   const { context: duelContext } = useDuelContext();
   const liveCycle = streamingState?.cycle ?? null;
+  const lifecycleChainKey =
+    activeChain === "bsc" || activeChain === "base" || activeChain === "avax"
+      ? activeChain
+      : "solana";
+  const { market: lifecycleMarket } = usePredictionMarketLifecycle(
+    lifecycleChainKey,
+  );
   const streamSources = STREAM_URLS;
   const activeStreamUrl = isE2eMode ? "" : (streamSources[streamSourceIndex] ?? "");
 
@@ -957,7 +965,10 @@ export function App() {
 
   const streamPhaseText = liveCycle?.phase ?? null;
   const marketStatusText = getMarketStatusLabel(
-    streamPhaseText ?? currentMatch?.status ?? copy.phaseLive,
+    lifecycleMarket?.lifecycleStatus ??
+      currentMatch?.status ??
+      streamPhaseText ??
+      copy.phaseLive,
     copy,
   );
   const countdownText = liveCycle

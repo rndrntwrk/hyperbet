@@ -28,6 +28,7 @@ import {
   captureInviteCodeFromLocation,
   getStoredInviteCode,
 } from "@hyperbet/ui/lib/invite";
+import { usePredictionMarketLifecycle } from "@hyperbet/ui/lib/predictionMarkets";
 import { useAppConnection, useAppWallet, useAppWalletModal } from "./lib/appWallet";
 import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
 import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
@@ -707,6 +708,7 @@ export function App() {
   const { state: streamingState } = useStreamingState();
   const { context: duelContext } = useDuelContext();
   const liveCycle = streamingState?.cycle ?? null;
+  const { market: lifecycleMarket } = usePredictionMarketLifecycle("solana");
   const streamSources = STREAM_URLS;
   const activeStreamUrl = streamSources[streamSourceIndex] ?? "";
 
@@ -1125,7 +1127,10 @@ export function App() {
     return "IDLE";
   })();
 
-  const marketStatusText = solanaClobSnapshot.marketStatus;
+  const marketStatusText = _getMarketStatusLabel(
+    lifecycleMarket?.lifecycleStatus ?? solanaClobSnapshot.marketStatus,
+    copy,
+  );
   const countdownText = formatCountdown(
     currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
   );
