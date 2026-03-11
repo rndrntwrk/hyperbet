@@ -78,7 +78,7 @@ Gate env controls:
 - `MM_ADVERSARIAL_OUTPUT_DIR` (default `simulations`)
 - `MM_ADVERSARIAL_ENFORCE_BASELINE` (`1` by default, set `0` to skip baseline regression checks)
 
-Gate behavior now enforces seven layers:
+Gate behavior now enforces eight layers:
 
 - mitigation pass threshold
 - hard invariants (`max mitigated attacker pnl`, `max exploit events`, `max inventory peak`, `max toxic fill rate`, `max adverse slippage`, `min loss reduction`)
@@ -87,6 +87,7 @@ Gate behavior now enforces seven layers:
 - bounded-loss budgets (scenario-level and chain-aggregate mitigated attacker PnL caps)
 - settlement state-machine checks (`open -> resolve_proposed -> dispute_window -> finalized`) including minimum dispute-window time before finalization
 - sybil/collusion controls (cluster concentration ceiling, circular-flow ratio ceiling, coordinated-resolution push score cap, minimum independent participant floor)
+- chaos-resilience controls (oracle outage damage cap, finality jitter damage cap, liquidity-cliff inventory stress cap)
 
 Refresh baseline snapshot after intentional model changes:
 

@@ -14,6 +14,7 @@ import { evaluateBoundedLossBreaches } from "./bounded-loss.js";
 import { evaluatePolicyBreaches } from "./policy.js";
 import { evaluateSettlementBreaches } from "./settlement.js";
 import { evaluateSybilBreaches } from "./sybil.js";
+import { evaluateChaosBreaches } from "./chaos.js";
 import { runAdversarialSuite, toMarkdownSummary } from "./suite.js";
 import type { ChainId, SuiteReport } from "./types.js";
 
@@ -157,6 +158,15 @@ export function runGate(
     return {
       ok: false,
       message: `sybil breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
+    };
+  }
+
+  const chaosBreaches = evaluateChaosBreaches(report);
+  if (chaosBreaches.length > 0) {
+    const first = chaosBreaches[0]!;
+    return {
+      ok: false,
+      message: `chaos breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
     };
   }
 

@@ -21,6 +21,7 @@ export { DEFAULT_CHAIN_POLICIES, evaluatePolicyBreaches } from "./policy.js";
 export { evaluateBoundedLossBreaches } from "./bounded-loss.js";
 export { evaluateSettlementBreaches, validateSettlementTrace } from "./settlement.js";
 export { evaluateSybilBreaches } from "./sybil.js";
+export { evaluateChaosBreaches } from "./chaos.js";
 export type {
   ChainId,
   ChainReport,
@@ -43,3 +44,4 @@ export type {
   SettlementState,
 } from "./settlement.js";
 export type { SybilBreach } from "./sybil.js";
+export type { ChaosBreach } from "./chaos.js";
