@@ -3,7 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BorshAccountsCoder, type Idl } from "@coral-xyz/anchor";
-import { expect, test, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
   createPublicClient,
@@ -39,30 +44,76 @@ type PageDiagnostics = {
   requestFailures: string[];
 };
 
+type PredictionMarketsResponse = {
+  duel: {
+    duelKey: string | null;
+    duelId: string | null;
+    phase: string | null;
+    winner: string;
+    betCloseTime: number | null;
+  };
+  markets: Array<{
+    chainKey: string;
+    duelKey: string | null;
+    duelId: string | null;
+    marketId: string | null;
+    marketRef: string | null;
+    lifecycleStatus: string;
+    winner: string;
+    betCloseTime: number | null;
+    contractAddress: string | null;
+    programId: string | null;
+    txRef: string | null;
+    syncedAt: number | null;
+  }>;
+  updatedAt: number | null;
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const statePath = path.resolve(__dirname, "./state.json");
-const anchorIdlDir = path.resolve(__dirname, "../../../anchor/target/idl");
+const GAME_API_URL = (process.env.E2E_GAME_API_URL || "http://127.0.0.1:5555")
+  .trim()
+  .replace(/\/$/, "");
+const anchorIdlDir = path.resolve(
+  __dirname,
+  "../../../../hyperbet-solana/anchor/target/idl",
+);
 const evmArtifactsDir = path.resolve(
   __dirname,
   "../../../../evm-contracts/artifacts/contracts",
 );
+const evmFoundryOutDir = path.resolve(__dirname, "../../../../evm-contracts/out");
+
+function readFirstExistingJson(candidatePaths: string[]): unknown {
+  for (const candidatePath of candidatePaths) {
+    if (!fs.existsSync(candidatePath)) continue;
+    return JSON.parse(fs.readFileSync(candidatePath, "utf8")) as unknown;
+  }
+  throw new Error(`Missing artifact. Checked: ${candidatePaths.join(", ")}`);
+}
+
 const goldPerpsIdl = JSON.parse(
   fs.readFileSync(path.join(anchorIdlDir, "gold_perps_market.json"), "utf8"),
 ) as Idl;
-const duelOutcomeOracleArtifact = JSON.parse(
-  fs.readFileSync(
+const duelOutcomeOracleArtifact = readFirstExistingJson(
+  [
     path.join(
       evmArtifactsDir,
       "DuelOutcomeOracle.sol",
       "DuelOutcomeOracle.json",
     ),
-    "utf8",
-  ),
+    path.join(
+      evmFoundryOutDir,
+      "DuelOutcomeOracle.sol",
+      "DuelOutcomeOracle.json",
+    ),
+  ],
 ) as { abi: readonly unknown[] };
 const perpsCoder = new BorshAccountsCoder(goldPerpsIdl);
 const perpsProgramId = new PublicKey(
   (goldPerpsIdl as Idl & { address: string }).address,
 );
+const MARKET_KIND_DUEL_WINNER = 0;
 
 function loadState(): E2eState {
   return JSON.parse(fs.readFileSync(statePath, "utf8")) as E2eState;
@@ -96,6 +147,31 @@ function normalizeHex32(value: string | undefined, label: string): Hash {
     throw new Error(`Missing or invalid ${label} in e2e state`);
   }
   return `0x${normalized}`;
+}
+
+async function fetchJson<T>(
+  request: APIRequestContext,
+  pathname: string,
+): Promise<T> {
+  const response = await request.get(`${GAME_API_URL}${pathname}`);
+  expect(response.ok(), `GET ${pathname} should succeed`).toBeTruthy();
+  return (await response.json()) as T;
+}
+
+async function fetchPredictionMarkets(
+  request: APIRequestContext,
+): Promise<PredictionMarketsResponse> {
+  return fetchJson<PredictionMarketsResponse>(
+    request,
+    "/api/arena/prediction-markets/active",
+  );
+}
+
+function findPredictionMarket(
+  payload: PredictionMarketsResponse,
+  chainKey: string,
+) {
+  return payload.markets.find((market) => market.chainKey === chainKey) ?? null;
 }
 
 async function readText(page: Page, testId: string): Promise<string> {
@@ -706,6 +782,7 @@ test.describe("market flows", () => {
 
   test("evm predictions place YES and NO orders, resolve, and claim", async ({
     page,
+    request,
   }) => {
     const state = loadState();
     const rpcUrl = state.evmRpcUrl || "http://127.0.0.1:8545";
@@ -742,6 +819,28 @@ test.describe("market flows", () => {
       },
       transport: http(rpcUrl),
     });
+
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const bscMarket = findPredictionMarket(predictionMarkets, "bsc");
+          return {
+            duelKey: predictionMarkets.duel.duelKey,
+            marketRef: bscMarket?.marketRef ?? null,
+            contractAddress: bscMarket?.contractAddress ?? null,
+          };
+        },
+        {
+          timeout: 30_000,
+          intervals: [500, 1_000, 2_000],
+        },
+      )
+      .toEqual({
+        duelKey: duelKey.slice(2),
+        marketRef: state.evmMarketKey || null,
+        contractAddress,
+      });
 
     await gotoApp(page);
     await selectChain(page, "bsc");
@@ -821,15 +920,26 @@ test.describe("market flows", () => {
       ],
     });
     await waitForEvmReceipt(publicClient, reportResultTx);
-    const previousResolveTx = await readText(page, "evm-last-resolve-tx");
-    await evmPanel.getByTestId("evm-resolve-match").click();
-    const resolveTx = await waitForNewEvmTxText(
-      page,
-      "evm-last-resolve-tx",
-      previousResolveTx,
-      "resolve",
-    );
-    await waitForEvmReceipt(publicClient, resolveTx as Hash);
+    const resolveTx = await adminWalletClient.writeContract({
+      address: contractAddress,
+      abi: GOLD_CLOB_ABI,
+      functionName: "syncMarketFromOracle",
+      args: [duelKey, MARKET_KIND_DUEL_WINNER],
+    });
+    await waitForEvmReceipt(publicClient, resolveTx);
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const bscMarket = findPredictionMarket(predictionMarkets, "bsc");
+          return `${bscMarket?.lifecycleStatus || "missing"}:${bscMarket?.winner || "missing"}`;
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toBe("RESOLVED:A");
 
     const previousClaimTx = await readText(page, "evm-last-claim-tx");
     console.log("[e2e][evm] waiting for auto-claim or zeroed YES position");
@@ -868,18 +978,13 @@ test.describe("market flows", () => {
       );
       if (maybeClaimed[0] > 0n) {
         console.log("[e2e][evm] auto-claim not observed, claiming manually");
-        await evmPanel.getByTestId("evm-refresh-market").click();
-        await expect(evmPanel.getByTestId("evm-claim-payout")).toBeEnabled({
-          timeout: 20_000,
+        const manualClaimTx = await adminWalletClient.writeContract({
+          address: contractAddress,
+          abi: GOLD_CLOB_ABI,
+          functionName: "claim",
+          args: [duelKey, MARKET_KIND_DUEL_WINNER],
         });
-        await evmPanel.getByTestId("evm-claim-payout").click();
-        const manualClaimTx = await waitForNewEvmTxText(
-          page,
-          "evm-last-claim-tx",
-          previousClaimTx,
-          "manual claim",
-        );
-        await waitForEvmReceipt(publicClient, manualClaimTx as Hash);
+        await waitForEvmReceipt(publicClient, manualClaimTx);
       }
     }
 

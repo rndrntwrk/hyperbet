@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_DIR="$(cd "$APP_DIR/.." && pwd)"
-ANCHOR_DIR="$DEMO_DIR/anchor"
+ANCHOR_DIR="$(cd "$DEMO_DIR/../hyperbet-solana/anchor" && pwd)"
 APP_PORT="${E2E_APP_PORT:-4182}"
 APP_LOG="$APP_DIR/.e2e-app-${E2E_CLUSTER:-mainnet-beta}.log"
 CLUSTER="${E2E_CLUSTER:-mainnet-beta}"

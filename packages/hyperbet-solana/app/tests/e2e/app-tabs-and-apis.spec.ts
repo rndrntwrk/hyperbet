@@ -13,6 +13,9 @@ type E2eState = {
   solanaTraderPublicKey?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
+  currentDuelId?: string;
+  currentDuelKeyHex?: string;
+  clobMarketState?: string;
 };
 
 type StreamingStateResponse = {
@@ -71,6 +74,31 @@ type PerpsMarketsResponse = {
 
 type PerpsOracleHistoryResponse = {
   snapshots: Array<{ spotIndex: number }>;
+};
+
+type PredictionMarketsResponse = {
+  duel: {
+    duelKey: string | null;
+    duelId: string | null;
+    phase: string | null;
+    winner: string;
+    betCloseTime: number | null;
+  };
+  markets: Array<{
+    chainKey: string;
+    duelKey: string | null;
+    duelId: string | null;
+    marketId: string | null;
+    marketRef: string | null;
+    lifecycleStatus: string;
+    winner: string;
+    betCloseTime: number | null;
+    contractAddress: string | null;
+    programId: string | null;
+    txRef: string | null;
+    syncedAt: number | null;
+  }>;
+  updatedAt: number | null;
 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -225,6 +253,21 @@ test.describe("app tabs and api coverage", () => {
       "/api/streaming/duel-context",
     );
     expect(duelContext.cycle.agent1?.name).toBe(streamState.cycle.agent1?.name);
+
+    const predictionMarkets = await fetchJson<PredictionMarketsResponse>(
+      request,
+      "/api/arena/prediction-markets/active",
+    );
+    expect(predictionMarkets.duel.phase).toBe(streamState.cycle.phase);
+    expect(predictionMarkets.duel.duelId).toBe(state.currentDuelId || null);
+    expect(predictionMarkets.duel.duelKey).toBe(state.currentDuelKeyHex || null);
+    const solanaMarket = predictionMarkets.markets.find(
+      (market) => market.chainKey === "solana",
+    );
+    expect(solanaMarket).toBeTruthy();
+    expect(solanaMarket?.marketRef).toBe(state.clobMarketState || null);
+    expect(["OPEN", "LOCKED", "RESOLVED", "CANCELLED", "PENDING", "UNKNOWN"])
+      .toContain(solanaMarket?.lifecycleStatus);
 
     const points = await fetchJson<PointsResponse>(
       request,

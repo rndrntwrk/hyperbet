@@ -3,9 +3,10 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_DIR="$(cd "$APP_DIR/.." && pwd)"
-ANCHOR_DIR="$DEMO_DIR/anchor"
+ANCHOR_DIR="$(cd "$DEMO_DIR/../hyperbet-solana/anchor" && pwd)"
 KEEPER_DIR="$DEMO_DIR/keeper"
 EVM_DIR="$(cd "$DEMO_DIR/../evm-contracts" && pwd)"
+STATE_PATH="$APP_DIR/tests/e2e/state.json"
 VALIDATOR_LOG="$APP_DIR/.e2e-validator.log"
 ANVIL_LOG="$APP_DIR/.e2e-anvil.log"
 APP_LOG="$APP_DIR/.e2e-app.log"
@@ -303,7 +304,7 @@ echo "[e2e] building anchor programs"
 bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-avax-e2e-build.log 2>&1
 
 echo "[e2e] compiling evm contracts"
-bun run --cwd "$EVM_DIR" compile >/tmp/hyperbet-avax-e2e-evm-build.log 2>&1
+forge build --root "$EVM_DIR" >/tmp/hyperbet-avax-e2e-evm-build.log 2>&1
 
 IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
 IDL_MARKET_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_perps_market.json" 2>/dev/null || true)"
@@ -411,6 +412,12 @@ run_with_retries \
     E2E_EVM_CHAIN_ID="$EVM_CHAIN_ID" \
     bun run "$APP_DIR/tests/e2e/setup-evm-local.ts"
 
+EVM_GOLD_CLOB_ADDRESS="$(jq -r '.evmGoldClobAddress // empty' "$STATE_PATH")"
+if [[ -z "$EVM_GOLD_CLOB_ADDRESS" || "$EVM_GOLD_CLOB_ADDRESS" == "null" ]]; then
+  echo "[e2e] failed to read evmGoldClobAddress from $STATE_PATH"
+  exit 1
+fi
+
 echo "[e2e] seeding keeper database"
 env \
   KEEPER_DB_PATH="$KEEPER_DB_PATH" \
@@ -420,6 +427,14 @@ echo "[e2e] starting keeper api on :$GAME_API_PORT"
 env \
   PORT="$GAME_API_PORT" \
   KEEPER_DB_PATH="$KEEPER_DB_PATH" \
+  SOLANA_CLUSTER="localnet" \
+  SOLANA_RPC_URL="$SOLANA_RPC_URL" \
+  ORACLE_AUTHORITY_KEYPAIR="$SOLANA_BOOTSTRAP_KEYPAIR" \
+  FIGHT_ORACLE_PROGRAM_ID="$PROGRAM_ORACLE_ID" \
+  GOLD_CLOB_MARKET_PROGRAM_ID="$PROGRAM_CLOB_ID" \
+  GOLD_PERPS_MARKET_PROGRAM_ID="$PROGRAM_MARKET_ID" \
+  AVAX_RPC_URL="$ANVIL_RPC_URL" \
+  AVAX_GOLD_CLOB_ADDRESS="$EVM_GOLD_CLOB_ADDRESS" \
   ENABLE_KEEPER_BOT=false \
   bun run --cwd "$KEEPER_DIR" service >"$KEEPER_LOG" 2>&1 < /dev/null &
 KEEPER_PID="$!"

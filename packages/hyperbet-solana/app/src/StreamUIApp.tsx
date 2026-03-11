@@ -328,6 +328,7 @@ export function StreamUIApp() {
                 noPercent={mock.noPercent}
                 yesPool={mock.yesPot}
                 noPool={mock.noPot}
+                isEvm={false}
                 side={side}
                 setSide={setSide}
                 amountInput={amountInput}

@@ -16,10 +16,10 @@ import {
   Connection,
 } from "@solana/web3.js";
 
-import fightOracleIdl from "../../../anchor/target/idl/fight_oracle.json";
-import goldClobIdl from "../../../anchor/target/idl/gold_clob_market.json";
-import goldPerpsIdl from "../../../anchor/target/idl/gold_perps_market.json";
-import { modelMarketIdFromCharacterId } from "../../src/lib/modelMarkets";
+import fightOracleIdl from "../../../../hyperbet-solana/anchor/target/idl/fight_oracle.json";
+import goldClobIdl from "../../../../hyperbet-solana/anchor/target/idl/gold_clob_market.json";
+import goldPerpsIdl from "../../../../hyperbet-solana/anchor/target/idl/gold_perps_market.json";
+import { modelMarketIdFromCharacterId } from "../../../../hyperbet-ui/src/lib/modelMarkets";
 
 type SignableTx = Transaction | VersionedTransaction;
 type AnchorLikeWallet = Wallet & { payer: Keypair };

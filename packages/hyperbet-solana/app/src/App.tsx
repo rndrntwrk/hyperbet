@@ -590,12 +590,12 @@ function goldDisplay(amount: unknown): string {
   return (raw / 10 ** GOLD_DECIMALS).toFixed(6);
 }
 const SolanaClobPanel = lazy(() =>
-  import("@hyperbet/ui/components/SolanaClobPanel").then((module) => ({
+  import("./components/SolanaClobPanel").then((module) => ({
     default: module.SolanaClobPanel,
   })),
 );
 const ModelsMarketView = lazy(() =>
-  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
+  import("./components/ModelsMarketView").then((module) => ({
     default: module.ModelsMarketView,
   })),
 );
@@ -1786,6 +1786,7 @@ export function App() {
                       data-testid={`duels-bottom-tab-${key}`}
                       aria-selected={hmBottomTab === key}
                       className={`hm-bottom-tab ${hmBottomTab === key ? "hm-bottom-tab--active" : ""}`}
+                      onClick={() => setHmBottomTab(key as typeof hmBottomTab)}
                       onClick={() => setHmBottomTab(key as typeof hmBottomTab)}
                       type="button"
                     >

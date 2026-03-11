@@ -23,7 +23,7 @@ import {
   deriveUserBalancePda,
   uniqueDuelKey,
 } from "../../../anchor/tests/clob-test-helpers";
-import { modelMarketIdFromCharacterId } from "../../src/lib/modelMarkets";
+import { modelMarketIdFromCharacterId } from "../../../../hyperbet-ui/src/lib/modelMarkets";
 
 type SignableTx = Transaction | VersionedTransaction;
 type AnchorLikeWallet = Wallet & { payer: Keypair };
@@ -187,7 +187,7 @@ async function ensureBalance(
   }
 }
 
-async function _ensureTransferredBalance(
+async function ensureTransferredBalance(
   connection: Connection,
   provider: AnchorProvider,
   recipient: PublicKey,

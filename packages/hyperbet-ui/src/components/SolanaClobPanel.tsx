@@ -17,6 +17,7 @@ import {
   type AccountMeta,
   ComputeBudgetProgram,
   LAMPORTS_PER_SOL,
+  type Connection,
   PublicKey,
   SystemProgram,
   Transaction,
@@ -32,16 +33,27 @@ import {
   findPriceLevelPda,
   findUserBalancePda,
 } from "../lib/pdas";
-import { createPrograms, createReadonlyPrograms } from "../lib/programs";
+import {
+  createPrograms,
+  createReadonlyPrograms,
+  type SigningWalletLike,
+} from "../lib/programs";
 import {
   confirmSignatureViaRpc,
   fetchPriorityFeeEstimate,
   getLatestBlockhashViaRpc,
   HELIUS_SENDER_MIN_TIP_LAMPORTS,
   randomJitoTipAccount,
+  sendRawTransactionViaRpc,
   sendViaHeliusSender,
   startHeliusSenderWarmup,
 } from "../lib/solanaRpc";
+import { CONFIG, DEFAULT_BET_FEE_BPS } from "../lib/config";
+import {
+  normalizePredictionMarketDuelKeyHex,
+  usePredictionMarketLifecycle,
+} from "../lib/predictionMarkets";
+import { recordPredictionMarketTrade } from "../lib/predictionMarketTracking";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
   PredictionMarketPanel,
@@ -114,7 +126,7 @@ const SIDE_BID = 1;
 const SIDE_ASK = 2;
 const MAX_MATCH_ACCOUNTS = 100;
 
-function walletReady(wallet: ReturnType<typeof useWallet>): boolean {
+function walletReady(wallet: SigningWalletLike): boolean {
   return Boolean(
     wallet.publicKey && wallet.signTransaction && wallet.signAllTransactions,
   );
@@ -217,12 +229,25 @@ function getCycleDuelStatusLabel(
   return "Preparing duel market";
 }
 
+function parsePublicKeyOrNull(
+  value: string | null | undefined,
+): PublicKey | null {
+  if (!value) return null;
+  try {
+    return new PublicKey(value);
+  } catch {
+    return null;
+  }
+}
+
 interface SolanaClobPanelProps {
   agent1Name: string;
   agent2Name: string;
   compact?: boolean;
   onMarketSnapshot?: (snapshot: SolanaClobMarketSnapshot) => void;
   locale?: UiLocale;
+  connectionOverride?: Connection;
+  walletOverride?: SigningWalletLike;
 }
 
 export interface SolanaClobMarketSnapshot {
@@ -242,11 +267,15 @@ export function SolanaClobPanel({
   compact = false,
   onMarketSnapshot,
   locale,
+  connectionOverride,
+  walletOverride,
 }: SolanaClobPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const isE2eMode = import.meta.env.MODE === "e2e";
-  const { connection } = useConnection();
-  const wallet = useWallet();
+  const { connection: adapterConnection } = useConnection();
+  const adapterWallet = useWallet();
+  const connection = connectionOverride ?? adapterConnection;
+  const wallet = walletOverride ?? adapterWallet;
   const { state: streamingState } = useStreamingState();
 
   const [status, setStatus] = useState(
@@ -269,6 +298,7 @@ export function SolanaClobPanel({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<bigint | null>(null);
   const [lastPlaceOrderTx, setLastPlaceOrderTx] = useState("-");
+  const [lastPlaceOrderError, setLastPlaceOrderError] = useState("-");
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   const lastSnapshotRef = useRef<{ yes: bigint; no: bigint }>({
@@ -277,8 +307,13 @@ export function SolanaClobPanel({
   });
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
+  const useHeliusSender = CONFIG.cluster === "mainnet-beta";
+
   // Warm Helius Sender on mount to avoid first-transaction cold-start latency.
-  useEffect(() => startHeliusSenderWarmup(), []);
+  useEffect(() => {
+    if (!useHeliusSender) return undefined;
+    return startHeliusSenderWarmup();
+  }, [useHeliusSender]);
 
   const writablePrograms = useMemo(
     () => (walletReady(wallet) ? createPrograms(connection, wallet) : null),
@@ -290,9 +325,20 @@ export function SolanaClobPanel({
   );
 
   const cycle = streamingState?.cycle ?? null;
-  const duelKeyHex =
+  const streamedDuelKeyHex =
     typeof cycle?.duelKeyHex === "string" ? cycle.duelKeyHex : null;
-  const cycleDuelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
+  const streamedDuelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
+  const { duel: lifecycleDuel, market: lifecycleMarket } =
+    usePredictionMarketLifecycle("solana");
+  const duelKeyHex = useMemo(
+    () =>
+      normalizePredictionMarketDuelKeyHex(
+        lifecycleMarket?.duelKey ?? lifecycleDuel?.duelKey ?? streamedDuelKeyHex,
+      ),
+    [lifecycleDuel?.duelKey, lifecycleMarket?.duelKey, streamedDuelKeyHex],
+  );
+  const cycleDuelId =
+    lifecycleMarket?.duelId ?? lifecycleDuel?.duelId ?? streamedDuelId;
   const duelLabel = cycleDuelId ?? shortDuelKey(duelKeyHex);
   const effectiveAgent1 = cycle?.agent1?.name ?? agent1Name;
   const effectiveAgent2 = cycle?.agent2?.name ?? agent2Name;
@@ -372,6 +418,31 @@ export function SolanaClobPanel({
         placingOrderContext: "placing order",
         claimingWinningsContext: "claiming winnings",
       };
+  const lifecycleStatusLabel = useMemo(() => {
+    switch (lifecycleMarket?.lifecycleStatus) {
+      case "RESOLVED":
+        if (lifecycleMarket.winner === "A") return copy.resolvedFor(effectiveAgent1);
+        if (lifecycleMarket.winner === "B") return copy.resolvedFor(effectiveAgent2);
+        return copy.resolved;
+      case "CANCELLED":
+        return copy.marketCancelled;
+      case "LOCKED":
+        return copy.bettingLocked;
+      case "OPEN":
+        return copy.marketOpen;
+      case "PENDING":
+      case "UNKNOWN":
+        return copy.waitingMarketOperator;
+      default:
+        return null;
+    }
+  }, [
+    copy,
+    effectiveAgent1,
+    effectiveAgent2,
+    lifecycleMarket?.lifecycleStatus,
+    lifecycleMarket?.winner,
+  ]);
 
   const updateChartAndTrades = useCallback(
     (nextYes: bigint, nextNo: bigint) => {
@@ -441,34 +512,41 @@ export function SolanaClobPanel({
         // Fetch blockhash and dynamic priority fee in parallel.
         const [latest, priorityFeeEstimate] = await Promise.all([
           getLatestBlockhashViaRpc(connection),
-          fetchPriorityFeeEstimate(connection.rpcEndpoint, [
-            wallet.publicKey.toBase58(),
-          ]),
+          useHeliusSender
+            ? fetchPriorityFeeEstimate(connection.rpcEndpoint, [
+                wallet.publicKey.toBase58(),
+              ])
+            : Promise.resolve(0),
         ]);
         transaction.recentBlockhash = latest.blockhash;
 
-        // Prepend ComputeBudget instructions so validators correctly budget CUs.
-        // setComputeUnitLimit MUST come before other instructions.
-        transaction.instructions = [
-          ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: priorityFeeEstimate,
-          }),
-          // Jito tip transfer — required by Helius Sender dual-routing.
-          SystemProgram.transfer({
-            fromPubkey: wallet.publicKey,
-            toPubkey: new PublicKey(randomJitoTipAccount()),
-            lamports: HELIUS_SENDER_MIN_TIP_LAMPORTS,
-          }),
-          ...transaction.instructions,
-        ];
+        if (useHeliusSender) {
+          // Prepend ComputeBudget instructions so validators correctly budget CUs.
+          // setComputeUnitLimit MUST come before other instructions.
+          transaction.instructions = [
+            ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+            ComputeBudgetProgram.setComputeUnitPrice({
+              microLamports: priorityFeeEstimate,
+            }),
+            // Jito tip transfer — required by Helius Sender dual-routing.
+            SystemProgram.transfer({
+              fromPubkey: wallet.publicKey,
+              toPubkey: new PublicKey(randomJitoTipAccount()),
+              lamports: HELIUS_SENDER_MIN_TIP_LAMPORTS,
+            }),
+            ...transaction.instructions,
+          ];
+        }
 
         stage = copy.stageSigning;
         const signed = await wallet.signTransaction(transaction);
 
         stage = copy.stageSending;
-        const wireBase64 = Buffer.from(signed.serialize()).toString("base64");
-        const signature = await sendViaHeliusSender(wireBase64);
+        const signature = useHeliusSender
+          ? await sendViaHeliusSender(
+              Buffer.from(signed.serialize()).toString("base64"),
+            )
+          : await sendRawTransactionViaRpc(connection, signed);
 
         stage = copy.stageConfirming;
         await confirmSignatureViaRpc(connection, signature);
@@ -485,6 +563,7 @@ export function SolanaClobPanel({
       copy.stageConfirming,
       copy.stageSending,
       copy.stageSigning,
+      useHeliusSender,
       wallet.publicKey,
       wallet.signTransaction,
     ],
@@ -541,17 +620,22 @@ export function SolanaClobPanel({
       setYesPool(0n);
       setNoPool(0n);
       setPosition({ aShares: 0n, bShares: 0n });
-      setStatus(getCycleDuelStatusLabel(cycle?.phase, duelKeyHex, resolvedLocale));
+      setStatus(
+        lifecycleStatusLabel ??
+          getCycleDuelStatusLabel(cycle?.phase, duelKeyHex, resolvedLocale),
+      );
       return;
     }
 
     const duelKeyBytes = duelKeyHexToBytes(duelKeyHex);
     const duelState = findDuelStatePda(oracleProgram.programId, duelKeyBytes);
-    const marketState = findMarketStatePda(
-      clobProgram.programId,
-      duelState,
-      DUEL_WINNER_MARKET_KIND,
-    );
+    const marketState =
+      parsePublicKeyOrNull(lifecycleMarket?.marketRef) ??
+      findMarketStatePda(
+        clobProgram.programId,
+        duelState,
+        DUEL_WINNER_MARKET_KIND,
+      );
     const vault = findClobVaultPda(clobProgram.programId, marketState);
 
     const [duelAccount, marketAccount, allLevels, allOrders, allBalances] =
@@ -564,13 +648,13 @@ export function SolanaClobPanel({
       ]);
 
     if (!duelAccount) {
-      setStatus(copy.waitingOracleReporter);
+      setStatus(lifecycleStatusLabel ?? copy.waitingOracleReporter);
       setActiveMarket(null);
       return;
     }
 
     if (!marketAccount) {
-      setStatus(copy.waitingMarketOperator);
+      setStatus(lifecycleStatusLabel ?? copy.waitingMarketOperator);
       setActiveMarket(null);
       return;
     }
@@ -663,7 +747,8 @@ export function SolanaClobPanel({
       bestBid: Number(marketAccount.bestBid ?? 0),
       bestAsk: Number(marketAccount.bestAsk ?? 1000),
       betCloseTime:
-        typeof cycle?.betCloseTime === "number" ? cycle.betCloseTime : null,
+        lifecycleDuel?.betCloseTime ??
+        (typeof cycle?.betCloseTime === "number" ? cycle.betCloseTime : null),
     });
     setPosition(userPosition);
     setYesPool(nextYesPool);
@@ -692,7 +777,7 @@ export function SolanaClobPanel({
     } else if (marketStatus === "open") {
       setStatus(copy.marketOpen);
     } else {
-      setStatus(formatStatus(marketStatus, resolvedLocale));
+      setStatus(lifecycleStatusLabel ?? formatStatus(marketStatus, resolvedLocale));
     }
   }, [
     cycle?.betCloseTime,
@@ -702,6 +787,9 @@ export function SolanaClobPanel({
     duelKeyHex,
     effectiveAgent1,
     effectiveAgent2,
+    lifecycleDuel?.betCloseTime,
+    lifecycleMarket?.marketRef,
+    lifecycleStatusLabel,
     readonlyPrograms.fightOracle,
     readonlyPrograms.goldClobMarket,
     resolvedLocale,
@@ -887,13 +975,16 @@ export function SolanaClobPanel({
   const handlePlaceOrder = useCallback(async () => {
     const clobProgram: any = writablePrograms?.goldClobMarket;
     if (!clobProgram || !wallet.publicKey || !activeMarket) {
+      setLastPlaceOrderError(copy.connectWalletToTrade);
       setStatus(copy.connectWalletToTrade);
       return;
     }
 
     try {
+      setLastPlaceOrderError("-");
       const amount = toBaseUnits(amountInput);
       if (amount <= 0n) {
+        setLastPlaceOrderError(copy.amountTooLow);
         setStatus(copy.amountTooLow);
         return;
       }
@@ -960,6 +1051,19 @@ export function SolanaClobPanel({
 
       const signature = await submitTransaction(tx, copy.placingOrderContext);
       setLastPlaceOrderTx(signature);
+      setLastPlaceOrderError("-");
+      await recordPredictionMarketTrade({
+        chainKey: "solana",
+        bettorWallet: wallet.publicKey.toBase58(),
+        sourceAsset: "SOL",
+        sourceAmount: fmtAmount(amount),
+        goldAmount: fmtAmount(amount),
+        feeBps: DEFAULT_BET_FEE_BPS,
+        txSignature: signature,
+        marketRef: activeMarket.marketState.toBase58(),
+        duelKey: activeMarket.duelKeyHex,
+        duelId: activeMarket.duelId,
+      });
       setActiveMarket((current) =>
         current
           ? {
@@ -971,7 +1075,9 @@ export function SolanaClobPanel({
       setStatus(copy.orderPlaced);
       await refreshData();
     } catch (error) {
-      setStatus(copy.orderFailed((error as Error).message));
+      const message = (error as Error).message;
+      setLastPlaceOrderError(message);
+      setStatus(copy.orderFailed(message));
     }
   }, [
     activeMarket,
@@ -979,6 +1085,7 @@ export function SolanaClobPanel({
     buildPlaceOrderRemainingAccounts,
     copy,
     ensureVaultRentExempt,
+    lastPlaceOrderError,
     priceInput,
     refreshData,
     side,
@@ -1204,6 +1311,7 @@ export function SolanaClobPanel({
           </div>
           <div data-testid="solana-clob-status">{status}</div>
           <div data-testid="solana-clob-place-order-tx">{lastPlaceOrderTx}</div>
+          <div data-testid="solana-clob-place-order-error">{lastPlaceOrderError}</div>
           <div data-testid="solana-clob-init-config-tx">-</div>
           <div data-testid="solana-clob-create-match-tx">-</div>
           <div data-testid="solana-clob-init-orderbook-tx">-</div>

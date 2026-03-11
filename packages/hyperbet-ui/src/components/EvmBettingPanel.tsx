@@ -36,6 +36,11 @@ import {
   type Position,
   SIDE_ENUM,
 } from "../lib/evmClient";
+import {
+  normalizePredictionMarketDuelKeyHex,
+  usePredictionMarketLifecycle,
+} from "../lib/predictionMarkets";
+import { recordPredictionMarketTrade } from "../lib/predictionMarketTracking";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
   PredictionMarketPanel,
@@ -77,6 +82,7 @@ function getEvmPanelCopy(locale: UiLocale) {
       waitingForMarketOperator: "等待市场运营方开启",
       resolvedFor: (name: string) => `${name} 已结算获胜`,
       resolved: "已结算",
+      marketCancelled: "市场已取消",
       bettingLocked: "下注已锁定",
       marketOpen: "市场开放中",
       refreshFailed: (message: string) => `刷新失败：${message}`,
@@ -126,6 +132,7 @@ function getEvmPanelCopy(locale: UiLocale) {
     waitingForMarketOperator: "Waiting for market operator",
     resolvedFor: (name: string) => `Resolved for ${name}`,
     resolved: "Resolved",
+    marketCancelled: "Market cancelled",
     bettingLocked: "Betting locked",
     marketOpen: "Market open",
     refreshFailed: (message: string) => `Refresh failed: ${message}`,
@@ -174,6 +181,32 @@ function getEvmPanelCopy(locale: UiLocale) {
 
 function formatCompactTokenAmount(value: bigint, decimals: number): string {
   return Number(formatUnits(value, decimals)).toFixed(3);
+}
+
+function getLifecycleStatusLabel(
+  lifecycleStatus: string | null | undefined,
+  winner: string | null | undefined,
+  agent1Name: string,
+  agent2Name: string,
+  copy: ReturnType<typeof getEvmPanelCopy>,
+): string | null {
+  switch (lifecycleStatus) {
+    case "RESOLVED":
+      if (winner === "A") return copy.resolvedFor(agent1Name);
+      if (winner === "B") return copy.resolvedFor(agent2Name);
+      return copy.resolved;
+    case "CANCELLED":
+      return copy.marketCancelled;
+    case "LOCKED":
+      return copy.bettingLocked;
+    case "OPEN":
+      return copy.marketOpen;
+    case "PENDING":
+    case "UNKNOWN":
+      return copy.waitingForMarketOperator;
+    default:
+      return null;
+  }
 }
 
 export function EvmBettingPanel({
@@ -288,14 +321,48 @@ export function EvmBettingPanel({
   const lastSnapshotRef = useRef<{ a: bigint; b: bigint }>({ a: 0n, b: 0n });
 
   const cycle = streamingState?.cycle ?? null;
-  const duelKeyHex =
+  const streamedDuelKeyHex =
     typeof cycle?.duelKeyHex === "string" ? cycle.duelKeyHex : null;
-  const duelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
+  const streamedDuelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
   const cycleAgent1 = cycle?.agent1?.name ?? agent1Name;
   const cycleAgent2 = cycle?.agent2?.name ?? agent2Name;
   const nativeDecimals = chainConfig?.nativeCurrency.decimals ?? 18;
   const chainNativeSymbol: Record<string, string> = { bsc: "BNB", base: "ETH", avax: "AVAX" };
   const nativeSymbol = chainConfig?.nativeCurrency.symbol ?? chainNativeSymbol[activeChain] ?? "ETH";
+  const lifecycleChainKey =
+    activeChain === "bsc" || activeChain === "base" || activeChain === "avax"
+      ? activeChain
+      : null;
+  const { duel: lifecycleDuel, market: lifecycleMarket } =
+    usePredictionMarketLifecycle(lifecycleChainKey, {
+      disabled: !chainConfig,
+    });
+  const duelKeyHex = useMemo(
+    () =>
+      normalizePredictionMarketDuelKeyHex(
+        lifecycleMarket?.duelKey ?? lifecycleDuel?.duelKey ?? streamedDuelKeyHex,
+      ),
+    [lifecycleDuel?.duelKey, lifecycleMarket?.duelKey, streamedDuelKeyHex],
+  );
+  const duelId =
+    lifecycleMarket?.duelId ?? lifecycleDuel?.duelId ?? streamedDuelId;
+  const lifecycleStatusLabel = useMemo(
+    () =>
+      getLifecycleStatusLabel(
+        lifecycleMarket?.lifecycleStatus,
+        lifecycleMarket?.winner,
+        cycleAgent1,
+        cycleAgent2,
+        copy,
+      ),
+    [
+      copy,
+      cycleAgent1,
+      cycleAgent2,
+      lifecycleMarket?.lifecycleStatus,
+      lifecycleMarket?.winner,
+    ],
+  );
 
   const publicClient = useMemo(() => {
     if (!chainConfig) return null;
@@ -367,7 +434,7 @@ export function EvmBettingPanel({
         setPosition(null);
         setBids([]);
         setAsks([]);
-        setStatus(copy.waitingForLiveDuel);
+        setStatus(lifecycleStatusLabel ?? copy.waitingForLiveDuel);
         return;
       }
 
@@ -386,7 +453,7 @@ export function EvmBettingPanel({
         setPosition(null);
         setBids([]);
         setAsks([]);
-        setStatus(copy.waitingForMarketOperator);
+        setStatus(lifecycleStatusLabel ?? copy.waitingForMarketOperator);
         return;
       }
 
@@ -473,7 +540,7 @@ export function EvmBettingPanel({
       } else if (market.status === "OPEN") {
         setStatus(copy.marketOpen);
       } else {
-        setStatus(copy.waitingForMarketOperator);
+        setStatus(lifecycleStatusLabel ?? copy.waitingForMarketOperator);
       }
     } catch (error) {
       setStatus(copy.refreshFailed((error as Error).message));
@@ -485,6 +552,7 @@ export function EvmBettingPanel({
     cycleAgent2,
     duelKeyHex,
     effectiveAddress,
+    lifecycleStatusLabel,
     nativeDecimals,
     publicClient,
     updateChartAndTrades,
@@ -540,6 +608,18 @@ export function EvmBettingPanel({
       );
       setLastOrderTx(tx);
       await publicClient?.waitForTransactionReceipt({ hash: tx });
+      await recordPredictionMarketTrade({
+        chainKey: chainConfig.chainId,
+        bettorWallet: effectiveAddress,
+        sourceAsset: nativeSymbol,
+        sourceAmount: Number(formatUnits(totalValue, nativeDecimals)),
+        goldAmount: Number(formatUnits(totalValue, nativeDecimals)),
+        feeBps: tradeFeeBps,
+        txSignature: tx,
+        marketRef: lifecycleMarket?.marketRef ?? marketMeta?.marketKey ?? duelKey,
+        duelKey: duelKeyHex,
+        duelId,
+      });
       setStatus(copy.orderPlaced);
       await refreshData();
     } catch (error) {
@@ -553,11 +633,15 @@ export function EvmBettingPanel({
     effectiveAddress,
     effectiveWalletClient,
     nativeDecimals,
+    nativeSymbol,
     priceInput,
     publicClient,
     refreshData,
     side,
     tradeFeeBps,
+    lifecycleMarket?.marketRef,
+    marketMeta?.marketKey,
+    duelId,
   ]);
 
 
