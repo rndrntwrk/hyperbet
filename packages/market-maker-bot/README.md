@@ -112,6 +112,19 @@ Optional fork integration harness (executes only when fork RPC env vars are set)
 bun run verify:forks
 ```
 
+`verify:forks` now performs two checks for each configured chain fork:
+
+- fork RPC reachability and block/head freshness check
+- deterministic fork-attack replay checks for:
+  - `stale_signal_arbitrage`
+  - `gas_auction_backrun`
+  - `sybil_wash_trading`
+
+Additional fork harness env controls:
+
+- `MM_FORK_ATTACK_SEEDS` (comma-separated seed corpus, default `20260311`)
+- `MM_FORK_REQUIRE_ALL_CHAINS` (`1`/`true` to fail unless all of `BSC_FORK_RPC_URL`, `AVAX_FORK_RPC_URL`, and `SOLANA_FORK_RPC_URL` are set)
+
 Formal safety specification:
 
 - `docs/safety-spec.md`

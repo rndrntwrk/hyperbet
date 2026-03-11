@@ -1,6 +1,14 @@
 import { ethers } from "ethers";
 import { Connection } from "@solana/web3.js";
 
+import {
+  runAdversarialSuite,
+  SCENARIO_RISK_BUDGETS,
+  type ChainId,
+  type ScenarioId,
+  type ScenarioRun,
+} from "./adversarial/index.js";
+
 type ForkTargets = {
   bscForkRpc?: string;
   avaxForkRpc?: string;
@@ -9,12 +17,157 @@ type ForkTargets = {
 
 type EnvMap = Record<string, string | undefined>;
 
+export type ForkAttackSummary = {
+  chain: ChainId;
+  seeds: number[];
+  scenariosChecked: number;
+  breaches: string[];
+};
+
+const DEFAULT_FORK_ATTACK_SEEDS = [20260311] as const;
+
+export const FORK_ATTACK_SCENARIOS: ScenarioId[] = [
+  "stale_signal_arbitrage",
+  "gas_auction_backrun",
+  "sybil_wash_trading",
+];
+
+function parseBoolean(raw: string | undefined): boolean {
+  if (!raw) {
+    return false;
+  }
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+export function parseForkAttackSeeds(raw: string | undefined): number[] {
+  if (!raw || raw.trim().length === 0) {
+    return [...DEFAULT_FORK_ATTACK_SEEDS];
+  }
+
+  const parsed = raw
+    .split(",")
+    .map((entry) => Number(entry.trim()))
+    .filter((entry) => Number.isFinite(entry) && entry > 0);
+
+  if (parsed.length === 0) {
+    throw new Error(
+      "invalid MM_FORK_ATTACK_SEEDS; expected comma-separated positive integers",
+    );
+  }
+
+  return [...new Set(parsed.map((entry) => Math.trunc(entry)))];
+}
+
+function pctReduction(run: ScenarioRun): number {
+  if (run.baseline.attackerPnl <= 0) {
+    return 1;
+  }
+  return 1 - run.mitigated.attackerPnl / run.baseline.attackerPnl;
+}
+
+function evaluateScenarioBreaches(chain: ChainId, seed: number, run: ScenarioRun): string[] {
+  const budget = SCENARIO_RISK_BUDGETS[run.scenario];
+  const reduction = pctReduction(run);
+  const breaches: string[] = [];
+
+  if (!run.mitigationPass) {
+    breaches.push(
+      `[seed=${seed}] ${chain}/${run.scenario} mitigationPass=false (improved=${run.improved})`,
+    );
+  }
+  if (run.mitigated.attackerPnl > budget.maxMitigatedAttackerPnl) {
+    breaches.push(
+      `[seed=${seed}] ${chain}/${run.scenario} mitigated attacker pnl ${run.mitigated.attackerPnl.toFixed(4)} > ${budget.maxMitigatedAttackerPnl}`,
+    );
+  }
+  if (run.mitigated.exploitEvents > budget.maxExploitEvents) {
+    breaches.push(
+      `[seed=${seed}] ${chain}/${run.scenario} exploit events ${run.mitigated.exploitEvents} > ${budget.maxExploitEvents}`,
+    );
+  }
+  if (run.mitigated.toxicFillRate > budget.maxToxicFillRate) {
+    breaches.push(
+      `[seed=${seed}] ${chain}/${run.scenario} toxic fill rate ${run.mitigated.toxicFillRate.toFixed(4)} > ${budget.maxToxicFillRate}`,
+    );
+  }
+  if (run.mitigated.avgAdverseSlippageBps > budget.maxAdverseSlippageBps) {
+    breaches.push(
+      `[seed=${seed}] ${chain}/${run.scenario} adverse slippage ${run.mitigated.avgAdverseSlippageBps.toFixed(2)} > ${budget.maxAdverseSlippageBps}`,
+    );
+  }
+  if (reduction < budget.minAttackerPnlReductionRatio) {
+    breaches.push(
+      `[seed=${seed}] ${chain}/${run.scenario} reduction ratio ${reduction.toFixed(4)} < ${budget.minAttackerPnlReductionRatio}`,
+    );
+  }
+
+  return breaches;
+}
+
+export function runForkAttackSuite(chain: ChainId, seeds: number[]): ForkAttackSummary {
+  const breaches: string[] = [];
+
+  for (const seed of seeds) {
+    const report = runAdversarialSuite(seed, chain);
+    const chainReport = report.chains[0];
+    if (!chainReport || chainReport.chain !== chain) {
+      breaches.push(`[seed=${seed}] missing chain report for ${chain}`);
+      continue;
+    }
+
+    for (const scenarioId of FORK_ATTACK_SCENARIOS) {
+      const scenarioRun = chainReport.scenarios.find((entry) => entry.scenario === scenarioId);
+      if (!scenarioRun) {
+        breaches.push(`[seed=${seed}] missing scenario ${chain}/${scenarioId}`);
+        continue;
+      }
+      breaches.push(...evaluateScenarioBreaches(chain, seed, scenarioRun));
+    }
+  }
+
+  return {
+    chain,
+    seeds,
+    scenariosChecked: seeds.length * FORK_ATTACK_SCENARIOS.length,
+    breaches,
+  };
+}
+
 export function resolveForkTargets(env: EnvMap): ForkTargets {
   return {
     bscForkRpc: env.BSC_FORK_RPC_URL?.trim() || undefined,
     avaxForkRpc: env.AVAX_FORK_RPC_URL?.trim() || undefined,
     solanaForkRpc: env.SOLANA_FORK_RPC_URL?.trim() || undefined,
   };
+}
+
+function configuredChains(targets: ForkTargets): ChainId[] {
+  const chains: ChainId[] = [];
+  if (targets.bscForkRpc) {
+    chains.push("bsc");
+  }
+  if (targets.avaxForkRpc) {
+    chains.push("avax");
+  }
+  if (targets.solanaForkRpc) {
+    chains.push("solana");
+  }
+  return chains;
+}
+
+function missingRequiredChainTargets(targets: ForkTargets): string[] {
+  const missing: string[] = [];
+  if (!targets.bscForkRpc) {
+    missing.push("BSC_FORK_RPC_URL");
+  }
+  if (!targets.avaxForkRpc) {
+    missing.push("AVAX_FORK_RPC_URL");
+  }
+  if (!targets.solanaForkRpc) {
+    missing.push("SOLANA_FORK_RPC_URL");
+  }
+  return missing;
 }
 
 async function checkEvmFork(label: "bsc" | "avax", rpcUrl: string): Promise<string> {
@@ -43,6 +196,18 @@ export async function runForkHarness(env: EnvMap): Promise<{
   const lines: string[] = [];
   const checks: Array<Promise<string>> = [];
 
+  const requireAllChains = parseBoolean(env.MM_FORK_REQUIRE_ALL_CHAINS);
+  const attackSeeds = parseForkAttackSeeds(env.MM_FORK_ATTACK_SEEDS);
+
+  if (requireAllChains) {
+    const missing = missingRequiredChainTargets(targets);
+    if (missing.length > 0) {
+      throw new Error(
+        `MM_FORK_REQUIRE_ALL_CHAINS is enabled but missing: ${missing.join(", ")}`,
+      );
+    }
+  }
+
   if (targets.bscForkRpc) {
     checks.push(checkEvmFork("bsc", targets.bscForkRpc));
   }
@@ -64,6 +229,33 @@ export async function runForkHarness(env: EnvMap): Promise<{
   for (const line of results) {
     lines.push(`[fork-harness] ok ${line}`);
   }
+
+  const chainRuns = configuredChains(targets).map((chain) =>
+    runForkAttackSuite(chain, attackSeeds),
+  );
+
+  let hasBreaches = false;
+  for (const run of chainRuns) {
+    if (run.breaches.length === 0) {
+      lines.push(
+        `[fork-harness] attack-suite pass chain=${run.chain} seeds=${run.seeds.join("|")} scenarios=${run.scenariosChecked}`,
+      );
+      continue;
+    }
+
+    hasBreaches = true;
+    lines.push(
+      `[fork-harness] attack-suite fail chain=${run.chain} seeds=${run.seeds.join("|")} breaches=${run.breaches.length}`,
+    );
+    for (const breach of run.breaches) {
+      lines.push(`[fork-harness] breach ${breach}`);
+    }
+  }
+
+  if (hasBreaches) {
+    throw new Error("fork attack suite detected mitigation regressions");
+  }
+
   return { executed: true, lines };
 }
 
