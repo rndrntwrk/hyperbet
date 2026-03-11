@@ -311,6 +311,109 @@ describe("CrossChainMarketMaker", () => {
     });
   });
 
+  describe("Basic Action Regression", () => {
+    it("cancels stale evm orders and refunds tracked inventory", async () => {
+      await mm.marketMakeCycle();
+      const initialOrders = mm.getActiveOrders();
+      expect(initialOrders.length).toBeGreaterThan(0);
+
+      const staleYes = initialOrders
+        .filter((order) => order.isBuy)
+        .reduce((sum, order) => sum + order.amount, 0);
+      const staleNo = initialOrders
+        .filter((order) => !order.isBuy)
+        .reduce((sum, order) => sum + order.amount, 0);
+      const before = mm.getInventory();
+
+      const internal = mm as unknown as {
+        activeOrders: Array<{ placedAt: number }>;
+        cancelStaleOrders: () => Promise<void>;
+      };
+      internal.activeOrders = internal.activeOrders.map((order) => ({
+        ...order,
+        placedAt: Date.now() - 31_000,
+      }));
+
+      await internal.cancelStaleOrders();
+
+      const after = mm.getInventory();
+      expect(after.yes).toBe(before.yes - staleYes);
+      expect(after.no).toBe(before.no - staleNo);
+      expect(mm.getActiveOrders()).toHaveLength(0);
+      expect(mockContract.cancelOrder).toHaveBeenCalledTimes(initialOrders.length);
+    });
+
+    it("tracks maker orders but not taker orders", async () => {
+      const internal = mm as unknown as {
+        placeEvmOrder: (
+          chain: "bsc" | "base",
+          clob: typeof mockContract,
+          matchId: number,
+          isBuy: boolean,
+          price: number,
+          amount: number,
+          intent?: "maker" | "taker",
+        ) => Promise<void>;
+      };
+
+      await internal.placeEvmOrder("bsc", mockContract, 1, true, 500, 25, "maker");
+      await internal.placeEvmOrder("bsc", mockContract, 1, false, 500, 25, "taker");
+
+      const orders = mm.getActiveOrders();
+      expect(orders).toHaveLength(1);
+      expect(orders[0]?.isBuy).toBe(true);
+      expect(mockContract.placeOrder).toHaveBeenCalledTimes(2);
+    });
+
+    it("ignores nonce-race placement errors without mutating state", async () => {
+      const internal = mm as unknown as {
+        placeEvmOrder: (
+          chain: "bsc" | "base",
+          clob: typeof mockContract,
+          matchId: number,
+          isBuy: boolean,
+          price: number,
+          amount: number,
+          intent?: "maker" | "taker",
+        ) => Promise<void>;
+      };
+      const beforeOrders = mm.getActiveOrders().length;
+      const beforeInv = mm.getInventory();
+
+      mockContract.placeOrder.mockRejectedValueOnce({
+        code: "NONCE_EXPIRED",
+        message: "nonce has already been used",
+      });
+
+      await expect(
+        internal.placeEvmOrder("bsc", mockContract, 1, true, 500, 40, "maker"),
+      ).resolves.toBeUndefined();
+
+      expect(mm.getActiveOrders()).toHaveLength(beforeOrders);
+      expect(mm.getInventory()).toEqual(beforeInv);
+    });
+
+    it("skips orders with invalid amount precision before tx submit", async () => {
+      const internal = mm as unknown as {
+        bscGoldTokenDecimals: number;
+        placeEvmOrder: (
+          chain: "bsc" | "base",
+          clob: typeof mockContract,
+          matchId: number,
+          isBuy: boolean,
+          price: number,
+          amount: number,
+          intent?: "maker" | "taker",
+        ) => Promise<void>;
+      };
+      internal.bscGoldTokenDecimals = 0;
+
+      await internal.placeEvmOrder("bsc", mockContract, 1, true, 501, 1, "maker");
+      expect(mockContract.placeOrder).not.toHaveBeenCalled();
+      expect(mm.getActiveOrders()).toHaveLength(0);
+    });
+  });
+
   describe("Cross-Chain Parity", () => {
     it("should produce orders on multiple chains", async () => {
       await mm.marketMakeCycle();
