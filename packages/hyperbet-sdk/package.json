@@ -7,9 +7,9 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     }
   },
   "files": [
@@ -25,9 +25,10 @@
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
     "@solana/web3.js": "^1.95.4",
-    "ethers": "^6.13.4",
+    "bn.js": "^5.2.1",
+    "bs58": "^6.0.0",
     "clsx": "^2.1.1",
-    "bn.js": "^5.2.1"
+    "ethers": "^6.13.4"
   },
   "devDependencies": {
     "@types/bn.js": "^5.2.0",

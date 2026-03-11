@@ -338,7 +338,14 @@ export default defineConfig(async ({ mode }) => {
       ],
     },
     optimizeDeps: {
-      include: ["fetch-retry"],
+      include: [
+        "fetch-retry",
+        "buffer",
+        "process",
+        "vite-plugin-node-polyfills/shims/buffer",
+        "vite-plugin-node-polyfills/shims/global",
+        "vite-plugin-node-polyfills/shims/process",
+      ],
     },
     build: {
       outDir: "dist",

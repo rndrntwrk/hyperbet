@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "hyperbet-sdk"
+version = "0.1.0"
+description = "Hyperbet Python SDK for EVM and Solana interactions"
+authors = ["Hyperbet <info@hyperbet.gg>"]
+readme = "README.md"
+packages = [{include = "hyperbet_sdk"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+web3 = "^7.5.0"
+solana = "^1.2.1"
+anchorpy = "^0.20.1"
+websockets = "^14.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+pytest-asyncio = "^0.24.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
