@@ -172,14 +172,27 @@ function lamportsBn(sol: number): BN {
 }
 
 async function loadBootstrapAuthority(): Promise<Keypair> {
-  const keypairPath =
-    process.env.E2E_SOLANA_BOOTSTRAP_KEYPAIR ||
+  const candidates = [
+    process.env.E2E_SOLANA_BOOTSTRAP_KEYPAIR,
     path.join(
       process.env.HOME ?? "",
       ".config/solana/hyperscape-keys/deployer.json",
-    );
-  const secret = JSON.parse(await fs.readFile(keypairPath, "utf8")) as number[];
-  return Keypair.fromSecretKey(Uint8Array.from(secret));
+    ),
+    path.join(process.env.HOME ?? "", ".config/solana/id.json"),
+  ].filter((value): value is string => Boolean(value?.trim()));
+
+  for (const candidate of candidates) {
+    try {
+      const secret = JSON.parse(await fs.readFile(candidate, "utf8")) as number[];
+      return Keypair.fromSecretKey(Uint8Array.from(secret));
+    } catch {
+      // Try the next configured wallet path.
+    }
+  }
+
+  throw new Error(
+    `Could not find a bootstrap Solana keypair. Checked: ${candidates.join(", ")}`,
+  );
 }
 
 function sleep(ms: number): Promise<void> {

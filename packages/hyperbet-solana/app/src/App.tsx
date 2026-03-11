@@ -596,7 +596,7 @@ const SolanaClobPanel = lazy(() =>
   })),
 );
 const ModelsMarketView = lazy(() =>
-  import("./components/ModelsMarketView").then((module) => ({
+  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
     default: module.ModelsMarketView,
   })),
 );
@@ -1791,7 +1791,6 @@ export function App() {
                       data-testid={`duels-bottom-tab-${key}`}
                       aria-selected={hmBottomTab === key}
                       className={`hm-bottom-tab ${hmBottomTab === key ? "hm-bottom-tab--active" : ""}`}
-                      onClick={() => setHmBottomTab(key as typeof hmBottomTab)}
                       onClick={() => setHmBottomTab(key as typeof hmBottomTab)}
                       type="button"
                     >
