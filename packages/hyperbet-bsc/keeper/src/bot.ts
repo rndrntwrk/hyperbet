@@ -8,6 +8,11 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
+import {
+  buildQuotePlan,
+  DEFAULT_MARKET_MAKER_CONFIG,
+  type MarketSnapshot,
+} from "@hyperbet/mm-core";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
@@ -396,9 +401,9 @@ const args = await yargs(hideBin(process.argv))
 import { type DuelLifecycleEvent, GameClient } from "./game-client";
 
 import { Program } from "@coral-xyz/anchor";
-import { type FightOracle } from "../../anchor/target/types/fight_oracle";
-import { type GoldClobMarket } from "../../anchor/target/types/gold_clob_market";
-import { type GoldPerpsMarket } from "../../anchor/target/types/gold_perps_market";
+import { type FightOracle } from "../../../hyperbet-solana/anchor/target/types/fight_oracle";
+import { type GoldClobMarket } from "../../../hyperbet-solana/anchor/target/types/gold_clob_market";
+import { type GoldPerpsMarket } from "../../../hyperbet-solana/anchor/target/types/gold_perps_market";
 import {
   updateRatings,
   createInitialRating,
@@ -1396,6 +1401,31 @@ const configuredAskPrice = Math.max(
   configuredBidPrice + 1,
   Math.min(999, Math.floor(Number(process.env.MARKET_MAKER_ASK_PRICE || 600))),
 );
+const configuredMidPrice = Math.max(
+  1,
+  Math.round((configuredBidPrice + configuredAskPrice) / 2),
+);
+const configuredSpreadBps = Math.max(
+  DEFAULT_MARKET_MAKER_CONFIG.targetSpreadBps,
+  Math.round(
+    ((configuredAskPrice - configuredBidPrice) * 10_000) /
+      Math.max(1, configuredMidPrice),
+  ),
+);
+const managedClobQuoteConfig = {
+  ...DEFAULT_MARKET_MAKER_CONFIG,
+  targetSpreadBps: configuredSpreadBps,
+  minQuoteUnits: marketMakerSeedLamports,
+  maxQuoteUnits: marketMakerSeedLamports,
+  maxInventoryPerSide: Math.max(
+    DEFAULT_MARKET_MAKER_CONFIG.maxInventoryPerSide,
+    marketMakerSeedLamports * 4,
+  ),
+  maxNetExposure: Math.max(
+    DEFAULT_MARKET_MAKER_CONFIG.maxNetExposure,
+    marketMakerSeedLamports * 2,
+  ),
+};
 
 type EvmKeeperRuntime = {
   label: string;
@@ -1798,6 +1828,7 @@ type ManagedClobOrder = {
   side: number;
   price: number;
   amountLamports: number;
+  placedAtMs: number;
 };
 
 type ActiveClobMatch = {
@@ -1809,6 +1840,16 @@ type ActiveClobMatch = {
   createdAt: number;
   yesBidOrder: ManagedClobOrder | null;
   noAskOrder: ManagedClobOrder | null;
+};
+
+type ManagedOrderState = ManagedClobOrder & {
+  remainingLamports: number;
+};
+
+type ManagedClobQuoteContext = {
+  snapshot: MarketSnapshot;
+  yesBidOrder: ManagedOrderState | null;
+  noAskOrder: ManagedOrderState | null;
 };
 
 async function ensureClobVaultReady(vault: PublicKey): Promise<void> {
@@ -1917,6 +1958,188 @@ async function syncTrackedMarketFromOracle(
   );
 }
 
+function toManagedClobOrder(order: ManagedOrderState): ManagedClobOrder {
+  return {
+    orderId: order.orderId,
+    side: order.side,
+    price: order.price,
+    amountLamports: order.amountLamports,
+    placedAtMs: order.placedAtMs,
+  };
+}
+
+function mapClobLifecycleStatus(
+  marketState: Record<string, unknown> | null,
+): MarketSnapshot["lifecycleStatus"] {
+  if (!marketState) return "UNKNOWN";
+  if (enumIs(marketState.status, "open")) return "OPEN";
+  if (enumIs(marketState.status, "locked")) return "LOCKED";
+  if (enumIs(marketState.status, "resolved")) return "RESOLVED";
+  if (enumIs(marketState.status, "cancelled")) return "CANCELLED";
+  return "UNKNOWN";
+}
+
+function normalizeClobBestBid(value: number): number | null {
+  return value > 0 ? value : null;
+}
+
+function normalizeClobBestAsk(value: number): number | null {
+  if (value <= 0 || value >= 1_000) {
+    return null;
+  }
+  return value;
+}
+
+async function getManagedOrderState(
+  trackedMatch: ActiveClobMatch,
+  trackedOrder: ManagedClobOrder | null,
+): Promise<ManagedOrderState | null> {
+  if (!trackedOrder) {
+    return null;
+  }
+
+  const orderPda = findOrderPda(
+    marketProgram.programId,
+    trackedMatch.marketState,
+    BigInt(trackedOrder.orderId),
+  );
+  const orderAccount = await marketProgram.account.order.fetchNullable(orderPda);
+  if (!orderAccount || !Boolean(orderAccount.active)) {
+    return null;
+  }
+
+  const amountLamports = asNum(orderAccount.amount, trackedOrder.amountLamports);
+  const remainingLamports = Math.max(
+    0,
+    amountLamports - asNum(orderAccount.filled),
+  );
+  if (remainingLamports <= 0) {
+    return null;
+  }
+
+  return {
+    orderId: trackedOrder.orderId,
+    side: trackedOrder.side,
+    price: asNum(orderAccount.price, trackedOrder.price),
+    amountLamports,
+    placedAtMs: trackedOrder.placedAtMs,
+    remainingLamports,
+  };
+}
+
+async function buildManagedClobQuoteContext(
+  trackedMatch: ActiveClobMatch,
+  marketState: Record<string, unknown> | null,
+  now = Date.now(),
+): Promise<ManagedClobQuoteContext> {
+  const [duelState, userBalance, yesBidOrder, noAskOrder] = await Promise.all([
+    getDuelState(trackedMatch.duelState),
+    marketProgram.account.userBalance.fetchNullable(
+      findUserBalancePda(
+        marketProgram.programId,
+        trackedMatch.marketState,
+        botKeypair.publicKey,
+      ),
+    ),
+    getManagedOrderState(trackedMatch, trackedMatch.yesBidOrder),
+    getManagedOrderState(trackedMatch, trackedMatch.noAskOrder),
+  ]);
+
+  const activeOrders = [yesBidOrder, noAskOrder].filter(
+    (order): order is ManagedOrderState => order !== null,
+  );
+  const quoteAgeMs =
+    activeOrders.length > 0
+      ? now - Math.min(...activeOrders.map((order) => order.placedAtMs))
+      : null;
+
+  return {
+    snapshot: {
+      chainKey: "bsc",
+      lifecycleStatus: mapClobLifecycleStatus(marketState),
+      duelKey: trackedMatch.duelKeyHex,
+      marketRef: trackedMatch.marketState.toBase58(),
+      bestBid: normalizeClobBestBid(asNum(marketState?.bestBid)),
+      bestAsk: normalizeClobBestAsk(asNum(marketState?.bestAsk, 1_000)),
+      betCloseTimeMs: duelState ? asNum(duelState.betCloseTs) * 1_000 : null,
+      lastStreamAtMs: now,
+      lastOracleAtMs: now,
+      lastRpcAtMs: now,
+      quoteAgeMs,
+      exposure: {
+        yes: asNum(userBalance?.aShares),
+        no: asNum(userBalance?.bShares),
+        openYes: yesBidOrder?.remainingLamports ?? 0,
+        openNo: noAskOrder?.remainingLamports ?? 0,
+      },
+    },
+    yesBidOrder,
+    noAskOrder,
+  };
+}
+
+async function cancelManagedClobOrder(
+  trackedMatch: ActiveClobMatch,
+  trackedOrder: ManagedOrderState,
+  reason: string,
+): Promise<void> {
+  const order = findOrderPda(
+    marketProgram.programId,
+    trackedMatch.marketState,
+    BigInt(trackedOrder.orderId),
+  );
+  const priceLevel = findPriceLevelPda(
+    marketProgram.programId,
+    trackedMatch.marketState,
+    trackedOrder.side,
+    trackedOrder.price,
+  );
+
+  await runWithRecovery(
+    () =>
+      marketProgram.methods
+        .cancelOrder(
+          new BN(trackedOrder.orderId),
+          trackedOrder.side,
+          trackedOrder.price,
+        )
+        .accountsPartial({
+          marketState: trackedMatch.marketState,
+          duelState: trackedMatch.duelState,
+          order,
+          priceLevel,
+          vault: trackedMatch.vault,
+          user: botKeypair.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc(),
+    connection,
+  );
+
+  console.log(
+    `[bot] Cancelled ${
+      trackedOrder.side === SIDE_BID ? "A-bid" : "B-ask"
+    } liquidity for ${trackedMatch.marketState.toBase58()} orderId=${
+      trackedOrder.orderId
+    } price=${trackedOrder.price} reason=${reason}`,
+  );
+}
+
+async function cancelManagedClobQuotes(
+  trackedMatch: ActiveClobMatch,
+  reason: string,
+): Promise<void> {
+  for (const side of ["yesBidOrder", "noAskOrder"] as const) {
+    const activeOrder = await getManagedOrderState(trackedMatch, trackedMatch[side]);
+    if (!activeOrder) {
+      trackedMatch[side] = null;
+      continue;
+    }
+    await cancelManagedClobOrder(trackedMatch, activeOrder, reason);
+    trackedMatch[side] = null;
+  }
+}
+
 async function placeManagedClobOrder(
   trackedMatch: ActiveClobMatch,
   side: number,
@@ -1982,6 +2205,7 @@ async function placeManagedClobOrder(
     side,
     price,
     amountLamports: marketMakerSeedLamports,
+    placedAtMs: Date.now(),
   };
 }
 
@@ -1989,28 +2213,71 @@ async function ensureManagedClobOrder(
   trackedMatch: ActiveClobMatch,
   side: "yesBidOrder" | "noAskOrder",
 ): Promise<void> {
-  const trackedOrder = trackedMatch[side];
-  if (trackedOrder) {
-    const orderPda = findOrderPda(
-      marketProgram.programId,
-      trackedMatch.marketState,
-      BigInt(trackedOrder.orderId),
+  const marketState = await getClobMarketState(trackedMatch.marketState);
+  if (!marketState || !enumIs(marketState.status, "open")) {
+    trackedMatch[side] = null;
+    return;
+  }
+
+  const now = Date.now();
+  const quoteContext = await buildManagedClobQuoteContext(
+    trackedMatch,
+    marketState,
+    now,
+  );
+  trackedMatch.yesBidOrder = quoteContext.yesBidOrder
+    ? toManagedClobOrder(quoteContext.yesBidOrder)
+    : null;
+  trackedMatch.noAskOrder = quoteContext.noAskOrder
+    ? toManagedClobOrder(quoteContext.noAskOrder)
+    : null;
+
+  const plan = buildQuotePlan(
+    quoteContext.snapshot,
+    quoteContext.snapshot.bestBid == null && quoteContext.snapshot.bestAsk == null
+      ? {
+          signalPrice: configuredMidPrice,
+          signalWeight: 1,
+        }
+      : {},
+    managedClobQuoteConfig,
+    now,
+  );
+  const activeOrder =
+    side === "yesBidOrder" ? quoteContext.yesBidOrder : quoteContext.noAskOrder;
+  const targetPrice = side === "yesBidOrder" ? plan.bidPrice : plan.askPrice;
+  const orderAgeMs = activeOrder ? now - activeOrder.placedAtMs : null;
+  const shouldRefresh =
+    activeOrder != null &&
+    (targetPrice == null ||
+      (plan.replaceQuotes && activeOrder.price !== targetPrice) ||
+      (orderAgeMs != null && orderAgeMs >= managedClobQuoteConfig.maxQuoteAgeMs));
+
+  if (activeOrder && shouldRefresh) {
+    await cancelManagedClobOrder(
+      trackedMatch,
+      activeOrder,
+      targetPrice == null
+        ? plan.risk.circuitBreaker.reason ?? "quote-disabled"
+        : orderAgeMs != null && orderAgeMs >= managedClobQuoteConfig.maxQuoteAgeMs
+          ? "quote-expired"
+          : "price-refresh",
     );
-    const orderAccount =
-      await marketProgram.account.order.fetchNullable(orderPda);
-    if (
-      orderAccount &&
-      asNum(orderAccount.filled) < asNum(orderAccount.amount) &&
-      Boolean(orderAccount.active)
-    ) {
-      return;
-    }
+    trackedMatch[side] = null;
+  } else if (activeOrder) {
+    trackedMatch[side] = toManagedClobOrder(activeOrder);
+    return;
+  }
+
+  if (targetPrice == null) {
+    trackedMatch[side] = null;
+    return;
   }
 
   trackedMatch[side] = await placeManagedClobOrder(
     trackedMatch,
     side === "yesBidOrder" ? SIDE_BID : SIDE_ASK,
-    side === "yesBidOrder" ? configuredBidPrice : configuredAskPrice,
+    targetPrice,
   );
 }
 
@@ -2517,6 +2784,7 @@ async function runMaintenance(): Promise<void> {
     }
 
     if (enumIs(duelState.status, "locked")) {
+      await cancelManagedClobQuotes(trackedMatch, "market-locked");
       await maybeWarnUnresolvedDuel(trackedMatch);
       continue;
     }
