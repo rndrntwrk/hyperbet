@@ -3,11 +3,11 @@ import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import type { AgentActionTrace } from "@hyperbet/mm-core";
 
 import type { ScenarioPreset } from "../../scenario-catalog.js";
-import type { SolanaProofOutcome, SolanaActorSnapshot } from "./types.js";
+import type { SolanaActorSnapshot, SolanaProofOutcome } from "./types.js";
 import {
-    SolanaProgramRuntime,
     SIDE_ASK,
     SIDE_BID,
+    SolanaProgramRuntime,
     buildSeededDuelKey,
     deriveUserBalancePda,
     hasProgramError,
@@ -18,6 +18,49 @@ import {
     type SolanaOpenMarket,
     type SolanaRuntimeActor,
 } from "./program-runtime.js";
+
+type ScenarioActors = {
+    marketMaker: SolanaRuntimeActor;
+    taker: SolanaRuntimeActor;
+    attacker: SolanaRuntimeActor;
+};
+
+type TradeFlowSummary = {
+    makerUserBalancePda: string;
+    takerUserBalancePda: string;
+    makerSnapshotBeforeSettlement: Record<string, unknown> | null;
+    takerSnapshotBeforeSettlement: Record<string, unknown> | null;
+    peakInventory: number;
+    quoteChecks: number;
+    quoteActiveChecks: number;
+    orderChurn: number;
+    debug?: Record<string, unknown>;
+};
+
+type FinalizeScenarioOptions = {
+    settlementMode: "resolve" | "cancel";
+    winner: "A" | "B";
+    tradeFlow: TradeFlowSummary;
+    attackRejected: boolean;
+    staleStreamGuardTrips?: number;
+    staleOracleGuardTrips?: number;
+    closeGuardTrips?: number;
+    claimants?: SolanaRuntimeActor[];
+    repeatClaimant?: SolanaRuntimeActor | null;
+    debug?: Record<string, unknown>;
+    onStage?: (stage: string) => void;
+};
+
+type ClaimRecord = {
+    actor: string;
+    userBalancePda: string;
+    balanceBefore: bigint;
+    balanceAfter: bigint;
+    aSharesAfter: bigint;
+    bSharesAfter: bigint;
+    aLockedLamportsAfter: bigint;
+    bLockedLamportsAfter: bigint;
+};
 
 function lamportsToSol(lamports: bigint): number {
     return Number(lamports) / LAMPORTS_PER_SOL;
@@ -141,40 +184,41 @@ async function snapshotActor(
     };
 }
 
-async function executeTradeFlow(
+async function placeAskAndMatchBid(
     runtime: SolanaProgramRuntime,
     market: SolanaOpenMarket,
     marketMaker: SolanaRuntimeActor,
     taker: SolanaRuntimeActor,
     traces: AgentActionTrace[],
+    input: {
+        makerOrderId: number;
+        takerOrderId: number;
+        price: number;
+        amount: bigint;
+        makerMessage: string;
+        takerMessage: string;
+    },
 ): Promise<{
-    makerUserBalancePda: string;
-    takerUserBalancePda: string;
-    makerSnapshotBeforeClaim: Record<string, unknown>;
-    takerSnapshotBeforeClaim: Record<string, unknown>;
-    peakInventory: number;
     quoteChecks: number;
     quoteActiveChecks: number;
+    orderChurn: number;
 }> {
-    const amount = 1_000n;
-    const price = 600;
-
     const makerAsk = await runtime.placeOrder({
         market,
         user: marketMaker,
-        orderId: 1,
+        orderId: input.makerOrderId,
         side: SIDE_ASK,
-        price,
-        amount,
+        price: input.price,
+        amount: input.amount,
     });
     traces.push(
         buildTrace("place_order", market, {
             actor: marketMaker.name,
             ok: true,
             txRef: makerAsk.signature,
-            message: "resting ask placed",
-            price,
-            units: Number(amount),
+            message: input.makerMessage,
+            price: input.price,
+            units: Number(input.amount),
         }),
     );
 
@@ -187,10 +231,10 @@ async function executeTradeFlow(
     const takerBid = await runtime.placeOrder({
         market,
         user: taker,
-        orderId: 2,
+        orderId: input.takerOrderId,
         side: SIDE_BID,
-        price,
-        amount,
+        price: input.price,
+        amount: input.amount,
         remainingAccounts: [
             writableAccount(makerAsk.restingLevel),
             writableAccount(makerAsk.order),
@@ -202,36 +246,422 @@ async function executeTradeFlow(
             actor: taker.name,
             ok: true,
             txRef: takerBid.signature,
-            message: "taker matched the resting ask",
-            price,
-            units: Number(amount),
+            message: input.takerMessage,
+            price: input.price,
+            units: Number(input.amount),
         }),
     );
 
     marketMaker.activeOrders = 0;
     taker.activeOrders = 0;
 
-    const makerSnapshotBeforeClaim = await runtime.fetchUserBalance(makerAsk.userBalance);
-    const takerSnapshotBeforeClaim = await runtime.fetchUserBalance(takerBid.userBalance);
+    return {
+        quoteChecks,
+        quoteActiveChecks,
+        orderChurn: 2,
+    };
+}
+
+async function buildTradeFlowSummary(
+    runtime: SolanaProgramRuntime,
+    market: SolanaOpenMarket,
+    actors: ScenarioActors,
+    metrics: {
+        quoteChecks: number;
+        quoteActiveChecks: number;
+        orderChurn: number;
+    },
+    debug?: Record<string, unknown>,
+): Promise<TradeFlowSummary> {
+    const makerUserBalancePda = deriveUserBalancePda(
+        runtime.clobProgram.programId,
+        market.marketState,
+        actors.marketMaker.keypair.publicKey,
+    );
+    const takerUserBalancePda = deriveUserBalancePda(
+        runtime.clobProgram.programId,
+        market.marketState,
+        actors.taker.keypair.publicKey,
+    );
+    const makerSnapshotBeforeSettlement = await runtime.fetchUserBalanceNullable(
+        makerUserBalancePda,
+    );
+    const takerSnapshotBeforeSettlement = await runtime.fetchUserBalanceNullable(
+        takerUserBalancePda,
+    );
     const peakInventory = Math.max(
         Number(
-            readBigintField(makerSnapshotBeforeClaim, "aShares") +
-                readBigintField(makerSnapshotBeforeClaim, "bShares"),
+            readBigintField(makerSnapshotBeforeSettlement, "aShares") +
+                readBigintField(makerSnapshotBeforeSettlement, "bShares"),
         ),
         Number(
-            readBigintField(takerSnapshotBeforeClaim, "aShares") +
-                readBigintField(takerSnapshotBeforeClaim, "bShares"),
+            readBigintField(takerSnapshotBeforeSettlement, "aShares") +
+                readBigintField(takerSnapshotBeforeSettlement, "bShares"),
         ),
     );
 
     return {
-        makerUserBalancePda: makerAsk.userBalance.toBase58(),
-        takerUserBalancePda: takerBid.userBalance.toBase58(),
-        makerSnapshotBeforeClaim,
-        takerSnapshotBeforeClaim,
+        makerUserBalancePda: makerUserBalancePda.toBase58(),
+        takerUserBalancePda: takerUserBalancePda.toBase58(),
+        makerSnapshotBeforeSettlement,
+        takerSnapshotBeforeSettlement,
         peakInventory,
-        quoteChecks,
-        quoteActiveChecks,
+        quoteChecks: metrics.quoteChecks,
+        quoteActiveChecks: metrics.quoteActiveChecks,
+        orderChurn: metrics.orderChurn,
+        debug,
+    };
+}
+
+async function executeStandardTradeFlow(
+    runtime: SolanaProgramRuntime,
+    market: SolanaOpenMarket,
+    actors: ScenarioActors,
+    traces: AgentActionTrace[],
+): Promise<TradeFlowSummary> {
+    const metrics = await placeAskAndMatchBid(
+        runtime,
+        market,
+        actors.marketMaker,
+        actors.taker,
+        traces,
+        {
+            makerOrderId: 1,
+            takerOrderId: 2,
+            price: 600,
+            amount: 1_000n,
+            makerMessage: "resting ask placed",
+            takerMessage: "taker matched the resting ask",
+        },
+    );
+
+    return buildTradeFlowSummary(runtime, market, actors, metrics);
+}
+
+async function executeCancelReplaceGriefingFlow(
+    runtime: SolanaProgramRuntime,
+    market: SolanaOpenMarket,
+    actors: ScenarioActors,
+    traces: AgentActionTrace[],
+): Promise<TradeFlowSummary> {
+    const churner = actors.attacker;
+    const anchorAsk = await runtime.placeOrder({
+        market,
+        user: actors.marketMaker,
+        orderId: 1,
+        side: SIDE_ASK,
+        price: 600,
+        amount: 1_000n,
+    });
+    traces.push(
+        buildTrace("place_order", market, {
+            actor: actors.marketMaker.name,
+            ok: true,
+            txRef: anchorAsk.signature,
+            message: "persistent resting ask placed for cancel/replace churn",
+            price: 600,
+            units: 1_000,
+        }),
+    );
+    const anchorOrderAccount = await (runtime.clobProgram.account as any).order.fetch(
+        anchorAsk.order,
+    );
+
+    const placements = [
+        { orderId: 2, amount: 500n },
+        { orderId: 3, amount: 550n },
+    ];
+    let quoteChecks = 0;
+    let quoteActiveChecks = 0;
+    let orderChurn = 1;
+
+    quoteChecks += 1;
+    quoteActiveChecks += anchorOrderAccount.active ? 1 : 0;
+
+    for (const placement of placements) {
+        const placed = await runtime.placeOrder({
+            market,
+            user: churner,
+            orderId: placement.orderId,
+            side: SIDE_ASK,
+            price: 600,
+            amount: placement.amount,
+            remainingAccounts: [writableAccount(anchorAsk.order)],
+        });
+        traces.push(
+            buildTrace("place_order", market, {
+                actor: churner.name,
+                ok: true,
+                txRef: placed.signature,
+                message: `griefing cycle placed order ${placement.orderId}`,
+                price: 600,
+                units: Number(placement.amount),
+            }),
+        );
+
+        const placedOrder = await (runtime.clobProgram.account as any).order.fetch(
+            placed.order,
+        );
+        quoteChecks += 1;
+        quoteActiveChecks += placedOrder.active ? 1 : 0;
+        orderChurn += 1;
+
+        const cancelSignature = await runtime.cancelOrder({
+            market,
+            user: churner,
+            orderId: placement.orderId,
+            side: SIDE_ASK,
+            price: 600,
+            remainingAccounts: [writableAccount(anchorAsk.order)],
+        });
+        traces.push(
+            buildTrace("cancel_order", market, {
+                actor: churner.name,
+                ok: true,
+                txRef: cancelSignature,
+                message: `cancelled churn order ${placement.orderId}`,
+                price: 600,
+                units: Number(placement.amount),
+            }),
+        );
+        orderChurn += 1;
+    }
+
+    const takerBid = await runtime.placeOrder({
+        market,
+        user: actors.taker,
+        orderId: 4,
+        side: SIDE_BID,
+        price: 600,
+        amount: 1_000n,
+        remainingAccounts: [
+            writableAccount(anchorAsk.restingLevel),
+            writableAccount(anchorAsk.order),
+            writableAccount(anchorAsk.userBalance),
+        ],
+    });
+    traces.push(
+        buildTrace("take_quote", market, {
+            actor: actors.taker.name,
+            ok: true,
+            txRef: takerBid.signature,
+            message: "taker matched the persistent ask after churn",
+            price: 600,
+            units: 1_000,
+        }),
+    );
+    actors.marketMaker.activeOrders = 0;
+    actors.taker.activeOrders = 0;
+
+    return buildTradeFlowSummary(
+        runtime,
+        market,
+        actors,
+        {
+            quoteChecks,
+            quoteActiveChecks,
+            orderChurn: orderChurn + 1,
+        },
+        {
+            churnCycles: 2,
+            anchorOrderId: 1,
+        },
+    );
+}
+
+async function executeInventoryPoisoningFlow(
+    runtime: SolanaProgramRuntime,
+    market: SolanaOpenMarket,
+    actors: ScenarioActors,
+    traces: AgentActionTrace[],
+): Promise<TradeFlowSummary> {
+    let quoteChecks = 0;
+    let quoteActiveChecks = 0;
+    let orderChurn = 0;
+    let nextOrderId = 1;
+
+    for (let index = 0; index < 3; index += 1) {
+        const fillMetrics = await placeAskAndMatchBid(
+            runtime,
+            market,
+            actors.marketMaker,
+            actors.taker,
+            traces,
+            {
+                makerOrderId: nextOrderId,
+                takerOrderId: nextOrderId + 1,
+                price: 600,
+                amount: 1_000n,
+                makerMessage: `inventory poisoning quote ${index + 1} placed`,
+                takerMessage: `one-sided toxic fill ${index + 1} matched`,
+            },
+        );
+        quoteChecks += fillMetrics.quoteChecks;
+        quoteActiveChecks += fillMetrics.quoteActiveChecks;
+        orderChurn += fillMetrics.orderChurn;
+        nextOrderId += 2;
+    }
+
+    return buildTradeFlowSummary(
+        runtime,
+        market,
+        actors,
+        {
+            quoteChecks,
+            quoteActiveChecks,
+            orderChurn,
+        },
+        {
+            toxicFillCount: 3,
+        },
+    );
+}
+
+async function executeCrossMarketValidationFlow(
+    runtime: SolanaProgramRuntime,
+    preset: ScenarioPreset,
+    seed: string,
+    market: SolanaOpenMarket,
+    actors: ScenarioActors,
+    traces: AgentActionTrace[],
+): Promise<{
+    tradeFlow: TradeFlowSummary;
+    attackRejected: boolean;
+}> {
+    const foreignDuelKey = buildSeededDuelKey(`${preset.id}:foreign`, seed);
+    const foreignMarket = await runtime.createOpenMarket(
+        foreignDuelKey,
+        actors.marketMaker.keypair.publicKey,
+        `https://hyperbet.local/${preset.id}/foreign`,
+    );
+
+    const foreignAsk = await runtime.placeOrder({
+        market: foreignMarket,
+        user: actors.marketMaker,
+        orderId: 1,
+        side: SIDE_ASK,
+        price: 600,
+        amount: 1_000n,
+    });
+    traces.push(
+        buildTrace("place_order", foreignMarket, {
+            actor: actors.marketMaker.name,
+            ok: true,
+            txRef: foreignAsk.signature,
+            message: "foreign market resting ask placed for validation attack",
+            price: 600,
+            units: 1_000,
+        }),
+    );
+    const foreignOrder = await (runtime.clobProgram.account as any).order.fetch(
+        foreignAsk.order,
+    );
+
+    const baseAsk = await runtime.placeOrder({
+        market,
+        user: actors.marketMaker,
+        orderId: 1,
+        side: SIDE_ASK,
+        price: 600,
+        amount: 1_000n,
+    });
+    traces.push(
+        buildTrace("place_order", market, {
+            actor: actors.marketMaker.name,
+            ok: true,
+            txRef: baseAsk.signature,
+            message: "base market resting ask placed",
+            price: 600,
+            units: 1_000,
+        }),
+    );
+    const baseOrder = await (runtime.clobProgram.account as any).order.fetch(baseAsk.order);
+
+    let attackRejected = false;
+    try {
+        await runtime.placeOrder({
+            market,
+            user: actors.taker,
+            orderId: 2,
+            side: SIDE_BID,
+            price: 600,
+            amount: 1_000n,
+            remainingAccounts: [
+                writableAccount(foreignAsk.restingLevel),
+                writableAccount(foreignAsk.order),
+                writableAccount(foreignAsk.userBalance),
+            ],
+        });
+        traces.push(
+            buildTrace("cross_market_match", market, {
+                actor: actors.attacker.name,
+                ok: false,
+                message: "cross-market remaining accounts unexpectedly matched",
+                price: 600,
+                units: 1_000,
+            }),
+        );
+    } catch (error) {
+        attackRejected = hasProgramError(error, "InvalidRemainingAccount");
+        traces.push(
+            buildTrace("cross_market_match_rejected", market, {
+                actor: actors.attacker.name,
+                ok: attackRejected,
+                message: attackRejected
+                    ? "cross-market remaining accounts rejected"
+                    : error instanceof Error
+                      ? error.message
+                      : String(error),
+                price: 600,
+                units: 1_000,
+            }),
+        );
+    }
+
+    const takerBid = await runtime.placeOrder({
+        market,
+        user: actors.taker,
+        orderId: 2,
+        side: SIDE_BID,
+        price: 600,
+        amount: 1_000n,
+        remainingAccounts: [
+            writableAccount(baseAsk.restingLevel),
+            writableAccount(baseAsk.order),
+            writableAccount(baseAsk.userBalance),
+        ],
+    });
+    traces.push(
+        buildTrace("take_quote", market, {
+            actor: actors.taker.name,
+            ok: true,
+            txRef: takerBid.signature,
+            message: "taker matched the correct base-market quote",
+            price: 600,
+            units: 1_000,
+        }),
+    );
+    actors.marketMaker.activeOrders = 1;
+    actors.taker.activeOrders = 0;
+
+    return {
+        tradeFlow: await buildTradeFlowSummary(
+            runtime,
+            market,
+            actors,
+            {
+                quoteChecks: (foreignOrder.active ? 1 : 0) + (baseOrder.active ? 1 : 0),
+                quoteActiveChecks:
+                    (foreignOrder.active ? 1 : 0) + (baseOrder.active ? 1 : 0),
+                orderChurn: 3,
+            },
+            {
+                foreignMarketRef: foreignMarket.marketState.toBase58(),
+                foreignUserBalancePda: foreignAsk.userBalance.toBase58(),
+                foreignOrderStillOpen: true,
+            },
+        ),
+        attackRejected,
     };
 }
 
@@ -240,11 +670,7 @@ async function finalizeOutcome(
     preset: ScenarioPreset,
     seed: string,
     market: SolanaOpenMarket,
-    actors: {
-        marketMaker: SolanaRuntimeActor;
-        taker: SolanaRuntimeActor;
-        attacker: SolanaRuntimeActor;
-    },
+    actors: ScenarioActors,
     initialBalances: {
         authority: bigint;
         marketMaker: bigint;
@@ -252,37 +678,52 @@ async function finalizeOutcome(
         attacker: bigint;
     },
     traces: AgentActionTrace[],
-    tradeFlow: Awaited<ReturnType<typeof executeTradeFlow>>,
-    winner: "A" | "B",
-    attackRejected: boolean,
-    onStage?: (stage: string) => void,
+    options: FinalizeScenarioOptions,
 ): Promise<SolanaProofOutcome> {
-    const marketMakerBalanceBeforeClaim = await runtime.getBalanceLamports(
-        actors.marketMaker.keypair.publicKey,
-    );
-    const takerBalanceBeforeClaim = await runtime.getBalanceLamports(
-        actors.taker.keypair.publicKey,
-    );
+    const claimants =
+        options.claimants ??
+        (options.settlementMode === "cancel"
+            ? [actors.marketMaker, actors.taker]
+            : [options.winner === "B" ? actors.marketMaker : actors.taker]);
 
-    const resolveStartedAt = Date.now();
-    const resultSignature = await runtime.reportResult({
-        reporter: runtime.authority,
-        duelKey: market.duelKey,
-        winner,
-        seed: `${preset.id}:${winner}`,
-        metadataUri: `https://hyperbet.local/${preset.id}/result`,
-    });
-    traces.push(
-        buildTrace("report_result", market, {
-            actor: "Authority Reporter",
-            ok: true,
-            txRef: resultSignature,
-            message: `authoritative ${winner}-winner result reported`,
-        }),
-    );
+    let settlementSignature: string;
+    let syncSignature: string;
+    const settlementStartedAt = Date.now();
+    if (options.settlementMode === "cancel") {
+        options.onStage?.("cancel");
+        settlementSignature = await runtime.cancelDuel(
+            market,
+            `https://hyperbet.local/${preset.id}/cancel`,
+        );
+        traces.push(
+            buildTrace("cancel_duel", market, {
+                actor: "Authority Reporter",
+                ok: true,
+                txRef: settlementSignature,
+                message: "authoritative market cancellation reported",
+            }),
+        );
+    } else {
+        options.onStage?.("resolve");
+        settlementSignature = await runtime.reportResult({
+            reporter: runtime.authority,
+            duelKey: market.duelKey,
+            winner: options.winner,
+            seed: `${preset.id}:${options.winner}`,
+            metadataUri: `https://hyperbet.local/${preset.id}/result`,
+        });
+        traces.push(
+            buildTrace("report_result", market, {
+                actor: "Authority Reporter",
+                ok: true,
+                txRef: settlementSignature,
+                message: `authoritative ${options.winner}-winner result reported`,
+            }),
+        );
+    }
 
-    const syncSignature = await runtime.syncMarketFromDuel(market);
-    const lockTransitionLatencyMs = Date.now() - resolveStartedAt;
+    syncSignature = await runtime.syncMarketFromDuel(market);
+    const lockTransitionLatencyMs = Date.now() - settlementStartedAt;
     traces.push(
         buildTrace("sync_market", market, {
             actor: "Authority Reporter",
@@ -292,31 +733,85 @@ async function finalizeOutcome(
         }),
     );
 
-    const claimant = winner === "B" ? actors.marketMaker : actors.taker;
-    const claimantBalanceBeforeClaim =
-        winner === "B" ? marketMakerBalanceBeforeClaim : takerBalanceBeforeClaim;
-    onStage?.("claim");
-    const claimResult = await runtime.claim(market, claimant);
-    traces.push(
-        buildTrace("claim", market, {
-            actor: claimant.name,
-            ok: true,
-            txRef: claimResult.signature,
-            message: "claim executed against the resolved market",
-        }),
-    );
+    const claimRecords: ClaimRecord[] = [];
+    options.onStage?.("claim");
+    for (const claimant of claimants) {
+        const balanceBefore = await runtime.getBalanceLamports(
+            claimant.keypair.publicKey,
+        );
+        const claimResult = await runtime.claim(market, claimant);
+        traces.push(
+            buildTrace(
+                options.settlementMode === "cancel" ? "refund_claim" : "claim",
+                market,
+                {
+                    actor: claimant.name,
+                    ok: true,
+                    txRef: claimResult.signature,
+                    message:
+                        options.settlementMode === "cancel"
+                            ? "refund claim executed against cancelled market"
+                            : "claim executed against the resolved market",
+                },
+            ),
+        );
 
-    const claimantBalanceAfterClaim = await runtime.getBalanceLamports(
-        claimant.keypair.publicKey,
-    );
-    const claimedUserBalance = await runtime.fetchUserBalance(claimResult.userBalance);
-    const winningSharesAfterClaim =
-        winner === "B"
-            ? readBigintField(claimedUserBalance, "bShares")
-            : readBigintField(claimedUserBalance, "aShares");
+        const balanceAfter = await runtime.getBalanceLamports(
+            claimant.keypair.publicKey,
+        );
+        const userBalanceAfter = await runtime.fetchUserBalance(claimResult.userBalance);
+        claimRecords.push({
+            actor: claimant.name,
+            userBalancePda: claimResult.userBalance.toBase58(),
+            balanceBefore,
+            balanceAfter,
+            aSharesAfter: readBigintField(userBalanceAfter, "aShares"),
+            bSharesAfter: readBigintField(userBalanceAfter, "bShares"),
+            aLockedLamportsAfter: readBigintField(
+                userBalanceAfter,
+                "aLockedLamports",
+                "aStake",
+            ),
+            bLockedLamportsAfter: readBigintField(
+                userBalanceAfter,
+                "bLockedLamports",
+                "bStake",
+            ),
+        });
+    }
+
+    let repeatClaimRejected = false;
+    if (options.repeatClaimant) {
+        try {
+            await runtime.claim(market, options.repeatClaimant);
+            traces.push(
+                buildTrace("repeat_claim", market, {
+                    actor: options.repeatClaimant.name,
+                    ok: false,
+                    message: "repeat claim unexpectedly succeeded",
+                }),
+            );
+        } catch (error) {
+            repeatClaimRejected = hasProgramError(error, "NothingToClaim");
+            traces.push(
+                buildTrace("repeat_claim_rejected", market, {
+                    actor: options.repeatClaimant.name,
+                    ok: repeatClaimRejected,
+                    message: repeatClaimRejected
+                        ? "repeat claim rejected after balance cleanup"
+                        : error instanceof Error
+                          ? error.message
+                          : String(error),
+                }),
+            );
+        }
+    }
 
     const marketState = await runtime.fetchMarketState(market.marketState);
     const config = await runtime.fetchConfig(market.config);
+    const treasuryDeltaLamports =
+        (await runtime.getBalanceLamports(runtime.authority.publicKey)) -
+        initialBalances.authority;
 
     const actorSnapshots = await Promise.all([
         snapshotActor(runtime, market, actors.marketMaker, initialBalances.marketMaker),
@@ -333,11 +828,12 @@ async function finalizeOutcome(
         0n,
     );
 
-    const marketMakerPnl = actorSnapshots.find(
+    const marketMakerSnapshot = actorSnapshots.find(
         (actor) => actor.role === "market_maker",
-    )?.balance.pnlSol ?? 0;
-    const attackerPnl =
-        actorSnapshots.find((actor) => actor.role === "attacker")?.balance.pnlSol ?? 0;
+    );
+    const attackerSnapshot = actorSnapshots.find((actor) => actor.role === "attacker");
+    const marketMakerPnl = marketMakerSnapshot?.balance.pnlSol ?? 0;
+    const attackerPnl = attackerSnapshot?.balance.pnlSol ?? 0;
     const marketMakerDrawdownBps = Math.round(
         (Math.abs(Math.min(0, marketMakerPnl)) /
             Math.max(lamportsToSol(initialBalances.marketMaker), 0.0001)) *
@@ -353,10 +849,36 @@ async function finalizeOutcome(
     const winnerLabel =
         winnerCode === 1 ? "A" : winnerCode === 2 ? "B" : ("NONE" as const);
     const resolvedCorrectly =
-        settlementStatus === "RESOLVED" && winnerLabel === winner;
+        options.settlementMode === "cancel"
+            ? settlementStatus === "CANCELLED"
+            : settlementStatus === "RESOLVED" && winnerLabel === options.winner;
     const claimCorrectly =
-        winningSharesAfterClaim === 0n &&
-        claimantBalanceAfterClaim > claimantBalanceBeforeClaim;
+        options.settlementMode === "cancel"
+            ? claimRecords.length > 0 &&
+              claimRecords.every(
+                  (record) =>
+                      record.balanceAfter > record.balanceBefore &&
+                      record.aSharesAfter === 0n &&
+                      record.bSharesAfter === 0n &&
+                      record.aLockedLamportsAfter === 0n &&
+                      record.bLockedLamportsAfter === 0n,
+              ) &&
+              repeatClaimRejected
+            : claimRecords.length > 0 &&
+              claimRecords.every((record) => {
+                  if (options.winner === "A") {
+                      return (
+                          record.balanceAfter > record.balanceBefore &&
+                          record.aSharesAfter === 0n &&
+                          record.aLockedLamportsAfter === 0n
+                      );
+                  }
+                  return (
+                      record.balanceAfter > record.balanceBefore &&
+                      record.bSharesAfter === 0n &&
+                      record.bLockedLamportsAfter === 0n
+                  );
+              });
     const claimsProcessed = claimCorrectly;
     const bestBid = readNumberField(marketState, "bestBid");
     const bestAsk = readNumberField(marketState, "bestAsk");
@@ -365,7 +887,7 @@ async function finalizeOutcome(
     return {
         preset,
         seed,
-        winner,
+        winner: options.winner,
         duelLabel: `${preset.id}:${seed}`,
         duelKeyHex: Buffer.from(market.duelKey).toString("hex"),
         marketRef: market.marketState.toBase58(),
@@ -378,9 +900,7 @@ async function finalizeOutcome(
             treasuryBps: readNumberField(config, "tradeTreasuryFeeBps"),
             mmBps: readNumberField(config, "tradeMarketMakerFeeBps"),
             winningsMmBps: readNumberField(config, "winningsMarketMakerFeeBps"),
-            treasuryAccruedLamports:
-                (await runtime.getBalanceLamports(runtime.authority.publicKey)) -
-                initialBalances.authority,
+            treasuryAccruedLamports: treasuryDeltaLamports,
             mmAccruedLamports:
                 (await runtime.getBalanceLamports(actors.marketMaker.keypair.publicKey)) -
                 initialBalances.marketMaker,
@@ -391,13 +911,14 @@ async function finalizeOutcome(
             asks: [],
         },
         traces,
-        attackRejected,
-        peakInventory: tradeFlow.peakInventory,
-        quoteChecks: tradeFlow.quoteChecks,
-        quoteActiveChecks: tradeFlow.quoteActiveChecks,
-        orderChurn: traces.filter((trace) =>
-            trace.action === "place_order" || trace.action === "take_quote"
-        ).length,
+        attackRejected: options.attackRejected || repeatClaimRejected,
+        staleStreamGuardTrips: options.staleStreamGuardTrips ?? 0,
+        staleOracleGuardTrips: options.staleOracleGuardTrips ?? 0,
+        closeGuardTrips: options.closeGuardTrips ?? 0,
+        peakInventory: options.tradeFlow.peakInventory,
+        quoteChecks: options.tradeFlow.quoteChecks,
+        quoteActiveChecks: options.tradeFlow.quoteActiveChecks,
+        orderChurn: options.tradeFlow.orderChurn,
         lockTransitionLatencyMs,
         resolvedCorrectly,
         claimCorrectly,
@@ -411,27 +932,50 @@ async function finalizeOutcome(
         bestAsk,
         marketMakerPnl,
         attackerPnl,
-        treasuryPnl: lamportsToSol(
-            (await runtime.getBalanceLamports(runtime.authority.publicKey)) -
-                initialBalances.authority,
-        ),
+        treasuryPnl: lamportsToSol(treasuryDeltaLamports),
         marketMakerDrawdownBps,
         claimsProcessed,
         bookNotCrossed,
-        mmSolvent: marketMakerBalanceBeforeClaim > 0n,
+        mmSolvent: (marketMakerSnapshot?.balance.lamports ?? 0n) > 0n,
         degraded: false,
         debug: {
-            makerUserBalancePda: tradeFlow.makerUserBalancePda,
-            takerUserBalancePda: tradeFlow.takerUserBalancePda,
-            makerSharesBeforeClaim: {
-                aShares: readBigintField(tradeFlow.makerSnapshotBeforeClaim, "aShares").toString(),
-                bShares: readBigintField(tradeFlow.makerSnapshotBeforeClaim, "bShares").toString(),
+            makerUserBalancePda: options.tradeFlow.makerUserBalancePda,
+            takerUserBalancePda: options.tradeFlow.takerUserBalancePda,
+            makerSharesBeforeSettlement: {
+                aShares: readBigintField(
+                    options.tradeFlow.makerSnapshotBeforeSettlement,
+                    "aShares",
+                ).toString(),
+                bShares: readBigintField(
+                    options.tradeFlow.makerSnapshotBeforeSettlement,
+                    "bShares",
+                ).toString(),
             },
-            takerSharesBeforeClaim: {
-                aShares: readBigintField(tradeFlow.takerSnapshotBeforeClaim, "aShares").toString(),
-                bShares: readBigintField(tradeFlow.takerSnapshotBeforeClaim, "bShares").toString(),
+            takerSharesBeforeSettlement: {
+                aShares: readBigintField(
+                    options.tradeFlow.takerSnapshotBeforeSettlement,
+                    "aShares",
+                ).toString(),
+                bShares: readBigintField(
+                    options.tradeFlow.takerSnapshotBeforeSettlement,
+                    "bShares",
+                ).toString(),
             },
-            claimant: claimant.name,
+            settlementSignature,
+            syncSignature,
+            claimRecords: claimRecords.map((record) => ({
+                actor: record.actor,
+                userBalancePda: record.userBalancePda,
+                balanceBefore: record.balanceBefore.toString(),
+                balanceAfter: record.balanceAfter.toString(),
+                aSharesAfter: record.aSharesAfter.toString(),
+                bSharesAfter: record.bSharesAfter.toString(),
+                aLockedLamportsAfter: record.aLockedLamportsAfter.toString(),
+                bLockedLamportsAfter: record.bLockedLamportsAfter.toString(),
+            })),
+            repeatClaimRejected,
+            ...(options.tradeFlow.debug ?? {}),
+            ...(options.debug ?? {}),
         },
     };
 }
@@ -468,49 +1012,186 @@ export async function runSolanaProofScenario(
     );
 
     const traces: AgentActionTrace[] = [];
-    const tradeFlow = await executeTradeFlow(
-        runtime,
-        market,
-        actors.marketMaker,
-        actors.taker,
-        traces,
-    );
-
+    let tradeFlow: TradeFlowSummary;
     let attackRejected = false;
-    if (input.attackUnauthorizedReporter) {
-        try {
-            await runtime.reportResult({
-                reporter: actors.attacker.keypair,
-                duelKey,
-                winner: input.winner,
-                seed: `${input.seed}:attacker`,
-                metadataUri: `https://hyperbet.local/${input.preset.id}/unauthorized`,
-            });
-            traces.push(
-                buildTrace("unauthorized_report", market, {
-                    actor: actors.attacker.name,
-                    ok: false,
-                    message: "unauthorized result unexpectedly succeeded",
-                }),
+    let closeGuardTrips = 0;
+    let settlementMode: "resolve" | "cancel" =
+        input.preset.runtimeProfile?.settlementMode === "cancel"
+            ? "cancel"
+            : "resolve";
+    let finalizeDebug: Record<string, unknown> | undefined;
+    let claimants: SolanaRuntimeActor[] | undefined;
+    let repeatClaimant: SolanaRuntimeActor | null = null;
+
+    switch (input.preset.id) {
+        case "solana-cancel-replace-griefing":
+            tradeFlow = await executeCancelReplaceGriefingFlow(
+                runtime,
+                market,
+                actors,
+                traces,
             );
-        } catch (error) {
-            attackRejected = hasProgramError(error, "Unauthorized");
-            traces.push(
-                buildTrace("unauthorized_report", market, {
-                    actor: actors.attacker.name,
-                    ok: attackRejected,
-                    message: attackRejected
-                        ? "unauthorized oracle write rejected"
-                        : error instanceof Error
-                          ? error.message
-                          : String(error),
-                }),
+            break;
+        case "solana-inventory-poisoning":
+            tradeFlow = await executeInventoryPoisoningFlow(
+                runtime,
+                market,
+                actors,
+                traces,
             );
+            break;
+        case "solana-cross-market-validation-abuse": {
+            const result = await executeCrossMarketValidationFlow(
+                runtime,
+                input.preset,
+                input.seed,
+                market,
+                actors,
+                traces,
+            );
+            tradeFlow = result.tradeFlow;
+            attackRejected = result.attackRejected;
+            break;
         }
+        default:
+            tradeFlow = await executeStandardTradeFlow(runtime, market, actors, traces);
+            break;
     }
 
-    input.onStage?.("resolve");
-    const outcome = await finalizeOutcome(
+    switch (input.preset.id) {
+        case "solana-unauthorized-oracle-attack":
+            try {
+                await runtime.reportResult({
+                    reporter: actors.attacker.keypair,
+                    duelKey,
+                    winner: input.winner,
+                    seed: `${input.seed}:attacker`,
+                    metadataUri: `https://hyperbet.local/${input.preset.id}/unauthorized`,
+                });
+                traces.push(
+                    buildTrace("unauthorized_report", market, {
+                        actor: actors.attacker.name,
+                        ok: false,
+                        message: "unauthorized result unexpectedly succeeded",
+                    }),
+                );
+            } catch (error) {
+                attackRejected = hasProgramError(error, "Unauthorized");
+                traces.push(
+                    buildTrace("unauthorized_report", market, {
+                        actor: actors.attacker.name,
+                        ok: attackRejected,
+                        message: attackRejected
+                            ? "unauthorized oracle write rejected"
+                            : error instanceof Error
+                              ? error.message
+                              : String(error),
+                    }),
+                );
+            }
+            break;
+        case "solana-stale-resolution-window": {
+            const duelState = await runtime.fetchDuelState(market.duelState);
+            const staleEndTs =
+                Number(readBigintField(duelState, "betCloseTs")) - 1;
+            try {
+                await runtime.reportResult({
+                    reporter: runtime.authority,
+                    duelKey,
+                    winner: input.winner,
+                    seed: `${input.seed}:stale`,
+                    metadataUri: `https://hyperbet.local/${input.preset.id}/invalid`,
+                    duelEndTs: staleEndTs,
+                });
+                traces.push(
+                    buildTrace("invalid_resolution", market, {
+                        actor: "Authority Reporter",
+                        ok: false,
+                        message: "invalid stale resolution unexpectedly succeeded",
+                    }),
+                );
+            } catch (error) {
+                attackRejected = hasProgramError(error, "InvalidLifecycleTransition");
+                traces.push(
+                    buildTrace("invalid_resolution_rejected", market, {
+                        actor: "Authority Reporter",
+                        ok: attackRejected,
+                        message: attackRejected
+                            ? "pre-close resolution rejected by oracle lifecycle checks"
+                            : error instanceof Error
+                              ? error.message
+                              : String(error),
+                    }),
+                );
+            }
+            break;
+        }
+        case "solana-lock-race-attempt": {
+            const lockSignature = await runtime.lockDuel(
+                market,
+                `https://hyperbet.local/${input.preset.id}/locked`,
+            );
+            traces.push(
+                buildTrace("lock_duel", market, {
+                    actor: "Authority Reporter",
+                    ok: true,
+                    txRef: lockSignature,
+                    message: "duel locked before post-close race attempt",
+                }),
+            );
+
+            try {
+                await runtime.placeOrder({
+                    market,
+                    user: actors.attacker,
+                    orderId: 3,
+                    side: SIDE_BID,
+                    price: 600,
+                    amount: 500n,
+                });
+                traces.push(
+                    buildTrace("post_lock_order", market, {
+                        actor: actors.attacker.name,
+                        ok: false,
+                        message: "post-lock order unexpectedly succeeded",
+                        price: 600,
+                        units: 500,
+                    }),
+                );
+            } catch (error) {
+                attackRejected =
+                    hasProgramError(error, "MarketNotOpen") ||
+                    hasProgramError(error, "BettingClosed");
+                closeGuardTrips = attackRejected ? 1 : 0;
+                traces.push(
+                    buildTrace("post_lock_order_rejected", market, {
+                        actor: actors.attacker.name,
+                        ok: attackRejected,
+                        message: attackRejected
+                            ? "post-lock order rejected by market close checks"
+                            : error instanceof Error
+                              ? error.message
+                              : String(error),
+                        price: 600,
+                        units: 500,
+                    }),
+                );
+            }
+            break;
+        }
+        case "solana-claim-refund-abuse":
+            settlementMode = "cancel";
+            claimants = [actors.marketMaker, actors.taker];
+            repeatClaimant = actors.taker;
+            finalizeDebug = {
+                refundScenario: true,
+            };
+            break;
+        default:
+            break;
+    }
+
+    return finalizeOutcome(
         runtime,
         input.preset,
         input.seed,
@@ -518,11 +1199,16 @@ export async function runSolanaProofScenario(
         actors,
         initialBalances,
         traces,
-        tradeFlow,
-        input.winner,
-        attackRejected,
-        input.onStage,
+        {
+            settlementMode,
+            winner: input.winner,
+            tradeFlow,
+            attackRejected,
+            closeGuardTrips,
+            claimants,
+            repeatClaimant,
+            debug: finalizeDebug,
+            onStage: input.onStage,
+        },
     );
-
-    return outcome;
 }

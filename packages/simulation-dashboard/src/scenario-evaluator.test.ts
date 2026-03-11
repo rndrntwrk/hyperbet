@@ -20,6 +20,9 @@ describe("scenario catalog", () => {
         expect(families.has("order-flood-dos")).toBeTrue();
         expect(families.has("inventory-poisoning")).toBeTrue();
         expect(families.has("claim-refund-abuse")).toBeTrue();
+        expect(families.has("stale-resolution-window")).toBeTrue();
+        expect(families.has("lock-race-attempt")).toBeTrue();
+        expect(families.has("cross-market-validation-abuse")).toBeTrue();
     });
 });
 

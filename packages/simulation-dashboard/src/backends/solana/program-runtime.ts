@@ -52,6 +52,10 @@ function duelStatusBettingOpen(): { bettingOpen: Record<string, never> } {
     return { bettingOpen: {} };
 }
 
+function duelStatusLocked(): { locked: Record<string, never> } {
+    return { locked: {} };
+}
+
 function marketSideA(): { a: Record<string, never> } {
     return { a: {} };
 }
@@ -463,6 +467,62 @@ export class SolanaProgramRuntime {
         return duelState;
     }
 
+    async setDuelStatus(
+        duelKey: readonly number[],
+        status: "bettingOpen" | "locked",
+        metadataUri: string,
+    ): Promise<PublicKey> {
+        const oracleConfig = deriveOracleConfigPda(this.fightProgram.programId);
+        const duelState = deriveDuelStatePda(this.fightProgram.programId, duelKey);
+        const existingDuel = await this.fetchDuelState(duelState);
+
+        await this.fightProgram.methods
+            .upsertDuel(
+                [...duelKey],
+                [...existingDuel.participantAHash],
+                [...existingDuel.participantBHash],
+                existingDuel.betOpenTs,
+                existingDuel.betCloseTs,
+                existingDuel.duelStartTs,
+                metadataUri,
+                status === "locked" ? duelStatusLocked() : duelStatusBettingOpen(),
+            )
+            .accountsPartial({
+                reporter: this.authority.publicKey,
+                oracleConfig,
+                duelState,
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([this.authority])
+            .rpc();
+
+        return duelState;
+    }
+
+    async lockDuel(
+        market: SolanaOpenMarket,
+        metadataUri = "https://hyperbet.local/lock",
+    ): Promise<string> {
+        await this.setDuelStatus(market.duelKey, "locked", metadataUri);
+        return this.syncMarketFromDuel(market);
+    }
+
+    async cancelDuel(
+        market: SolanaOpenMarket,
+        metadataUri = "https://hyperbet.local/cancel",
+    ): Promise<string> {
+        const oracleConfig = deriveOracleConfigPda(this.fightProgram.programId);
+        return this.fightProgram.methods
+            .cancelDuel([...market.duelKey], metadataUri)
+            .accountsPartial({
+                reporter: this.authority.publicKey,
+                oracleConfig,
+                duelState: market.duelState,
+            })
+            .signers([this.authority])
+            .rpc();
+    }
+
     async initializeCanonicalMarket(
         duelKey: readonly number[],
         duelState: PublicKey,
@@ -601,12 +661,55 @@ export class SolanaProgramRuntime {
         return { signature, userBalance, order, restingLevel };
     }
 
+    async cancelOrder(args: {
+        market: SolanaOpenMarket;
+        user: SolanaRuntimeActor;
+        orderId: bigint | number;
+        side: number;
+        price: number;
+        remainingAccounts?: anchor.web3.AccountMeta[];
+    }): Promise<string> {
+        const order = deriveOrderPda(
+            this.clobProgram.programId,
+            args.market.marketState,
+            args.orderId,
+        );
+        const priceLevel = derivePriceLevelPda(
+            this.clobProgram.programId,
+            args.market.marketState,
+            args.side,
+            args.price,
+        );
+
+        let builder = this.clobProgram.methods
+            .cancelOrder(toBn(args.orderId), args.side, args.price)
+            .accountsPartial({
+                marketState: args.market.marketState,
+                duelState: args.market.duelState,
+                order,
+                priceLevel,
+                vault: args.market.vault,
+                user: args.user.keypair.publicKey,
+                systemProgram: SystemProgram.programId,
+            });
+
+        if (args.remainingAccounts?.length) {
+            builder = builder.remainingAccounts(args.remainingAccounts);
+        }
+
+        const signature = await builder.signers([args.user.keypair]).rpc();
+        args.user.tradeCount += 1;
+        args.user.activeOrders = Math.max(0, args.user.activeOrders - 1);
+        return signature;
+    }
+
     async reportResult(args: {
         reporter: Keypair;
         duelKey: readonly number[];
         winner: "A" | "B";
         seed: string;
         metadataUri: string;
+        duelEndTs?: number;
     }): Promise<string> {
         const oracleConfig = deriveOracleConfigPda(this.fightProgram.programId);
         const duelState = deriveDuelStatePda(this.fightProgram.programId, args.duelKey);
@@ -619,7 +722,7 @@ export class SolanaProgramRuntime {
                 toBn(BigInt(`0x${Buffer.from(hashLabel(args.seed)).toString("hex")}`) % 10_000n),
                 [...hashLabel(`${args.seed}:replay`)],
                 [...hashLabel(`${args.seed}:result`)],
-                toBn(now + 7_200),
+                toBn(args.duelEndTs ?? (now + 7_200)),
                 args.metadataUri,
             )
             .accountsPartial({

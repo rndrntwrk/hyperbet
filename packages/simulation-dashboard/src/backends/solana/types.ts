@@ -64,6 +64,9 @@ export type SolanaProofOutcome = {
     };
     traces: AgentActionTrace[];
     attackRejected: boolean;
+    staleStreamGuardTrips: number;
+    staleOracleGuardTrips: number;
+    closeGuardTrips: number;
     peakInventory: number;
     quoteChecks: number;
     quoteActiveChecks: number;

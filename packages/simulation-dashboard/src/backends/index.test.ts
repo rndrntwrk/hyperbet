@@ -11,7 +11,7 @@ describe("simulation backend selection", () => {
     });
 
     test("routes Solana proof scenarios to the solana backend", () => {
-        const preset = getScenarioPresetByIdOrName("solana-happy-path");
+        const preset = getScenarioPresetByIdOrName("solana-lock-race-attempt");
         expect(preset).not.toBeNull();
         expect(getSimulationBackendKind(preset!)).toBe("solana");
     });

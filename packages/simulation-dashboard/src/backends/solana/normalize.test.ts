@@ -36,7 +36,7 @@ describe("normalizeSolanaProofOutcome", () => {
             traces: [
                 {
                     actor: "Unauthorized Reporter",
-                    action: "unauthorized_report",
+                    action: "post_lock_order_rejected",
                     chainKey: "solana",
                     duelKey: "abcd",
                     marketRef: "Market111111111111111111111111111111111",
@@ -48,6 +48,9 @@ describe("normalizeSolanaProofOutcome", () => {
                 },
             ],
             attackRejected: true,
+            staleStreamGuardTrips: 0,
+            staleOracleGuardTrips: 0,
+            closeGuardTrips: 1,
             peakInventory: 1_000,
             quoteChecks: 1,
             quoteActiveChecks: 1,
@@ -87,6 +90,7 @@ describe("normalizeSolanaProofOutcome", () => {
                 (gate) => gate.name === "adversarialActionRejected" && gate.passed,
             ),
         ).toBeTrue();
+        expect(normalized.summary.metrics.closeGuardTrips).toBe(1);
         expect(normalized.state.backend).toBe("solana");
         expect(normalized.state.market).toEqual({
             exists: true,

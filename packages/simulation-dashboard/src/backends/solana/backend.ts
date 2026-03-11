@@ -16,10 +16,7 @@ export class SolanaSimulationBackend implements SimulationBackend {
     ): Promise<SimulationBackendRunResult> {
         const { callbacks, preset, run } = context;
 
-        if (
-            preset.id !== "solana-happy-path" &&
-            preset.id !== "solana-unauthorized-oracle-attack"
-        ) {
+        if (preset.chainKey !== "solana") {
             throw new Error(`Unsupported Solana proof scenario: ${preset.id}`);
         }
 

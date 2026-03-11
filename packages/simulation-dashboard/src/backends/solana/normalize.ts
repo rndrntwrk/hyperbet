@@ -57,12 +57,18 @@ function buildMitigationGates(outcome: SolanaProofOutcome): {
         "winning claimable balance did not clear cleanly",
     );
 
-    if (outcome.traces.some((trace) => trace.action === "unauthorized_report")) {
+    if (
+        outcome.traces.some(
+            (trace) =>
+                trace.action === "unauthorized_report" ||
+                trace.action.endsWith("_rejected"),
+        )
+    ) {
         pushGate(
             gates,
             "adversarialActionRejected",
             outcome.attackRejected,
-            "unauthorized oracle write was not rejected",
+            "adversarial Solana action was not rejected",
         );
     }
 
@@ -80,9 +86,9 @@ function buildMitigationGates(outcome: SolanaProofOutcome): {
         settlementConsistent: outcome.resolvedCorrectly,
         claimsProcessed: outcome.claimsProcessed,
         settlementStatus: outcome.settlementStatus as SolanaSettlementStatus,
-        staleStreamGuardTrips: 0,
-        staleOracleGuardTrips: 0,
-        closeGuardTrips: 0,
+        staleStreamGuardTrips: outcome.staleStreamGuardTrips,
+        staleOracleGuardTrips: outcome.staleOracleGuardTrips,
+        closeGuardTrips: outcome.closeGuardTrips,
     });
 
     return { gates, scenarioGates };
@@ -148,9 +154,9 @@ export function normalizeSolanaProofOutcome(
                       )
                     : 0,
             orderChurn: outcome.orderChurn,
-            staleStreamGuardTrips: 0,
-            staleOracleGuardTrips: 0,
-            closeGuardTrips: 0,
+            staleStreamGuardTrips: outcome.staleStreamGuardTrips,
+            staleOracleGuardTrips: outcome.staleOracleGuardTrips,
+            closeGuardTrips: outcome.closeGuardTrips,
             circuitBreakerTrips: 0,
             settlementConsistent: outcome.resolvedCorrectly,
             claimsProcessed: outcome.claimsProcessed,
