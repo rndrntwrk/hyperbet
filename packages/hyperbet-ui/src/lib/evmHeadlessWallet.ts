@@ -17,7 +17,7 @@ import type {
   VersionedTransaction,
 } from "@solana/web3.js";
 import { Keypair } from "@solana/web3.js";
-import { Buffer } from "buffer";
+
 import { CONFIG } from "./config";
 
 import bs58 from "bs58";
