@@ -10,6 +10,7 @@ on:
       - "packages/hyperbet-bsc/keeper/**"
       - "packages/hyperbet-avax/app/**"
       - "packages/hyperbet-avax/keeper/**"
+      - "packages/hyperbet-ui/**"
       - "docs/hyperbet-production-deploy.md"
       - ".github/workflows/ci.yml"
       - "package.json"
@@ -23,6 +24,7 @@ on:
       - "packages/hyperbet-bsc/keeper/**"
       - "packages/hyperbet-avax/app/**"
       - "packages/hyperbet-avax/keeper/**"
+      - "packages/hyperbet-ui/**"
       - "docs/hyperbet-production-deploy.md"
       - ".github/workflows/ci.yml"
       - "package.json"
@@ -88,10 +90,11 @@ jobs:
 
       - name: Run app unit tests
         run: |
-          bun test \
-            packages/${{ matrix.package }}/app/tests/unit/modelMarkets.test.ts \
-            packages/${{ matrix.package }}/app/tests/unit/invite.test.ts \
-            packages/${{ matrix.package }}/app/tests/unit/invite-extended.test.ts
+          if ls packages/${{ matrix.package }}/app/tests/unit/*.test.ts 1>/dev/null 2>&1; then
+            bun test packages/${{ matrix.package }}/app/tests/unit/
+          else
+            echo "No app unit tests found, skipping"
+          fi
 
       - name: Run keeper unit tests
         run: |

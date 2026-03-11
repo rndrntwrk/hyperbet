@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "packages/hyperbet-bsc/app/**"
+      - "packages/hyperbet-ui/**"
       - ".github/workflows/deploy-bsc-pages.yml"
       - "docs/hyperbet-production-deploy.md"
       - "package.json"

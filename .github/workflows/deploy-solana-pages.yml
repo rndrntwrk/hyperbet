@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "packages/hyperbet-solana/app/**"
+      - "packages/hyperbet-ui/**"
       - ".github/workflows/deploy-solana-pages.yml"
       - "docs/hyperbet-production-deploy.md"
       - "package.json"
