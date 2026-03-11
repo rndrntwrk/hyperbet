@@ -29,6 +29,9 @@ const DEFAULT_FORK_ATTACK_SEEDS = [20260311] as const;
 export const FORK_ATTACK_SCENARIOS: ScenarioId[] = [
   "stale_signal_arbitrage",
   "gas_auction_backrun",
+  "layering_spoof_ladder",
+  "quote_stuffing_burst",
+  "cancel_storm_griefing",
   "sybil_wash_trading",
 ];
 

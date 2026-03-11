@@ -7,6 +7,9 @@ export type ScenarioId =
   | "stale_signal_arbitrage"
   | "liquidation_cascade"
   | "gas_auction_backrun"
+  | "layering_spoof_ladder"
+  | "quote_stuffing_burst"
+  | "cancel_storm_griefing"
   | "sybil_wash_trading"
   | "rebate_farming_ring"
   | "coordinated_resolution_push";

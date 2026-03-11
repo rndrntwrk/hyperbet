@@ -90,6 +90,30 @@ export function scenarioIntensity(
   if (scenario === "liquidation_cascade") {
     return 0.75 * ((vuln.inventory + vuln.cancel) / 2) * chainRisk;
   }
+  if (scenario === "layering_spoof_ladder") {
+    return (
+      0.45 *
+      ((vuln.spoof + vuln.cancel) / 2) *
+      chainRisk *
+      (1 + chain.mempoolFriction * 0.22)
+    );
+  }
+  if (scenario === "quote_stuffing_burst") {
+    return (
+      0.52 *
+      ((vuln.latency + vuln.cancel) / 2) *
+      chainRisk *
+      (1 + chain.mempoolFriction * 0.24)
+    );
+  }
+  if (scenario === "cancel_storm_griefing") {
+    return (
+      0.5 *
+      ((vuln.cancel + vuln.toxic) / 2) *
+      chainRisk *
+      (1 + chain.mevRisk * 0.2)
+    );
+  }
   if (scenario === "sybil_wash_trading") {
     return 0.7 * ((vuln.toxic + vuln.cancel) / 2) * chainRisk;
   }

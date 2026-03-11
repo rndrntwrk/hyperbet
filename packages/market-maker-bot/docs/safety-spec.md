@@ -11,7 +11,7 @@ The market maker must remain solvent and operational under adversarial order flo
 ## Scope
 
 - Chains: `solana`, `bsc`, `avax`
-- Scenario suite: latency, spoof, toxic flow, stale signal, liquidation, gas backrun, sybil wash, rebate ring, coordinated resolution push
+- Scenario suite: latency, spoof, toxic flow, stale signal, liquidation, gas backrun, layering ladder, quote stuffing, cancel storm, sybil wash, rebate ring, coordinated resolution push
 - Gate families:
   - mitigation threshold
   - invariants

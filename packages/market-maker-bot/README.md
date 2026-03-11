@@ -52,6 +52,9 @@ Scenarios covered per chain (Solana, BSC, AVAX):
 - `stale_signal_arbitrage`
 - `liquidation_cascade`
 - `gas_auction_backrun`
+- `layering_spoof_ladder`
+- `quote_stuffing_burst`
+- `cancel_storm_griefing`
 - `sybil_wash_trading`
 - `rebate_farming_ring`
 - `coordinated_resolution_push`
@@ -74,7 +77,7 @@ Gate env controls:
 
 - `MM_ADVERSARIAL_SEED` (default `20260311`)
 - `MM_ADVERSARIAL_CHAIN` (`solana` | `bsc` | `avax`, optional; unset means all chains)
-- `MM_ADVERSARIAL_MIN_PASSES` (default is all scenarios in scope: `27` for all chains, `9` for one chain)
+- `MM_ADVERSARIAL_MIN_PASSES` (default is all scenarios in scope: `36` for all chains, `12` for one chain)
 - `MM_ADVERSARIAL_OUTPUT_DIR` (default `simulations`)
 - `MM_ADVERSARIAL_ENFORCE_BASELINE` (`1` by default, set `0` to skip baseline regression checks)
 - `MM_ADVERSARIAL_SEED_CORPUS` (optional path override for regression-seed corpus used by `--seed-corpus`)
@@ -118,6 +121,9 @@ bun run verify:forks
 - deterministic fork-attack replay checks for:
   - `stale_signal_arbitrage`
   - `gas_auction_backrun`
+  - `layering_spoof_ladder`
+  - `quote_stuffing_burst`
+  - `cancel_storm_griefing`
   - `sybil_wash_trading`
 
 Additional fork harness env controls:

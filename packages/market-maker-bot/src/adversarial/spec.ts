@@ -19,19 +19,19 @@ export type ScenarioRiskBudget = {
 
 export const CHAIN_RISK_BUDGETS: Record<ChainId, ChainRiskBudget> = {
   solana: {
-    maxAggregateMitigatedAttackerPnl: 130,
-    maxAggregateExploitEvents: 110,
-    maxAggregateInventoryPeak: 110,
+    maxAggregateMitigatedAttackerPnl: 180,
+    maxAggregateExploitEvents: 155,
+    maxAggregateInventoryPeak: 150,
   },
   bsc: {
-    maxAggregateMitigatedAttackerPnl: 190,
-    maxAggregateExploitEvents: 170,
-    maxAggregateInventoryPeak: 150,
+    maxAggregateMitigatedAttackerPnl: 260,
+    maxAggregateExploitEvents: 235,
+    maxAggregateInventoryPeak: 210,
   },
   avax: {
-    maxAggregateMitigatedAttackerPnl: 210,
-    maxAggregateExploitEvents: 190,
-    maxAggregateInventoryPeak: 150,
+    maxAggregateMitigatedAttackerPnl: 290,
+    maxAggregateExploitEvents: 260,
+    maxAggregateInventoryPeak: 225,
   },
 };
 
@@ -100,6 +100,39 @@ export const SCENARIO_RISK_BUDGETS: Record<ScenarioId, ScenarioRiskBudget> = {
     maxExploitEvents: 22,
     maxToxicFillRate: 0.42,
     maxAdverseSlippageBps: 145,
+    minAttackerPnlReductionRatio: 0.3,
+  },
+  layering_spoof_ladder: {
+    requiredControls: [
+      "oracle.max_same_slot_round_trips",
+      "chaos.finality_jitter.max_damage_score",
+    ],
+    maxMitigatedAttackerPnl: 32,
+    maxExploitEvents: 26,
+    maxToxicFillRate: 0.48,
+    maxAdverseSlippageBps: 155,
+    minAttackerPnlReductionRatio: 0.3,
+  },
+  quote_stuffing_burst: {
+    requiredControls: [
+      "oracle.max_same_slot_round_trips",
+      "bounded_loss.scenario_attacker_pnl",
+    ],
+    maxMitigatedAttackerPnl: 36,
+    maxExploitEvents: 28,
+    maxToxicFillRate: 0.5,
+    maxAdverseSlippageBps: 160,
+    minAttackerPnlReductionRatio: 0.3,
+  },
+  cancel_storm_griefing: {
+    requiredControls: [
+      "bounded_loss.chain_attacker_pnl_total",
+      "chaos.finality_jitter.max_damage_score",
+    ],
+    maxMitigatedAttackerPnl: 31,
+    maxExploitEvents: 25,
+    maxToxicFillRate: 0.52,
+    maxAdverseSlippageBps: 150,
     minAttackerPnlReductionRatio: 0.3,
   },
   sybil_wash_trading: {

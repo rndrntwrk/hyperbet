@@ -12,6 +12,9 @@ export const SCENARIOS: ScenarioId[] = [
   "sybil_wash_trading",
   "rebate_farming_ring",
   "coordinated_resolution_push",
+  "layering_spoof_ladder",
+  "quote_stuffing_burst",
+  "cancel_storm_griefing",
 ];
 
 export const CHAIN_PROFILES: ChainProfile[] = [

@@ -52,6 +52,12 @@ function defenseStrength(input: {
     scenarioBias = chain.mempoolFriction * 0.18;
   } else if (scenario === "rebate_farming_ring") {
     scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.11;
+  } else if (scenario === "layering_spoof_ladder") {
+    scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.16;
+  } else if (scenario === "quote_stuffing_burst") {
+    scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.2;
+  } else if (scenario === "cancel_storm_griefing") {
+    scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.18;
   } else if (scenario === "coordinated_resolution_push") {
     scenarioBias = (chain.oracleLagAmplifier + chain.mevRisk) * 0.14;
   }
@@ -388,6 +394,105 @@ export function simulateScenario(input: {
           bid,
           ask,
         });
+      }
+    }
+
+    if (scenario === "layering_spoof_ladder") {
+      const ladderPressure = clamp(
+        intensity *
+          (0.07 + vuln.spoof * 0.45 + vuln.cancel * 0.22 + chain.mempoolFriction * 0.1),
+        0,
+        0.6,
+      );
+      if (rng.next() < ladderPressure) {
+        const rounds = 1 + Math.round(1 + intensity * 1.3 + vuln.cancel * 1.2);
+        for (let round = 0; round < rounds; round += 1) {
+          const directionalBias = round % 2 === 0;
+          const side: "buy" | "sell" = directionalBias ? "buy" : "sell";
+          const qty = Math.max(1, Math.round(1 + intensity * 1.1 + vuln.spoof * 0.7));
+          tryExploitFill({
+            rng,
+            guards,
+            chain,
+            vuln,
+            scenario,
+            state,
+            divergence,
+            staleTicks,
+            quotePrice: side === "buy" ? bid : ask,
+            truePrice,
+            side,
+            qty,
+            feeBps: chain.feeBps,
+            bid,
+            ask,
+          });
+        }
+      }
+    }
+
+    if (scenario === "quote_stuffing_burst") {
+      const stuffingBurstChance = clamp(
+        intensity *
+          (0.1 + vuln.latency * 0.42 + vuln.cancel * 0.32 + chain.mempoolFriction * 0.12),
+        0,
+        0.72,
+      );
+      if (rng.next() < stuffingBurstChance) {
+        const burst = 1 + Math.round(1 + intensity * 2 + vuln.cancel * 1.2);
+        for (let burstTick = 0; burstTick < burst; burstTick += 1) {
+          const side: "buy" | "sell" = rng.next() > 0.5 ? "buy" : "sell";
+          const qty = Math.max(1, Math.round(1 + intensity * 1.2 + vuln.cancel * 0.9));
+          tryExploitFill({
+            rng,
+            guards,
+            chain,
+            vuln,
+            scenario,
+            state,
+            divergence,
+            staleTicks,
+            quotePrice: side === "buy" ? bid : ask,
+            truePrice,
+            side,
+            qty,
+            feeBps: chain.feeBps,
+            bid,
+            ask,
+          });
+        }
+      }
+    }
+
+    if (scenario === "cancel_storm_griefing") {
+      const cancelStormChance = clamp(
+        intensity * (0.05 + vuln.cancel * 0.4 + vuln.toxic * 0.18 + chain.mevRisk * 0.08),
+        0,
+        0.55,
+      );
+      if (rng.next() < cancelStormChance) {
+        const chopRounds = 1 + Math.round(0.8 + intensity * 1.2 + vuln.cancel * 1.1);
+        for (let round = 0; round < chopRounds; round += 1) {
+          const side: "buy" | "sell" = round % 2 === 0 ? "sell" : "buy";
+          const qty = Math.max(1, Math.round(1 + intensity * 0.9 + vuln.cancel * 0.7));
+          tryExploitFill({
+            rng,
+            guards,
+            chain,
+            vuln,
+            scenario,
+            state,
+            divergence,
+            staleTicks,
+            quotePrice: side === "buy" ? bid : ask,
+            truePrice,
+            side,
+            qty,
+            feeBps: chain.feeBps,
+            bid,
+            ask,
+          });
+        }
       }
     }
 

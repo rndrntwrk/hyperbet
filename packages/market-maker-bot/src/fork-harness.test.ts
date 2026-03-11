@@ -52,13 +52,13 @@ describe("fork harness attack seed parsing", () => {
 });
 
 describe("fork harness deterministic attack suite", () => {
-  it("passes hardened stale/backrun/sybil scenarios for each chain", () => {
+  it("passes hardened fork attack scenarios for each chain", () => {
     const chains = ["solana", "bsc", "avax"] as const;
 
     for (const chain of chains) {
       const result = runForkAttackSuite(chain, [20260311]);
       expect(result.breaches).toEqual([]);
-      expect(result.scenariosChecked).toBe(3);
+      expect(result.scenariosChecked).toBe(6);
     }
   });
 });
