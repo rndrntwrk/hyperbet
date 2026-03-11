@@ -76,6 +76,7 @@ type EvmRuntime = {
   chainKey: BettingEvmChain;
   provider: ethers.JsonRpcProvider;
   wallet: ethers.Wallet;
+  walletAddress: string;
   clob: ethers.Contract;
   enabled: boolean;
   rpcUrl: string;
@@ -388,6 +389,7 @@ export class CrossChainMarketMaker {
   private readonly activeOrders: TrackedOrder[] = [];
   private readonly exposureByChain = new Map<BettingChainKey, { yes: number; no: number }>();
   private readonly orderHashToSignature = new Map<string, string>();
+  private readonly nextNonceByChain = new Map<BettingEvmChain, number>();
   private startupValidated = false;
   private cycleCount = 0;
   private solanaEnabled = MM_ENABLE_SOLANA;
@@ -433,12 +435,14 @@ export class CrossChainMarketMaker {
     const privateKey =
       process.env[`EVM_PRIVATE_KEY_${chainUpper}`] || sharedKey;
     if (!privateKey) {
+      const baseWallet = new ethers.Wallet(
+        "0x0000000000000000000000000000000000000000000000000000000000000001",
+      );
       return {
         chainKey,
         provider: new ethers.JsonRpcProvider("http://127.0.0.1:0"),
-        wallet: new ethers.Wallet(
-          "0x0000000000000000000000000000000000000000000000000000000000000001",
-        ),
+        wallet: baseWallet,
+        walletAddress: baseWallet.address,
         clob: new ethers.Contract(
           ethers.ZeroAddress,
           GOLD_CLOB_ABI,
@@ -451,15 +455,20 @@ export class CrossChainMarketMaker {
     }
 
     const provider = new ethers.JsonRpcProvider(runtimeEnv.rpcUrl);
-    const wallet = new ethers.Wallet(privateKey, provider);
+    const baseWallet = new ethers.Wallet(privateKey, provider);
     const goldClobAddressRaw = runtimeEnv.goldClobAddress;
     const goldClobAddress =
       goldClobAddressRaw.trim().length > 0 ? normalizeAddress(goldClobAddressRaw) : "";
-    const clob = new ethers.Contract(goldClobAddress || ethers.ZeroAddress, GOLD_CLOB_ABI, wallet);
+    const clob = new ethers.Contract(
+      goldClobAddress || ethers.ZeroAddress,
+      GOLD_CLOB_ABI,
+      baseWallet,
+    );
     return {
       chainKey,
       provider,
-      wallet,
+      wallet: baseWallet,
+      walletAddress: baseWallet.address,
       clob,
       enabled: enabled && goldClobAddress.length > 0,
       rpcUrl: runtimeEnv.rpcUrl,
@@ -498,7 +507,7 @@ export class CrossChainMarketMaker {
           const [network, code, nativeBalance] = await Promise.all([
             runtime.provider.getNetwork(),
             runtime.provider.getCode(runtime.goldClobAddress),
-            runtime.provider.getBalance(runtime.wallet.address),
+            runtime.provider.getBalance(runtime.walletAddress),
           ]);
           if (code === "0x") {
             runtime.enabled = false;
@@ -510,7 +519,7 @@ export class CrossChainMarketMaker {
           if (nativeBalance <= 0n) {
             runtime.enabled = false;
             console.warn(
-              `[${runtime.chainKey.toUpperCase()}] Disabled: zero native balance for ${runtime.wallet.address}`,
+              `[${runtime.chainKey.toUpperCase()}] Disabled: zero native balance for ${runtime.walletAddress}`,
             );
             return;
           }
@@ -600,7 +609,7 @@ export class CrossChainMarketMaker {
         (await runtime.clob.marketKey(duelKey, MARKET_KIND_DUEL_WINNER)),
     );
     const market = await runtime.clob.getMarket(duelKey, MARKET_KIND_DUEL_WINNER);
-    const position = await runtime.clob.positions(marketKey, runtime.wallet.address);
+    const position = await runtime.clob.positions(marketKey, runtime.walletAddress);
     const openOrders = this.activeOrders.filter(
       (order) => order.chainKey === runtime.chainKey && order.duelKey === duelKey,
     );
@@ -729,7 +738,10 @@ export class CrossChainMarketMaker {
       side,
       decision.targetPrice,
       rawAmount,
-      { value: nativeValue },
+      {
+        value: nativeValue,
+        nonce: await this.nextRuntimeNonce(runtime),
+      },
     );
     const receipt = await tx.wait();
     const orderId = this.extractOrderId(receipt?.logs ?? [], marketKey);
@@ -785,12 +797,27 @@ export class CrossChainMarketMaker {
     return null;
   }
 
+  private async nextRuntimeNonce(runtime: EvmRuntime): Promise<number> {
+    const cached = this.nextNonceByChain.get(runtime.chainKey);
+    if (cached != null) {
+      this.nextNonceByChain.set(runtime.chainKey, cached + 1);
+      return cached;
+    }
+    const fresh = await runtime.provider.getTransactionCount(
+      runtime.walletAddress,
+      "pending",
+    );
+    this.nextNonceByChain.set(runtime.chainKey, fresh + 1);
+    return fresh;
+  }
+
   private async cancelTrackedOrder(runtime: EvmRuntime, order: TrackedOrder) {
     try {
       const tx = await runtime.clob.cancelOrder(
         duelKeyHex(order.duelKey),
         MARKET_KIND_DUEL_WINNER,
         order.orderId,
+        { nonce: await this.nextRuntimeNonce(runtime) },
       );
       await tx.wait();
     } catch (error) {
