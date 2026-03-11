@@ -5,10 +5,12 @@
     "moduleResolution": "NodeNext",
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "strict": false,
     "skipLibCheck": true,
     "types": ["bun-types"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/runtime-smoke-solana.ts"]
 }

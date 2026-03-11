@@ -13,6 +13,7 @@ dotenv.config();
 
 const DEFAULT_SOLANA_PROGRAM_ID =
   process.env.SOLANA_VERIFY_PROGRAM_ID ||
+  process.env.GOLD_CLOB_MARKET_PROGRAM_ID ||
   process.env.SOLANA_ARENA_MARKET_PROGRAM_ID ||
   "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi";
 const DEFAULT_SOLANA_RPC_URL =
