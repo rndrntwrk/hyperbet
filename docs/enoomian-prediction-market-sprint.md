@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `e709eac`
+- Latest recorded gate merged into base: `0a8af43`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-06-frontend-settlement`
+- Active gate branch: `enoomian/pm-09-solana-scenario-gates`
 
 ## Gate Status
 
@@ -25,7 +25,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 03 | `enoomian/pm-03-mm-risk-engine` | Complete | Yes | Shared quote sizing, gross-exposure and imbalance caps, and keeper quote refresh decisions now come from `@hyperbet/mm-core` |
 | 04 | `enoomian/pm-04-keeper-health-recovery` | Complete | Yes | Keeper bots now persist market health/recovery snapshots and all three keeper services expose merged bot health via `/status` and `/api/keeper/bot-health` |
 | 05 | `enoomian/pm-05-runtime-parity` | Complete | Yes | External bot and EVM keepers now share chain-registry runtime assembly, quote refresh behavior, and direct local quote lifecycle smokes for BSC and AVAX |
-| 06 | `enoomian/pm-06-frontend-settlement` | Pending | No | Make the frontend lifecycle and claim handling fully canonical on normalized market state |
+| 06 | `enoomian/pm-06-frontend-settlement` | Complete | Yes | Solana, BSC, and AVAX shells now follow canonical lifecycle and claim state with green focused lifecycle verification |
 | 07 | `enoomian/pm-07-solana-bot-execution` | Complete | Yes | External market-maker bot now executes real Solana quote, cancel, refresh, and claim flows with validator-backed smoke coverage |
 | 08 | `enoomian/pm-08-solana-sim-backend` | Complete | Yes | Validator-backed Solana proof scenarios now run through the shared scenario backend contract |
 | 09 | `enoomian/pm-09-solana-scenario-gates` | Pending | No | Add Solana exploit families and deterministic gate coverage |
@@ -187,6 +187,41 @@ Known remaining risk:
 - The BSC and AVAX app shells still have UI-level drift relative to the shared canonical lifecycle panels, so frontend claim/settlement parity remains open for Gate 06 and full cross-chain product reliability remains open for Gate 10.
 - The direct runtime smokes currently log a benign cancel failure when the bot tries to cancel an order that was already fully filled before lock; the tracked-order state still clears correctly, but the noisy log path should eventually be tightened.
 - Solana execution in the external bot is still incomplete, so runtime parity is only closed for the EVM side of the external market maker.
+
+### Gate 06
+
+- Branch: `enoomian/pm-06-frontend-settlement`
+- Base commit after merge: `0a8af43`
+- Commits:
+  - `110c9e9` `Implement Gate 06 frontend settlement parity`
+  - `9c6fcd1` `frontend: fix shell typecheck and avax e2e setup`
+  - `0a8af43` `frontend: keep evm lifecycle claim state live`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Fixed Solana shell/typecheck drift so the Solana app now resolves the shared `ModelsMarketView` correctly and no longer carries duplicate handler/prop issues in the stream shell.
+- Fixed AVAX local E2E harness drift so its validator bootstrap falls back through the same Solana wallet path chain as BSC instead of hard-failing on a missing deployer key.
+- Kept the shared EVM lifecycle shell canonical by allowing the EVM panel to trade from normalized lifecycle state without requiring a pre-fetched market existence check.
+- Added optimistic EVM wallet-position carry-forward in the shared EVM panel so claimability and visible exposure stay aligned with canonical lifecycle after a confirmed order even when local read refresh lags the write path.
+- Kept quick-order UI hidden by default in normal runtime but exposed limit-price controls in E2E mode so the lifecycle shell specs can drive deterministic price entry on BSC and AVAX.
+
+Targeted verification:
+
+- `bun test packages/hyperbet-ui/tests/predictionMarkets.test.ts`
+- `bunx tsc --noEmit -p packages/hyperbet-ui/tsconfig.verify.json`
+- `bunx tsc --noEmit -p packages/hyperbet-solana/app/tsconfig.json`
+- `bunx tsc --noEmit -p packages/hyperbet-bsc/app/tsconfig.json`
+- `bunx tsc --noEmit -p packages/hyperbet-avax/app/tsconfig.json`
+- `bash scripts/run-e2e-local.sh tests/e2e/market-flows.spec.ts --grep "solana lifecycle shell|solana predictions place"` in `packages/hyperbet-solana/app`
+- `bash scripts/run-e2e-local.sh tests/e2e/market-flows.spec.ts --grep "evm lifecycle shell|evm predictions place"` in `packages/hyperbet-bsc/app`
+- `bash scripts/run-e2e-local.sh tests/e2e/market-flows.spec.ts --grep "evm lifecycle shell|evm predictions place"` in `packages/hyperbet-avax/app`
+
+Known remaining risk:
+
+- Gate 06 closes focused lifecycle and claim parity, but it does not yet close the full cross-chain product path; restart/recovery, broader shell regressions, and full create -> seed -> trade -> lock -> resolve -> claim reliability remain Gate 10 work.
+- The shared EVM panel now uses an optimistic exposure fallback to bridge local read lag after confirmed writes. That behavior is intentional and test-backed, but it should continue to be exercised in Gate 10 so it does not mask a real backend read regression.
+- Solana exploit-family coverage is still open, so the next sprint-critical work remains Gate 09.
 
 ### Gate 07
 
