@@ -1071,7 +1071,7 @@ export function App() {
               value={activeChain}
               onChange={(event) =>
                 setActiveChain(
-                  event.target.value as "solana" | "avax",
+                  event.target.value as "avax",
                 )
               }
             >
