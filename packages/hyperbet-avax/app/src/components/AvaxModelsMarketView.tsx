@@ -150,7 +150,7 @@ function isOracleFresh(timestamp: number | null): boolean {
   return Date.now() - timestamp <= MAX_ORACLE_STALENESS_MS;
 }
 
-function computePnl(
+function _computePnl(
   entryPrice: number,
   signedSize: number,
   markPrice: number | null,
@@ -161,7 +161,7 @@ function computePnl(
   return (entryPrice - markPrice) * (size / entryPrice);
 }
 
-function computeLiquidationPrice(
+function _computeLiquidationPrice(
   entryPrice: number,
   signedSize: number,
   margin: number,

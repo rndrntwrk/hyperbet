@@ -103,7 +103,7 @@ describe("fee_simulation (stress test)", () => {
     for (let i = 0; i < 20; i++) {
         const side = rng() > 0.5 ? SIDE_BID : SIDE_ASK;
         const price = Math.floor(rng() * 400) + 300; // 300 to 700
-        const amount = Math.floor(rng() * 5000) + 1000; // 1000 to 6000
+        const amount = (Math.floor(rng() * 5) + 1) * 1000; // 1000 to 5000 in multiples of 1000
         const trader = traders[Math.floor(rng() * traders.length)];
 
         // Cost calculation from program

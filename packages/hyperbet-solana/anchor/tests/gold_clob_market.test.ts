@@ -315,8 +315,8 @@ describe("gold_clob_market (native SOL settlement)", () => {
     const takerBalanceBefore = await clobProgram.account.userBalance.fetch(
       takerBid.userBalance,
     );
-    assert.strictEqual(makerBalanceBefore.bStake.toString(), "400");
-    assert.strictEqual(takerBalanceBefore.aStake.toString(), "600");
+    assert.strictEqual(makerBalanceBefore.bLockedLamports.toString(), "400");
+    assert.strictEqual(takerBalanceBefore.aLockedLamports.toString(), "600");
 
     await cancelDuel(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
@@ -351,11 +351,11 @@ describe("gold_clob_market (native SOL settlement)", () => {
     );
     assert.strictEqual(makerBalanceAfter.aShares.toString(), "0");
     assert.strictEqual(makerBalanceAfter.bShares.toString(), "0");
-    assert.strictEqual(makerBalanceAfter.aStake.toString(), "0");
-    assert.strictEqual(makerBalanceAfter.bStake.toString(), "0");
+    assert.strictEqual(makerBalanceAfter.aLockedLamports.toString(), "0");
+    assert.strictEqual(makerBalanceAfter.bLockedLamports.toString(), "0");
     assert.strictEqual(takerBalanceAfter.aShares.toString(), "0");
     assert.strictEqual(takerBalanceAfter.bShares.toString(), "0");
-    assert.strictEqual(takerBalanceAfter.aStake.toString(), "0");
-    assert.strictEqual(takerBalanceAfter.bStake.toString(), "0");
+    assert.strictEqual(takerBalanceAfter.aLockedLamports.toString(), "0");
+    assert.strictEqual(takerBalanceAfter.bLockedLamports.toString(), "0");
   });
 });
