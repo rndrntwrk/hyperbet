@@ -1,4 +1,5 @@
 export type ScenarioGateTier = "gate" | "diagnostic";
+export type ScenarioChainKey = "bsc" | "solana";
 export type ScenarioSettlementMode = "resolve" | "cancel";
 export type ScenarioSettlementStatus =
     | "NULL"
@@ -36,6 +37,7 @@ export type ScenarioGatePolicy = {
 
 export type ScenarioPreset = {
     id: string;
+    chainKey: ScenarioChainKey;
     name: string;
     family: string;
     description: string;
@@ -49,7 +51,7 @@ export type ScenarioPreset = {
     gatePolicy?: ScenarioGatePolicy;
 };
 
-export const SCENARIO_PRESETS: ScenarioPreset[] = [
+const EVM_SCENARIO_PRESETS: Omit<ScenarioPreset, "chainKey">[] = [
     {
         id: "normal-market",
         name: "Normal Market",
@@ -403,6 +405,45 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         matrixSeeds: [],
         tier: "diagnostic",
     },
+];
+
+const SOLANA_PROOF_SCENARIOS: ScenarioPreset[] = [
+    {
+        id: "solana-happy-path",
+        chainKey: "solana",
+        name: "Solana Happy Path",
+        family: "validator-proof",
+        description:
+            "Validator-backed duel setup, trade, settlement, and claim against the real Solana programs",
+        enabledStrategies: [],
+        defaultTicks: 1,
+        defaultWinner: "A",
+        canonicalSeed: "solana-happy-seed-1",
+        matrixSeeds: [],
+        tier: "diagnostic",
+    },
+    {
+        id: "solana-unauthorized-oracle-attack",
+        chainKey: "solana",
+        name: "Solana Unauthorized Oracle Attack",
+        family: "validator-proof",
+        description:
+            "Attempts an unauthorized oracle report before settling and claiming on the real validator-backed market",
+        enabledStrategies: [],
+        defaultTicks: 1,
+        defaultWinner: "A",
+        canonicalSeed: "solana-unauthorized-seed-1",
+        matrixSeeds: [],
+        tier: "diagnostic",
+    },
+];
+
+export const SCENARIO_PRESETS: ScenarioPreset[] = [
+    ...EVM_SCENARIO_PRESETS.map((preset) => ({
+        chainKey: "bsc" as const,
+        ...preset,
+    })),
+    ...SOLANA_PROOF_SCENARIOS,
 ];
 
 export const GATE_SCENARIOS = SCENARIO_PRESETS.filter(
