@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `0a8af43`
+- Latest recorded gate merged into base: `20c3e52`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-09-solana-scenario-gates`
+- Active gate branch: `enoomian/pm-10-cross-chain-e2e`
 
 ## Gate Status
 
@@ -28,7 +28,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 06 | `enoomian/pm-06-frontend-settlement` | Complete | Yes | Solana, BSC, and AVAX shells now follow canonical lifecycle and claim state with green focused lifecycle verification |
 | 07 | `enoomian/pm-07-solana-bot-execution` | Complete | Yes | External market-maker bot now executes real Solana quote, cancel, refresh, and claim flows with validator-backed smoke coverage |
 | 08 | `enoomian/pm-08-solana-sim-backend` | Complete | Yes | Validator-backed Solana proof scenarios now run through the shared scenario backend contract |
-| 09 | `enoomian/pm-09-solana-scenario-gates` | Pending | No | Add Solana exploit families and deterministic gate coverage |
+| 09 | `enoomian/pm-09-solana-scenario-gates` | Complete | Yes | Validator-backed Solana exploit families now run through deterministic gate scenarios with canonical and matrix verification |
 | 10 | `enoomian/pm-10-cross-chain-e2e` | Pending | No | Stabilize create -> seed -> trade -> lock -> resolve -> claim across Solana, BSC, and AVAX |
 | 11 | `enoomian/pm-11-ci-ops` | Pending | No | Wire gates into CI, add env safety checks, add-chain proof, and runbooks |
 
@@ -221,7 +221,7 @@ Known remaining risk:
 
 - Gate 06 closes focused lifecycle and claim parity, but it does not yet close the full cross-chain product path; restart/recovery, broader shell regressions, and full create -> seed -> trade -> lock -> resolve -> claim reliability remain Gate 10 work.
 - The shared EVM panel now uses an optimistic exposure fallback to bridge local read lag after confirmed writes. That behavior is intentional and test-backed, but it should continue to be exercised in Gate 10 so it does not mask a real backend read regression.
-- Solana exploit-family coverage is still open, so the next sprint-critical work remains Gate 09.
+- Solana exploit-family coverage is now closed by Gate 09, so the next sprint-critical work moves to Gate 10 cross-chain reliability.
 
 ### Gate 07
 
@@ -280,7 +280,42 @@ Known remaining risk:
 
 - The long diagnostic EVM `normal-market` preset still degrades under extended tick counts; Gate 08 closes the backend abstraction and proof path, but not the remaining diagnostic-performance issue.
 - Solana proof runs still leave noisy websocket reconnect logs from validator teardown in the long-lived dashboard process; they do not invalidate results, but the cleanup path should be tightened.
-- Gate 09 must now add real Solana exploit families on top of this backend rather than relying only on proof scenarios.
+- Gate 09 closes the first Solana exploit-family gate set, but Gate 10 still needs to re-exercise those protections in the full cross-chain product flows.
+
+### Gate 09
+
+- Branch: `enoomian/pm-09-solana-scenario-gates`
+- Base commit after merge: `20c3e52`
+- Commit: `20c3e52` `solana-sim: add validator-backed scenario gates`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Added six real Solana gate presets on top of the validator-backed backend: stale-resolution-window, lock-race-attempt, cancel-replace-griefing, inventory-poisoning, claim-refund-abuse, and cross-market-validation-abuse.
+- Extended the Solana program runtime with duel locking, duel cancellation, order cancellation, and custom result timestamps so validator-backed proof scenarios can drive real lifecycle abuse paths against `fight_oracle` and `gold_clob_market`.
+- Replaced the single-path Solana proof runner with scenario-specific scripted flows that hit actual oracle and CLOB rejection paths, including invalid pre-close resolution attempts, post-lock order rejection, same-level cancel/replace churn, repeated refund-claim rejection, and wrong-market remaining-account rejection.
+- Extended Solana proof normalization with guard-trip metrics and generalized adversarial-rejection detection so the new gate scenarios land on the shared `ScenarioResult` contract without Solana-only pass/fail logic.
+- Verified that persistent-level cancel/replace churn works on the real Solana programs while level-closing cancellation remains a separate protocol concern to revisit under broader E2E/runtime coverage.
+
+Targeted verification:
+
+- `bunx tsc --noEmit -p packages/simulation-dashboard/tsconfig.json`
+- `bun test packages/simulation-dashboard`
+- `bun run --cwd packages/simulation-dashboard scenario canonical solana-stale-resolution-window`
+- `bun run --cwd packages/simulation-dashboard scenario canonical solana-lock-race-attempt`
+- `bun run --cwd packages/simulation-dashboard scenario canonical solana-cancel-replace-griefing`
+- `bun run --cwd packages/simulation-dashboard scenario canonical solana-inventory-poisoning`
+- `bun run --cwd packages/simulation-dashboard scenario canonical solana-claim-refund-abuse`
+- `bun run --cwd packages/simulation-dashboard scenario canonical solana-cross-market-validation-abuse`
+- `bun run --cwd packages/simulation-dashboard scenario matrix solana-lock-race-attempt`
+- `bun run --cwd packages/simulation-dashboard scenario matrix solana-inventory-poisoning`
+- `bun run --cwd packages/simulation-dashboard scenario matrix solana-cross-market-validation-abuse`
+
+Known remaining risk:
+
+- Solana validator runs still emit noisy websocket reconnect logs during teardown; they do not invalidate results, but the shutdown path is still rough.
+- The cancel/replace scenario is currently validated through same-level churn behind a persistent resting quote; broader order-book cancellation patterns still need to be exercised in Gate 10 cross-chain E2E.
+- The canonical stale-resolution and claim-refund scenarios have one fixed seed each today. They are deterministic and green, but higher-pressure seed matrices can still be added if Gate 10 uncovers path dependence.
 
 ## Update Template
 
