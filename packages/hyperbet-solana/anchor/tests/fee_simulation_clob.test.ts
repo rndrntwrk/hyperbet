@@ -145,7 +145,7 @@ describe("fee_simulation (stress test)", () => {
             side,
             price,
             amount,
-            remainingAccounts: dedupedAccounts.slice(0, 30), // take up to 30 matches
+            remainingAccounts: dedupedAccounts.slice(0, 15), // take up to 15 matches to stay under 1232 bytes
         });
         
         openOrders.push({...orderParams, trader});

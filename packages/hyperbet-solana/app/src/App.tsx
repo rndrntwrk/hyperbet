@@ -1323,7 +1323,13 @@ export function App() {
               )}
               {pointsDrawerTab === "referral" && (
                 <Suspense fallback={<PanelFallback label={copy.loadingReferral} />}>
-                  <ReferralPanel solanaWallet={solanaWalletAddress} />
+                  <ReferralPanel
+                    activeChain="solana"
+                    solanaWallet={solanaWalletAddress}
+                    evmWallet={null}
+                    evmWalletPlatform={null}
+                    locale={locale}
+                  />
                 </Suspense>
               )}
             </div>
@@ -1762,7 +1768,7 @@ export function App() {
                       data-testid={`duels-bottom-tab-${key}`}
                       aria-selected={hmBottomTab === key}
                       className={`hm-bottom-tab ${hmBottomTab === key ? "hm-bottom-tab--active" : ""}`}
-                      onClick={() => setHmBottomTab(key)}
+                      onClick={() => setHmBottomTab(key as any)}
                       type="button"
                     >
                       {label}
