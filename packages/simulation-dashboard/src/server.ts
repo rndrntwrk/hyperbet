@@ -46,10 +46,18 @@ import {
     CabalAgent,
     ArbitrageurAgent,
     StressTestAgent,
-    SCENARIO_PRESETS,
+    CancelReplaceAgent,
     type SimContext,
-    type ScenarioPreset,
 } from "./agents.js";
+import {
+    GATE_SCENARIOS,
+    SCENARIO_PRESETS,
+    getScenarioPresetByIdOrName,
+    type ScenarioPreset,
+    type ScenarioSettlementMode,
+    type ScenarioSettlementStatus,
+} from "./scenario-catalog.js";
+import { evaluateScenarioPolicyGates } from "./scenario-evaluator.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
@@ -67,7 +75,22 @@ const RESOLVE_CLAIM_BUDGET_MS = Number(
     process.env.SIM_RESOLVE_CLAIM_BUDGET_MS ?? "45000",
 );
 const SCENARIO_RESOLVE_TIMEOUT_MS = Number(
-    process.env.SIM_SCENARIO_RESOLVE_TIMEOUT_MS ?? "60000",
+    process.env.SIM_SCENARIO_RESOLVE_TIMEOUT_MS ?? "120000",
+);
+const SCENARIO_SETTLEMENT_TX_TIMEOUT_MS = Number(
+    process.env.SIM_SCENARIO_SETTLEMENT_TX_TIMEOUT_MS ?? "20000",
+);
+const SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS = Number(
+    process.env.SIM_SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS ?? "30000",
+);
+const SCENARIO_BASELINE_REVERT_TIMEOUT_MS = Number(
+    process.env.SIM_SCENARIO_BASELINE_REVERT_TIMEOUT_MS ?? "12000",
+);
+const SCENARIO_BASELINE_SNAPSHOT_TIMEOUT_MS = Number(
+    process.env.SIM_SCENARIO_BASELINE_SNAPSHOT_TIMEOUT_MS ?? "12000",
+);
+const SCENARIO_BASELINE_REBUILD_TIMEOUT_MS = Number(
+    process.env.SIM_SCENARIO_BASELINE_REBUILD_TIMEOUT_MS ?? "90000",
 );
 
 type ScenarioRunStatus = "queued" | "running" | "succeeded" | "failed";
@@ -79,6 +102,7 @@ type ScenarioRunRecord = {
     seed: string;
     ticks: number;
     winner: "A" | "B";
+    freshBaseline: boolean;
     status: ScenarioRunStatus;
     stage: string | null;
     requestedAt: number;
@@ -143,6 +167,7 @@ const ATTACKER_STRATEGIES = new Set([
     "cabal",
     "arbitrageur",
     "stress_test",
+    "cancel_replace",
 ]);
 const MARKET_STATUS_RESOLVED = 3;
 const MARKET_STATUS_CANCELLED = 4;
@@ -154,6 +179,10 @@ let scenarioQuotedTicks = 0;
 let scenarioSpreadBpsTotal = 0;
 let scenarioSpreadSamples = 0;
 let lastResolveLatencyMs: number | null = null;
+let staleStreamGuardTripsSeen = 0;
+let staleOracleGuardTripsSeen = 0;
+let closeGuardTripsSeen = 0;
+let circuitBreakerTripsSeen = 0;
 let lastComputedState: Record<string, any> | null = null;
 let scenarioRunInFlight = false;
 let scenarioHistory: ScenarioResult[] = [];
@@ -275,6 +304,20 @@ function hasPosition(position: CachedPosition): boolean {
     );
 }
 
+function parsePosition(positionRaw: {
+    aShares: bigint;
+    bShares: bigint;
+    aStake: bigint;
+    bStake: bigint;
+}): CachedPosition {
+    return {
+        aShares: BigInt(positionRaw.aShares),
+        bShares: BigInt(positionRaw.bShares),
+        aStake: BigInt(positionRaw.aStake),
+        bStake: BigInt(positionRaw.bStake),
+    };
+}
+
 function updateActiveRunStage(stage: string): void {
     const activeRun = getActiveScenarioRun();
     if (!activeRun) {
@@ -283,6 +326,16 @@ function updateActiveRunStage(stage: string): void {
     updateScenarioRun(activeRun.runId, (entry) => {
         entry.stage = stage;
     });
+}
+
+function refreshReadClients(): void {
+    readProvider = new JsonRpcProvider(`http://127.0.0.1:${ANVIL_PORT}`, 31337);
+    if (oracle) {
+        oracleRead = oracle.connect(readProvider) as unknown as Contract;
+    }
+    if (clob) {
+        clobRead = clob.connect(readProvider) as unknown as Contract;
+    }
 }
 
 async function withReadRetry<T>(
@@ -309,6 +362,7 @@ async function withReadRetry<T>(
         } catch (error) {
             lastError = error;
             if (attempt < attempts) {
+                refreshReadClients();
                 await sleep(backoffMs * attempt);
             }
         }
@@ -319,12 +373,146 @@ async function withReadRetry<T>(
         : new Error(`${label} failed after ${attempts} attempts`);
 }
 
+async function loadClaimPosition(
+    agent: BaseAgent,
+    address: string,
+): Promise<CachedPosition | null> {
+    const cachedPosition = getCachedPosition(address);
+    if (hasPosition(cachedPosition)) {
+        return cachedPosition;
+    }
+
+    const loadWithContract = async (
+        contract: Contract,
+        label: string,
+    ): Promise<CachedPosition> => {
+        const positionRaw = await withTimeout(
+            contract.positions(currentMarketKey, address),
+            6_000,
+            `${agent.config.name} ${label} claim lookup`,
+        );
+        return parsePosition(positionRaw);
+    };
+
+    try {
+        const position = await loadWithContract(clobRead, "read");
+        agentPositionCache.set(address, position);
+        return position;
+    } catch (error) {
+        refreshReadClients();
+        try {
+            const position = await loadWithContract(clob, "write");
+            agentPositionCache.set(address, position);
+            return position;
+        } catch (fallbackError) {
+            broadcast({
+                type: "log",
+                data: {
+                    message: `[${agent.config.name}] Claim lookup skipped: ${
+                        fallbackError instanceof Error
+                            ? fallbackError.message.slice(0, 100)
+                            : String(fallbackError).slice(0, 100)
+                    }`,
+                    tick: simTick,
+                },
+            });
+            if (error instanceof Error) {
+                console.warn(
+                    `[claims] ${agent.config.name} read lookup failed: ${error.message}`,
+                );
+            }
+            return null;
+        }
+    }
+}
+
+function getResidualClaimCandidates(): ClaimCandidate[] {
+    const candidates: ClaimCandidate[] = [];
+    for (const agent of agents) {
+        const address = agentAddressCache.get(agent);
+        if (!address) {
+            continue;
+        }
+        const position = getCachedPosition(address);
+        if (!hasPosition(position)) {
+            continue;
+        }
+        candidates.push({
+            agent,
+            address,
+            position,
+        });
+    }
+    return candidates;
+}
+
+async function processClaimCandidates(
+    candidates: ClaimCandidate[],
+    stagePrefix: string,
+    budgetMs: number,
+): Promise<void> {
+    if (candidates.length === 0) {
+        return;
+    }
+
+    updateActiveRunStage(`${stagePrefix}-${candidates.length}`);
+    const claimDeadline = Date.now() + budgetMs;
+    for (const [index, candidate] of candidates.entries()) {
+        if (Date.now() >= claimDeadline) {
+            updateActiveRunStage(`${stagePrefix}-budget-exhausted`);
+            broadcast({
+                type: "log",
+                data: {
+                    message: `⏭️ Claim budget exhausted after ${index}/${candidates.length} claims during ${stagePrefix}`,
+                    tick: simTick,
+                },
+            });
+            break;
+        }
+        try {
+            updateActiveRunStage(
+                `${stagePrefix}-${index + 1}-of-${candidates.length}`,
+            );
+            const txClaim: any = await withTimeout(
+                (clob.connect(candidate.agent.signer) as any).claim(
+                    currentDuelKey,
+                    MARKET_KIND_DUEL_WINNER,
+                ),
+                20_000,
+                `${candidate.agent.config.name} claim`,
+            );
+            await withTimeout(
+                txClaim.wait(),
+                20_000,
+                `${candidate.agent.config.name} claim receipt`,
+            );
+            agentPositionCache.set(candidate.address, { ...ZERO_POSITION });
+            broadcast({
+                type: "log",
+                data: {
+                    message: `[${candidate.agent.config.name}] Claimed winnings`,
+                    tick: simTick,
+                },
+            });
+        } catch (err: any) {
+            broadcast({
+                type: "log",
+                data: {
+                    message: `[${candidate.agent.config.name}] Claim: ${err.message?.slice(0, 80)}`,
+                    tick: simTick,
+                },
+            });
+        }
+    }
+}
+
 function createScenarioRunRecord(
     preset: ScenarioPreset,
     options: {
         seed?: string;
         ticks?: number;
         winner?: "A" | "B";
+        freshBaseline?: boolean;
     },
 ): ScenarioRunRecord {
     scenarioRunSequence += 1;
@@ -332,9 +520,10 @@ function createScenarioRunRecord(
         runId: `${preset.id}-${Date.now()}-${scenarioRunSequence}`,
         scenarioId: preset.id,
         scenarioName: preset.name,
-        seed: options.seed?.trim() || `${preset.id}-seed`,
+        seed: options.seed?.trim() || preset.canonicalSeed,
         ticks: Math.max(1, Math.min(200, options.ticks ?? preset.defaultTicks)),
         winner: options.winner ?? preset.defaultWinner,
+        freshBaseline: options.freshBaseline ?? false,
         status: "queued",
         stage: "queued",
         requestedAt: Date.now(),
@@ -354,12 +543,16 @@ function resetScenarioMetrics(): void {
     scenarioSpreadBpsTotal = 0;
     scenarioSpreadSamples = 0;
     lastResolveLatencyMs = null;
+    staleStreamGuardTripsSeen = 0;
+    staleOracleGuardTripsSeen = 0;
+    closeGuardTripsSeen = 0;
+    circuitBreakerTripsSeen = 0;
     lastComputedState = null;
     simTick = 0;
 }
 
 function applyScenarioPresetByName(name: string): ScenarioPreset {
-    const preset = SCENARIO_PRESETS.find((entry) => entry.name === name || entry.id === name);
+    const preset = getScenarioPresetByIdOrName(name);
     if (!preset) {
         throw new Error(`Unknown scenario preset: ${name}`);
     }
@@ -371,14 +564,55 @@ function applyScenarioPresetByName(name: string): ScenarioPreset {
     return preset;
 }
 
+function marketStatusLabel(status: number): ScenarioSettlementStatus {
+    switch (status) {
+        case 1:
+            return "OPEN";
+        case 2:
+            return "LOCKED";
+        case 3:
+            return "RESOLVED";
+        case 4:
+            return "CANCELLED";
+        default:
+            return "NULL";
+    }
+}
+
 async function restoreScenarioBaseline(): Promise<void> {
     if (!provider || !baselineSnapshotId || !baselineRuntimeState) {
         throw new Error("Scenario baseline is not initialized");
     }
 
     simRunning = false;
-    await provider.send("evm_revert", [baselineSnapshotId]);
-    baselineSnapshotId = await provider.send("evm_snapshot", []);
+    try {
+        updateActiveRunStage("restore-baseline-revert");
+        const controlProvider = new JsonRpcProvider(`http://127.0.0.1:${ANVIL_PORT}`, 31337);
+        await withTimeout(
+            controlProvider.send("evm_revert", [baselineSnapshotId]),
+            SCENARIO_BASELINE_REVERT_TIMEOUT_MS,
+            "baseline evm_revert",
+        );
+        updateActiveRunStage("restore-baseline-snapshot");
+        baselineSnapshotId = await withTimeout(
+            controlProvider.send("evm_snapshot", []),
+            SCENARIO_BASELINE_SNAPSHOT_TIMEOUT_MS,
+            "baseline evm_snapshot",
+        );
+        refreshReadClients();
+    } catch (error) {
+        console.warn(
+            `[baseline] Restore failed, rebuilding local sim backend: ${
+                error instanceof Error ? error.message : String(error)
+            }`,
+        );
+        updateActiveRunStage("restore-baseline-rebuild");
+        await withTimeout(
+            rebuildSimulationEnvironment(),
+            SCENARIO_BASELINE_REBUILD_TIMEOUT_MS,
+            "baseline rebuild",
+        );
+    }
 
     duelCounter = baselineRuntimeState.duelCounter;
     currentDuelLabel = baselineRuntimeState.currentDuelLabel;
@@ -397,6 +631,29 @@ async function restoreScenarioBaseline(): Promise<void> {
     resetScenarioMetrics();
 }
 
+async function captureScenarioBaseline(): Promise<void> {
+    baselineRuntimeState = {
+        duelCounter,
+        currentDuelLabel,
+        currentDuelKey,
+        currentMarketKey,
+    };
+    baselineSnapshotId = await provider.send("evm_snapshot", []);
+    eventLog.length = 0;
+    refreshReadClients();
+}
+
+async function rebuildSimulationEnvironment(): Promise<void> {
+    await stopAnvil();
+    eventLog.length = 0;
+    initialBalances.clear();
+    agentAddressCache.clear();
+    agentPositionCache.clear();
+    await startAnvil();
+    await deployContracts();
+    await captureScenarioBaseline();
+}
+
 // ─── Anvil Management ────────────────────────────────────────────────────────
 
 async function startAnvil(): Promise<void> {
@@ -406,7 +663,7 @@ async function startAnvil(): Promise<void> {
             "--host", "127.0.0.1",
             "--port", String(ANVIL_PORT),
             "--chain-id", "31337",
-            "--accounts", "20",
+            "--accounts", "24",
             "--balance", "10000",
             "--silent",
         ]);
@@ -443,10 +700,30 @@ async function startAnvil(): Promise<void> {
     });
 }
 
-function stopAnvil(): void {
+async function stopAnvil(): Promise<void> {
     if (anvilProcess) {
-        anvilProcess.kill("SIGTERM");
+        const processToStop = anvilProcess;
         anvilProcess = null;
+        await new Promise<void>((resolve) => {
+            let settled = false;
+            const finish = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                resolve();
+            };
+            const timer = setTimeout(() => {
+                processToStop.kill("SIGKILL");
+                finish();
+            }, 5_000);
+            processToStop.once("exit", () => {
+                clearTimeout(timer);
+                finish();
+            });
+            processToStop.kill("SIGTERM");
+        });
+        await sleep(250);
         console.log("[anvil] Stopped");
     }
 }
@@ -458,7 +735,7 @@ async function deployContracts(): Promise<void> {
     readProvider = new JsonRpcProvider(`http://127.0.0.1:${ANVIL_PORT}`, 31337);
 
     const signers = await Promise.all(
-        Array.from({ length: 20 }, (_, i) => provider.getSigner(i)),
+        Array.from({ length: 24 }, (_, i) => provider.getSigner(i)),
     );
     const admin = signers[0];
     const operator = signers[1];
@@ -576,6 +853,7 @@ async function createAgents(signers: any[]): Promise<void> {
         { agent: new CabalAgent(signers[19], clob, false), balance: "3" },
         { agent: new ArbitrageurAgent(signers[14], clob), balance: "2" },
         { agent: new StressTestAgent(signers[15], clob), balance: "2" },
+        { agent: new CancelReplaceAgent(signers[20], clob), balance: "2" },
     ];
 
     agents = agentDefs.map(d => d.agent);
@@ -643,6 +921,7 @@ async function openNewDuel(): Promise<void> {
 async function simulationTick(): Promise<void> {
     simTick++;
     const scenarioMode = scenarioRunInFlight;
+    const scenarioPreset = getScenarioPresetByIdOrName(currentScenarioId);
     const treasuryFeeBps = feeConfig.treasuryBps;
     const mmFeeBps = feeConfig.mmBps;
     let market = await withReadRetry(
@@ -670,9 +949,11 @@ async function simulationTick(): Promise<void> {
                         totalAShares: market.totalAShares,
                         totalBShares: market.totalBShares,
                         tick: simTick,
+                        nowMs: simTick * 500,
                         treasuryFeeBps,
                         mmFeeBps,
                         agentActiveOrderIds: agent.activeOrderIds,
+                        scenarioProfile: scenarioPreset?.runtimeProfile ?? null,
                         agentPosition: {
                             aShares: position.aShares,
                             bShares: position.bShares,
@@ -817,6 +1098,7 @@ async function broadcastState(): Promise<void> {
             ({ pnlValue, inventoryUnits, positionRaw, ...agentState }) => agentState,
         );
         const marketStatus = Number(market.status);
+        const settlementStatus = marketStatusLabel(marketStatus);
         const bestBid = Number(market.bestBid);
         const bestAsk = Number(market.bestAsk);
         const boundedBestAsk = bestAsk > 0 && bestAsk < MAX_PRICE ? bestAsk : null;
@@ -837,6 +1119,25 @@ async function broadcastState(): Promise<void> {
         const marketMakerAgent = agentSnapshots.find(
             (agent) => agent.strategy === "market_maker",
         );
+        const marketMakerRuntimeAgent =
+            agents.find((agent) => agent instanceof MarketMakerAgent) ??
+            null;
+        const marketMakerPlan =
+            marketMakerRuntimeAgent instanceof MarketMakerAgent
+                ? marketMakerRuntimeAgent.lastPlan
+                : null;
+        if (marketMakerPlan?.risk.staleStream) {
+            staleStreamGuardTripsSeen += 1;
+        }
+        if (marketMakerPlan?.risk.staleOracle) {
+            staleOracleGuardTripsSeen += 1;
+        }
+        if (marketMakerPlan?.risk.closingSoon) {
+            closeGuardTripsSeen += 1;
+        }
+        if (marketMakerPlan?.risk.circuitBreaker.active) {
+            circuitBreakerTripsSeen += 1;
+        }
         if (marketMakerAgent) {
             worstMarketMakerPnl = Math.min(
                 worstMarketMakerPnl,
@@ -907,6 +1208,27 @@ async function broadcastState(): Promise<void> {
                 reason: claimsProcessed ? null : "settled market still has residual positions",
             },
         ];
+        const activeScenarioPreset = getScenarioPresetByIdOrName(currentScenarioId);
+        const scenarioPolicyGates = activeScenarioPreset
+            ? evaluateScenarioPolicyGates(activeScenarioPreset, {
+                  attackerPnl: bestAttackerPnlSeen,
+                  maxDrawdownBps: marketMakerDrawdownBps,
+                  quoteUptimeRatio:
+                      scenarioObservedTicks > 0
+                          ? scenarioQuotedTicks / scenarioObservedTicks
+                          : 0,
+                  orderChurn,
+                  degraded: false,
+                  mmSolvent,
+                  bookNotCrossed,
+                  settlementConsistent,
+                  claimsProcessed,
+                  settlementStatus,
+                  staleStreamGuardTrips: staleStreamGuardTripsSeen,
+                  staleOracleGuardTrips: staleOracleGuardTripsSeen,
+                  closeGuardTrips: closeGuardTripsSeen,
+              })
+            : [];
         const protocolMmPnl = Number(
             formatEth(
                 mmBalance - ethers.parseEther(initialBalances.get(mmAddr) || "10000"),
@@ -960,6 +1282,7 @@ async function broadcastState(): Promise<void> {
                 book,
                 mitigation: {
                     gates: mitigationGates,
+                    scenarioGates: scenarioPolicyGates,
                     metrics: {
                         attackerPnlCurrent: attackerPnl,
                         attackerPnlPeak: bestAttackerPnlSeen,
@@ -970,8 +1293,13 @@ async function broadcastState(): Promise<void> {
                         peakInventory: peakInventorySeen,
                         spreadWidthBps,
                         orderChurn,
+                        staleStreamGuardTrips: staleStreamGuardTripsSeen,
+                        staleOracleGuardTrips: staleOracleGuardTripsSeen,
+                        closeGuardTrips: closeGuardTripsSeen,
+                        circuitBreakerTrips: circuitBreakerTripsSeen,
                         settlementConsistent,
                         claimsProcessed,
+                        settlementStatus,
                     },
                 },
                 scenarios: SCENARIO_PRESETS,
@@ -1122,8 +1450,11 @@ function buildScenarioResult(
             reason: "Scenario finished without a computed state snapshot",
         });
         const marketMakerPnl = worstMarketMakerPnl;
+        const gates = fallbackGates;
         return {
+            scenarioId: preset.id,
             name: preset.name,
+            family: preset.family,
             seed,
             chainKey: "bsc",
             attackerPnl: bestAttackerPnlSeen,
@@ -1148,13 +1479,16 @@ function buildScenarioResult(
             lockTransitionLatencyMs: lastResolveLatencyMs,
             resolvedCorrectly: false,
             claimCorrectly: false,
-            gates: fallbackGates,
+            passed: gates.every((gate) => gate.passed),
+            degraded: true,
+            gates,
             traces: buildScenarioTraces(),
         };
     }
 
     const gates = [
         ...(lastComputedState.mitigation.gates as MitigationGate[]),
+        ...((lastComputedState.mitigation.scenarioGates as MitigationGate[] | undefined) ?? []),
     ];
     gates.unshift(...fallbackGates);
 
@@ -1166,9 +1500,16 @@ function buildScenarioResult(
     const maxDrawdownBps = Math.round(
         (Math.abs(Math.min(0, marketMakerPnl)) / 1) * 10_000,
     );
+    const degraded = (options.degradedReasons?.length ?? 0) > 0;
+    const expectedSettledStatus =
+        preset.runtimeProfile?.settlementMode === "cancel"
+            ? MARKET_STATUS_CANCELLED
+            : MARKET_STATUS_RESOLVED;
 
     return {
+        scenarioId: preset.id,
         name: preset.name,
+        family: preset.family,
         seed,
         chainKey: "bsc",
         attackerPnl: bestAttackerPnlSeen,
@@ -1187,13 +1528,15 @@ function buildScenarioResult(
             entry.event === "OrderMatched",
         ).length,
         lockTransitionLatencyMs: lastResolveLatencyMs,
-        resolvedCorrectly: (options.degradedReasons?.length ?? 0) > 0
+        resolvedCorrectly: degraded
             ? false
             : Boolean(lastComputedState.mitigation.metrics.settlementConsistent) &&
-              Number(lastComputedState.market.status) === MARKET_STATUS_RESOLVED,
-        claimCorrectly: (options.degradedReasons?.length ?? 0) > 0
+              Number(lastComputedState.market.status) === expectedSettledStatus,
+        claimCorrectly: degraded
             ? false
             : Boolean(lastComputedState.mitigation.metrics.claimsProcessed),
+        passed: gates.every((gate) => gate.passed),
+        degraded,
         gates,
         traces: buildScenarioTraces(),
     };
@@ -1222,15 +1565,22 @@ async function runScenarioPreset(
             entry.error = null;
             entry.result = null;
         });
-        await withTimeout(
-            restoreScenarioBaseline(),
-            20_000,
-            `scenario ${preset.id} restore baseline`,
-        );
+        if (run.freshBaseline) {
+            updateActiveRunStage("restore-baseline-rebuild");
+            await withTimeout(
+                rebuildSimulationEnvironment(),
+                SCENARIO_BASELINE_REBUILD_TIMEOUT_MS,
+                `scenario ${preset.id} fresh baseline rebuild`,
+            );
+        } else {
+            await restoreScenarioBaseline();
+        }
         applyScenarioPresetByName(run.scenarioId);
         const seed = run.seed;
         const ticks = run.ticks;
         const winner = run.winner;
+        const settlementMode =
+            preset.runtimeProfile?.settlementMode ?? "resolve";
 
         setRandomSeed(seed);
         broadcast({
@@ -1278,9 +1628,9 @@ async function runScenarioPreset(
             try {
                 const resolveStartedAt = Date.now();
                 await withTimeout(
-                    resolveDuel(winner === "B" ? SIDE_B : SIDE_A),
+                    settleDuel(settlementMode, winner === "B" ? SIDE_B : SIDE_A),
                     SCENARIO_RESOLVE_TIMEOUT_MS,
-                    `scenario ${preset.id} resolve`,
+                    `scenario ${preset.id} settle`,
                 );
                 lastResolveLatencyMs = Date.now() - resolveStartedAt;
             } catch (error) {
@@ -1380,7 +1730,10 @@ async function runScenarioPreset(
 
 // ─── Resolve Duel ────────────────────────────────────────────────────────────
 
-async function resolveDuel(winnerSide: number): Promise<void> {
+async function settleDuel(
+    settlementMode: ScenarioSettlementMode,
+    winnerSide: number,
+): Promise<void> {
   try {
     const reporter = await provider.getSigner(2);
     const operator = await provider.getSigner(1);
@@ -1393,34 +1746,63 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     const block = await provider.getBlock("latest");
     const now = BigInt(block?.timestamp ?? Math.floor(Date.now() / 1000));
 
-    updateActiveRunStage("resolve-report-result");
-    const tx1: any = await withTimeout(
-        (oracle.connect(reporter) as any).reportResult(
-            currentDuelKey,
-            winnerSide,
-            BigInt(Math.floor(random() * 1000000)),
-            ethers.keccak256(ethers.toUtf8Bytes(`replay-${currentDuelLabel}`)),
-            ethers.keccak256(ethers.toUtf8Bytes(`result-${currentDuelLabel}`)),
-            now,
-            `resolved-${currentDuelLabel}`,
-        ),
-        10_000,
-        "resolve reportResult",
-    );
-    await withTimeout(tx1.wait(), 10_000, "resolve reportResult receipt");
+    let tx1: any;
+    if (settlementMode === "cancel") {
+        updateActiveRunStage("resolve-cancel-duel");
+        tx1 = await withTimeout(
+            (oracle.connect(reporter) as any).cancelDuel(
+                currentDuelKey,
+                `cancelled-${currentDuelLabel}`,
+            ),
+            SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
+            "resolve cancelDuel",
+        );
+        await withTimeout(
+            tx1.wait(),
+            SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
+            "resolve cancelDuel receipt",
+        );
+    } else {
+        updateActiveRunStage("resolve-report-result");
+        tx1 = await withTimeout(
+            (oracle.connect(reporter) as any).reportResult(
+                currentDuelKey,
+                winnerSide,
+                BigInt(Math.floor(random() * 1000000)),
+                ethers.keccak256(ethers.toUtf8Bytes(`replay-${currentDuelLabel}`)),
+                ethers.keccak256(ethers.toUtf8Bytes(`result-${currentDuelLabel}`)),
+                now,
+                `resolved-${currentDuelLabel}`,
+            ),
+            SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
+            "resolve reportResult",
+        );
+        await withTimeout(
+            tx1.wait(),
+            SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
+            "resolve reportResult receipt",
+        );
+    }
 
     updateActiveRunStage("resolve-sync-market");
     const tx2: any = await withTimeout(
         (clob.connect(operator) as any).syncMarketFromOracle(currentDuelKey, MARKET_KIND_DUEL_WINNER),
-        10_000,
+        SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
         "resolve syncMarketFromOracle",
     );
-    await withTimeout(tx2.wait(), 10_000, "resolve syncMarketFromOracle receipt");
+    await withTimeout(
+        tx2.wait(),
+        SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
+        "resolve syncMarketFromOracle receipt",
+    );
 
     broadcast({
         type: "log",
         data: {
-            message: `🏆 Duel resolved! Winner: Side ${winnerSide === SIDE_A ? "A" : "B"}`,
+            message:
+                settlementMode === "cancel"
+                    ? "🧾 Duel cancelled and refunds unlocked"
+                    : `🏆 Duel resolved! Winner: Side ${winnerSide === SIDE_A ? "A" : "B"}`,
             tick: simTick,
         },
     });
@@ -1430,82 +1812,26 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     broadcast({ type: "log", data: { message: "⏸️ Simulation auto-paused after resolution. Click 'New Duel' then 'Start' to continue.", tick: simTick } });
 
     updateActiveRunStage("resolve-scan-claims");
-    const claimCandidates = (
-        await Promise.all(
-            agents.map(async (agent): Promise<ClaimCandidate | null> => {
-                const address = await getAgentAddress(agent);
-                const positionRaw = await withReadRetry(
-                    `${agent.config.name} claim position lookup`,
-                    () => clobRead.positions(currentMarketKey, address),
-                    { timeoutMs: 15_000 },
-                );
-                const position: CachedPosition = {
-                    aShares: BigInt(positionRaw.aShares),
-                    bShares: BigInt(positionRaw.bShares),
-                    aStake: BigInt(positionRaw.aStake),
-                    bStake: BigInt(positionRaw.bStake),
-                };
-                agentPositionCache.set(address, position);
-                return hasPosition(position)
-                    ? {
-                          agent,
-                          address,
-                          position,
-                      }
-                    : null;
-            }),
-        )
-    ).filter((candidate): candidate is ClaimCandidate => candidate != null);
-
-    updateActiveRunStage(`resolve-claims-${claimCandidates.length}`);
-    const claimDeadline = Date.now() + RESOLVE_CLAIM_BUDGET_MS;
-    for (const [index, candidate] of claimCandidates.entries()) {
-        if (Date.now() >= claimDeadline) {
-            updateActiveRunStage("resolve-claims-budget-exhausted");
-            broadcast({
-                type: "log",
-                data: {
-                    message: `⏭️ Claim budget exhausted after ${index}/${claimCandidates.length} claims; continuing with partial settlement state`,
-                    tick: simTick,
-                },
-            });
-            break;
-        }
-        try {
-            updateActiveRunStage(
-                `resolve-claim-${index + 1}-of-${claimCandidates.length}`,
-            );
-            const txClaim: any = await withTimeout(
-                (clob.connect(candidate.agent.signer) as any).claim(
-                    currentDuelKey,
-                    MARKET_KIND_DUEL_WINNER,
-                ),
-                20_000,
-                `${candidate.agent.config.name} claim`,
-            );
-            await withTimeout(
-                txClaim.wait(),
-                20_000,
-                `${candidate.agent.config.name} claim receipt`,
-            );
-            agentPositionCache.set(candidate.address, { ...ZERO_POSITION });
-            broadcast({
-                type: "log",
-                data: {
-                    message: `[${candidate.agent.config.name}] Claimed winnings`,
-                    tick: simTick,
-                },
-            });
-        } catch (err: any) {
-            broadcast({
-                type: "log",
-                data: {
-                    message: `[${candidate.agent.config.name}] Claim: ${err.message?.slice(0, 80)}`,
-                    tick: simTick,
-                },
+    refreshReadClients();
+    const claimCandidates: ClaimCandidate[] = [];
+    for (const [index, agent] of agents.entries()) {
+        updateActiveRunStage(`resolve-position-${index + 1}-of-${agents.length}`);
+        const address = await getAgentAddress(agent);
+        const position = await loadClaimPosition(agent, address);
+        if (position && hasPosition(position)) {
+            claimCandidates.push({
+                agent,
+                address,
+                position,
             });
         }
     }
+
+    await processClaimCandidates(
+        claimCandidates,
+        "resolve-claims",
+        RESOLVE_CLAIM_BUDGET_MS,
+    );
 
     updateActiveRunStage("resolve-final-state");
     await withTimeout(
@@ -1513,6 +1839,23 @@ async function resolveDuel(winnerSide: number): Promise<void> {
         60_000,
         "resolve final broadcastState",
     );
+
+    if (!lastComputedState?.mitigation.metrics.claimsProcessed) {
+        const residualCandidates = getResidualClaimCandidates();
+        if (residualCandidates.length > 0) {
+            await processClaimCandidates(
+                residualCandidates,
+                "resolve-residual-claims",
+                Math.max(10_000, Math.floor(RESOLVE_CLAIM_BUDGET_MS / 2)),
+            );
+            updateActiveRunStage("resolve-final-state-residual");
+            await withTimeout(
+                broadcastState(),
+                60_000,
+                "resolve residual broadcastState",
+            );
+        }
+    }
   } catch (err: any) {
     broadcast({
         type: "log",
@@ -1588,7 +1931,7 @@ function handleWsMessage(data: string): void {
 
             case "resolve": {
                 const side = msg.winner === "B" ? SIDE_B : SIDE_A;
-                resolveDuel(side);
+                settleDuel("resolve", side);
                 break;
             }
 
@@ -1683,6 +2026,7 @@ async function handleHttpRequest(
         writeJson(res, 200, {
             ok: true,
             scenarios: SCENARIO_PRESETS,
+            gateScenarios: GATE_SCENARIOS,
             latest: scenarioHistory[0] ?? null,
             activeRun: getActiveScenarioRun(),
             runs: scenarioRuns.slice(0, SCENARIO_HISTORY_LIMIT),
@@ -1754,6 +2098,9 @@ async function handleHttpRequest(
                     winnerParam === "A" || winnerParam === "B"
                         ? winnerParam
                         : undefined,
+                freshBaseline:
+                    requestUrl.searchParams.get("fresh") === "1" ||
+                    requestUrl.searchParams.get("fresh") === "true",
             });
             scenarioRuns = [run, ...scenarioRuns].slice(0, SCENARIO_HISTORY_LIMIT);
             persistScenarioState();
@@ -1793,14 +2140,7 @@ async function main(): Promise<void> {
 
     // 2. Deploy contracts
     await deployContracts();
-    baselineRuntimeState = {
-        duelCounter,
-        currentDuelLabel,
-        currentDuelKey,
-        currentMarketKey,
-    };
-    baselineSnapshotId = await provider.send("evm_snapshot", []);
-    eventLog.length = 0;
+    await captureScenarioBaseline();
     await broadcastState();
 
     // 3. Start HTTP server
@@ -1832,10 +2172,11 @@ async function main(): Promise<void> {
     // Cleanup on exit
     const cleanup = () => {
         simRunning = false;
-        stopAnvil();
         wss.close();
         httpServer.close();
-        process.exit(0);
+        void stopAnvil().finally(() => {
+            process.exit(0);
+        });
     };
 
     process.on("SIGINT", cleanup);
@@ -1846,6 +2187,7 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
     console.error("Fatal:", err);
-    stopAnvil();
-    process.exit(1);
+    void stopAnvil().finally(() => {
+        process.exit(1);
+    });
 });

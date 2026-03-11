@@ -3,7 +3,9 @@ import {
     DEFAULT_MARKET_MAKER_CONFIG,
     buildQuotePlan,
     type MarketSnapshot,
+    type QuotePlan,
 } from "@hyperbet/mm-core";
+import type { ScenarioRuntimeProfile } from "./scenario-catalog.js";
 import {
     BUY_SIDE,
     SELL_SIDE,
@@ -39,9 +41,11 @@ export type SimContext = {
     totalAShares: bigint;
     totalBShares: bigint;
     tick: number;
+    nowMs: number;
     treasuryFeeBps: bigint;
     mmFeeBps: bigint;
     agentActiveOrderIds: number[];
+    scenarioProfile: ScenarioRuntimeProfile | null;
     agentPosition: { aShares: bigint; bShares: bigint; aStake: bigint; bStake: bigint };
 };
 
@@ -199,6 +203,9 @@ export class RetailAgent extends BaseAgent {
 
 // ─── Market Maker Agent ──────────────────────────────────────────────────────
 export class MarketMakerAgent extends BaseAgent {
+    lastPlan: QuotePlan | null = null;
+    lastSnapshot: MarketSnapshot | null = null;
+
     constructor(signer: JsonRpcSigner, clob: Contract) {
         super(
             {
@@ -216,6 +223,15 @@ export class MarketMakerAgent extends BaseAgent {
     decide(ctx: SimContext): AgentAction[] {
         const actions: AgentAction[] = [];
         const shouldReduceOnly = this.activeOrderIds.length >= 6;
+        const runtimeProfile = ctx.scenarioProfile;
+        const nowMs = ctx.nowMs;
+        const staleStreamLagMs = (runtimeProfile?.staleStreamLagTicks ?? 0) * 500;
+        const staleOracleLagMs = (runtimeProfile?.staleOracleLagTicks ?? 0) * 500;
+        const staleRpcLagMs = (runtimeProfile?.staleRpcLagTicks ?? 0) * 500;
+        const betCloseTimeMs =
+            runtimeProfile?.betCloseTick != null
+                ? runtimeProfile.betCloseTick * 500
+                : null;
 
         // Cancel stale orders first
         if (this.activeOrderIds.length > 4) {
@@ -235,21 +251,26 @@ export class MarketMakerAgent extends BaseAgent {
             marketRef: ctx.marketKey,
             bestBid: ctx.bestBid > 0 ? ctx.bestBid : null,
             bestAsk: ctx.bestAsk > 0 ? ctx.bestAsk : null,
+            betCloseTimeMs,
             exposure: {
                 yes: Number(ctx.agentPosition.aShares / 1000n),
                 no: Number(ctx.agentPosition.bShares / 1000n),
                 openYes: 0,
                 openNo: 0,
             },
-            lastStreamAtMs: ctx.tick * 500,
-            lastOracleAtMs: ctx.tick * 500,
-            lastRpcAtMs: ctx.tick * 500,
+            lastStreamAtMs: nowMs - staleStreamLagMs,
+            lastOracleAtMs: nowMs - staleOracleLagMs,
+            lastRpcAtMs: nowMs - staleRpcLagMs,
             quoteAgeMs: this.activeOrderIds.length > 0 ? 2_000 : null,
         };
+        this.lastSnapshot = snapshot;
 
         const plan = buildQuotePlan(
             snapshot,
-            { signalPrice: ctx.mid, signalWeight: 0.35 },
+            {
+                signalPrice: ctx.mid,
+                signalWeight: runtimeProfile?.signalWeight ?? 0.35,
+            },
             {
                 ...DEFAULT_MARKET_MAKER_CONFIG,
                 minQuoteUnits: 2,
@@ -258,9 +279,13 @@ export class MarketMakerAgent extends BaseAgent {
                 maxNetExposure: 25,
                 maxQuoteAgeMs: 2_500,
                 minRefreshIntervalMs: 1_000,
+                betCloseGuardMs:
+                    runtimeProfile?.marketMakerBetCloseGuardMs ??
+                    DEFAULT_MARKET_MAKER_CONFIG.betCloseGuardMs,
             },
-            ctx.tick * 500,
+            nowMs,
         );
+        this.lastPlan = plan;
 
         if (plan.risk.circuitBreaker.active) {
             return actions;
@@ -595,170 +620,37 @@ export class StressTestAgent extends BaseAgent {
     }
 }
 
-// ─── Scenario Presets ────────────────────────────────────────────────────────
+export class CancelReplaceAgent extends BaseAgent {
+    constructor(signer: JsonRpcSigner, clob: Contract) {
+        super(
+            {
+                name: "Cancel/Replace Griefer",
+                strategy: "cancel_replace",
+                description: "Rapidly churns its own quotes to stress cancel-replace paths",
+                enabled: false,
+                color: "#8d6e63",
+            },
+            signer,
+            clob,
+        );
+    }
 
-export type ScenarioPreset = {
-    id: string;
-    name: string;
-    family: string;
-    description: string;
-    enabledStrategies: string[];
-    defaultTicks: number;
-    defaultWinner: "A" | "B";
-};
-
-export const SCENARIO_PRESETS: ScenarioPreset[] = [
-    {
-        id: "normal-market",
-        name: "Normal Market",
-        family: "baseline",
-        description: "Retail traders + market maker in a balanced market",
-        enabledStrategies: ["retail", "market_maker"],
-        defaultTicks: 20,
-        defaultWinner: "A",
-    },
-    {
-        id: "retail-rush",
-        name: "Retail Rush",
-        family: "toxic-flow",
-        description: "All retail traders active, overwhelming thin MM liquidity",
-        enabledStrategies: ["retail", "market_maker"],
-        defaultTicks: 24,
-        defaultWinner: "A",
-    },
-    {
-        id: "whale-impact",
-        name: "Whale Impact",
-        family: "inventory-poisoning",
-        description: "Normal market with a whale dumping large orders",
-        enabledStrategies: ["retail", "market_maker", "whale"],
-        defaultTicks: 24,
-        defaultWinner: "B",
-    },
-    {
-        id: "mev-extraction",
-        name: "MEV Extraction",
-        family: "frontrun-backrun",
-        description: "Multiple MEV bots frontrunning retail order flow",
-        enabledStrategies: ["retail", "market_maker", "mev_frontrunner"],
-        defaultTicks: 24,
-        defaultWinner: "A",
-    },
-    {
-        id: "sandwich-attack",
-        name: "Sandwich Attack",
-        family: "sandwich",
-        description: "Multiple sandwich bots wrapping retail orders",
-        enabledStrategies: ["retail", "market_maker", "sandwich"],
-        defaultTicks: 24,
-        defaultWinner: "B",
-    },
-    {
-        id: "double-sandwich-mev",
-        name: "Double Sandwich + MEV",
-        family: "sandwich",
-        description: "Both sandwich bots and MEV bots extracting from retail",
-        enabledStrategies: ["retail", "market_maker", "sandwich", "mev_frontrunner"],
-        defaultTicks: 28,
-        defaultWinner: "B",
-    },
-    {
-        id: "wash-trading",
-        name: "Wash Trading",
-        family: "wash-volume",
-        description: "Wash trader inflating volume alongside normal flow",
-        enabledStrategies: ["retail", "market_maker", "wash_trader"],
-        defaultTicks: 20,
-        defaultWinner: "A",
-    },
-    {
-        id: "oracle-attack",
-        name: "Oracle Attack",
-        family: "oracle-abuse",
-        description: "Attacker trying to manipulate the duel oracle",
-        enabledStrategies: ["retail", "market_maker", "oracle_attack"],
-        defaultTicks: 18,
-        defaultWinner: "A",
-    },
-    {
-        id: "cabal-coordination",
-        name: "Cabal Coordination",
-        family: "coordinated-flow",
-        description: "Two coordinated cabal groups betting against each other",
-        enabledStrategies: ["retail", "market_maker", "cabal"],
-        defaultTicks: 24,
-        defaultWinner: "B",
-    },
-    {
-        id: "arbitrage-hunt",
-        name: "Arbitrage Hunt",
-        family: "crossed-book-arb",
-        description: "Arbitrageur exploiting tight/crossed spreads",
-        enabledStrategies: ["retail", "market_maker", "arbitrageur"],
-        defaultTicks: 20,
-        defaultWinner: "A",
-    },
-    {
-        id: "stress-test",
-        name: "Stress Test",
-        family: "order-flood-dos",
-        description: "High-frequency flood of orders overwhelming the book",
-        enabledStrategies: ["retail", "market_maker", "stress_test"],
-        defaultTicks: 16,
-        defaultWinner: "B",
-    },
-    {
-        id: "whale-vs-mev",
-        name: "Whale vs MEV",
-        family: "toxic-flow",
-        description: "Whale moving markets while MEV bots try to extract",
-        enabledStrategies: ["market_maker", "whale", "mev_frontrunner"],
-        defaultTicks: 24,
-        defaultWinner: "B",
-    },
-    {
-        id: "attack-gauntlet",
-        name: "Attack Gauntlet",
-        family: "multi-vector",
-        description: "All attack agents vs thin MM — maximum adversarial pressure",
-        enabledStrategies: [
-            "market_maker",
-            "mev_frontrunner",
-            "sandwich",
-            "wash_trader",
-            "cabal",
-            "arbitrageur",
-        ],
-        defaultTicks: 10,
-        defaultWinner: "B",
-    },
-    {
-        id: "liquidity-crisis",
-        name: "Liquidity Crisis",
-        family: "insolvency",
-        description: "Only the underfunded MM and whale — tests insolvency edge cases",
-        enabledStrategies: ["market_maker", "whale"],
-        defaultTicks: 18,
-        defaultWinner: "B",
-    },
-    {
-        id: "full-chaos",
-        name: "Full Chaos",
-        family: "multi-vector",
-        description: "All 15 agents active simultaneously — maximum entropy",
-        enabledStrategies: [
-            "retail",
-            "market_maker",
-            "whale",
-            "mev_frontrunner",
-            "sandwich",
-            "wash_trader",
-            "oracle_attack",
-            "cabal",
-            "arbitrageur",
-            "stress_test",
-        ],
-        defaultTicks: 8,
-        defaultWinner: "B",
-    },
-];
+    decide(ctx: SimContext): AgentAction[] {
+        const actions: AgentAction[] = [];
+        for (const orderId of this.activeOrderIds.slice(0, 2)) {
+            actions.push({ type: "cancelOrder", orderId, label: "cancel/replace" });
+        }
+        const orderCount = randomInt(1, 2);
+        for (let i = 0; i < orderCount; i += 1) {
+            const isBuy = random() > 0.5;
+            actions.push({
+                type: "placeOrder",
+                side: isBuy ? BUY_SIDE : SELL_SIDE,
+                price: clamp(ctx.mid + randomInt(-15, 15), 10, 990),
+                amount: BigInt(randomInt(1, 2)) * 1000n,
+                label: `cancel-replace #${i + 1}`,
+            });
+        }
+        return actions;
+    }
+}
