@@ -6,6 +6,7 @@ import {
   buildRiskState,
   computeFairValue,
   evaluateQuoteDecision,
+  mergePredictionMarketsWithHealth,
 } from "../src/index.ts";
 
 describe("mm-core", () => {
@@ -250,5 +251,69 @@ describe("mm-core", () => {
     );
     expect(decision.shouldKeep).toBe(true);
     expect(decision.shouldCancel).toBe(false);
+  });
+
+  test("merges lifecycle records with keeper health by market ref", () => {
+    const records = mergePredictionMarketsWithHealth(
+      [
+        {
+          chainKey: "bsc",
+          duelKey: "0xabc",
+          duelId: "duel-1",
+          marketId: "market-1",
+          marketRef: "market-1",
+          lifecycleStatus: "OPEN",
+          winner: "NONE",
+          betCloseTime: null,
+          contractAddress: null,
+          programId: null,
+          txRef: null,
+          syncedAt: 1,
+          metadata: undefined,
+        },
+      ],
+      {
+        chainKey: "bsc",
+        updatedAtMs: 1_000,
+        bootedAtMs: 100,
+        running: true,
+        processId: 123,
+        lastSuccessfulRpcAtMs: 999,
+        recovery: [],
+        markets: [
+          {
+            chainKey: "bsc",
+            duelId: "duel-1",
+            duelKey: "0xabc",
+            marketRef: "market-1",
+            lifecycleStatus: "OPEN",
+            fairValue: 500,
+            bidPrice: 490,
+            askPrice: 510,
+            bidUnits: 50,
+            askUnits: 50,
+            openOrderCount: 2,
+            inventoryYes: 10,
+            inventoryNo: 5,
+            openYes: 40,
+            openNo: 40,
+            netExposure: 5,
+            grossExposure: 95,
+            drawdownBps: 0,
+            quoteAgeMs: 1_000,
+            lastStreamAtMs: 900,
+            lastOracleAtMs: 901,
+            lastRpcAtMs: 902,
+            circuitBreakerReason: null,
+            lastResolvedAtMs: null,
+            lastClaimAtMs: null,
+            recovery: [],
+          },
+        ],
+      },
+    );
+    expect(records).toHaveLength(1);
+    expect(records[0].health?.marketRef).toBe("market-1");
+    expect(records[0].health?.openOrderCount).toBe(2);
   });
 });

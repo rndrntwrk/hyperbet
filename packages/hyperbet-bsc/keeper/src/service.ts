@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import fs_node from "node:fs";
 import path from "node:path";
 
 import {
@@ -14,6 +15,10 @@ import {
   type PredictionMarketWinner,
   type RecordedBetChain,
 } from "@hyperbet/chain-registry";
+import {
+  mergePredictionMarketsWithHealth,
+  type KeeperBotHealthSnapshot,
+} from "@hyperbet/mm-core";
 import { PublicKey } from "@solana/web3.js";
 import { createPublicClient, http, type Address } from "viem";
 
@@ -130,7 +135,23 @@ type ProxyCacheEntry = {
 const encoder = new TextEncoder();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const keeperRoot = path.resolve(__dirname, "..");
+const KEEPER_BOT_HEALTH_FILE = (
+  process.env.KEEPER_BOT_HEALTH_FILE ||
+  path.resolve(keeperRoot, ".status", "keeper-bot-health.json")
+).trim();
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+function loadKeeperBotHealthSnapshot(): KeeperBotHealthSnapshot | null {
+  if (!KEEPER_BOT_HEALTH_FILE || !fs_node.existsSync(KEEPER_BOT_HEALTH_FILE)) {
+    return null;
+  }
+  try {
+    return JSON.parse(fs_node.readFileSync(KEEPER_BOT_HEALTH_FILE, "utf8"));
+  } catch (error) {
+    console.warn("[service] Failed to read keeper bot health snapshot:", error);
+    return null;
+  }
+}
 
 function readPositiveEnvInteger(
   name: string,
@@ -1698,6 +1719,7 @@ function startKeeperBotIfEnabled(): void {
   const childEnv = {
     ...process.env,
     GAME_URL: process.env.GAME_URL || `http://127.0.0.1:${PORT}`,
+    KEEPER_BOT_HEALTH_FILE,
   };
 
   botSubprocess = Bun.spawn(["bun", "--bun", "src/bot.ts"], {
@@ -2670,6 +2692,17 @@ const server = Bun.serve({
 
     if (url.pathname === "/status") {
       const predictionMarkets = buildPredictionMarketLifecycleRecords();
+      const botHealthSnapshotRaw = loadKeeperBotHealthSnapshot();
+      const botHealthSnapshot = botHealthSnapshotRaw
+        ? {
+          ...botHealthSnapshotRaw,
+          running: Boolean(botSubprocess),
+        }
+        : null;
+      const marketStatuses = mergePredictionMarketsWithHealth(
+        predictionMarkets,
+        botHealthSnapshot,
+      );
       return jsonResponse(req, {
         ok: true,
         service: "hyperbet-bsc-backend",
@@ -2697,6 +2730,7 @@ const server = Bun.serve({
           running: Boolean(botSubprocess),
           lastExitCode: botExitCode,
           lastExitAt: botLastExitAt,
+          health: botHealthSnapshot,
         },
         stats: {
           trackedBets: bets.length,
@@ -2706,7 +2740,8 @@ const server = Bun.serve({
         predictionMarkets: {
           activeDuelKey: currentDuelKey(),
           marketCount: predictionMarkets.length,
-          chains: predictionMarkets.map((market) => ({
+          botHealthUpdatedAt: botHealthSnapshot?.updatedAtMs ?? null,
+          chains: marketStatuses.map((market) => ({
             chainKey: market.chainKey,
             marketRef: market.marketRef,
             lifecycleStatus: market.lifecycleStatus,
@@ -2715,6 +2750,7 @@ const server = Bun.serve({
             syncedAt: market.syncedAt,
             txRef: market.txRef,
             metadata: market.metadata ?? null,
+            health: market.health,
           })),
         },
       });
@@ -2745,6 +2781,20 @@ const server = Bun.serve({
       url.pathname === "/api/arena/prediction-markets/active"
     ) {
       return handlePredictionMarkets(req);
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/keeper/bot-health") {
+      const botHealthSnapshotRaw = loadKeeperBotHealthSnapshot();
+      return jsonResponse(req, {
+        ok: true,
+        running: Boolean(botSubprocess),
+        health: botHealthSnapshotRaw
+          ? {
+            ...botHealthSnapshotRaw,
+            running: Boolean(botSubprocess),
+          }
+          : null,
+      });
     }
 
     if (

@@ -1,5 +1,6 @@
 import type {
   BettingChainKey,
+  PredictionMarketLifecycleRecord,
   PredictionMarketLifecycleStatus,
 } from "@hyperbet/chain-registry";
 
@@ -170,6 +171,59 @@ export interface MitigationGate {
   reason: string | null;
 }
 
+export interface KeeperRecoveryState {
+  code: string;
+  active: boolean;
+  sinceMs: number | null;
+  untilMs: number | null;
+  details: string | null;
+}
+
+export interface KeeperMarketHealthRecord {
+  chainKey: BettingChainKey;
+  duelId: string | null;
+  duelKey: string | null;
+  marketRef: string | null;
+  lifecycleStatus: PredictionMarketLifecycleStatus;
+  fairValue: number | null;
+  bidPrice: number | null;
+  askPrice: number | null;
+  bidUnits: number;
+  askUnits: number;
+  openOrderCount: number;
+  inventoryYes: number;
+  inventoryNo: number;
+  openYes: number;
+  openNo: number;
+  netExposure: number;
+  grossExposure: number;
+  drawdownBps: number;
+  quoteAgeMs: number | null;
+  lastStreamAtMs: number | null;
+  lastOracleAtMs: number | null;
+  lastRpcAtMs: number | null;
+  circuitBreakerReason: string | null;
+  lastResolvedAtMs: number | null;
+  lastClaimAtMs: number | null;
+  recovery: string[];
+}
+
+export interface KeeperBotHealthSnapshot {
+  chainKey: BettingChainKey;
+  updatedAtMs: number;
+  bootedAtMs: number;
+  running: boolean;
+  processId: number | null;
+  lastSuccessfulRpcAtMs: number | null;
+  recovery: KeeperRecoveryState[];
+  markets: KeeperMarketHealthRecord[];
+}
+
+export interface PredictionMarketStatusRecord
+  extends PredictionMarketLifecycleRecord {
+  health: KeeperMarketHealthRecord | null;
+}
+
 export interface ScenarioResult {
   scenarioId: string;
   name: string;
@@ -190,6 +244,29 @@ export interface ScenarioResult {
   degraded: boolean;
   gates: MitigationGate[];
   traces: AgentActionTrace[];
+}
+
+export function mergePredictionMarketsWithHealth(
+  records: readonly PredictionMarketLifecycleRecord[],
+  botHealth: KeeperBotHealthSnapshot | null,
+): PredictionMarketStatusRecord[] {
+  return records.map((record) => {
+    const health =
+      botHealth?.markets.find(
+        (candidate) =>
+          candidate.chainKey === record.chainKey &&
+          ((candidate.marketRef != null &&
+            record.marketRef != null &&
+            candidate.marketRef === record.marketRef) ||
+            (candidate.duelKey != null &&
+              record.duelKey != null &&
+              candidate.duelKey === record.duelKey)),
+      ) ?? null;
+    return {
+      ...record,
+      health,
+    };
+  });
 }
 
 export const DEFAULT_MARKET_MAKER_CONFIG: MarketMakerConfig = {
