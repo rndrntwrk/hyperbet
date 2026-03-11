@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `79d0101`
+- Latest recorded gate merged into base: `dc05370`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-05-runtime-parity`
+- Active gate branch: `enoomian/pm-06-frontend-settlement`
 
 ## Gate Status
 
@@ -24,7 +24,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 02 | `enoomian/pm-02-evm-scenario-gates` | Complete | Yes | Explicit gate-family catalog, scenario-specific policy evaluation, fresh-baseline scenario runs, and canonical/matrix verification coverage |
 | 03 | `enoomian/pm-03-mm-risk-engine` | Complete | Yes | Shared quote sizing, gross-exposure and imbalance caps, and keeper quote refresh decisions now come from `@hyperbet/mm-core` |
 | 04 | `enoomian/pm-04-keeper-health-recovery` | Complete | Yes | Keeper bots now persist market health/recovery snapshots and all three keeper services expose merged bot health via `/status` and `/api/keeper/bot-health` |
-| 05 | `enoomian/pm-05-runtime-parity` | Pending | No | Align external bot and EVM keepers on the same runtime and strategy inputs |
+| 05 | `enoomian/pm-05-runtime-parity` | Complete | Yes | External bot and EVM keepers now share chain-registry runtime assembly, quote refresh behavior, and direct local quote lifecycle smokes for BSC and AVAX |
 | 06 | `enoomian/pm-06-frontend-settlement` | Pending | No | Make the frontend lifecycle and claim handling fully canonical on normalized market state |
 | 07 | `enoomian/pm-07-solana-bot-execution` | Pending | No | Finish real Solana execution in the external market-maker bot |
 | 08 | `enoomian/pm-08-solana-sim-backend` | Pending | No | Build validator-backed Solana scenario execution |
@@ -155,6 +155,38 @@ Known remaining risk:
 - Keeper health is now visible and durable, but the external market-maker bot and EVM keeper runtimes still diverge in runtime assembly, env handling, and refresh/recovery behavior.
 - `predictionMarkets.chains[].health` depends on live lifecycle records existing in the current keeper snapshot, so the merge path is covered by tests while idle `/status` responses can still show an empty `chains` array.
 - Gate 05 should align the external bot and EVM keepers on the same chain-registry-driven runtime selection, fair-value inputs, halt logic, and refresh rules.
+
+### Gate 05
+
+- Branch: `enoomian/pm-05-runtime-parity`
+- Base commit after merge: `dc05370`
+- Commits:
+  - `8928897` `runtime: align evm resolver and quote refresh`
+  - `dc05370` `runtime: add evm quote lifecycle smoke coverage`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Moved the external market-maker bot and `verify-chains` onto shared chain-registry runtime resolution so BSC, Base, and AVAX use the same RPC/address/env selection path as the rest of the stack.
+- Switched the external bot onto shared quote refresh behavior and added explicit per-chain nonce management for EVM write paths, fixing local same-cycle quote placement on real chains.
+- Updated BSC and AVAX keeper bots and services to derive enabled EVM runtimes from chain-registry data plus `EVM_KEEPER_CHAINS`, instead of package-local hardcoded chain lists.
+- Added direct runtime smoke commands in `packages/market-maker-bot` that deploy local oracle/CLOB contracts, run quote -> take -> lock -> resolve -> claim, and verify filled-position cleanup without depending on the frontend shell.
+- Extended the bot test harness to cover the new runtime nonce path and refresh-window behavior.
+
+Targeted verification:
+
+- `bun test` in `packages/hyperbet-chain-registry`
+- `bun test` in `packages/market-maker-bot`
+- `bunx tsc --noEmit -p tsconfig.json` in `packages/hyperbet-bsc/keeper`
+- `bunx tsc --noEmit -p tsconfig.json` in `packages/hyperbet-avax/keeper`
+- `bun run smoke:runtime:bsc -- --rpc-url http://127.0.0.1:18545` in `packages/market-maker-bot`
+- `bun run smoke:runtime:avax -- --rpc-url http://127.0.0.1:18545` in `packages/market-maker-bot`
+
+Known remaining risk:
+
+- The BSC and AVAX app shells still have UI-level drift relative to the shared canonical lifecycle panels, so frontend claim/settlement parity remains open for Gate 06 and full cross-chain product reliability remains open for Gate 10.
+- The direct runtime smokes currently log a benign cancel failure when the bot tries to cancel an order that was already fully filled before lock; the tracked-order state still clears correctly, but the noisy log path should eventually be tightened.
+- Solana execution in the external bot is still incomplete, so runtime parity is only closed for the EVM side of the external market maker.
 
 ## Update Template
 
