@@ -7,12 +7,15 @@ export interface MarketMakerConfig {
   targetSpreadBps: number;
   toxicSpreadMultiplier: number;
   toxicityThresholdBps: number;
+  toxicUnitReductionBps: number;
   minQuotePrice: number;
   maxQuotePrice: number;
   minQuoteUnits: number;
   maxQuoteUnits: number;
   maxInventoryPerSide: number;
   maxNetExposure: number;
+  maxGrossExposure: number;
+  maxSideImbalanceBps: number;
   maxDrawdownBps: number;
   staleStreamAfterMs: number;
   staleOracleAfterMs: number;
@@ -107,13 +110,16 @@ export interface CircuitBreakerState {
 export interface RiskState {
   yesExposure: number;
   noExposure: number;
+  grossExposure: number;
   netExposure: number;
+  sideImbalanceBps: number;
   drawdownBps: number;
   toxicityBps: number;
   staleStream: boolean;
   staleOracle: boolean;
   staleRpc: boolean;
   closingSoon: boolean;
+  reduceOnly: boolean;
   canBid: boolean;
   canAsk: boolean;
   circuitBreaker: CircuitBreakerState;
@@ -127,6 +133,22 @@ export interface QuotePlan {
   askUnits: number;
   replaceQuotes: boolean;
   risk: RiskState;
+}
+
+export interface ManagedQuoteState {
+  price: number;
+  units: number;
+  placedAtMs: number;
+}
+
+export interface QuoteDecision {
+  side: "BID" | "ASK";
+  targetPrice: number | null;
+  targetUnits: number;
+  shouldCancel: boolean;
+  shouldPlace: boolean;
+  shouldKeep: boolean;
+  reason: string | null;
 }
 
 export interface AgentActionTrace {
@@ -174,12 +196,15 @@ export const DEFAULT_MARKET_MAKER_CONFIG: MarketMakerConfig = {
   targetSpreadBps: 200,
   toxicSpreadMultiplier: 2,
   toxicityThresholdBps: 1000,
+  toxicUnitReductionBps: 5_000,
   minQuotePrice: 1,
   maxQuotePrice: 999,
   minQuoteUnits: 25,
   maxQuoteUnits: 100,
   maxInventoryPerSide: 500_000,
   maxNetExposure: 250_000,
+  maxGrossExposure: 750_000,
+  maxSideImbalanceBps: 6_000,
   maxDrawdownBps: 2_000,
   staleStreamAfterMs: 3_000,
   staleOracleAfterMs: 5_000,
@@ -275,7 +300,12 @@ export function buildRiskState(
 ): RiskState {
   const yesExposure = snapshot.exposure.yes + snapshot.exposure.openYes;
   const noExposure = snapshot.exposure.no + snapshot.exposure.openNo;
+  const grossExposure = yesExposure + noExposure;
   const netExposure = yesExposure - noExposure;
+  const sideImbalanceBps =
+    grossExposure > 0
+      ? Math.round((Math.abs(netExposure) * 10_000) / Math.max(1, grossExposure))
+      : 0;
   const drawdownBps = Math.max(0, snapshot.exposure.drawdownBps ?? 0);
   const staleStream =
     snapshot.lastStreamAtMs == null || now - snapshot.lastStreamAtMs > config.staleStreamAfterMs;
@@ -287,6 +317,12 @@ export function buildRiskState(
     snapshot.betCloseTimeMs != null &&
     snapshot.betCloseTimeMs - now <= config.betCloseGuardMs;
   const toxicityBps = computeToxicityBps(snapshot.bestBid, snapshot.bestAsk);
+  const marketNotionalLimited =
+    grossExposure >= Math.max(config.maxGrossExposure, config.maxQuoteUnits);
+  const bidImbalanceLimited =
+    netExposure > 0 && sideImbalanceBps >= config.maxSideImbalanceBps;
+  const askImbalanceLimited =
+    netExposure < 0 && sideImbalanceBps >= config.maxSideImbalanceBps;
 
   let reason: string | null = null;
   if (snapshot.lifecycleStatus !== "OPEN") {
@@ -301,27 +337,36 @@ export function buildRiskState(
     reason = "stale-rpc";
   } else if (drawdownBps >= config.maxDrawdownBps) {
     reason = "drawdown-limit";
+  } else if (marketNotionalLimited) {
+    reason = "market-notional-limit";
   }
 
   const canBid =
     yesExposure < config.maxInventoryPerSide &&
     netExposure < config.maxNetExposure &&
+    !bidImbalanceLimited &&
     reason == null;
   const canAsk =
     noExposure < config.maxInventoryPerSide &&
     -netExposure < config.maxNetExposure &&
+    !askImbalanceLimited &&
     reason == null;
 
   return {
     yesExposure,
     noExposure,
+    grossExposure,
     netExposure,
+    sideImbalanceBps,
     drawdownBps,
     toxicityBps,
     staleStream,
     staleOracle,
     staleRpc,
     closingSoon,
+    reduceOnly:
+      reason == null &&
+      ((bidImbalanceLimited && canAsk) || (askImbalanceLimited && canBid)),
     canBid,
     canAsk,
     circuitBreaker: {
@@ -329,6 +374,17 @@ export function buildRiskState(
       reason,
     },
   };
+}
+
+function clampQuoteUnits(
+  requestedUnits: number,
+  minQuoteUnits: number,
+  limits: number[],
+): number {
+  const boundedUnits = Math.floor(
+    Math.min(requestedUnits, ...limits.map((value) => Math.max(0, value))),
+  );
+  return boundedUnits >= minQuoteUnits ? boundedUnits : 0;
 }
 
 export function buildQuotePlan(
@@ -370,34 +426,71 @@ export function buildQuotePlan(
     quoteWidth *= Math.max(1, config.toxicSpreadMultiplier);
   }
 
-  let baseUnits = Math.max(
-    config.minQuoteUnits,
-    Math.min(
-      config.maxQuoteUnits,
+  const inventoryHeadroomRatio = Math.max(
+    0,
+    1 -
+      Math.max(risk.yesExposure, risk.noExposure) /
+        Math.max(1, config.maxInventoryPerSide),
+  );
+  const grossHeadroomRatio = Math.max(
+    0,
+    1 - risk.grossExposure / Math.max(1, config.maxGrossExposure),
+  );
+  const drawdownHeadroomRatio = Math.max(
+    0.25,
+    1 - risk.drawdownBps / Math.max(1, config.maxDrawdownBps),
+  );
+  const toxicUnitScale =
+    risk.toxicityBps >= config.toxicityThresholdBps
+      ? Math.max(0, Math.min(1, config.toxicUnitReductionBps / 10_000))
+      : 1;
+  const baseUnits = Math.min(
+    config.maxQuoteUnits,
+    Math.max(
+      config.minQuoteUnits,
       Math.round(
         config.maxQuoteUnits *
-          (1 -
-            Math.max(risk.yesExposure, risk.noExposure) /
-              Math.max(1, config.maxInventoryPerSide)),
+          Math.min(
+            inventoryHeadroomRatio,
+            grossHeadroomRatio,
+            drawdownHeadroomRatio,
+          ) *
+          toxicUnitScale,
       ),
     ),
   );
-  if (risk.toxicityBps >= config.toxicityThresholdBps) {
-    baseUnits = Math.max(config.minQuoteUnits, Math.floor(baseUnits / 2));
-  }
 
   const imbalance = Math.max(-1, Math.min(1, computeInventorySkew(snapshot.exposure)));
+  const grossHeadroomUnits = Math.max(0, config.maxGrossExposure - risk.grossExposure);
+  const bidNetHeadroomUnits = Math.max(0, config.maxNetExposure - risk.netExposure);
+  const askNetHeadroomUnits = Math.max(0, config.maxNetExposure + risk.netExposure);
+  const bidInventoryHeadroomUnits = Math.max(
+    0,
+    config.maxInventoryPerSide - risk.yesExposure,
+  );
+  const askInventoryHeadroomUnits = Math.max(
+    0,
+    config.maxInventoryPerSide - risk.noExposure,
+  );
+  const bidRequestedUnits = Math.round(
+    baseUnits * Math.max(0.25, 1 - Math.max(0, imbalance)),
+  );
+  const askRequestedUnits = Math.round(
+    baseUnits * Math.max(0.25, 1 + Math.min(0, imbalance)),
+  );
   const bidUnits = risk.canBid
-    ? Math.max(
-        config.minQuoteUnits,
-        Math.round(baseUnits * Math.max(0.25, 1 - Math.max(0, imbalance))),
-      )
+    ? clampQuoteUnits(bidRequestedUnits, config.minQuoteUnits, [
+        bidInventoryHeadroomUnits,
+        bidNetHeadroomUnits,
+        grossHeadroomUnits,
+      ])
     : 0;
   const askUnits = risk.canAsk
-    ? Math.max(
-        config.minQuoteUnits,
-        Math.round(baseUnits * Math.max(0.25, 1 + Math.min(0, imbalance))),
-      )
+    ? clampQuoteUnits(askRequestedUnits, config.minQuoteUnits, [
+        askInventoryHeadroomUnits,
+        askNetHeadroomUnits,
+        grossHeadroomUnits,
+      ])
     : 0;
 
   let bidPrice = clampPrice(
@@ -424,5 +517,76 @@ export function buildQuotePlan(
     replaceQuotes:
       snapshot.quoteAgeMs == null || snapshot.quoteAgeMs >= config.minRefreshIntervalMs,
     risk,
+  };
+}
+
+export function evaluateQuoteDecision(
+  side: "BID" | "ASK",
+  plan: QuotePlan,
+  activeQuote: ManagedQuoteState | null,
+  config: MarketMakerConfig = DEFAULT_MARKET_MAKER_CONFIG,
+  now = Date.now(),
+): QuoteDecision {
+  const targetPrice = side === "BID" ? plan.bidPrice : plan.askPrice;
+  const targetUnits = side === "BID" ? plan.bidUnits : plan.askUnits;
+  if (!activeQuote) {
+    return {
+      side,
+      targetPrice,
+      targetUnits,
+      shouldCancel: false,
+      shouldPlace: targetPrice != null && targetUnits > 0,
+      shouldKeep: targetPrice == null || targetUnits <= 0,
+      reason:
+        targetPrice != null && targetUnits > 0
+          ? "quote-missing"
+          : plan.risk.circuitBreaker.reason,
+    };
+  }
+
+  if (targetPrice == null || targetUnits <= 0) {
+    return {
+      side,
+      targetPrice,
+      targetUnits,
+      shouldCancel: true,
+      shouldPlace: false,
+      shouldKeep: false,
+      reason: plan.risk.circuitBreaker.reason ?? "quote-disabled",
+    };
+  }
+
+  const quoteAgeMs = Math.max(0, now - activeQuote.placedAtMs);
+  const expired = quoteAgeMs >= config.maxQuoteAgeMs;
+  const needsPriceRefresh = activeQuote.price !== targetPrice;
+  const needsSizeRefresh = activeQuote.units !== targetUnits;
+  const refreshWindowOpen = plan.replaceQuotes || expired;
+  const shouldRefresh =
+    expired || (refreshWindowOpen && (needsPriceRefresh || needsSizeRefresh));
+
+  if (shouldRefresh) {
+    return {
+      side,
+      targetPrice,
+      targetUnits,
+      shouldCancel: true,
+      shouldPlace: true,
+      shouldKeep: false,
+      reason: expired
+        ? "quote-expired"
+        : needsSizeRefresh
+          ? "size-refresh"
+          : "price-refresh",
+    };
+  }
+
+  return {
+    side,
+    targetPrice,
+    targetUnits,
+    shouldCancel: false,
+    shouldPlace: false,
+    shouldKeep: true,
+    reason: null,
   };
 }

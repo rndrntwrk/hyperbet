@@ -11,6 +11,7 @@ import {
 import {
   buildQuotePlan,
   DEFAULT_MARKET_MAKER_CONFIG,
+  evaluateQuoteDecision,
   type MarketSnapshot,
 } from "@hyperbet/mm-core";
 import yargs from "yargs";
@@ -1415,7 +1416,7 @@ const configuredSpreadBps = Math.max(
 const managedClobQuoteConfig = {
   ...DEFAULT_MARKET_MAKER_CONFIG,
   targetSpreadBps: configuredSpreadBps,
-  minQuoteUnits: marketMakerSeedLamports,
+  minQuoteUnits: Math.max(1, Math.floor(marketMakerSeedLamports / 4)),
   maxQuoteUnits: marketMakerSeedLamports,
   maxInventoryPerSide: Math.max(
     DEFAULT_MARKET_MAKER_CONFIG.maxInventoryPerSide,
@@ -1424,6 +1425,10 @@ const managedClobQuoteConfig = {
   maxNetExposure: Math.max(
     DEFAULT_MARKET_MAKER_CONFIG.maxNetExposure,
     marketMakerSeedLamports * 2,
+  ),
+  maxGrossExposure: Math.max(
+    DEFAULT_MARKET_MAKER_CONFIG.maxGrossExposure,
+    marketMakerSeedLamports * 6,
   ),
 };
 
@@ -2144,6 +2149,7 @@ async function placeManagedClobOrder(
   trackedMatch: ActiveClobMatch,
   side: number,
   price: number,
+  amountLamports: number,
 ): Promise<ManagedClobOrder> {
   const marketState = await getClobMarketState(trackedMatch.marketState);
   if (!enumIs(marketState?.status, "open")) {
@@ -2177,7 +2183,7 @@ async function placeManagedClobOrder(
           new BN(orderId),
           side,
           price,
-          new BN(marketMakerSeedLamports),
+          new BN(amountLamports),
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,
@@ -2197,14 +2203,14 @@ async function placeManagedClobOrder(
   );
 
   console.log(
-    `[bot] Seeded ${side === SIDE_BID ? "A-bid" : "B-ask"} liquidity for ${trackedMatch.marketState.toBase58()} orderId=${orderId} price=${price} amountLamports=${marketMakerSeedLamports}`,
+    `[bot] Seeded ${side === SIDE_BID ? "A-bid" : "B-ask"} liquidity for ${trackedMatch.marketState.toBase58()} orderId=${orderId} price=${price} amountLamports=${amountLamports}`,
   );
 
   return {
     orderId,
     side,
     price,
-    amountLamports: marketMakerSeedLamports,
+    amountLamports,
     placedAtMs: Date.now(),
   };
 }
@@ -2245,31 +2251,37 @@ async function ensureManagedClobOrder(
   );
   const activeOrder =
     side === "yesBidOrder" ? quoteContext.yesBidOrder : quoteContext.noAskOrder;
-  const targetPrice = side === "yesBidOrder" ? plan.bidPrice : plan.askPrice;
-  const orderAgeMs = activeOrder ? now - activeOrder.placedAtMs : null;
-  const shouldRefresh =
-    activeOrder != null &&
-    (targetPrice == null ||
-      (plan.replaceQuotes && activeOrder.price !== targetPrice) ||
-      (orderAgeMs != null && orderAgeMs >= managedClobQuoteConfig.maxQuoteAgeMs));
+  const decision = evaluateQuoteDecision(
+    side === "yesBidOrder" ? "BID" : "ASK",
+    plan,
+    activeOrder
+      ? {
+          price: activeOrder.price,
+          units: activeOrder.remainingLamports,
+          placedAtMs: activeOrder.placedAtMs,
+        }
+      : null,
+    managedClobQuoteConfig,
+    now,
+  );
 
-  if (activeOrder && shouldRefresh) {
+  if (activeOrder && decision.shouldCancel) {
     await cancelManagedClobOrder(
       trackedMatch,
       activeOrder,
-      targetPrice == null
-        ? plan.risk.circuitBreaker.reason ?? "quote-disabled"
-        : orderAgeMs != null && orderAgeMs >= managedClobQuoteConfig.maxQuoteAgeMs
-          ? "quote-expired"
-          : "price-refresh",
+      decision.reason ?? "quote-refresh",
     );
     trackedMatch[side] = null;
-  } else if (activeOrder) {
+  } else if (activeOrder && decision.shouldKeep) {
     trackedMatch[side] = toManagedClobOrder(activeOrder);
     return;
   }
 
-  if (targetPrice == null) {
+  if (
+    !decision.shouldPlace ||
+    decision.targetPrice == null ||
+    decision.targetUnits <= 0
+  ) {
     trackedMatch[side] = null;
     return;
   }
@@ -2277,7 +2289,8 @@ async function ensureManagedClobOrder(
   trackedMatch[side] = await placeManagedClobOrder(
     trackedMatch,
     side === "yesBidOrder" ? SIDE_BID : SIDE_ASK,
-    targetPrice,
+    decision.targetPrice,
+    decision.targetUnits,
   );
 }
 
