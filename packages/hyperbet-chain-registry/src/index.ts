@@ -78,6 +78,14 @@ export interface EvmChainRuntimeConfig {
   deployment: BettingEvmDeployment;
 }
 
+export interface ResolvedBettingEvmRuntimeEnv {
+  chainKey: BettingEvmChain;
+  deployment: BettingEvmDeployment;
+  rpcUrl: string;
+  duelOracleAddress: string;
+  goldClobAddress: string;
+}
+
 export interface ExternalBetRecordPayload {
   bettorWallet: string;
   chain?: string | null;
@@ -392,6 +400,68 @@ export function getEvmRuntimeConfig(
     goldTokenAddress: overrides.goldTokenAddress ?? deployment.goldTokenAddress,
     deployment,
   };
+}
+
+function firstNonEmptyEnvValue(
+  env: Record<string, string | undefined>,
+  names: readonly string[],
+): string | null {
+  for (const name of names) {
+    const value = env[name]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+export function resolveBettingEvmRuntimeEnv(
+  chainKey: BettingEvmChain,
+  environment: BettingAppEnvironment,
+  env: Record<string, string | undefined> = process.env,
+): ResolvedBettingEvmRuntimeEnv {
+  const deployment = resolveBettingEvmDeploymentForChain(chainKey, environment);
+  const chainUpper = chainKey.toUpperCase();
+  return {
+    chainKey,
+    deployment,
+    rpcUrl:
+      firstNonEmptyEnvValue(env, [
+        `EVM_${chainUpper}_RPC_URL`,
+        `${chainUpper}_RPC_URL`,
+        deployment.rpcEnvVar,
+      ]) ?? defaultRpcUrlForEvmNetwork(deployment.networkKey),
+    duelOracleAddress:
+      firstNonEmptyEnvValue(env, [
+        `ORACLE_CONTRACT_ADDRESS_${chainUpper}`,
+        `${chainUpper}_DUEL_ORACLE_ADDRESS`,
+      ]) ?? deployment.duelOracleAddress,
+    goldClobAddress:
+      firstNonEmptyEnvValue(env, [
+        `CLOB_CONTRACT_ADDRESS_${chainUpper}`,
+        `${chainUpper}_GOLD_CLOB_ADDRESS`,
+      ]) ?? deployment.goldClobAddress,
+  };
+}
+
+export function parseBettingEvmChainList(
+  value: string | null | undefined,
+  fallback: readonly BettingEvmChain[] = BETTING_EVM_CHAIN_ORDER,
+): BettingEvmChain[] {
+  const tokens = (value ?? "")
+    .split(/[\s,]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) {
+    return [...fallback];
+  }
+
+  const chains: BettingEvmChain[] = [];
+  for (const token of tokens) {
+    const normalized = normalizeChainKey(token, "solana");
+    if (isEvmChainKey(normalized) && !chains.includes(normalized)) {
+      chains.push(normalized);
+    }
+  }
+  return chains.length > 0 ? chains : [...fallback];
 }
 
 export function normalizeChainKey(

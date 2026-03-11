@@ -9,6 +9,13 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import {
+  BETTING_EVM_CHAIN_ORDER,
+  normalizeSolanaCluster,
+  parseBettingEvmChainList,
+  resolveBettingEvmRuntimeEnv,
+  type BettingEvmChain,
+} from "@hyperbet/chain-registry";
+import {
   buildQuotePlan,
   DEFAULT_MARKET_MAKER_CONFIG,
   evaluateQuoteDecision,
@@ -1342,6 +1349,7 @@ const botCluster = (
 )
   .toLowerCase()
   .trim();
+const keeperEnvironment = normalizeSolanaCluster(botCluster);
 const minSignerLamports = Math.max(
   5_000,
   Number(process.env.BOT_MIN_BALANCE_LAMPORTS || 100_000),
@@ -1450,7 +1458,7 @@ const managedClobQuoteConfig = {
 };
 
 type EvmKeeperRuntime = {
-  label: string;
+  chainKey: BettingEvmChain;
   duelOracleAddress: Address;
   goldClobAddress: Address;
   publicClient: ReturnType<typeof createPublicClient>;
@@ -1477,22 +1485,24 @@ function parsePrivateKey(value: string | undefined): `0x${string}` | null {
 }
 
 function buildEvmRuntime(
-  label: string,
-  rpcUrl: string | undefined,
-  duelOracleAddress: string | undefined,
-  goldClobAddress: string | undefined,
+  chainKey: BettingEvmChain,
   privateKey: `0x${string}` | null,
 ): EvmKeeperRuntime | null {
-  const oracle = parseAddressEnv(duelOracleAddress);
-  const clob = parseAddressEnv(goldClobAddress);
-  if (!rpcUrl || !oracle || !clob || !privateKey) {
+  const runtimeEnv = resolveBettingEvmRuntimeEnv(
+    chainKey,
+    keeperEnvironment,
+    process.env,
+  );
+  const oracle = parseAddressEnv(runtimeEnv.duelOracleAddress);
+  const clob = parseAddressEnv(runtimeEnv.goldClobAddress);
+  if (!oracle || !clob || !privateKey) {
     return null;
   }
 
   const account = privateKeyToAccount(privateKey);
-  const transport = http(rpcUrl.trim());
+  const transport = http(runtimeEnv.rpcUrl.trim());
   return {
-    label,
+    chainKey,
     duelOracleAddress: oracle,
     goldClobAddress: clob,
     publicClient: createPublicClient({ transport }),
@@ -1504,22 +1514,13 @@ function buildEvmRuntime(
 const evmKeeperPrivateKey = parsePrivateKey(
   process.env.EVM_KEEPER_PRIVATE_KEY ?? process.env.PRIVATE_KEY,
 );
-const evmKeeperChains = [
-  buildEvmRuntime(
-    "bsc",
-    process.env.BSC_RPC_URL ?? process.env.BSC_MAINNET_RPC ?? process.env.BSC_TESTNET_RPC,
-    process.env.BSC_DUEL_ORACLE_ADDRESS,
-    process.env.BSC_GOLD_CLOB_ADDRESS,
-    evmKeeperPrivateKey,
-  ),
-  buildEvmRuntime(
-    "base",
-    process.env.BASE_RPC_URL ?? process.env.BASE_MAINNET_RPC ?? process.env.BASE_SEPOLIA_RPC,
-    process.env.BASE_DUEL_ORACLE_ADDRESS,
-    process.env.BASE_GOLD_CLOB_ADDRESS,
-    evmKeeperPrivateKey,
-  ),
-].filter((chain): chain is EvmKeeperRuntime => chain !== null);
+const configuredEvmKeeperChains = parseBettingEvmChainList(
+  process.env.EVM_KEEPER_CHAINS,
+  BETTING_EVM_CHAIN_ORDER,
+);
+const evmKeeperChains = configuredEvmKeeperChains
+  .map((chainKey) => buildEvmRuntime(chainKey, evmKeeperPrivateKey))
+  .filter((chain): chain is EvmKeeperRuntime => chain !== null);
 
 const requiredPrograms = [
   {

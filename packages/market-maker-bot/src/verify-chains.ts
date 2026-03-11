@@ -1,6 +1,7 @@
 import {
-  defaultRpcUrlForEvmNetwork,
-  resolveBettingEvmDeploymentForChain,
+  BETTING_EVM_CHAIN_ORDER,
+  resolveBettingEvmRuntimeEnv,
+  type BettingEvmChain,
 } from "@hyperbet/chain-registry";
 import { Connection, PublicKey } from "@solana/web3.js";
 import dotenv from "dotenv";
@@ -22,13 +23,13 @@ const DEFAULT_SOLANA_RPC_URL =
 const EVM_CLOB_ABI = ["function feeBps() view returns (uint256)"];
 
 export type CheckResult = {
-  chain: "bsc" | "base" | "avax" | "solana";
+  chain: BettingEvmChain | "solana";
   ok: boolean;
   details: string;
 };
 
 export const verifyEvmChain = async (params: {
-  chain: "bsc" | "base" | "avax";
+  chain: BettingEvmChain;
   rpcUrl: string;
   expectedChainId: bigint;
   clobAddress: string;
@@ -108,44 +109,24 @@ export const verifySolanaChain = async (params: {
   }
 };
 
+function expectedChainIdEnvVar(chain: BettingEvmChain): string {
+  return `${chain.toUpperCase()}_EXPECTED_CHAIN_ID`;
+}
+
 async function run() {
-  const bscDeployment = resolveBettingEvmDeploymentForChain("bsc", "mainnet-beta");
-  const baseDeployment = resolveBettingEvmDeploymentForChain("base", "mainnet-beta");
-  const avaxDeployment = resolveBettingEvmDeploymentForChain("avax", "mainnet-beta");
+  const evmChecks = BETTING_EVM_CHAIN_ORDER.map((chain) => {
+    const runtime = resolveBettingEvmRuntimeEnv(chain, "mainnet-beta", process.env);
+    return verifyEvmChain({
+      chain,
+      rpcUrl: runtime.rpcUrl,
+      expectedChainId: BigInt(
+        process.env[expectedChainIdEnvVar(chain)] || runtime.deployment.chainId,
+      ),
+      clobAddress: normalizeAddress(runtime.goldClobAddress),
+    });
+  });
   const results = await Promise.all([
-    verifyEvmChain({
-      chain: "bsc",
-      rpcUrl:
-        process.env.EVM_BSC_RPC_URL ||
-        process.env[bscDeployment.rpcEnvVar] ||
-        defaultRpcUrlForEvmNetwork(bscDeployment.networkKey),
-      expectedChainId: BigInt(process.env.BSC_EXPECTED_CHAIN_ID || bscDeployment.chainId),
-      clobAddress: normalizeAddress(
-        process.env.CLOB_CONTRACT_ADDRESS_BSC || bscDeployment.goldClobAddress,
-      ),
-    }),
-    verifyEvmChain({
-      chain: "base",
-      rpcUrl:
-        process.env.EVM_BASE_RPC_URL ||
-        process.env[baseDeployment.rpcEnvVar] ||
-        defaultRpcUrlForEvmNetwork(baseDeployment.networkKey),
-      expectedChainId: BigInt(process.env.BASE_EXPECTED_CHAIN_ID || baseDeployment.chainId),
-      clobAddress: normalizeAddress(
-        process.env.CLOB_CONTRACT_ADDRESS_BASE || baseDeployment.goldClobAddress,
-      ),
-    }),
-    verifyEvmChain({
-      chain: "avax",
-      rpcUrl:
-        process.env.EVM_AVAX_RPC_URL ||
-        process.env[avaxDeployment.rpcEnvVar] ||
-        defaultRpcUrlForEvmNetwork(avaxDeployment.networkKey),
-      expectedChainId: BigInt(process.env.AVAX_EXPECTED_CHAIN_ID || avaxDeployment.chainId),
-      clobAddress: normalizeAddress(
-        process.env.CLOB_CONTRACT_ADDRESS_AVAX || avaxDeployment.goldClobAddress,
-      ),
-    }),
+    ...evmChecks,
     verifySolanaChain({
       rpcUrl: DEFAULT_SOLANA_RPC_URL,
       programId: DEFAULT_SOLANA_PROGRAM_ID,

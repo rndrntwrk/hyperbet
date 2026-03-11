@@ -7,12 +7,12 @@ import {
   type BettingEvmChain,
   type PredictionMarketLifecycleRecord,
   type PredictionMarketLifecycleStatus,
-  defaultRpcUrlForEvmNetwork,
-  resolveBettingEvmDeploymentForChain,
+  resolveBettingEvmRuntimeEnv,
 } from "@hyperbet/chain-registry";
 import {
   DEFAULT_MARKET_MAKER_CONFIG,
   buildQuotePlan,
+  evaluateQuoteDecision,
   type MarketMakerConfig,
   type MarketSnapshot,
 } from "@hyperbet/mm-core";
@@ -426,9 +426,9 @@ export class CrossChainMarketMaker {
   }
 
   private createEvmRuntime(chainKey: BettingEvmChain): EvmRuntime {
-    const deployment = resolveBettingEvmDeploymentForChain(chainKey, TARGET_ENV);
+    const runtimeEnv = resolveBettingEvmRuntimeEnv(chainKey, TARGET_ENV, process.env);
     const chainUpper = chainKey.toUpperCase();
-    const enabled = readEnvBoolean(`MM_ENABLE_${chainUpper}`, chainKey !== "avax");
+    const enabled = readEnvBoolean(`MM_ENABLE_${chainUpper}`, true);
     const sharedKey = process.env.EVM_PRIVATE_KEY || "";
     const privateKey =
       process.env[`EVM_PRIVATE_KEY_${chainUpper}`] || sharedKey;
@@ -450,18 +450,9 @@ export class CrossChainMarketMaker {
       };
     }
 
-    const rpcUrl =
-      process.env[`EVM_${chainUpper}_RPC_URL`] ||
-      process.env[deployment.rpcEnvVar] ||
-      "";
-    const resolvedRpcUrl =
-      rpcUrl.trim().length > 0
-        ? rpcUrl.trim()
-        : defaultRpcUrlForEvmNetwork(deployment.networkKey);
-    const provider = new ethers.JsonRpcProvider(resolvedRpcUrl);
+    const provider = new ethers.JsonRpcProvider(runtimeEnv.rpcUrl);
     const wallet = new ethers.Wallet(privateKey, provider);
-    const goldClobAddressRaw =
-      process.env[`CLOB_CONTRACT_ADDRESS_${chainUpper}`] || deployment.goldClobAddress;
+    const goldClobAddressRaw = runtimeEnv.goldClobAddress;
     const goldClobAddress =
       goldClobAddressRaw.trim().length > 0 ? normalizeAddress(goldClobAddressRaw) : "";
     const clob = new ethers.Contract(goldClobAddress || ethers.ZeroAddress, GOLD_CLOB_ABI, wallet);
@@ -471,7 +462,7 @@ export class CrossChainMarketMaker {
       wallet,
       clob,
       enabled: enabled && goldClobAddress.length > 0,
-      rpcUrl: resolvedRpcUrl,
+      rpcUrl: runtimeEnv.rpcUrl,
       goldClobAddress,
     };
   }
@@ -671,8 +662,8 @@ export class CrossChainMarketMaker {
       return;
     }
 
-    await this.reconcileOrder(runtime, duelKey, marketKey, BUY_SIDE, plan.bidPrice, plan.bidUnits);
-    await this.reconcileOrder(runtime, duelKey, marketKey, SELL_SIDE, plan.askPrice, plan.askUnits);
+    await this.reconcileOrder(runtime, duelKey, marketKey, BUY_SIDE, plan);
+    await this.reconcileOrder(runtime, duelKey, marketKey, SELL_SIDE, plan);
   }
 
   private async reconcileOrder(
@@ -680,8 +671,7 @@ export class CrossChainMarketMaker {
     duelKey: string,
     marketKey: string,
     side: typeof BUY_SIDE | typeof SELL_SIDE,
-    targetPrice: number | null,
-    targetUnits: number,
+    plan: ReturnType<typeof buildQuotePlan>,
   ) {
     const existing = this.activeOrders.filter(
       (order) =>
@@ -689,33 +679,45 @@ export class CrossChainMarketMaker {
         order.duelKey === duelKey &&
         order.side === side,
     );
-    const needsRefresh =
-      targetPrice == null ||
-      targetUnits <= 0 ||
-      existing.length === 0 ||
-      existing.some(
-        (order) =>
-          Date.now() - order.placedAt >= this.config.maxQuoteAgeMs ||
-          order.price !== targetPrice ||
-          order.amount !== targetUnits,
-      );
-
-    if (needsRefresh) {
-      for (const order of existing) {
-        await this.cancelTrackedOrder(runtime, order);
-      }
+    const primaryOrder = existing[0] ?? null;
+    for (const duplicateOrder of existing.slice(1)) {
+      await this.cancelTrackedOrder(runtime, duplicateOrder);
     }
 
-    if (targetPrice == null || targetUnits <= 0 || !needsRefresh) {
+    const now = Date.now();
+    const decision = evaluateQuoteDecision(
+      side === BUY_SIDE ? "BID" : "ASK",
+      plan,
+      primaryOrder
+        ? {
+            price: primaryOrder.price,
+            units: primaryOrder.amount,
+            placedAtMs: primaryOrder.placedAt,
+          }
+        : null,
+      this.config,
+      now,
+    );
+
+    if (primaryOrder && decision.shouldCancel) {
+      await this.cancelTrackedOrder(runtime, primaryOrder);
+    }
+
+    if (
+      decision.shouldKeep ||
+      !decision.shouldPlace ||
+      decision.targetPrice == null ||
+      decision.targetUnits <= 0
+    ) {
       return;
     }
 
-    const rawAmount = unitsToRawAmount(targetUnits);
+    const rawAmount = unitsToRawAmount(decision.targetUnits);
     const [tradeTreasuryFeeBps, tradeMarketMakerFeeBps] = await Promise.all([
       runtime.clob.tradeTreasuryFeeBps() as Promise<bigint>,
       runtime.clob.tradeMarketMakerFeeBps() as Promise<bigint>,
     ]);
-    const cost = computeCost(side, targetPrice, rawAmount);
+    const cost = computeCost(side, decision.targetPrice, rawAmount);
     const nativeValue =
       cost +
       (cost * tradeTreasuryFeeBps) / 10_000n +
@@ -725,7 +727,7 @@ export class CrossChainMarketMaker {
       duelKey,
       MARKET_KIND_DUEL_WINNER,
       side,
-      targetPrice,
+      decision.targetPrice,
       rawAmount,
       { value: nativeValue },
     );
@@ -742,14 +744,14 @@ export class CrossChainMarketMaker {
       duelKey,
       marketKey,
       side,
-      price: targetPrice,
-      amount: targetUnits,
+      price: decision.targetPrice,
+      amount: decision.targetUnits,
       placedAt: Date.now(),
     };
     this.activeOrders.push(trackedOrder);
     this.orderHashToSignature.set(this.orderHash(trackedOrder), receipt?.hash ?? tx.hash);
     console.log(
-      `[${runtime.chainKey.toUpperCase()}] quote ${side === BUY_SIDE ? "BID" : "ASK"} @${targetPrice} x${targetUnits} order=${orderId}`,
+      `[${runtime.chainKey.toUpperCase()}] quote ${side === BUY_SIDE ? "BID" : "ASK"} @${decision.targetPrice} x${decision.targetUnits} order=${orderId}`,
     );
   }
 

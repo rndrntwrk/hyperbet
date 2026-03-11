@@ -6,8 +6,10 @@ import {
   defaultRpcUrlForEvmNetwork,
   normalizeChainKey,
   normalizeSolanaCluster,
+  parseBettingEvmChainList,
   resolveBettingEvmDefaults,
   resolveBettingEvmDeploymentForChain,
+  resolveBettingEvmRuntimeEnv,
   resolveLifecycleFromEvmStatus,
   resolveLifecycleFromStreamPhase,
   toRecordedBetChain,
@@ -41,6 +43,31 @@ describe("chain registry", () => {
     const avax = resolveBettingEvmDeploymentForChain("avax", "mainnet-beta");
     expect(avax.chainId).toBe(BETTING_DEPLOYMENTS.evm.avax.chainId);
     expect(defaultRpcUrlForEvmNetwork(avax.networkKey)).toContain("avax");
+  });
+
+  test("resolves EVM runtime env with shared override precedence", () => {
+    const runtime = resolveBettingEvmRuntimeEnv("avax", "testnet", {
+      EVM_AVAX_RPC_URL: "https://override.example/rpc",
+      AVAX_DUEL_ORACLE_ADDRESS: "0x1111111111111111111111111111111111111111",
+      AVAX_GOLD_CLOB_ADDRESS: "0x2222222222222222222222222222222222222222",
+      AVAX_FUJI_RPC: "https://ignored.example/fuji",
+    });
+    expect(runtime.rpcUrl).toBe("https://override.example/rpc");
+    expect(runtime.duelOracleAddress).toBe(
+      "0x1111111111111111111111111111111111111111",
+    );
+    expect(runtime.goldClobAddress).toBe(
+      "0x2222222222222222222222222222222222222222",
+    );
+  });
+
+  test("parses configurable EVM keeper chain lists without duplicates", () => {
+    expect(parseBettingEvmChainList("avax, base bsc avax")).toEqual([
+      "avax",
+      "base",
+      "bsc",
+    ]);
+    expect(parseBettingEvmChainList("")).toEqual(BETTING_EVM_CHAIN_ORDER);
   });
 
   test("normalizes chain keys and recorded chain names", () => {

@@ -1676,6 +1676,7 @@ function startKeeperBotIfEnabled(): void {
   const childEnv = {
     ...process.env,
     GAME_URL: process.env.GAME_URL || `http://127.0.0.1:${PORT}`,
+    EVM_KEEPER_CHAINS: process.env.EVM_KEEPER_CHAINS || "avax",
     KEEPER_BOT_HEALTH_FILE,
   };
 
