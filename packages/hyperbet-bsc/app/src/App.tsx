@@ -884,8 +884,7 @@ export function App() {
       : null;
   const effAgent1Name = currentMatch?.agent1Name ?? liveAgent1Name ?? "Agent A";
   const effAgent2Name = currentMatch?.agent2Name ?? liveAgent2Name ?? "Agent B";
-  const effStatusColor = status ? "#fda4af" : "rgba(255,255,255,0.78)";
-  const effStatus = status;
+
   const contextAgent1 = duelContext?.cycle.agent1 ?? null;
   const contextAgent2 = duelContext?.cycle.agent2 ?? null;
 
@@ -967,7 +966,7 @@ export function App() {
 
   // Sidebar bet state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [hmSide, setHmSide] = useState<BetSide>("YES");
+
   const [hmBottomTab, setHmBottomTab] = useState<
     "positions" | "orders" | "trades" | "topTraders" | "holders" | "news"
   >("trades");

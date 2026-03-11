@@ -61,7 +61,10 @@ let currentDuelKey = "";
 let currentMarketKey = "";
 let currentDuelLabel = "";
 let duelCounter = 0;
+let treasuryAddr = "";
+let mmAddr = "";
 const eventLog: any[] = [];
+const initialBalances: Map<string, string> = new Map();
 const wsClients = new Set<WebSocket>();
 
 // ─── Anvil Management ────────────────────────────────────────────────────────
@@ -137,6 +140,9 @@ async function deployContracts(): Promise<void> {
         console.log("[deploy] Artifacts not found. Run `npx hardhat compile` in packages/evm-contracts first.");
         process.exit(1);
     }
+    
+    treasuryAddr = await treasury.getAddress();
+    mmAddr = await marketMaker.getAddress();
 
     const oracleArtifact = loadArtifact(CONTRACTS_DIR, "DuelOutcomeOracle");
     const clobArtifact = loadArtifact(CONTRACTS_DIR, "GoldClob");
@@ -211,23 +217,47 @@ function setupEventListeners(): void {
 }
 
 async function createAgents(signers: any[]): Promise<void> {
-    agents = [
-        new RetailAgent(signers[5], clob),
-        new RetailAgent(signers[6], clob),
-        new MarketMakerAgent(signers[7], clob),
-        new WhaleAgent(signers[8], clob),
-        new MevFrontrunnerAgent(signers[9], clob, provider),
-        new SandwichAgent(signers[10], clob),
-        new WashTraderAgent(signers[11], clob),
-        new OracleAttackAgent(signers[12], clob, oracle),
-        new CabalAgent(signers[13], clob, true),
-        new ArbitrageurAgent(signers[14], clob),
-        new StressTestAgent(signers[15], clob),
+    // Define agents with their desired starting balances
+    const agentDefs: { agent: BaseAgent; balance: string }[] = [
+        { agent: new RetailAgent(signers[5], clob), balance: "5" },
+        { agent: new RetailAgent(signers[6], clob), balance: "5" },
+        { agent: new RetailAgent(signers[16], clob), balance: "3" },
+        { agent: new MarketMakerAgent(signers[7], clob), balance: "1" },
+        { agent: new WhaleAgent(signers[8], clob), balance: "10" },
+        { agent: new MevFrontrunnerAgent(signers[9], clob, provider), balance: "2" },
+        { agent: new MevFrontrunnerAgent(signers[17], clob, provider), balance: "2" },
+        { agent: new SandwichAgent(signers[10], clob), balance: "3" },
+        { agent: new SandwichAgent(signers[18], clob), balance: "2" },
+        { agent: new WashTraderAgent(signers[11], clob), balance: "3" },
+        { agent: new OracleAttackAgent(signers[12], clob, oracle), balance: "2" },
+        { agent: new CabalAgent(signers[13], clob, true), balance: "3" },
+        { agent: new CabalAgent(signers[19], clob, false), balance: "3" },
+        { agent: new ArbitrageurAgent(signers[14], clob), balance: "2" },
+        { agent: new StressTestAgent(signers[15], clob), balance: "2" },
     ];
 
-    // Second retail agent gets a different name
+    agents = agentDefs.map(d => d.agent);
+
+    // Name duplicated agent types
     agents[1].config.name = "Retail Trader 2";
     agents[1].config.color = "#29b6f6";
+    agents[2].config.name = "Retail Trader 3";
+    agents[2].config.color = "#4dd0e1";
+    agents[6].config.name = "MEV Bot 2";
+    agents[6].config.color = "#ff6e40";
+    agents[8].config.name = "Sandwich Bot 2";
+    agents[8].config.color = "#e040fb";
+    agents[12].config.name = "Cabal (Counter)";
+    agents[12].config.color = "#b388ff";
+
+    // Set balances via anvil_setBalance
+    for (let i = 0; i < agents.length; i++) {
+        const addr = await agents[i].signer.getAddress();
+        const balWei = ethers.parseEther(agentDefs[i].balance);
+        await provider.send("anvil_setBalance", [addr, "0x" + balWei.toString(16)]);
+        initialBalances.set(addr, agentDefs[i].balance);
+        console.log(`[fund] ${agents[i].config.name}: ${agentDefs[i].balance} ETH`);
+    }
 }
 
 async function openNewDuel(): Promise<void> {
@@ -241,22 +271,20 @@ async function openNewDuel(): Promise<void> {
     const block = await provider.getBlock("latest");
     const now = BigInt(block?.timestamp ?? Math.floor(Date.now() / 1000));
 
-    await (
-        (await oracle.connect(reporter) as any).upsertDuel(
-            currentDuelKey,
-            hashParticipant(`${currentDuelLabel}:agent-alpha`),
-            hashParticipant(`${currentDuelLabel}:agent-beta`),
-            now,
-            now + 3600n, // 1 hour betting window
-            now + 7200n, // 2 hour duel start
-            `sim://${currentDuelLabel}`,
-            DUEL_STATUS_BETTING_OPEN,
-        )
-    ).wait();
+    const tx1 = await (oracle.connect(reporter) as any).upsertDuel(
+      currentDuelKey,
+      hashParticipant(`${currentDuelLabel}:agent-alpha`),
+      hashParticipant(`${currentDuelLabel}:agent-beta`),
+      now,
+      now + 604800n, // 1 week betting window (Anvil advances time per-tx)
+      now + 1209600n, // 2 week duel start
+      `sim://${currentDuelLabel}`,
+      DUEL_STATUS_BETTING_OPEN,
+  );
+  await tx1.wait();
 
-    await (
-        (await clob.connect(operator) as any).createMarketForDuel(currentDuelKey, MARKET_KIND_DUEL_WINNER)
-    ).wait();
+  const tx2 = await (clob.connect(operator) as any).createMarketForDuel(currentDuelKey, MARKET_KIND_DUEL_WINNER);
+  await tx2.wait();
 
     currentMarketKey = await clob.marketKey(currentDuelKey, MARKET_KIND_DUEL_WINNER);
 
@@ -345,6 +373,10 @@ async function broadcastState(): Promise<void> {
                 const addr = await agent.signer.getAddress();
                 const balance = await provider.getBalance(addr);
                 const position = await clob.positions(currentMarketKey, addr);
+                const balanceFormatted = formatEth(balance);
+                const initBal = initialBalances.get(addr) || "10000";
+                const pnl = (Number(balanceFormatted) - Number(initBal)).toFixed(4);
+
                 return {
                     name: agent.config.name,
                     strategy: agent.config.strategy,
@@ -352,7 +384,8 @@ async function broadcastState(): Promise<void> {
                     enabled: agent.config.enabled,
                     color: agent.config.color,
                     address: addr,
-                    balance: formatEth(balance),
+                    balance: balanceFormatted,
+                    pnl,
                     tradeCount: agent.tradeCount,
                     activeOrders: agent.activeOrderIds.length,
                     position: {
@@ -367,6 +400,9 @@ async function broadcastState(): Promise<void> {
 
         // Build order book snapshot (scan populated price levels)
         const book = await buildOrderBook();
+
+        const treasuryBalance = await provider.getBalance(treasuryAddr);
+        const mmBalance = await provider.getBalance(mmAddr);
 
         const state = {
             type: "state",
@@ -396,6 +432,8 @@ async function broadcastState(): Promise<void> {
                     treasuryBps: (await clob.tradeTreasuryFeeBps()).toString(),
                     mmBps: (await clob.tradeMarketMakerFeeBps()).toString(),
                     winningsMmBps: (await clob.winningsMarketMakerFeeBps()).toString(),
+                    treasuryAccruedWei: (treasuryBalance - ethers.parseEther(initialBalances.get(treasuryAddr) || "10000")).toString(),
+                    mmAccruedWei: (mmBalance - ethers.parseEther(initialBalances.get(mmAddr) || "10000")).toString(),
                 },
                 agents: agentStates,
                 book,
@@ -456,27 +494,30 @@ async function runSimLoop(): Promise<void> {
 // ─── Resolve Duel ────────────────────────────────────────────────────────────
 
 async function resolveDuel(winnerSide: number): Promise<void> {
+  try {
     const reporter = await provider.getSigner(2);
     const operator = await provider.getSigner(1);
+
+    // Advance Anvil's block time past the betting window (1 week forward)
+    await provider.send("evm_increaseTime", [604800]);
+    await provider.send("evm_mine", []);
 
     const block = await provider.getBlock("latest");
     const now = BigInt(block?.timestamp ?? Math.floor(Date.now() / 1000));
 
-    await (
-        (await oracle.connect(reporter) as any).reportResult(
-            currentDuelKey,
-            winnerSide,
-            BigInt(Math.floor(Math.random() * 1000000)),
-            ethers.keccak256(ethers.toUtf8Bytes(`replay-${currentDuelLabel}`)),
-            ethers.keccak256(ethers.toUtf8Bytes(`result-${currentDuelLabel}`)),
-            now + 10n,
-            `resolved-${currentDuelLabel}`,
-        )
-    ).wait();
+    const tx1 = await (oracle.connect(reporter) as any).reportResult(
+      currentDuelKey,
+      winnerSide,
+      BigInt(Math.floor(Math.random() * 1000000)),
+      ethers.keccak256(ethers.toUtf8Bytes(`replay-${currentDuelLabel}`)),
+      ethers.keccak256(ethers.toUtf8Bytes(`result-${currentDuelLabel}`)),
+      now,
+      `resolved-${currentDuelLabel}`,
+    );
+    await tx1.wait();
 
-    await (
-        (await clob.connect(operator) as any).syncMarketFromOracle(currentDuelKey, MARKET_KIND_DUEL_WINNER)
-    ).wait();
+    const tx2 = await (clob.connect(operator) as any).syncMarketFromOracle(currentDuelKey, MARKET_KIND_DUEL_WINNER);
+    await tx2.wait();
 
     broadcast({
         type: "log",
@@ -486,12 +527,17 @@ async function resolveDuel(winnerSide: number): Promise<void> {
         },
     });
 
+    // Auto-pause so agents don't spam "market not open" errors
+    simRunning = false;
+    broadcast({ type: "log", data: { message: "⏸️ Simulation auto-paused after resolution. Click 'New Duel' then 'Start' to continue.", tick: simTick } });
+
     // Auto-claim for all agents
     for (const agent of agents) {
         try {
             const position = await clob.positions(currentMarketKey, await agent.signer.getAddress());
             if (position.aShares > 0n || position.bShares > 0n) {
-                await ((await clob.connect(agent.signer) as any).claim(currentDuelKey, MARKET_KIND_DUEL_WINNER)).wait();
+                const txClaim = await (clob.connect(agent.signer) as any).claim(currentDuelKey, MARKET_KIND_DUEL_WINNER);
+                await txClaim.wait();
                 broadcast({
                     type: "log",
                     data: { message: `[${agent.config.name}] Claimed winnings`, tick: simTick },
@@ -506,6 +552,13 @@ async function resolveDuel(winnerSide: number): Promise<void> {
     }
 
     await broadcastState();
+  } catch (err: any) {
+    broadcast({
+        type: "log",
+        data: { message: `⚠️ Resolution error: ${err.message?.slice(0, 120)}`, tick: simTick },
+    });
+    console.error("[resolve] Error:", err.shortMessage || err.message);
+  }
 }
 
 // ─── WebSocket Server ────────────────────────────────────────────────────────

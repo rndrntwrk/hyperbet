@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 #![allow(unexpected_cfgs)]
 
 use anchor_lang::prelude::*;
@@ -7,7 +8,6 @@ declare_id!("6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD");
 pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
 
-#[allow(clippy::too_many_arguments)]
 #[program]
 pub mod fight_oracle {
     use super::*;

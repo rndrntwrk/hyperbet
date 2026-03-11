@@ -22,6 +22,8 @@
     const totalB = $("total-b");
     const feeTreasury = $("fee-treasury");
     const feeMm = $("fee-mm");
+    const profitTreasury = $("profit-treasury");
+    const profitMm = $("profit-mm");
     const spreadValue = $("spread-value");
     const bidsContainer = $("bids-container");
     const asksContainer = $("asks-container");
@@ -151,6 +153,19 @@
         if (state.fees) {
             feeTreasury.textContent = `${state.fees.treasuryBps} bps`;
             feeMm.textContent = `${state.fees.mmBps} bps`;
+            
+            function formatFee(weiStr) {
+                if (!weiStr) return "0.0000 ETH";
+                const numEth = Number(weiStr) / 1e18;
+                if (numEth === 0) return "0.0000 ETH";
+                if (Math.abs(numEth) < 0.0001) {
+                    return `${weiStr} WEI`;
+                }
+                return `${numEth.toFixed(4)} ETH`;
+            }
+
+            if (profitTreasury) profitTreasury.textContent = formatFee(state.fees.treasuryAccruedWei);
+            if (profitMm) profitMm.textContent = formatFee(state.fees.mmAccruedWei);
         }
 
         // Order book
@@ -336,6 +351,7 @@
         <div class="agent-desc">${agent.description}</div>
         <div class="agent-stats">
           <div class="agent-stat"><span class="agent-stat-label">Balance</span><span class="agent-stat-value">${Number(agent.balance).toFixed(2)} ETH</span></div>
+          <div class="agent-stat"><span class="agent-stat-label">PnL</span><span class="agent-stat-value ${Number(agent.pnl) >= 0 ? 'bid-color' : 'ask-color'}">${Number(agent.pnl) > 0 ? '+' : ''}${Number(agent.pnl).toFixed(4)} ETH</span></div>
           <div class="agent-stat"><span class="agent-stat-label">Trades</span><span class="agent-stat-value">${agent.tradeCount}</span></div>
           <div class="agent-stat"><span class="agent-stat-label">A Shares</span><span class="agent-stat-value bid-color">${formatBigNumber(agent.position.aShares)}</span></div>
           <div class="agent-stat"><span class="agent-stat-label">B Shares</span><span class="agent-stat-value ask-color">${formatBigNumber(agent.position.bShares)}</span></div>

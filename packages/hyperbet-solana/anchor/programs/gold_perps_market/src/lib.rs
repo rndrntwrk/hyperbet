@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 #![allow(unexpected_cfgs)]
 
 use anchor_lang::prelude::*;
@@ -35,7 +36,6 @@ fn bootstrap_authority() -> Pubkey {
 /// Positions are managed with signed size deltas through `modify_position`,
 /// which supports opening, increasing, reducing, flipping, depositing margin,
 /// withdrawing margin, and fully closing the account.
-#[allow(clippy::too_many_arguments)]
 #[program]
 pub mod gold_perps_market {
     use super::*;
@@ -620,7 +620,6 @@ fn require_market(market: &MarketState, market_id: u64) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn validate_config_inputs(
     default_skew_scale: u64,
     max_oracle_staleness_seconds: i64,

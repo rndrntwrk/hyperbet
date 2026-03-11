@@ -108,19 +108,27 @@ export abstract class BaseAgent {
                         `[${this.config.name}] ${sideLabel} @${action.price} x${action.amount} (order #${orderId})`,
                     );
                 } else if (action.type === "cancelOrder" && action.orderId) {
-                    const tx = await (this.clob.connect(this.signer) as any).cancelOrder(
-                        ctx.duelKey,
-                        MARKET_KIND_DUEL_WINNER,
-                        action.orderId,
-                    );
-                    await tx.wait();
+                    try {
+                        const tx = await (this.clob.connect(this.signer) as any).cancelOrder(
+                            ctx.duelKey,
+                            MARKET_KIND_DUEL_WINNER,
+                            action.orderId,
+                        );
+                        await tx.wait();
+                        logs.push(`[${this.config.name}] CANCEL order #${action.orderId}`);
+                    } catch {
+                        // Order was already filled or cancelled — silently clean up
+                    }
                     this.activeOrderIds = this.activeOrderIds.filter(
                         (id) => id !== action.orderId,
                     );
-                    logs.push(`[${this.config.name}] CANCEL order #${action.orderId}`);
                 }
             } catch (err: any) {
-                logs.push(`[${this.config.name}] ERROR: ${err.message?.slice(0, 120)}`);
+                const msg = err.message || "";
+                // Suppress noisy but harmless errors
+                if (!msg.includes("not maker") && !msg.includes("order inactive") && !msg.includes("market not open") && !msg.includes("betting closed")) {
+                    logs.push(`[${this.config.name}] ERROR: ${msg.slice(0, 120)}`);
+                }
             }
         }
         return logs;
@@ -149,7 +157,7 @@ export class RetailAgent extends BaseAgent {
         const isBuy = Math.random() > 0.5;
         const noise = randomInt(-50, 50);
         const price = clamp(ctx.mid + noise, 10, 990);
-        const amount = BigInt(randomInt(100, 500)) * 10n;
+        const amount = BigInt(randomInt(1, 5)) * 1000n;
 
         return [
             {
@@ -198,7 +206,7 @@ export class MarketMakerAgent extends BaseAgent {
         );
         const bidPrice = clamp(Math.floor(ctx.mid - quoteWidth / 2), 10, 990);
         const askPrice = clamp(Math.ceil(ctx.mid + quoteWidth / 2), 10, 990);
-        const amount = BigInt(randomInt(200, 800)) * 10n;
+        const amount = BigInt(randomInt(2, 8)) * 1000n;
 
         actions.push(
             { type: "placeOrder", side: BUY_SIDE, price: bidPrice, amount, label: "MM bid" },
@@ -232,7 +240,7 @@ export class WhaleAgent extends BaseAgent {
         const price = isBuy
             ? clamp(ctx.mid + randomInt(10, 40), 10, 990)
             : clamp(ctx.mid - randomInt(10, 40), 10, 990);
-        const amount = BigInt(randomInt(2000, 8000)) * 10n;
+        const amount = BigInt(randomInt(5, 20)) * 1000n;
 
         return [
             {
@@ -273,7 +281,7 @@ export class MevFrontrunnerAgent extends BaseAgent {
         const price = isBuy
             ? clamp(ctx.bestAsk > 0 && ctx.bestAsk < MAX_PRICE ? ctx.bestAsk : ctx.mid + 20, 10, 990)
             : clamp(ctx.bestBid > 0 ? ctx.bestBid : ctx.mid - 20, 10, 990);
-        const amount = BigInt(randomInt(300, 1000)) * 10n;
+        const amount = BigInt(randomInt(1, 5)) * 1000n;
 
         return [
             {
@@ -306,7 +314,7 @@ export class SandwichAgent extends BaseAgent {
     decide(ctx: SimContext): AgentAction[] {
         if (Math.random() < 0.7) return [];
 
-        const amount = BigInt(randomInt(500, 2000)) * 10n;
+        const amount = BigInt(randomInt(1, 5)) * 1000n;
         // Buy before and sell after — in sim, these are sequential
         return [
             {
@@ -347,7 +355,7 @@ export class WashTraderAgent extends BaseAgent {
         if (Math.random() < 0.5) return [];
 
         const price = clamp(ctx.mid, 10, 990);
-        const amount = BigInt(randomInt(100, 300)) * 10n;
+        const amount = BigInt(randomInt(1, 3)) * 1000n;
 
         // Place both sides at the same price to self-trade
         return [
@@ -428,7 +436,7 @@ export class CabalAgent extends BaseAgent {
         const price = side === BUY_SIDE
             ? clamp(ctx.mid + randomInt(20, 60), 10, 990)
             : clamp(ctx.mid - randomInt(20, 60), 10, 990);
-        const amount = BigInt(randomInt(500, 1500)) * 10n;
+        const amount = BigInt(randomInt(1, 5)) * 1000n;
 
         return [
             { type: "placeOrder", side, price, amount, label: "cabal push" },
@@ -457,7 +465,7 @@ export class ArbitrageurAgent extends BaseAgent {
         if (ctx.bestBid <= 0 || ctx.bestAsk >= MAX_PRICE) return [];
         if (ctx.bestBid < ctx.bestAsk - 20) return []; // needs tight/crossed spread
 
-        const amount = BigInt(randomInt(200, 600)) * 10n;
+        const amount = BigInt(randomInt(1, 3)) * 1000n;
 
         return [
             {
@@ -501,7 +509,7 @@ export class StressTestAgent extends BaseAgent {
         for (let i = 0; i < count; i++) {
             const isBuy = Math.random() > 0.5;
             const price = clamp(ctx.mid + randomInt(-100, 100), 10, 990);
-            const amount = BigInt(randomInt(50, 200)) * 10n;
+            const amount = BigInt(randomInt(1, 3)) * 1000n;
             actions.push({
                 type: "placeOrder",
                 side: isBuy ? BUY_SIDE : SELL_SIDE,
@@ -530,19 +538,29 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         enabledStrategies: ["retail", "market_maker"],
     },
     {
+        name: "Retail Rush",
+        description: "All retail traders active, overwhelming thin MM liquidity",
+        enabledStrategies: ["retail", "market_maker"],
+    },
+    {
         name: "Whale Impact",
         description: "Normal market with a whale dumping large orders",
         enabledStrategies: ["retail", "market_maker", "whale"],
     },
     {
         name: "MEV Extraction",
-        description: "MEV frontrunner exploiting retail order flow",
+        description: "Multiple MEV bots frontrunning retail order flow",
         enabledStrategies: ["retail", "market_maker", "mev_frontrunner"],
     },
     {
         name: "Sandwich Attack",
-        description: "Sandwich bot wrapping retail orders",
+        description: "Multiple sandwich bots wrapping retail orders",
         enabledStrategies: ["retail", "market_maker", "sandwich"],
+    },
+    {
+        name: "Double Sandwich + MEV",
+        description: "Both sandwich bots and MEV bots extracting from retail",
+        enabledStrategies: ["retail", "market_maker", "sandwich", "mev_frontrunner"],
     },
     {
         name: "Wash Trading",
@@ -556,7 +574,7 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
     },
     {
         name: "Cabal Coordination",
-        description: "Coordinated group betting against the house",
+        description: "Two coordinated cabal groups betting against each other",
         enabledStrategies: ["retail", "market_maker", "cabal"],
     },
     {
@@ -566,12 +584,34 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
     },
     {
         name: "Stress Test",
-        description: "High-frequency flood of orders",
+        description: "High-frequency flood of orders overwhelming the book",
         enabledStrategies: ["retail", "market_maker", "stress_test"],
     },
     {
+        name: "Whale vs MEV",
+        description: "Whale moving markets while MEV bots try to extract",
+        enabledStrategies: ["market_maker", "whale", "mev_frontrunner"],
+    },
+    {
+        name: "Attack Gauntlet",
+        description: "All attack agents vs thin MM — maximum adversarial pressure",
+        enabledStrategies: [
+            "market_maker",
+            "mev_frontrunner",
+            "sandwich",
+            "wash_trader",
+            "cabal",
+            "arbitrageur",
+        ],
+    },
+    {
+        name: "Liquidity Crisis",
+        description: "Only the underfunded MM and whale — tests insolvency edge cases",
+        enabledStrategies: ["market_maker", "whale"],
+    },
+    {
         name: "Full Chaos",
-        description: "All agents active simultaneously",
+        description: "All 15 agents active simultaneously — maximum entropy",
         enabledStrategies: [
             "retail",
             "market_maker",
@@ -579,9 +619,11 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
             "mev_frontrunner",
             "sandwich",
             "wash_trader",
+            "oracle_attack",
             "cabal",
             "arbitrageur",
             "stress_test",
         ],
     },
 ];
+

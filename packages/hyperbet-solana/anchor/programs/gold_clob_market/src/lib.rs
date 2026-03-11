@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 #![allow(unexpected_cfgs)]
 
 use anchor_lang::prelude::*;
@@ -68,7 +69,6 @@ pub mod gold_clob_market {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn update_config(
         ctx: Context<UpdateConfig>,
         authority: Pubkey,

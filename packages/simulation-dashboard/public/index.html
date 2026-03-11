@@ -22,7 +22,6 @@
   </header>
 
   <main id="main">
-    <!-- Top Row: Controls + Contract Info -->
     <section id="controls-section" class="panel">
       <h2>🎮 Controls</h2>
       <div class="controls-row">
@@ -45,9 +44,9 @@
       </div>
     </section>
 
-    <section id="contract-section" class="panel">
+    <section id="contract-section" class="panel panel-full">
       <h2>📋 Contract Overview</h2>
-      <div id="contract-info" class="info-grid">
+      <div id="contract-info" class="info-grid-compact">
         <div class="info-item"><span class="info-label">Oracle</span><span id="oracle-addr" class="mono">—</span></div>
         <div class="info-item"><span class="info-label">CLOB</span><span id="clob-addr" class="mono">—</span></div>
         <div class="info-item"><span class="info-label">Duel</span><span id="duel-label">—</span></div>
@@ -56,13 +55,16 @@
         <div class="info-item"><span class="info-label">Best Ask</span><span id="best-ask" class="mono ask-color">—</span></div>
         <div class="info-item"><span class="info-label">A Shares</span><span id="total-a" class="mono">—</span></div>
         <div class="info-item"><span class="info-label">B Shares</span><span id="total-b" class="mono">—</span></div>
-        <div class="info-item"><span class="info-label">Treasury Fee</span><span id="fee-treasury" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">T. Fee</span><span id="fee-treasury" class="mono">—</span></div>
         <div class="info-item"><span class="info-label">MM Fee</span><span id="fee-mm" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">T. Earned</span><span id="profit-treasury" class="mono">—</span></div>
+        <div class="info-item"><span class="info-label">MM Earned</span><span id="profit-mm" class="mono">—</span></div>
       </div>
     </section>
 
-    <!-- Middle Row: Order Book + Trade Tape -->
-    <section id="book-section" class="panel panel-wide">
+    <!-- Middle Row: Order Book + Visualizer side by side -->
+    <div class="row-2col">
+    <section id="book-section" class="panel">
       <h2>📊 Order Book</h2>
       <div id="order-book">
         <div id="book-bids" class="book-side">
@@ -83,13 +85,14 @@
       </div>
     </section>
 
-    <!-- Visualizer Row -->
-    <section id="visualizer-section" class="panel panel-wide">
+    <section id="visualizer-section" class="panel">
       <h2>🕸️ System Visualizer</h2>
       <div id="visualizer-container" style="width: 100%; height: 300px; position: relative;"></div>
     </section>
+    </div>
 
-    <section id="tape-section" class="panel panel-tall">
+    <!-- Event Log: full width -->
+    <section id="tape-section" class="panel panel-full">
       <h2>📜 Event Log <span id="event-count" class="badge badge-count">0</span></h2>
       <div id="event-tape"></div>
     </section>
