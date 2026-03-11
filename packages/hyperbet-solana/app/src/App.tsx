@@ -480,7 +480,7 @@ function getAppCopy(locale: UiLocale) {
   };
 }
 
-function getPhaseLabel(
+function _getPhaseLabel(
   phase: string,
   countdown: string | number | null,
   copy: ReturnType<typeof getAppCopy>,
@@ -492,7 +492,7 @@ function getPhaseLabel(
   return copy.phaseIdle;
 }
 
-function getMarketStatusLabel(
+function _getMarketStatusLabel(
   rawStatus: string | null | undefined,
   copy: ReturnType<typeof getAppCopy>,
 ): string {
@@ -1113,7 +1113,7 @@ export function App() {
   );
   // Sidebar bet state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [hmSide, setHmSide] = useState<BetSide>("YES");
+  const [_hmSide, _setHmSide] = useState<BetSide>("YES");
   const [hmBottomTab, setHmBottomTab] = useState<
     "positions" | "orders" | "trades" | "topTraders" | "holders" | "news"
   >("trades");
@@ -1768,7 +1768,7 @@ export function App() {
                       data-testid={`duels-bottom-tab-${key}`}
                       aria-selected={hmBottomTab === key}
                       className={`hm-bottom-tab ${hmBottomTab === key ? "hm-bottom-tab--active" : ""}`}
-                      onClick={() => setHmBottomTab(key as any)}
+                      onClick={() => setHmBottomTab(key as typeof hmBottomTab)}
                       type="button"
                     >
                       {label}
