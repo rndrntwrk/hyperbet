@@ -58,6 +58,13 @@ import {
     type ScenarioSettlementStatus,
 } from "./scenario-catalog.js";
 import { evaluateScenarioPolicyGates } from "./scenario-evaluator.js";
+import {
+    createScenarioRunRecord as createScenarioRunRecordShared,
+    type ScenarioRunRecord,
+} from "./scenario-runs.js";
+import { getSimulationBackendKind } from "./backends/index.js";
+import { EvmSimulationBackend } from "./backends/evm.js";
+import { SolanaSimulationBackend } from "./backends/solana/backend.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
@@ -93,25 +100,6 @@ const SCENARIO_BASELINE_REBUILD_TIMEOUT_MS = Number(
     process.env.SIM_SCENARIO_BASELINE_REBUILD_TIMEOUT_MS ?? "90000",
 );
 
-type ScenarioRunStatus = "queued" | "running" | "succeeded" | "failed";
-
-type ScenarioRunRecord = {
-    runId: string;
-    scenarioId: string;
-    scenarioName: string;
-    seed: string;
-    ticks: number;
-    winner: "A" | "B";
-    freshBaseline: boolean;
-    status: ScenarioRunStatus;
-    stage: string | null;
-    requestedAt: number;
-    startedAt: number | null;
-    finishedAt: number | null;
-    error: string | null;
-    result: ScenarioResult | null;
-};
-
 type PersistedScenarioState = {
     history: ScenarioResult[];
     runs: ScenarioRunRecord[];
@@ -129,6 +117,10 @@ type ClaimCandidate = {
     address: string;
     position: CachedPosition;
 };
+
+const INTERACTIVE_SCENARIOS = SCENARIO_PRESETS.filter(
+    (scenario) => scenario.chainKey === "bsc",
+);
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let anvilProcess: ChildProcess | null = null;
@@ -219,7 +211,16 @@ function loadScenarioState(): void {
             ? parsed.history.slice(0, SCENARIO_HISTORY_LIMIT)
             : [];
         scenarioRuns = Array.isArray(parsed.runs)
-            ? parsed.runs.slice(0, SCENARIO_HISTORY_LIMIT)
+            ? parsed.runs
+                  .slice(0, SCENARIO_HISTORY_LIMIT)
+                  .map((run) => ({
+                      ...run,
+                      chainKey:
+                          run.chainKey ??
+                          (SCENARIO_PRESETS.find(
+                              (preset) => preset.id === run.scenarioId,
+                          )?.chainKey ?? "bsc"),
+                  }))
             : [];
     } catch (error) {
         console.warn(
@@ -516,22 +517,7 @@ function createScenarioRunRecord(
     },
 ): ScenarioRunRecord {
     scenarioRunSequence += 1;
-    return {
-        runId: `${preset.id}-${Date.now()}-${scenarioRunSequence}`,
-        scenarioId: preset.id,
-        scenarioName: preset.name,
-        seed: options.seed?.trim() || preset.canonicalSeed,
-        ticks: Math.max(1, Math.min(200, options.ticks ?? preset.defaultTicks)),
-        winner: options.winner ?? preset.defaultWinner,
-        freshBaseline: options.freshBaseline ?? false,
-        status: "queued",
-        stage: "queued",
-        requestedAt: Date.now(),
-        startedAt: null,
-        finishedAt: null,
-        error: null,
-        result: null,
-    };
+    return createScenarioRunRecordShared(preset, options, scenarioRunSequence);
 }
 
 function resetScenarioMetrics(): void {
@@ -1246,11 +1232,13 @@ async function broadcastState(): Promise<void> {
         const state = {
             type: "state",
             data: {
+                backend: "evm",
                 tick: simTick,
                 running: simRunning,
                 speed: simSpeed,
                 scenario: {
                     id: currentScenarioId,
+                    chainKey: activeScenarioPreset?.chainKey ?? "bsc",
                 },
                 duel: {
                     label: currentDuelLabel,
@@ -1302,7 +1290,7 @@ async function broadcastState(): Promise<void> {
                         settlementStatus,
                     },
                 },
-                scenarios: SCENARIO_PRESETS,
+                scenarios: INTERACTIVE_SCENARIOS,
                 eventLogCount: eventLog.length,
             },
         };
@@ -1403,10 +1391,11 @@ async function runSimLoop(): Promise<void> {
 }
 
 function buildScenarioTraces(limit = 80): AgentActionTrace[] {
+    const chainKey = getScenarioPresetByIdOrName(currentScenarioId)?.chainKey ?? "bsc";
     return eventLog.slice(-limit).map((entry) => ({
         actor: String(entry.args?.maker ?? "protocol"),
         action: String(entry.event ?? "unknown"),
-        chainKey: "bsc",
+        chainKey,
         duelKey: currentDuelKey,
         marketRef: currentMarketKey,
         price:
@@ -1456,7 +1445,7 @@ function buildScenarioResult(
             name: preset.name,
             family: preset.family,
             seed,
-            chainKey: "bsc",
+            chainKey: preset.chainKey,
             attackerPnl: bestAttackerPnlSeen,
             marketMakerPnl,
             maxDrawdownBps: Math.round(
@@ -1511,7 +1500,7 @@ function buildScenarioResult(
         name: preset.name,
         family: preset.family,
         seed,
-        chainKey: "bsc",
+        chainKey: preset.chainKey,
         attackerPnl: bestAttackerPnlSeen,
         marketMakerPnl,
         maxDrawdownBps,
@@ -1542,16 +1531,12 @@ function buildScenarioResult(
     };
 }
 
-async function runScenarioPreset(
+async function runEvmScenarioPreset(
     run: ScenarioRunRecord,
+    preset: ScenarioPreset,
 ): Promise<ScenarioResult> {
     if (scenarioRunInFlight) {
         throw new Error("A scenario run is already in progress");
-    }
-
-    const preset = SCENARIO_PRESETS.find((entry) => entry.id === run.scenarioId);
-    if (!preset) {
-        throw new Error(`Unknown scenario preset: ${run.scenarioId}`);
     }
 
     scenarioRunInFlight = true;
@@ -1724,8 +1709,278 @@ async function runScenarioPreset(
         resetRandomSource();
         scenarioRunInFlight = false;
         activeScenarioRunId = null;
+        clearPublishedActiveRun();
         persistScenarioState();
     }
+}
+
+function broadcastScenarioLog(message: string): void {
+    broadcast({
+        type: "log",
+        data: {
+            message,
+            tick: simTick,
+        },
+    });
+}
+
+function publishScenarioState(state: Record<string, unknown>): void {
+    const activeRun = getActiveScenarioRun();
+    const nextState = {
+        ...state,
+        activeRun,
+        scenarios: INTERACTIVE_SCENARIOS,
+    };
+    lastComputedState = nextState;
+    broadcast({
+        type: "state",
+        data: nextState,
+    });
+}
+
+function clearPublishedActiveRun(): void {
+    if (!lastComputedState) {
+        return;
+    }
+
+    const nextState = {
+        ...lastComputedState,
+        activeRun: null,
+        scenarios: INTERACTIVE_SCENARIOS,
+    };
+    lastComputedState = nextState;
+    broadcast({
+        type: "state",
+        data: nextState,
+    });
+}
+
+function buildSolanaDegradedScenarioArtifacts(
+    preset: ScenarioPreset,
+    run: ScenarioRunRecord,
+    stage: string,
+    reason: string,
+): {
+    result: ScenarioResult;
+    state: Record<string, unknown>;
+} {
+    const gates: MitigationGate[] = [
+        {
+            name: stage,
+            passed: false,
+            reason,
+        },
+    ];
+    const result: ScenarioResult = {
+        scenarioId: preset.id,
+        name: preset.name,
+        family: preset.family,
+        seed: run.seed,
+        chainKey: preset.chainKey,
+        attackerPnl: 0,
+        marketMakerPnl: 0,
+        maxDrawdownBps: 0,
+        peakInventory: 0,
+        quoteUptimeRatio: 0,
+        spreadWidthBps: 0,
+        orderChurn: 0,
+        lockTransitionLatencyMs: null,
+        resolvedCorrectly: false,
+        claimCorrectly: false,
+        passed: false,
+        degraded: true,
+        gates,
+        traces: [],
+    };
+
+    return {
+        result,
+        state: {
+            backend: "solana",
+            tick: 0,
+            running: false,
+            speed: 0,
+            scenario: {
+                id: preset.id,
+                name: preset.name,
+                chainKey: preset.chainKey,
+                seed: run.seed,
+            },
+            duel: {
+                label: `${preset.id}:${run.seed}`,
+                key: "",
+                counter: 0,
+            },
+            market: {
+                exists: false,
+                status: 0,
+                winner: 0,
+                bestBid: 0,
+                bestAsk: 0,
+                totalAShares: "0",
+                totalBShares: "0",
+            },
+            contracts: {
+                oracle: "",
+                clob: "",
+            },
+            fees: {
+                treasuryBps: "0",
+                mmBps: "0",
+                winningsMmBps: "0",
+                treasuryAccruedWei: "0",
+                mmAccruedWei: "0",
+            },
+            agents: [],
+            book: {
+                bids: [],
+                asks: [],
+            },
+            mitigation: {
+                gates,
+                scenarioGates: [],
+                metrics: {
+                    attackerPnlCurrent: 0,
+                    attackerPnlPeak: 0,
+                    marketMakerPnl: 0,
+                    protocolMarketMakerPnl: 0,
+                    marketMakerDrawdownBps: 0,
+                    peakInventory: 0,
+                    spreadWidthBps: 0,
+                    orderChurn: 0,
+                    staleStreamGuardTrips: 0,
+                    staleOracleGuardTrips: 0,
+                    closeGuardTrips: 0,
+                    circuitBreakerTrips: 0,
+                    settlementConsistent: false,
+                    claimsProcessed: false,
+                    settlementStatus: "NULL",
+                },
+            },
+            traces: [],
+            eventLogCount: 0,
+            solana: {
+                debug: {
+                    error: reason,
+                },
+            },
+        },
+    };
+}
+
+async function runSolanaScenarioPreset(
+    run: ScenarioRunRecord,
+    preset: ScenarioPreset,
+): Promise<ScenarioResult> {
+    if (scenarioRunInFlight) {
+        throw new Error("A scenario run is already in progress");
+    }
+
+    scenarioRunInFlight = true;
+    activeScenarioRunId = run.runId;
+    const backend = new SolanaSimulationBackend();
+    try {
+        updateScenarioRun(run.runId, (entry) => {
+            entry.status = "running";
+            entry.stage = "boot-validator";
+            entry.startedAt = Date.now();
+            entry.finishedAt = null;
+            entry.error = null;
+            entry.result = null;
+        });
+
+        broadcastScenarioLog(
+            `🧪 Solana scenario run starting: ${preset.name} seed=${run.seed} winner=${run.winner}`,
+        );
+
+        const { result, state } = await backend.run({
+            preset,
+            run,
+            callbacks: {
+                onStage(stage) {
+                    updateScenarioRun(run.runId, (entry) => {
+                        entry.stage = stage;
+                    });
+                },
+                onLog(message) {
+                    broadcastScenarioLog(message);
+                },
+            },
+        });
+
+        scenarioHistory = [result, ...scenarioHistory].slice(
+            0,
+            SCENARIO_HISTORY_LIMIT,
+        );
+        updateScenarioRun(run.runId, (entry) => {
+            entry.status = "succeeded";
+            entry.stage = result.degraded ? "completed-degraded" : "completed";
+            entry.finishedAt = Date.now();
+            entry.error = result.degraded
+                ? result.gates
+                      .filter((gate) => !gate.passed)
+                      .map((gate) => `${gate.name}: ${gate.reason ?? "failed"}`)
+                      .join("; ")
+                : null;
+            entry.result = result;
+        });
+        publishScenarioState(state);
+        broadcast({
+            type: "scenario_result",
+            data: result,
+        });
+        return result;
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const stage = getActiveScenarioRun()?.stage ?? "solanaScenarioCompleted";
+        const degraded = buildSolanaDegradedScenarioArtifacts(
+            preset,
+            run,
+            stage,
+            reason,
+        );
+        scenarioHistory = [degraded.result, ...scenarioHistory].slice(
+            0,
+            SCENARIO_HISTORY_LIMIT,
+        );
+        updateScenarioRun(run.runId, (entry) => {
+            entry.status = "succeeded";
+            entry.stage = "completed-degraded";
+            entry.finishedAt = Date.now();
+            entry.error = `${stage}: ${reason}`;
+            entry.result = degraded.result;
+        });
+        publishScenarioState(degraded.state);
+        broadcast({
+            type: "scenario_result",
+            data: degraded.result,
+        });
+        return degraded.result;
+    } finally {
+        scenarioRunInFlight = false;
+        activeScenarioRunId = null;
+        clearPublishedActiveRun();
+        persistScenarioState();
+    }
+}
+
+async function runScenarioPreset(run: ScenarioRunRecord): Promise<ScenarioResult> {
+    const preset = SCENARIO_PRESETS.find((entry) => entry.id === run.scenarioId);
+    if (!preset) {
+        throw new Error(`Unknown scenario preset: ${run.scenarioId}`);
+    }
+
+    if (getSimulationBackendKind(preset) === "solana") {
+        return runSolanaScenarioPreset(run, preset);
+    }
+
+    const backend = new EvmSimulationBackend(async ({ preset, run }) => ({
+        result: await runEvmScenarioPreset(run, preset),
+        state:
+            (lastComputedState as Record<string, unknown> | null) ?? { backend: "evm" },
+    }));
+    const { result } = await backend.run({ preset, run });
+    return result;
 }
 
 // ─── Resolve Duel ────────────────────────────────────────────────────────────
@@ -1910,6 +2165,16 @@ function handleWsMessage(data: string): void {
                     (p) => p.name === msg.value || p.id === msg.value,
                 );
                 if (preset) {
+                    if (preset.chainKey !== "bsc") {
+                        broadcast({
+                            type: "log",
+                            data: {
+                                message: `ℹ️ ${preset.name} runs through the scenario API/CLI, not the interactive EVM controls.`,
+                                tick: simTick,
+                            },
+                        });
+                        break;
+                    }
                     applyScenarioPresetByName(preset.id);
                     broadcast({
                         type: "log",
