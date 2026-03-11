@@ -2,6 +2,8 @@ import type { Contract, JsonRpcSigner, JsonRpcProvider } from "ethers";
 import {
     DEFAULT_MARKET_MAKER_CONFIG,
     buildQuotePlan,
+    evaluateQuoteDecision,
+    type ManagedQuoteState,
     type MarketSnapshot,
     type QuotePlan,
 } from "@hyperbet/mm-core";
@@ -30,6 +32,8 @@ export type AgentAction = {
     amount?: bigint;
     orderId?: number;
     label?: string;
+    managedQuoteSide?: "BID" | "ASK";
+    managedQuoteUnits?: number;
 };
 
 export type SimContext = {
@@ -47,6 +51,10 @@ export type SimContext = {
     agentActiveOrderIds: number[];
     scenarioProfile: ScenarioRuntimeProfile | null;
     agentPosition: { aShares: bigint; bShares: bigint; aStake: bigint; bStake: bigint };
+};
+
+type ManagedQuoteRef = ManagedQuoteState & {
+    orderId: number;
 };
 
 export type AgentConfig = {
@@ -73,6 +81,25 @@ export abstract class BaseAgent {
     }
 
     abstract decide(ctx: SimContext): AgentAction[];
+
+    protected onOrderPlaced(
+        action: AgentAction,
+        orderId: number,
+        _ctx: SimContext,
+    ): void {
+        if (orderId > 0) {
+            this.activeOrderIds.push(orderId);
+        }
+    }
+
+    protected onOrderCancelled(action: AgentAction): void {
+        if (action.orderId == null) {
+            return;
+        }
+        this.activeOrderIds = this.activeOrderIds.filter(
+            (id) => id !== action.orderId,
+        );
+    }
 
     async executeActions(
         actions: AgentAction[],
@@ -121,7 +148,7 @@ export abstract class BaseAgent {
                             }
                         } catch { /* skip */ }
                     }
-                    if (orderId > 0) this.activeOrderIds.push(orderId);
+                    this.onOrderPlaced(action, orderId, ctx);
 
                     const sideLabel = action.side === BUY_SIDE ? "BUY" : "SELL";
                     logs.push(
@@ -149,9 +176,7 @@ export abstract class BaseAgent {
                     } catch {
                         // Order was already filled or cancelled — silently clean up
                     }
-                    this.activeOrderIds = this.activeOrderIds.filter(
-                        (id) => id !== action.orderId,
-                    );
+                    this.onOrderCancelled(action);
                 }
             } catch (err: any) {
                 const msg = err.message || "";
@@ -205,6 +230,10 @@ export class RetailAgent extends BaseAgent {
 export class MarketMakerAgent extends BaseAgent {
     lastPlan: QuotePlan | null = null;
     lastSnapshot: MarketSnapshot | null = null;
+    private managedQuotes: Record<"BID" | "ASK", ManagedQuoteRef | null> = {
+        BID: null,
+        ASK: null,
+    };
 
     constructor(signer: JsonRpcSigner, clob: Contract) {
         super(
@@ -222,7 +251,6 @@ export class MarketMakerAgent extends BaseAgent {
 
     decide(ctx: SimContext): AgentAction[] {
         const actions: AgentAction[] = [];
-        const shouldReduceOnly = this.activeOrderIds.length >= 6;
         const runtimeProfile = ctx.scenarioProfile;
         const nowMs = ctx.nowMs;
         const staleStreamLagMs = (runtimeProfile?.staleStreamLagTicks ?? 0) * 500;
@@ -232,17 +260,9 @@ export class MarketMakerAgent extends BaseAgent {
             runtimeProfile?.betCloseTick != null
                 ? runtimeProfile.betCloseTick * 500
                 : null;
-
-        // Cancel stale orders first
-        if (this.activeOrderIds.length > 4) {
-            const toCancel = this.activeOrderIds.slice(0, 1);
-            for (const id of toCancel) {
-                actions.push({ type: "cancelOrder", orderId: id });
-            }
-            if (shouldReduceOnly) {
-                return actions;
-            }
-        }
+        const quoteAges = Object.values(this.managedQuotes)
+            .filter((quote): quote is ManagedQuoteRef => quote != null)
+            .map((quote) => Math.max(0, nowMs - quote.placedAtMs));
 
         const snapshot: MarketSnapshot = {
             chainKey: "bsc",
@@ -261,7 +281,10 @@ export class MarketMakerAgent extends BaseAgent {
             lastStreamAtMs: nowMs - staleStreamLagMs,
             lastOracleAtMs: nowMs - staleOracleLagMs,
             lastRpcAtMs: nowMs - staleRpcLagMs,
-            quoteAgeMs: this.activeOrderIds.length > 0 ? 2_000 : null,
+            quoteAgeMs:
+                quoteAges.length > 0
+                    ? Math.max(...quoteAges)
+                    : null,
         };
         this.lastSnapshot = snapshot;
 
@@ -287,30 +310,124 @@ export class MarketMakerAgent extends BaseAgent {
         );
         this.lastPlan = plan;
 
-        if (plan.risk.circuitBreaker.active) {
-            return actions;
-        }
+        const bidDecision = evaluateQuoteDecision(
+            "BID",
+            plan,
+            this.managedQuotes.BID,
+            {
+                ...DEFAULT_MARKET_MAKER_CONFIG,
+                minQuoteUnits: 2,
+                maxQuoteUnits: 8,
+                maxInventoryPerSide: 40,
+                maxNetExposure: 25,
+                maxQuoteAgeMs: 2_500,
+                minRefreshIntervalMs: 1_000,
+                betCloseGuardMs:
+                    runtimeProfile?.marketMakerBetCloseGuardMs ??
+                    DEFAULT_MARKET_MAKER_CONFIG.betCloseGuardMs,
+            },
+            nowMs,
+        );
+        const askDecision = evaluateQuoteDecision(
+            "ASK",
+            plan,
+            this.managedQuotes.ASK,
+            {
+                ...DEFAULT_MARKET_MAKER_CONFIG,
+                minQuoteUnits: 2,
+                maxQuoteUnits: 8,
+                maxInventoryPerSide: 40,
+                maxNetExposure: 25,
+                maxQuoteAgeMs: 2_500,
+                minRefreshIntervalMs: 1_000,
+                betCloseGuardMs:
+                    runtimeProfile?.marketMakerBetCloseGuardMs ??
+                    DEFAULT_MARKET_MAKER_CONFIG.betCloseGuardMs,
+            },
+            nowMs,
+        );
 
-        if (plan.bidPrice != null && plan.bidUnits > 0) {
+        if (bidDecision.shouldCancel && this.managedQuotes.BID) {
+            actions.push({
+                type: "cancelOrder",
+                orderId: this.managedQuotes.BID.orderId as unknown as number,
+                label: "MM cancel bid",
+                managedQuoteSide: "BID",
+            });
+        }
+        if (askDecision.shouldCancel && this.managedQuotes.ASK) {
+            actions.push({
+                type: "cancelOrder",
+                orderId: this.managedQuotes.ASK.orderId as unknown as number,
+                label: "MM cancel ask",
+                managedQuoteSide: "ASK",
+            });
+        }
+        if (
+            bidDecision.shouldPlace &&
+            bidDecision.targetPrice != null &&
+            bidDecision.targetUnits > 0
+        ) {
             actions.push({
                 type: "placeOrder",
                 side: BUY_SIDE,
-                price: plan.bidPrice,
-                amount: BigInt(plan.bidUnits) * 1000n,
+                price: bidDecision.targetPrice,
+                amount: BigInt(bidDecision.targetUnits) * 1000n,
                 label: "MM bid",
+                managedQuoteSide: "BID",
+                managedQuoteUnits: bidDecision.targetUnits,
             });
         }
-        if (plan.askPrice != null && plan.askUnits > 0) {
+        if (
+            askDecision.shouldPlace &&
+            askDecision.targetPrice != null &&
+            askDecision.targetUnits > 0
+        ) {
             actions.push({
                 type: "placeOrder",
                 side: SELL_SIDE,
-                price: plan.askPrice,
-                amount: BigInt(plan.askUnits) * 1000n,
+                price: askDecision.targetPrice,
+                amount: BigInt(askDecision.targetUnits) * 1000n,
                 label: "MM ask",
+                managedQuoteSide: "ASK",
+                managedQuoteUnits: askDecision.targetUnits,
             });
         }
 
         return actions;
+    }
+
+    protected override onOrderPlaced(
+        action: AgentAction,
+        orderId: number,
+        ctx: SimContext,
+    ): void {
+        if (action.managedQuoteSide && orderId > 0) {
+            this.managedQuotes[action.managedQuoteSide] = {
+                orderId,
+                price: action.price ?? 0,
+                units: action.managedQuoteUnits ?? 0,
+                placedAtMs: ctx.nowMs,
+            };
+            this.syncManagedOrderIds();
+            return;
+        }
+        super.onOrderPlaced(action, orderId, ctx);
+    }
+
+    protected override onOrderCancelled(action: AgentAction): void {
+        if (action.managedQuoteSide) {
+            this.managedQuotes[action.managedQuoteSide] = null;
+            this.syncManagedOrderIds();
+            return;
+        }
+        super.onOrderCancelled(action);
+    }
+
+    private syncManagedOrderIds(): void {
+        this.activeOrderIds = (["BID", "ASK"] as const)
+            .map((side) => this.managedQuotes[side]?.orderId)
+            .filter((orderId): orderId is number => orderId != null);
     }
 }
 

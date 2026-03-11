@@ -69,9 +69,9 @@ import { SolanaSimulationBackend } from "./backends/solana/backend.js";
 // ─── Config ──────────────────────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const ANVIL_PORT = 18546;
-const WS_PORT = 3400;
-const HTTP_PORT = 3401;
+const ANVIL_PORT = Number(process.env.SIM_ANVIL_PORT ?? "18546");
+const WS_PORT = Number(process.env.SIM_WS_PORT ?? "3400");
+const HTTP_PORT = Number(process.env.SIM_HTTP_PORT ?? "3401");
 const PUBLIC_DIR = join(__dirname, "..", "public");
 const CONTRACTS_DIR = join(__dirname, "..", "..", "evm-contracts");
 const SCENARIO_HISTORY_LIMIT = 50;
@@ -372,6 +372,84 @@ async function withReadRetry<T>(
     throw lastError instanceof Error
         ? lastError
         : new Error(`${label} failed after ${attempts} attempts`);
+}
+
+async function withReadFallback<T>(
+    label: string,
+    loadRead: () => Promise<T>,
+    loadWrite: () => Promise<T>,
+    options: {
+        attempts?: number;
+        timeoutMs?: number;
+        backoffMs?: number;
+        fallbackTimeoutMs?: number;
+    } = {},
+): Promise<T> {
+    try {
+        return await withReadRetry(label, loadRead, options);
+    } catch (readError) {
+        try {
+            return await withTimeout(
+                loadWrite(),
+                Math.max(2_000, options.fallbackTimeoutMs ?? options.timeoutMs ?? 12_000),
+                `${label} fallback`,
+            );
+        } catch (fallbackError) {
+            throw fallbackError instanceof Error
+                ? fallbackError
+                : readError instanceof Error
+                  ? readError
+                  : new Error(String(fallbackError));
+        }
+    }
+}
+
+async function loadMarketState(label: string): Promise<any> {
+    return withReadFallback(
+        label,
+        () => clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
+        () => clob.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
+    );
+}
+
+async function loadPositionState(label: string, address: string): Promise<any> {
+    return withReadFallback(
+        label,
+        () => clobRead.positions(currentMarketKey, address),
+        () => clob.positions(currentMarketKey, address),
+    );
+}
+
+async function loadWalletBalance(label: string, address: string): Promise<bigint> {
+    return withReadFallback(
+        label,
+        () => readProvider.getBalance(address),
+        () => provider.getBalance(address),
+    );
+}
+
+async function loadPriceLevelState(
+    label: string,
+    side: number,
+    price: number,
+): Promise<any> {
+    return withReadFallback(
+        label,
+        () =>
+            clobRead.getPriceLevel(
+                currentDuelKey,
+                MARKET_KIND_DUEL_WINNER,
+                side,
+                price,
+            ),
+        () =>
+            clob.getPriceLevel(
+                currentDuelKey,
+                MARKET_KIND_DUEL_WINNER,
+                side,
+                price,
+            ),
+    );
 }
 
 async function loadClaimPosition(
@@ -910,10 +988,7 @@ async function simulationTick(): Promise<void> {
     const scenarioPreset = getScenarioPresetByIdOrName(currentScenarioId);
     const treasuryFeeBps = feeConfig.treasuryBps;
     const mmFeeBps = feeConfig.mmBps;
-    let market = await withReadRetry(
-        `tick ${simTick} initial getMarket`,
-        () => clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
-    );
+    let market = await loadMarketState(`tick ${simTick} initial getMarket`);
 
     for (const agent of agents) {
         if (!agent.config.enabled) continue;
@@ -959,11 +1034,12 @@ async function simulationTick(): Promise<void> {
 
                     const actions = agent.decide(ctx);
                     if (actions.length > 0) {
+                        const actionBudgetMs = scenarioMode
+                            ? Math.max(10_000, actions.length * 8_000)
+                            : Math.max(20_000, actions.length * 20_000);
                         const logs = await withTimeout(
                             agent.executeActions(actions, ctx),
-                            scenarioMode
-                                ? Math.max(8_000, actions.length * 6_000)
-                                : Math.max(20_000, actions.length * 20_000),
+                            actionBudgetMs,
                             `tick ${simTick} agent ${agent.config.name} executeActions`,
                         );
                         for (const msg of logs) {
@@ -971,7 +1047,7 @@ async function simulationTick(): Promise<void> {
                         }
                     }
                 })(),
-                scenarioMode ? 15_000 : 120_000,
+                scenarioMode ? 30_000 : 120_000,
                 `tick ${simTick} agent ${agent.config.name}`,
             );
         } catch (err: any) {
@@ -1019,22 +1095,13 @@ async function broadcastState(): Promise<void> {
             treasuryBalance,
             mmBalance,
         ] = await Promise.all([
-            withReadRetry(
-                "broadcast getMarket",
-                () => clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
-            ),
+            loadMarketState("broadcast getMarket"),
             Promise.all(
                 agents.map(async (agent) => {
                     const addr = await getAgentAddress(agent);
                     const [balance, position] = await Promise.all([
-                        withReadRetry(
-                            `broadcast ${agent.config.name} getBalance`,
-                            () => readProvider.getBalance(addr),
-                        ),
-                        withReadRetry(
-                            `broadcast ${agent.config.name} getPosition`,
-                            () => clobRead.positions(currentMarketKey, addr),
-                        ),
+                        loadWalletBalance(`broadcast ${agent.config.name} getBalance`, addr),
+                        loadPositionState(`broadcast ${agent.config.name} getPosition`, addr),
                     ]);
                     const balanceFormatted = formatEth(balance);
                     const initBal = initialBalances.get(addr) || "10000";
@@ -1069,8 +1136,8 @@ async function broadcastState(): Promise<void> {
                     }),
             ),
             buildOrderBook(),
-            withReadRetry("broadcast treasury getBalance", () => readProvider.getBalance(treasuryAddr)),
-            withReadRetry("broadcast mm getBalance", () => readProvider.getBalance(mmAddr)),
+            loadWalletBalance("broadcast treasury getBalance", treasuryAddr),
+            loadWalletBalance("broadcast mm getBalance", mmAddr),
         ]);
         for (const snapshot of agentSnapshots) {
             agentPositionCache.set(snapshot.address, {
@@ -1307,10 +1374,7 @@ async function buildOrderBook(): Promise<{ bids: any[]; asks: any[] }> {
     const asks: { price: number; total: string }[] = [];
 
     // Sample price levels around the interesting range
-    const market = await withReadRetry(
-        "order-book getMarket",
-        () => clobRead.getMarket(currentDuelKey, MARKET_KIND_DUEL_WINNER),
-    );
+    const market = await loadMarketState("order-book getMarket");
     const bestBid = Number(market.bestBid);
     const bestAsk = Number(market.bestAsk);
 
@@ -1323,14 +1387,10 @@ async function buildOrderBook(): Promise<{ bids: any[]; asks: any[] }> {
         const levels = await Promise.all(
             prices.map(async (price) => {
                 try {
-                    const level = await withReadRetry(
+                    const level = await loadPriceLevelState(
                         `order-book bid level ${price}`,
-                        () => clobRead.getPriceLevel(
-                            currentDuelKey,
-                            MARKET_KIND_DUEL_WINNER,
-                            BUY_SIDE,
-                            price,
-                        ),
+                        BUY_SIDE,
+                        price,
                     );
                     return level[2] > 0n
                         ? { price, total: level[2].toString() }
@@ -1356,14 +1416,10 @@ async function buildOrderBook(): Promise<{ bids: any[]; asks: any[] }> {
         const levels = await Promise.all(
             prices.map(async (price) => {
                 try {
-                    const level = await withReadRetry(
+                    const level = await loadPriceLevelState(
                         `order-book ask level ${price}`,
-                        () => clobRead.getPriceLevel(
-                            currentDuelKey,
-                            MARKET_KIND_DUEL_WINNER,
-                            SELL_SIDE,
-                            price,
-                        ),
+                        SELL_SIDE,
+                        price,
                     );
                     return level[2] > 0n
                         ? { price, total: level[2].toString() }
@@ -1577,7 +1633,7 @@ async function runEvmScenarioPreset(
         });
 
         const degradedReasons: Array<{ name: string; reason: string }> = [];
-        const tickTimeoutMs = Math.max(20_000, countEnabledAgents() * 4_000);
+        const tickTimeoutMs = Math.max(30_000, countEnabledAgents() * 8_000);
         for (let i = 0; i < ticks; i += 1) {
             updateScenarioRun(run.runId, (entry) => {
                 entry.stage = `tick-${i + 1}-of-${ticks}`;
@@ -2447,7 +2503,7 @@ async function main(): Promise<void> {
     process.on("SIGINT", cleanup);
     process.on("SIGTERM", cleanup);
 
-    console.log("\n🎮 Ready! Open http://localhost:3401 in your browser.\n");
+    console.log(`\n🎮 Ready! Open http://localhost:${HTTP_PORT} in your browser.\n`);
 }
 
 main().catch((err) => {
