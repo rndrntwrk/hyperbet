@@ -9,13 +9,6 @@ Update this document every time the sprint base branch is pushed. Each update sh
 3. The targeted verification that was run.
 4. The remaining risk or next gate.
 
-Parallel gate handoff documents for independently executable remaining gates live in:
-
-- `docs/enoomian-gates/README.md`
-- `docs/enoomian-gates/gate-06-frontend-settlement.md`
-- `docs/enoomian-gates/gate-07-solana-bot-execution.md`
-- `docs/enoomian-gates/gate-08-solana-sim-backend.md`
-
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
