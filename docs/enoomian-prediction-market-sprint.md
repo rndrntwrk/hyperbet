@@ -12,8 +12,8 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `05c7882`
-- Last updated: `2026-03-11`
+- Latest recorded gate merged into base: `2e16661`
+- Last updated: `2026-03-12`
 - Active gate branch: `none`
 
 ## Gate Status
@@ -31,6 +31,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 09 | `enoomian/pm-09-solana-scenario-gates` | Complete | Yes | Validator-backed Solana exploit families now run through deterministic gate scenarios with canonical and matrix verification |
 | 10 | `enoomian/pm-10-cross-chain-e2e` | Complete | Yes | Cross-chain local E2E now covers full lifecycle, cancel/refund, and keeper restart recovery across Solana, BSC, and AVAX |
 | 11 | `enoomian/pm-11-ci-ops` | Complete | Yes | Prediction-market gates are enforced in CI, deploy envs fail closed, Base has a registry-only add-chain proof, and operator runbooks are in place |
+| 12 | `enoomian/pm-12-avax-canonicalization` | Complete | Yes | AVAX production semantics are now explicit and fail closed until canonical registry addresses exist |
+| 13 | `enoomian/pm-13-contract-ci-hardening` | Complete | Yes | EVM contract validation, proof, and security checks are promoted into stable CI workflow lanes |
+| 15 | `enoomian/pm-15-docs-hygiene-and-release-prep` | Complete | Yes | Release-facing docs are cleaned, reviewer handoff material is assembled, and sprint history reflects the merged post-sprint gates |
 
 ## Gate Results
 
@@ -401,6 +404,95 @@ Known remaining risk:
 - The new heavyweight CI workflow is wired and locally sanity-checked through the direct wrapper entrypoints, but the full GitHub Actions matrix has not yet been observed end-to-end on remote runners from this branch.
 - The direct Node/tsx wrapper entrypoints are the canonical Gate 11 verification path. On this local desktop sandbox, `bun run ci:gate:base` remains less reliable than invoking the wrapper directly, so the workflows intentionally call the wrappers themselves instead of shelling through package scripts.
 - Any new protocol-level exploit or deploy invariant uncovered by the CI gate workflows should land as a dedicated follow-up branch, not by weakening the gates.
+
+### Gate 12
+
+- Branch: `enoomian/pm-12-avax-canonicalization`
+- Base commit after merge: `eaa5f0f`
+- Commits:
+  - `c173587` `avax: add canonical readiness checks`
+  - `e4f1d44` `ci: fail closed on incomplete avax production config`
+  - `eaa5f0f` `docs: document avax fail-closed production state`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Added explicit shared chain-registry helpers for EVM canonical readiness and missing canonical address reporting.
+- Marked AVAX mainnet and Fuji as incomplete until real canonical addresses are committed, instead of letting blank production values pass implicitly.
+- Added fail-closed AVAX app, keeper, and bot env-audit semantics so production-like AVAX paths reject partial config.
+- Updated CI/deploy assumptions and AVAX-facing docs/examples so AVAX is treated as local/testnet capable but intentionally production-disabled until canonical registry truth exists.
+- Disabled AVAX by default in the market-maker bot example env so copied configs do not accidentally opt into a non-canonical production lane.
+
+Targeted verification:
+
+- `bun test packages/hyperbet-chain-registry/tests/chainRegistry.test.ts`
+- `VITE_GAME_API_URL=https://api.hyperbet.win VITE_GAME_WS_URL=wss://api.hyperbet.win/ws VITE_SOLANA_CLUSTER=testnet VITE_USE_GAME_RPC_PROXY=true VITE_USE_GAME_EVM_RPC_PROXY=true node --import tsx scripts/ci-env-audit.ts --target=app:avax`
+- `HYPERBET_KEEPER_URL=https://keeper.example RAILWAY_PROJECT_ID=proj RAILWAY_PRODUCTION_ENVIRONMENT_ID=env RAILWAY_KEEPER_SERVICE_ID=svc CI_AUDIT_REQUIRE_RUNTIME=true AVAX_RPC_URL=https://api.avax.network/ext/bc/C/rpc AVAX_GOLD_CLOB_ADDRESS=0x1111111111111111111111111111111111111111 node --import tsx scripts/ci-env-audit.ts --target=keeper:avax`
+- `node --import tsx scripts/ci-gate-base.ts`
+
+Known remaining risk:
+
+- AVAX is safe by explicit disablement, not by canonical production readiness.
+- Re-enabling AVAX production later should happen in a dedicated follow-up lane that commits real registry addresses and reopens the audits/workflows intentionally.
+
+### Gate 13
+
+- Branch: `enoomian/pm-13-contract-ci-hardening`
+- Base commit after merge: `77deb7e`
+- Commits:
+  - `b123339` `contracts: promote evm assurance entrypoints`
+  - `77deb7e` `ci: wire contract and security jobs`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Added stable root contract-CI entrypoints and a dedicated `scripts/ci-contracts.ts` wrapper for fast validation, proof, and security targets.
+- Promoted EVM contract validation into fast CI and added heavyweight `EVM Contract Proof Gate` and `EVM Contract Security Gate` jobs with artifact upload.
+- Replaced the stale fuzz script with a real Foundry fuzz suite for `GoldClob`.
+- Updated contract tests to match the current custom-error settlement behavior instead of stale revert-string expectations.
+
+Targeted verification:
+
+- `bun test packages/hyperbet-chain-registry/tests/chainRegistry.test.ts`
+- `bun run ci:contracts:fast`
+- `bun run ci:contracts:proof`
+- workflow structure spot-checks in `.github/workflows/ci.yml` and `.github/workflows/prediction-market-gates.yml`
+
+Known remaining risk:
+
+- Local desktop verification of the contract lanes is still constrained by environment issues: Hardhat fast validation needs network compiler download, and local macOS Foundry proof runs can crash inside the system configuration layer.
+- The intended source of truth for final Gate 13 green status remains the CI workflows themselves once pushed to remote runners.
+
+### Gate 15
+
+- Branch: `enoomian/pm-15-docs-hygiene-and-release-prep`
+- Base commit after merge: `2e16661`
+- Commits:
+  - `9af1b49` `docs: clean release-facing repo documentation`
+  - `2e16661` `release: add final reviewer summary and checklist`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Cleaned tracked release-facing docs to remove accidental local absolute-path links and normalize repo-relative references.
+- Updated production deploy and runbook docs so AVAX fail-closed wording and current verification commands match the actual repo state.
+- Added `docs/prediction-market-release-prep.md` as the reviewer-facing release handoff with artifact inventory, merge checklist, and residual-risk summary.
+- Recorded the post-sprint Gate 12 and Gate 13 outcomes in the sprint tracker so the merged base history matches the real repo state.
+
+Targeted verification:
+
+- relative-link and path sanity scan across touched markdown docs
+- spot-checks against:
+  - `docs/hyperbet-production-deploy.md`
+  - `docs/development-setup.md`
+  - `docs/runbooks/README.md`
+  - `packages/market-maker-bot/README.md`
+  - `docs/prediction-market-release-prep.md`
+
+Known remaining risk:
+
+- Gate 15 closes reviewer/documentation drift, but it does not eliminate the remaining staged-live-proof follow-up represented by Gate 14.
+- Any future AVAX production enablement or contract-gate changes must update the release-prep doc again so it stays aligned with the repo truth.
 
 ## Update Template
 
