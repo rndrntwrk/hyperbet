@@ -442,6 +442,15 @@ env \
   bun run "$APP_DIR/tests/e2e/seed-api-local.ts"
 
 echo "[e2e] starting app on :$APP_PORT"
+kill_listeners "$APP_PORT"
+rm -rf "$APP_DIR/node_modules/.vite"
+echo "[e2e] pre-bundling vite dependencies"
+(
+  cd "$APP_DIR"
+  env \
+    VITE_GAME_API_URL="$GAME_API_URL" \
+    ./node_modules/.bin/vite optimize --force --mode e2e
+) >/tmp/hyperbet-solana-e2e-vite-optimize.log 2>&1
 (
   cd "$APP_DIR"
   env \
@@ -456,6 +465,7 @@ if ! wait_for_app "http://127.0.0.1:$APP_PORT/"; then
   tail -n 80 "$APP_LOG" || true
   exit 1
 fi
+sleep 2
 
 write_control_file
 
