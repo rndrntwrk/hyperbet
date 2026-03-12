@@ -200,14 +200,6 @@ function bnLikeToBigInt(value: unknown): bigint {
   return 0n;
 }
 
-function duelKeyHexToBytes(value: string | undefined): number[] {
-  const normalized = value?.trim().toLowerCase().replace(/^0x/, "") || "";
-  if (!/^[0-9a-f]{64}$/.test(normalized)) {
-    throw new Error("Missing currentDuelKeyHex in e2e state");
-  }
-  return Array.from(Buffer.from(normalized, "hex"));
-}
-
 async function fetchJson<T>(
   request: APIRequestContext,
   pathname: string,
@@ -252,9 +244,15 @@ async function waitForKeeperBotHealth(
   await expect
     .poll(
       async () => {
-        let payload: KeeperBotHealthResponse | null = null;
         try {
-          payload = await fetchBotHealth(request);
+          const payload = await fetchBotHealth(request);
+          return {
+            ok: payload.ok,
+            running: payload.running,
+            chainKey: payload.health?.chainKey ?? null,
+            hasRecovery: Array.isArray(payload.health?.recovery),
+            hasSnapshot: payload.health != null,
+          };
         } catch {
           return {
             ok: false,
@@ -264,13 +262,6 @@ async function waitForKeeperBotHealth(
             hasSnapshot: false,
           };
         }
-        return {
-          ok: payload.ok,
-          running: payload.running,
-          chainKey: payload.health?.chainKey ?? null,
-          hasRecovery: Array.isArray(payload.health?.recovery),
-          hasSnapshot: payload.health != null,
-        };
       },
       {
         timeout: 90_000,

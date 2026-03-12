@@ -247,9 +247,15 @@ async function waitForKeeperBotHealth(
   await expect
     .poll(
       async () => {
-        let payload: KeeperBotHealthResponse | null = null;
         try {
-          payload = await fetchBotHealth(request);
+          const payload = await fetchBotHealth(request);
+          return {
+            ok: payload.ok,
+            running: payload.running,
+            chainKey: payload.health?.chainKey ?? null,
+            hasRecovery: Array.isArray(payload.health?.recovery),
+            hasSnapshot: payload.health != null,
+          };
         } catch {
           return {
             ok: false,
@@ -259,13 +265,6 @@ async function waitForKeeperBotHealth(
             hasSnapshot: false,
           };
         }
-        return {
-          ok: payload.ok,
-          running: payload.running,
-          chainKey: payload.health?.chainKey ?? null,
-          hasRecovery: Array.isArray(payload.health?.recovery),
-          hasSnapshot: payload.health != null,
-        };
       },
       {
         timeout: 90_000,

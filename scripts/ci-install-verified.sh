@@ -68,9 +68,20 @@ target_requires_root_install() {
   esac
 }
 
+target_requires_nested_lockfile_refresh() {
+  case "$1" in
+    hyperbet-solana-app|hyperbet-bsc-app|hyperbet-avax-app)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 target_requires_nested_install() {
   case "$1" in
-    hyperbet-solana-app|hyperbet-bsc-app|hyperbet-avax-app|hyperbet-solana-anchor)
+    hyperbet-solana-anchor)
       return 0
       ;;
     *)
@@ -121,6 +132,10 @@ install_target() {
 
   if target_requires_root_install "$target"; then
     install_root_workspace
+  fi
+
+  if target_requires_nested_lockfile_refresh "$target"; then
+    bun install --lockfile-only --cwd "$ROOT_DIR/$cwd"
   fi
 
   if target_requires_nested_install "$target"; then
