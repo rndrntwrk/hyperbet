@@ -130,6 +130,69 @@ try {
   // Column already exists.
 }
 
+type DuplicateBetRow = {
+  value: string;
+  count: number;
+};
+
+type DuplicateChainTxRow = {
+  chain: string;
+  txSignature: string;
+  count: number;
+};
+
+function assertNoDuplicateRecordedBets(): void {
+  const duplicateExternalRefs = db
+    .prepare(
+      `SELECT external_bet_ref AS value, COUNT(*) AS count
+         FROM bets
+        WHERE external_bet_ref IS NOT NULL
+        GROUP BY external_bet_ref
+       HAVING COUNT(*) > 1
+        LIMIT 10`,
+    )
+    .all() as DuplicateBetRow[];
+  const duplicateChainTxSignatures = db
+    .prepare(
+      `SELECT chain, tx_signature AS txSignature, COUNT(*) AS count
+         FROM bets
+        WHERE tx_signature <> ''
+        GROUP BY chain, tx_signature
+       HAVING COUNT(*) > 1
+        LIMIT 10`,
+    )
+    .all() as DuplicateChainTxRow[];
+  if (
+    duplicateExternalRefs.length === 0 &&
+    duplicateChainTxSignatures.length === 0
+  ) {
+    return;
+  }
+
+  const details = [
+    ...duplicateExternalRefs.map(
+      (row) => `external_bet_ref=${row.value} (count=${row.count})`,
+    ),
+    ...duplicateChainTxSignatures.map(
+      (row) =>
+        `chain=${row.chain} tx_signature=${row.txSignature} (count=${row.count})`,
+    ),
+  ];
+  throw new Error(
+    `[keeper-db] Duplicate recorded bets detected. Clean the keeper DB before startup: ${details.join("; ")}`,
+  );
+}
+
+assertNoDuplicateRecordedBets();
+
+db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_external_bet_ref_unique
+  ON bets (external_bet_ref)
+  WHERE external_bet_ref IS NOT NULL`);
+
+db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_chain_tx_signature_unique
+  ON bets (chain, tx_signature)
+  WHERE tx_signature <> ''`);
+
 db.run(`CREATE TABLE IF NOT EXISTS wallet_display (
   normalized_wallet TEXT PRIMARY KEY,
   display_name TEXT NOT NULL
@@ -538,8 +601,8 @@ export function loadAll(betLimit = 5000): HydratedState {
 
 // ── Save helpers (called after each mutation) ─────────────────────────────────
 
-export function saveBet(bet: DbBetRecord): void {
-  insertBet.run({
+export function saveBet(bet: DbBetRecord): boolean {
+  const result = insertBet.run({
     $id: bet.id,
     $bettorWallet: bet.bettorWallet,
     $chain: bet.chain,
@@ -554,7 +617,8 @@ export function saveBet(bet: DbBetRecord): void {
     $inviteCode: bet.inviteCode,
     $externalBetRef: bet.externalBetRef,
     $recordedAt: bet.recordedAt,
-  });
+  }) as { changes?: number };
+  return Number(result.changes ?? 0) > 0;
 }
 
 export function saveWalletDisplay(normalized: string, display: string): void {

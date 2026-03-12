@@ -23,6 +23,7 @@ import {
   Transaction,
   VersionedTransaction,
 } from "@solana/web3.js";
+import bs58 from "bs58";
 
 import {
   createPrograms,
@@ -740,25 +741,7 @@ function applyCors(req: Request, headers: Headers): void {
     return;
   }
 
-  const isAllowedOrigin =
-    CORS_ORIGINS.length === 0 ||
-    CORS_ORIGINS.includes(origin) ||
-    origin === "https://hyperbet.win" ||
-    origin.endsWith(".hyperbet.win") ||
-    origin === "https://hyperscape.bet" ||
-    origin.endsWith(".hyperscape.bet") ||
-    origin === "https://hyperscape.gg" ||
-    origin.endsWith(".hyperscape.gg") ||
-    origin === "https://hyperbet.pages.dev" ||
-    origin.endsWith(".hyperbet.pages.dev") ||
-    origin === "https://hyperscape.club" ||
-    origin.endsWith(".hyperscape.club") ||
-    origin === "https://hyperscape.pages.dev" ||
-    origin.endsWith(".hyperscape.pages.dev") ||
-    origin.includes("localhost") ||
-    origin.includes("127.0.0.1");
-
-  if (isAllowedOrigin) {
+  if (isAllowedAppOrigin(origin)) {
     headers.set("access-control-allow-origin", origin);
     headers.set("vary", "Origin");
   } else {
@@ -776,32 +759,140 @@ function applyCors(req: Request, headers: Headers): void {
 function normalizeOriginLike(value: string | null): string | null {
   if (!value) return null;
   try {
-    return new URL(value).origin;
+    const url = new URL(value);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      !url.hostname
+    ) {
+      return null;
+    }
+    return url.origin;
   } catch {
-    return value;
+    return null;
   }
 }
 
 function isAllowedAppOrigin(origin: string | null): boolean {
   const normalized = normalizeOriginLike(origin);
   if (!normalized) return false;
+  const { hostname } = new URL(normalized);
+  const lowerHostname = hostname.toLowerCase();
+  const matchesAppDomain = (domain: string) =>
+    lowerHostname === domain || lowerHostname.endsWith(`.${domain}`);
+  const isLoopbackHost =
+    lowerHostname === "localhost" ||
+    lowerHostname === "127.0.0.1" ||
+    lowerHostname === "::1" ||
+    lowerHostname === "[::1]";
   return (
     CORS_ORIGINS.includes(normalized) ||
-    normalized === "https://hyperbet.win" ||
-    normalized.endsWith(".hyperbet.win") ||
-    normalized === "https://hyperscape.bet" ||
-    normalized.endsWith(".hyperscape.bet") ||
-    normalized === "https://hyperscape.gg" ||
-    normalized.endsWith(".hyperscape.gg") ||
-    normalized === "https://hyperbet.pages.dev" ||
-    normalized.endsWith(".hyperbet.pages.dev") ||
-    normalized === "https://hyperscape.club" ||
-    normalized.endsWith(".hyperscape.club") ||
-    normalized === "https://hyperscape.pages.dev" ||
-    normalized.endsWith(".hyperscape.pages.dev") ||
-    normalized.includes("localhost") ||
-    normalized.includes("127.0.0.1")
+    matchesAppDomain("hyperbet.win") ||
+    matchesAppDomain("hyperscape.bet") ||
+    matchesAppDomain("hyperscape.gg") ||
+    matchesAppDomain("hyperbet.pages.dev") ||
+    matchesAppDomain("hyperscape.club") ||
+    matchesAppDomain("hyperscape.pages.dev") ||
+    isLoopbackHost
   );
+}
+
+type ExternalBetVerificationInput = {
+  marketRef: string | null;
+  duelKey: string | null;
+};
+
+const GOLD_CLOB_PLACE_ORDER_DISCRIMINATOR = createHash("sha256")
+  .update("global:place_order")
+  .digest()
+  .subarray(0, 8);
+
+function normalizeDuelKeyHex(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  const normalized = trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed;
+  return /^[0-9a-f]{64}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeBase58Key(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new PublicKey(value.trim()).toBase58();
+  } catch {
+    return null;
+  }
+}
+
+function toInstructionAccountAddress(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "pubkey" in value &&
+    typeof (value as { pubkey?: unknown }).pubkey === "string"
+  ) {
+    return (value as { pubkey: string }).pubkey;
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "pubkey" in value &&
+    typeof (value as { pubkey?: { toBase58?: () => string } }).pubkey?.toBase58 ===
+      "function"
+  ) {
+    return (value as { pubkey: { toBase58: () => string } }).pubkey.toBase58();
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toBase58" in value &&
+    typeof (value as { toBase58?: () => string }).toBase58 === "function"
+  ) {
+    return (value as { toBase58: () => string }).toBase58();
+  }
+  return null;
+}
+
+function extractInstructionProgramId(instruction: unknown): string | null {
+  if (
+    typeof instruction === "object" &&
+    instruction !== null &&
+    "programId" in instruction
+  ) {
+    return toInstructionAccountAddress(
+      (instruction as { programId?: unknown }).programId,
+    );
+  }
+  return null;
+}
+
+function extractInstructionAccounts(instruction: unknown): string[] {
+  if (
+    typeof instruction !== "object" ||
+    instruction === null ||
+    !("accounts" in instruction) ||
+    !Array.isArray((instruction as { accounts?: unknown[] }).accounts)
+  ) {
+    return [];
+  }
+  return (instruction as { accounts: unknown[] }).accounts
+    .map((account) => toInstructionAccountAddress(account))
+    .filter((account): account is string => Boolean(account));
+}
+
+function isPlaceOrderInstructionData(data: unknown): boolean {
+  if (typeof data !== "string") return false;
+  try {
+    const raw = bs58.decode(data);
+    return (
+      raw.length >= GOLD_CLOB_PLACE_ORDER_DISCRIMINATOR.length &&
+      raw
+        .slice(0, GOLD_CLOB_PLACE_ORDER_DISCRIMINATOR.length)
+        .every((byte, index) => byte === GOLD_CLOB_PLACE_ORDER_DISCRIMINATOR[index])
+    );
+  } catch {
+    return false;
+  }
 }
 
 function decodeSenderTransaction(transaction: string): Transaction | VersionedTransaction {
@@ -1259,11 +1350,57 @@ function requireWriteAuth(
   return provided === fallbackKey;
 }
 
+function hasPrivilegedWriteAuth(
+  req: Request,
+  fallbackKey = ARENA_WRITE_KEY,
+): boolean {
+  return Boolean(fallbackKey) && requireWriteAuth(req, fallbackKey);
+}
+
 async function verifyRecordedBet(
   bettorWallet: string,
   txSignature: string,
+  expected: ExternalBetVerificationInput,
 ): Promise<boolean> {
-  if (!solanaCtx) return true;
+  if (!solanaCtx) return false;
+  const normalizedWallet = normalizeBase58Key(bettorWallet);
+  const rawMarketRef = expected.marketRef?.trim() || null;
+  const rawDuelKey = expected.duelKey?.trim() || null;
+  const normalizedMarketRef = rawMarketRef
+    ? normalizeBase58Key(rawMarketRef)
+    : null;
+  const normalizedDuelKey = normalizeDuelKeyHex(rawDuelKey);
+  if (!normalizedWallet || !txSignature.trim()) {
+    return false;
+  }
+  if ((rawMarketRef && !normalizedMarketRef) || (rawDuelKey && !normalizedDuelKey)) {
+    return false;
+  }
+  if (!normalizedMarketRef && !normalizedDuelKey) {
+    return false;
+  }
+
+  const expectedDuelState = normalizedDuelKey
+    ? findDuelStatePda(
+      FIGHT_ORACLE_PROGRAM_ID,
+      duelKeyHexToBytes(normalizedDuelKey),
+    ).toBase58()
+    : null;
+  const derivedMarketRef = expectedDuelState
+    ? findMarketPda(
+      GOLD_CLOB_MARKET_PROGRAM_ID,
+      new PublicKey(expectedDuelState),
+    ).toBase58()
+    : null;
+  if (
+    normalizedMarketRef &&
+    derivedMarketRef &&
+    normalizedMarketRef !== derivedMarketRef
+  ) {
+    return false;
+  }
+  const expectedMarketRef = normalizedMarketRef ?? derivedMarketRef;
+
   try {
     const transaction = await solanaCtx.connection.getParsedTransaction(
       txSignature,
@@ -1275,10 +1412,44 @@ async function verifyRecordedBet(
     if (!transaction || transaction.meta?.err) {
       return false;
     }
-    const walletLower = bettorWallet.trim().toLowerCase();
-    return transaction.transaction.message.accountKeys.some(
-      (key) => key.signer && key.pubkey.toBase58().toLowerCase() === walletLower,
+
+    const walletSigned = transaction.transaction.message.accountKeys.some(
+      (key) =>
+        key.signer &&
+        normalizeBase58Key(toInstructionAccountAddress(key.pubkey)) ===
+          normalizedWallet,
     );
+    if (!walletSigned) {
+      return false;
+    }
+
+    for (const instruction of transaction.transaction.message.instructions) {
+      const programId = extractInstructionProgramId(instruction);
+      if (programId !== GOLD_CLOB_MARKET_PROGRAM_ID.toBase58()) {
+        continue;
+      }
+      if (
+        !(
+          typeof instruction === "object" &&
+          instruction !== null &&
+          "data" in instruction &&
+          isPlaceOrderInstructionData(
+            (instruction as { data?: unknown }).data,
+          )
+        )
+      ) {
+        continue;
+      }
+      const accounts = extractInstructionAccounts(instruction);
+      const marketState = normalizeBase58Key(accounts[0] ?? null);
+      const duelState = normalizeBase58Key(accounts[1] ?? null);
+      const user = normalizeBase58Key(accounts[9] ?? null);
+      if (user !== normalizedWallet) continue;
+      if (expectedMarketRef && marketState !== expectedMarketRef) continue;
+      if (expectedDuelState && duelState !== expectedDuelState) continue;
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -1288,17 +1459,15 @@ async function authorizeExternalBetRecord(
   req: Request,
   bettorWallet: string,
   txSignature: string,
+  expected: ExternalBetVerificationInput,
 ): Promise<boolean> {
-  if (requireWriteAuth(req)) return true;
+  if (hasPrivilegedWriteAuth(req)) return true;
 
-  const trustedOrigin =
-    isAllowedAppOrigin(req.headers.get("origin")) ||
-    isAllowedAppOrigin(req.headers.get("referer"));
-  if (!trustedOrigin || !txSignature.trim()) {
+  if (!isAllowedAppOrigin(req.headers.get("origin")) || !txSignature.trim()) {
     return false;
   }
 
-  return verifyRecordedBet(bettorWallet, txSignature);
+  return verifyRecordedBet(bettorWallet, txSignature, expected);
 }
 
 function toStreamState(payload: unknown): StreamState | null {
@@ -1781,7 +1950,19 @@ async function handleBetRecord(req: Request): Promise<Response> {
   }
 
   const txSignature = String(payload.txSignature || "").trim();
-  if (!(await authorizeExternalBetRecord(req, walletRaw, txSignature))) {
+  const marketRefRaw = payload.marketPda
+    ? String(payload.marketPda)
+    : payload.marketRef
+      ? String(payload.marketRef)
+      : null;
+  const duelKeyRaw = payload.duelKey ? String(payload.duelKey).trim() : null;
+  const authorizedByWriteKey = hasPrivilegedWriteAuth(req);
+  if (
+    !(await authorizeExternalBetRecord(req, walletRaw, txSignature, {
+      marketRef: marketRefRaw,
+      duelKey: duelKeyRaw,
+    }))
+  ) {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
@@ -1792,7 +1973,6 @@ async function handleBetRecord(req: Request): Promise<Response> {
 
   const normalizedWallet = rememberWalletCase(walletRaw);
   ensureIdentity(normalizedWallet);
-  const points = ensureWalletPoints(normalizedWallet);
   const pointsAwarded = Math.max(
     1,
     Math.round(Math.max(goldAmount, sourceAmount) * 10),
@@ -1806,28 +1986,41 @@ async function handleBetRecord(req: Request): Promise<Response> {
     goldAmount,
     feeBps,
     txSignature,
-    marketPda: payload.marketPda
-      ? String(payload.marketPda)
-      : payload.marketRef
-        ? String(payload.marketRef)
-        : null,
-    duelKey: payload.duelKey ? String(payload.duelKey).trim() : null,
+    marketPda: marketRefRaw,
+    duelKey: duelKeyRaw,
     duelId: payload.duelId ? String(payload.duelId).trim() : null,
     inviteCode: null,
-    externalBetRef: payload.externalBetRef
-      ? String(payload.externalBetRef)
+    externalBetRef: authorizedByWriteKey
+      ? payload.externalBetRef
+        ? String(payload.externalBetRef)
+        : txSignature
+          ? `solana:${txSignature}`
+          : null
       : txSignature
         ? `solana:${txSignature}`
-      : null,
+        : null,
     recordedAt,
   };
-  points.selfPoints += pointsAwarded;
-  saveWalletPoints(normalizedWallet, points);
 
   const inviteCodeRaw = String(payload.inviteCode || "")
     .trim()
     .toUpperCase();
   record.inviteCode = inviteCodeRaw || null;
+  const inserted = saveBet(record);
+  if (!inserted) {
+    return jsonResponse(req, {
+      ok: true,
+      duplicate: true,
+      pointsAwarded: 0,
+      wallet: record.bettorWallet,
+      totalPoints: totalPoints(aggregatePoints([normalizedWallet])),
+    });
+  }
+
+  const points = ensureWalletPoints(normalizedWallet);
+  points.selfPoints += pointsAwarded;
+  saveWalletPoints(normalizedWallet, points);
+
   if (inviteCodeRaw && !referredByWallet.has(normalizedWallet)) {
     const inviter = walletByInviteCode.get(inviteCodeRaw);
     if (inviter && inviter !== normalizedWallet) {
@@ -1887,7 +2080,6 @@ async function handleBetRecord(req: Request): Promise<Response> {
   if (bets.length > BET_STORE_LIMIT) {
     bets.length = BET_STORE_LIMIT;
   }
-  saveBet(record);
 
   return jsonResponse(req, {
     ok: true,
@@ -2152,10 +2344,8 @@ async function handleSolanaSenderProxy(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "transaction is required" }, 400);
   }
 
-  const authorizedByKey = requireWriteAuth(req);
-  const trustedOrigin =
-    isAllowedAppOrigin(req.headers.get("origin")) ||
-    isAllowedAppOrigin(req.headers.get("referer"));
+  const authorizedByKey = hasPrivilegedWriteAuth(req);
+  const trustedOrigin = isAllowedAppOrigin(req.headers.get("origin"));
 
   let decodedTransaction: Transaction | VersionedTransaction;
   try {

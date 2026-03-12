@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { normalizeAddress } from "./index.ts";
-import type { CheckResult } from "./verify-chains.ts";
+import { validateConfiguredAddress, type CheckResult } from "./verify-chains.ts";
 
 describe("normalizeAddress", () => {
   it("checksums a valid lowercase address", () => {
@@ -39,5 +39,19 @@ describe("verify-chains module structure", () => {
     expect(result.chain).toBe("avax");
     expect(result.ok).toBe(true);
     expect(typeof result.details).toBe("string");
+  });
+
+  it("reports blank configured addresses without throwing", () => {
+    expect(validateConfiguredAddress("", "goldClobAddress")).toEqual({
+      ok: false,
+      details: "goldClobAddress not configured",
+    });
+  });
+
+  it("reports invalid configured addresses without throwing", () => {
+    expect(validateConfiguredAddress("not-an-address", "goldClobAddress")).toEqual({
+      ok: false,
+      details: "goldClobAddress invalid",
+    });
   });
 });

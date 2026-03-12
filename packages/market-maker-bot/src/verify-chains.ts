@@ -29,6 +29,30 @@ export type CheckResult = {
   details: string;
 };
 
+export function validateConfiguredAddress(
+  rawAddress: string,
+  fieldName: string,
+): { ok: true; address: string } | { ok: false; details: string } {
+  const trimmed = rawAddress.trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      details: `${fieldName} not configured`,
+    };
+  }
+  try {
+    return {
+      ok: true,
+      address: normalizeAddress(trimmed),
+    };
+  } catch {
+    return {
+      ok: false,
+      details: `${fieldName} invalid`,
+    };
+  }
+}
+
 export const verifyEvmChain = async (params: {
   chain: BettingEvmChain;
   rpcUrl: string;
@@ -117,13 +141,24 @@ function expectedChainIdEnvVar(chain: BettingEvmChain): string {
 async function run() {
   const evmChecks = BETTING_EVM_CHAIN_ORDER.map((chain) => {
     const runtime = resolveBettingEvmRuntimeEnv(chain, "mainnet-beta", process.env);
+    const addressValidation = validateConfiguredAddress(
+      runtime.goldClobAddress,
+      "goldClobAddress",
+    );
+    if ("details" in addressValidation) {
+      return Promise.resolve({
+        chain,
+        ok: false,
+        details: addressValidation.details,
+      });
+    }
     return verifyEvmChain({
       chain,
       rpcUrl: runtime.rpcUrl,
       expectedChainId: BigInt(
         process.env[expectedChainIdEnvVar(chain)] || runtime.deployment.chainId,
       ),
-      clobAddress: normalizeAddress(runtime.goldClobAddress),
+      clobAddress: addressValidation.address,
     });
   });
   const results = await Promise.all([
