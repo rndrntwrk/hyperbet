@@ -102,6 +102,11 @@ const processControlScriptPath = path.resolve(
 const GAME_API_URL = (process.env.E2E_GAME_API_URL || "http://127.0.0.1:5555")
   .trim()
   .replace(/\/$/, "");
+const E2E_ARENA_WRITE_KEY =
+  process.env.E2E_ARENA_WRITE_KEY?.trim() ||
+  process.env.ARENA_EXTERNAL_BET_WRITE_KEY?.trim() ||
+  process.env.VITE_ARENA_WRITE_KEY?.trim() ||
+  "";
 const anchorIdlDir = path.resolve(
   __dirname,
   "../../../../hyperbet-solana/anchor/target/idl",
@@ -219,6 +224,9 @@ async function postJson<T>(
 ): Promise<T> {
   const response = await request.post(`${GAME_API_URL}${pathname}`, {
     data: body,
+    headers: E2E_ARENA_WRITE_KEY
+      ? { "x-arena-write-key": E2E_ARENA_WRITE_KEY }
+      : undefined,
   });
   expect(response.ok(), `POST ${pathname} should succeed`).toBeTruthy();
   return (await response.json()) as T;
