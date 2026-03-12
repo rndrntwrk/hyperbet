@@ -64,6 +64,7 @@ jobs:
         env:
           CI_AUDIT_REQUIRE_RUNTIME: "true"
           AVAX_RPC_URL: https://api.avax.network/ext/bc/C/rpc
+          AVAX_GOLD_CLOB_ADDRESS: ${{ vars.HYPERBET_AVAX_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_AVAX_GOLD_CLOB_ADDRESS || '' }}
 
       - name: Run keeper tests
         run: |
