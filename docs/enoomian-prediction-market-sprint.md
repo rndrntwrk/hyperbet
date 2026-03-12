@@ -33,6 +33,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 11 | `enoomian/pm-11-ci-ops` | Complete | Yes | Prediction-market gates are enforced in CI, deploy envs fail closed, Base has a registry-only add-chain proof, and operator runbooks are in place |
 | 12 | `enoomian/pm-12-avax-canonicalization` | Complete | Yes | AVAX production semantics are now explicit and fail closed until canonical registry addresses exist |
 | 13 | `enoomian/pm-13-contract-ci-hardening` | Complete | Yes | EVM contract validation, proof, and security checks are promoted into stable CI workflow lanes |
+| 14 | `n/a` | In Progress | No | Manual staged live-proof rail is implemented for Solana and BSC, but the staged execution and artifact review are still outstanding |
 | 15 | `enoomian/pm-15-docs-hygiene-and-release-prep` | Complete | Yes | Release-facing docs are cleaned, reviewer handoff material is assembled, and sprint history reflects the merged post-sprint gates |
 
 ## Gate Results

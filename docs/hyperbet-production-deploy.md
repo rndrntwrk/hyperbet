@@ -14,6 +14,46 @@ Operator runbooks are in [docs/runbooks/README.md](runbooks/README.md).
 
 AVAX does not have a production frontend deployment path in this repo today. Until canonical AVAX deployment addresses are committed to the shared chain registry, AVAX production builds and keeper deploys should be treated as intentionally disabled.
 
+## Staging Rail
+
+The repo also supports a manual staging rail for Solana and BSC without
+changing the production topology:
+
+- staged Solana Pages + staged Solana keeper
+- staged BSC Pages + staged BSC keeper
+- external staged duel/stream source
+- no staged AVAX frontend path
+
+Manual staging deploys use the same workflows as production through
+`workflow_dispatch`:
+
+- `Deploy Hyperbet Solana Pages`
+- `Deploy Hyperbet Solana Keeper`
+- `Deploy Hyperbet BSC Pages`
+- `Deploy Hyperbet BSC Keeper`
+
+Select `environment=staging` when dispatching the relevant workflow.
+
+Required staging vars are:
+
+- `HYPERBET_SOLANA_PAGES_STAGING_PROJECT_NAME`
+- `HYPERBET_SOLANA_PAGES_STAGING_URL`
+- `HYPERBET_SOLANA_KEEPER_STAGING_URL`
+- `HYPERBET_SOLANA_KEEPER_STAGING_WS_URL`
+- `HYPERBET_SOLANA_RAILWAY_STAGING_PROJECT_ID`
+- `HYPERBET_SOLANA_RAILWAY_STAGING_ENVIRONMENT_ID`
+- `HYPERBET_SOLANA_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+- `HYPERBET_BSC_PAGES_STAGING_PROJECT_NAME`
+- `HYPERBET_BSC_PAGES_STAGING_URL`
+- `HYPERBET_BSC_KEEPER_STAGING_URL`
+- `HYPERBET_BSC_KEEPER_STAGING_WS_URL`
+- `HYPERBET_BSC_RAILWAY_STAGING_PROJECT_ID`
+- `HYPERBET_BSC_RAILWAY_STAGING_ENVIRONMENT_ID`
+- `HYPERBET_BSC_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+
+AVAX remains fail-closed for staging and production until canonical deployment
+truth exists in the shared chain registry.
+
 ## 1) Deploy the keeper to Railway
 
 From repo root, deploy the keeper service path:
@@ -133,7 +173,32 @@ Repo-backed checks from repo root:
 bun run --cwd packages/hyperbet-solana build:mainnet
 ```
 
-## 6) Security notes
+## 6) Run staged live proof
+
+Use the manual `Staged Live Proof` workflow or the repo wrapper:
+
+```bash
+bun run staged:proof -- --mode=read-only --target=all
+bun run staged:proof -- --mode=canary-write --target=solana
+bun run staged:proof -- --mode=canary-write --target=bsc
+```
+
+The proof wrapper captures:
+
+- Pages `build-info.json`
+- keeper `/status`
+- `/api/arena/prediction-markets/active`
+- `/api/keeper/bot-health`
+- stream-state and duel-context payloads
+- Solana and BSC proxy proof
+- Solana and BSC canary tx hashes/signatures when `mode=canary-write`
+- `verify:chains` output
+- AVAX fail-closed proof
+
+This is a manual operator proof rail. It should not be treated as complete
+until a real staged run passes end to end and the artifacts are reviewed.
+
+## 7) Security notes
 
 - Do not expose `ARENA_EXTERNAL_BET_WRITE_KEY` in public frontend env vars.
 - Do not ship provider-keyed RPC URLs in public frontend env vars. Keep them on Railway and let the keeper proxy them.

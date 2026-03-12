@@ -9,8 +9,8 @@ As of March 12, 2026, this is a phase-2 release-prep artifact:
 - Gate 12 is merged as an explicit fail-closed AVAX production lane
 - Gate 13 is merged as contract-validation, proof, and security CI hardening
 - reviewer inventory and merge checklist are assembled
-- Gate 14 staged live proof is now dependency-unblocked but still intentionally
-  deferred from this synthesis pass
+- Gate 14 now has a manual staged-live-proof rail, but staged execution is
+  still outstanding before the gate can be called complete
 
 This document does not declare the sprint release-ready for unrestricted real
 funds. It is the reviewer handoff for the sprint base after Gates 12, 13, and
@@ -36,8 +36,8 @@ Current dependency state:
 
 - Gate 12: complete as fail-closed AVAX production handling
 - Gate 13: complete as contract/security CI promotion
-- Gate 14: not started; dependency block is removed, but staged live proof is
-  still outstanding
+- Gate 14: proof rail implemented; staged live proof execution still
+  outstanding
 
 ## Reviewer Artifact Inventory
 
@@ -53,8 +53,10 @@ Operational and CI surfaces to spot-check:
 
 - [Fast CI workflow](../.github/workflows/ci.yml)
 - [Prediction-market gate workflow](../.github/workflows/prediction-market-gates.yml)
+- [Staged live proof workflow](../.github/workflows/staged-live-proof.yml)
 - `scripts/ci-env-audit.ts`
 - `scripts/ci-contracts.ts`
+- `scripts/staged-live-proof.ts`
 - `packages/simulation-dashboard`
 - `packages/market-maker-bot`
 - `packages/hyperbet-solana/keeper`
@@ -78,15 +80,15 @@ Representative local verification entrypoints already documented elsewhere:
 - AVAX is described accurately as fail-closed for production until canonical
   registry addresses are committed
 - CI wording reflects the real required lanes:
+  - `Solana Program Build Gate`
   - `EVM Contract Validation`
   - `EVM Contract Proof Gate`
   - `EVM Contract Security Gate`
   - `EVM Exploit Gate`
   - `Solana Exploit Gate`
-  - `Cross-Chain E2E`
   - `Base Add-Chain Smoke`
-- Gate 14 is described as outstanding and intentionally deferred, not silently
-  complete
+- Gate 14 is described as having a proof rail but not yet complete until a real
+  staged run succeeds
 - targeted checks and broader regression for the dependency gates are green
 - sprint tracker is updated after the relevant base-branch push
 - ready-to-merge synthesis is written without overstating release readiness
@@ -98,7 +100,7 @@ Representative local verification entrypoints already documented elsewhere:
 - Contract/security CI is now wired into the repo workflows, but local desktop
   verification can still be constrained by toolchain issues such as Hardhat
   compiler download and macOS-specific Foundry crashes.
-- Gate 14 staged live proof remains the largest explicitly deferred follow-on
+- Gate 14 staged live proof remains the largest outstanding operator proof
   before claiming full audit-style deployment confidence.
 - Any release-facing summary that omits the AVAX fail-closed state or the
   remaining staged-live-proof work would be misleading.

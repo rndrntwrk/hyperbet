@@ -21,30 +21,58 @@ on:
         type: choice
         options:
           - production
+          - staging
           - preview
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CLOUDFLARE_ACCOUNT_ID: ${{ vars.HYPERBET_CLOUDFLARE_ACCOUNT_ID != '' && vars.HYPERBET_CLOUDFLARE_ACCOUNT_ID || '50ad2052bbc6ca528d6993a689b419a4' }}
-  PAGES_PROJECT_NAME: ${{ vars.HYPERBET_BSC_PAGES_PROJECT_NAME != '' && vars.HYPERBET_BSC_PAGES_PROJECT_NAME || 'hyperbet-bsc' }}
-  PAGES_PRODUCTION_URL: ${{ vars.HYPERBET_BSC_PAGES_PRODUCTION_URL != '' && vars.HYPERBET_BSC_PAGES_PRODUCTION_URL || 'https://bsc.hyperbet.win' }}
-  HYPERBET_API_URL: ${{ vars.HYPERBET_BSC_KEEPER_URL != '' && vars.HYPERBET_BSC_KEEPER_URL || 'https://bsc-api.hyperbet.win' }}
-  HYPERBET_WS_URL: ${{ vars.HYPERBET_BSC_KEEPER_WS_URL != '' && vars.HYPERBET_BSC_KEEPER_WS_URL || 'wss://bsc-api.hyperbet.win/ws' }}
-  HYPERBET_BSC_GOLD_CLOB_ADDRESS: ${{ vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS || '0x443C09B1E7bb7bA3392b02500772B185654A6F33' }}
-  HYPERBET_BASE_GOLD_CLOB_ADDRESS: ${{ vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS || '0xb8c66D6895Bafd1B0027F2c0865865043064437C' }}
-
 jobs:
   deploy:
-    if: ${{ vars.HYPERBET_BSC_DEPLOY_ENABLED == 'true' }}
+    if: ${{ vars.HYPERBET_BSC_DEPLOY_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging') }}
     name: Deploy hyperbet-bsc pages
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' && 'staging' || 'production' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Resolve deployment target
+        run: |
+          deploy_target="production"
+          pages_project_name="${{ vars.HYPERBET_BSC_PAGES_PROJECT_NAME != '' && vars.HYPERBET_BSC_PAGES_PROJECT_NAME || 'hyperbet-bsc' }}"
+          pages_expected_url="${{ vars.HYPERBET_BSC_PAGES_PRODUCTION_URL != '' && vars.HYPERBET_BSC_PAGES_PRODUCTION_URL || 'https://bsc.hyperbet.win' }}"
+          api_url="${{ vars.HYPERBET_BSC_KEEPER_URL != '' && vars.HYPERBET_BSC_KEEPER_URL || 'https://bsc-api.hyperbet.win' }}"
+          ws_url="${{ vars.HYPERBET_BSC_KEEPER_WS_URL != '' && vars.HYPERBET_BSC_KEEPER_WS_URL || 'wss://bsc-api.hyperbet.win/ws' }}"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.environment }}" = "staging" ]; then
+            deploy_target="staging"
+            pages_project_name="${{ vars.HYPERBET_BSC_PAGES_STAGING_PROJECT_NAME }}"
+            pages_expected_url="${{ vars.HYPERBET_BSC_PAGES_STAGING_URL }}"
+            api_url="${{ vars.HYPERBET_BSC_KEEPER_STAGING_URL }}"
+            ws_url="${{ vars.HYPERBET_BSC_KEEPER_STAGING_WS_URL }}"
+          fi
+
+          if [ -z "${pages_project_name}" ]; then
+            echo "Missing BSC Pages project name for ${deploy_target}" >&2
+            exit 1
+          fi
+
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ inputs.environment }}" != "preview" ]; then
+            if [ -z "${pages_expected_url}" ] || [ -z "${api_url}" ] || [ -z "${ws_url}" ]; then
+              echo "Missing BSC staging/prod URL configuration for ${deploy_target}" >&2
+              exit 1
+            fi
+          fi
+
+          echo "DEPLOY_TARGET=${deploy_target}" >> "${GITHUB_ENV}"
+          echo "PAGES_PROJECT_NAME=${pages_project_name}" >> "${GITHUB_ENV}"
+          echo "PAGES_EXPECTED_URL=${pages_expected_url}" >> "${GITHUB_ENV}"
+          echo "HYPERBET_API_URL=${api_url}" >> "${GITHUB_ENV}"
+          echo "HYPERBET_WS_URL=${ws_url}" >> "${GITHUB_ENV}"
+          echo "HYPERBET_BSC_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS || '0x443C09B1E7bb7bA3392b02500772B185654A6F33' }}" >> "${GITHUB_ENV}"
+          echo "HYPERBET_BASE_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS || '0xb8c66D6895Bafd1B0027F2c0865865043064437C' }}" >> "${GITHUB_ENV}"
 
       - name: Configure Wrangler auth
         env:
@@ -115,6 +143,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.environment }}" = "preview" ]; then
             BRANCH="preview-${{ github.run_id }}"
+          elif [ "${DEPLOY_TARGET}" = "staging" ]; then
+            BRANCH="staging"
           else
             BRANCH="main"
           fi
@@ -130,15 +160,15 @@ jobs:
             --skip-caching
 
       - name: Verify production build metadata
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.environment == 'production' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.environment != 'preview' }}
         run: |
           for attempt in $(seq 1 20); do
-            payload="$(curl -fsSL "${PAGES_PRODUCTION_URL}/build-info.json" || true)"
+            payload="$(curl -fsSL "${PAGES_EXPECTED_URL}/build-info.json" || true)"
             if [ -n "$payload" ] && echo "$payload" | jq -e --arg sha "$GITHUB_SHA" '.commitHash == $sha' >/dev/null; then
               echo "build-info.json matches ${GITHUB_SHA}"
               exit 0
             fi
             sleep 15
           done
-          echo "Timed out waiting for ${PAGES_PRODUCTION_URL}/build-info.json to report ${GITHUB_SHA}"
+          echo "Timed out waiting for ${PAGES_EXPECTED_URL}/build-info.json to report ${GITHUB_SHA}"
           exit 1

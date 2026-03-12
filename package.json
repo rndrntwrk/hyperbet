@@ -57,6 +57,7 @@
     "ci:gate:e2e:bsc": "node --import tsx scripts/ci-gate-e2e.ts --chain=bsc",
     "ci:gate:e2e:avax": "node --import tsx scripts/ci-gate-e2e.ts --chain=avax",
     "ci:gate:base": "node --import tsx scripts/ci-gate-base.ts",
+    "staged:proof": "node --import tsx scripts/staged-live-proof.ts",
     "ci:prepr": "node scripts/check-pr-ready.mjs"
   },
   "devDependencies": {

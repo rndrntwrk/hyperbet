@@ -14,25 +14,55 @@ on:
       - "package.json"
       - "bun.lock"
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment target"
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  HYPERBET_KEEPER_URL: ${{ vars.HYPERBET_SOLANA_KEEPER_URL != '' && vars.HYPERBET_SOLANA_KEEPER_URL || 'https://api.hyperbet.win' }}
-  RAILWAY_PROJECT_ID: ${{ vars.HYPERBET_SOLANA_RAILWAY_PROJECT_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_PROJECT_ID || 'e5f5ba11-0380-4d71-aa0b-343d89a58c0d' }}
-  RAILWAY_PRODUCTION_ENVIRONMENT_ID: ${{ vars.HYPERBET_SOLANA_RAILWAY_PRODUCTION_ENVIRONMENT_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_PRODUCTION_ENVIRONMENT_ID || '194f3565-ba2f-4c98-87d2-85dfc3a5110b' }}
-  RAILWAY_KEEPER_SERVICE_ID: ${{ vars.HYPERBET_SOLANA_RAILWAY_KEEPER_SERVICE_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_KEEPER_SERVICE_ID || '330ea18e-b215-4cf9-9fe2-4bb09fc2ec63' }}
-
 jobs:
   deploy:
     name: Deploy hyperbet-solana keeper
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' && 'staging' || 'production' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Resolve deployment target
+        run: |
+          deploy_target="production"
+          keeper_url="${{ vars.HYPERBET_SOLANA_KEEPER_URL != '' && vars.HYPERBET_SOLANA_KEEPER_URL || 'https://api.hyperbet.win' }}"
+          railway_project_id="${{ vars.HYPERBET_SOLANA_RAILWAY_PROJECT_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_PROJECT_ID || 'e5f5ba11-0380-4d71-aa0b-343d89a58c0d' }}"
+          railway_environment_id="${{ vars.HYPERBET_SOLANA_RAILWAY_PRODUCTION_ENVIRONMENT_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_PRODUCTION_ENVIRONMENT_ID || '194f3565-ba2f-4c98-87d2-85dfc3a5110b' }}"
+          railway_service_id="${{ vars.HYPERBET_SOLANA_RAILWAY_KEEPER_SERVICE_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_KEEPER_SERVICE_ID || '330ea18e-b215-4cf9-9fe2-4bb09fc2ec63' }}"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.environment }}" = "staging" ]; then
+            deploy_target="staging"
+            keeper_url="${{ vars.HYPERBET_SOLANA_KEEPER_STAGING_URL }}"
+            railway_project_id="${{ vars.HYPERBET_SOLANA_RAILWAY_STAGING_PROJECT_ID != '' && vars.HYPERBET_SOLANA_RAILWAY_STAGING_PROJECT_ID || vars.HYPERBET_SOLANA_RAILWAY_PROJECT_ID }}"
+            railway_environment_id="${{ vars.HYPERBET_SOLANA_RAILWAY_STAGING_ENVIRONMENT_ID }}"
+            railway_service_id="${{ vars.HYPERBET_SOLANA_RAILWAY_STAGING_KEEPER_SERVICE_ID }}"
+          fi
+
+          if [ -z "${keeper_url}" ] || [ -z "${railway_project_id}" ] || [ -z "${railway_environment_id}" ] || [ -z "${railway_service_id}" ]; then
+            echo "Missing Solana keeper staging/prod configuration for ${deploy_target}" >&2
+            exit 1
+          fi
+
+          echo "DEPLOY_TARGET=${deploy_target}" >> "${GITHUB_ENV}"
+          echo "HYPERBET_KEEPER_URL=${keeper_url}" >> "${GITHUB_ENV}"
+          echo "RAILWAY_PROJECT_ID=${railway_project_id}" >> "${GITHUB_ENV}"
+          echo "RAILWAY_ENVIRONMENT_ID=${railway_environment_id}" >> "${GITHUB_ENV}"
+          echo "RAILWAY_KEEPER_SERVICE_ID=${railway_service_id}" >> "${GITHUB_ENV}"
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
@@ -109,8 +139,8 @@ jobs:
                 "projectPath": "${keeper_path}",
                 "name": "hyperbet",
                 "project": "${RAILWAY_PROJECT_ID}",
-                "environment": "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}",
-                "environmentName": "production",
+                "environment": "${RAILWAY_ENVIRONMENT_ID}",
+                "environmentName": "${DEPLOY_TARGET}",
                 "service": "${RAILWAY_KEEPER_SERVICE_ID}"
               }
             },
@@ -137,7 +167,7 @@ jobs:
             --path-as-root \
             --detach \
             --service "${RAILWAY_KEEPER_SERVICE_ID}" \
-            --environment "${RAILWAY_PRODUCTION_ENVIRONMENT_ID}"
+            --environment "${RAILWAY_ENVIRONMENT_ID}"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           CI: "true"

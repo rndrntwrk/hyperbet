@@ -9,6 +9,7 @@ Use them together with:
 
 Runbooks:
 
+- [Staged Live Proof](staged-live-proof.md)
 - [Quote Disablement And Safe Restart](quote-disablement-and-safe-restart.md)
 - [Stale Oracle Or Stale Stream](stale-oracle-or-stale-stream.md)
 - [Chain Outage Or RPC Degradation](chain-outage-or-rpc-degradation.md)

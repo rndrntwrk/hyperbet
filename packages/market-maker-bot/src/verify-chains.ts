@@ -139,7 +139,21 @@ function expectedChainIdEnvVar(chain: BettingEvmChain): string {
 }
 
 async function run() {
-  const evmChecks = BETTING_EVM_CHAIN_ORDER.map((chain) => {
+  const args = process.argv.slice(2);
+  const jsonOutput = args.includes("--json");
+  const chainsArg = args.find((arg) => arg.startsWith("--chains="));
+  const requestedChains = new Set(
+    (chainsArg?.slice("--chains=".length).split(",") ?? [])
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  const includeAll = requestedChains.size === 0;
+  const evmChains = BETTING_EVM_CHAIN_ORDER.filter(
+    (chain) => includeAll || requestedChains.has(chain),
+  );
+  const includeSolana = includeAll || requestedChains.has("solana");
+
+  const evmChecks = evmChains.map((chain) => {
     const runtime = resolveBettingEvmRuntimeEnv(chain, "mainnet-beta", process.env);
     const addressValidation = validateConfiguredAddress(
       runtime.goldClobAddress,
@@ -161,19 +175,27 @@ async function run() {
       clobAddress: addressValidation.address,
     });
   });
-  const results = await Promise.all([
-    ...evmChecks,
-    verifySolanaChain({
-      rpcUrl: DEFAULT_SOLANA_RPC_URL,
-      programId: DEFAULT_SOLANA_PROGRAM_ID,
-    }),
-  ]);
+  const results = await Promise.all(
+    [
+      ...evmChecks,
+      includeSolana
+        ? verifySolanaChain({
+            rpcUrl: DEFAULT_SOLANA_RPC_URL,
+            programId: DEFAULT_SOLANA_PROGRAM_ID,
+          })
+        : null,
+    ].filter(Boolean) as Array<Promise<CheckResult>>,
+  );
 
-  console.log("chain | status | details");
-  for (const result of results) {
-    console.log(
-      `${result.chain} | ${result.ok ? "ok" : "fail"} | ${result.details}`,
-    );
+  if (jsonOutput) {
+    console.log(JSON.stringify(results, null, 2));
+  } else {
+    console.log("chain | status | details");
+    for (const result of results) {
+      console.log(
+        `${result.chain} | ${result.ok ? "ok" : "fail"} | ${result.details}`,
+      );
+    }
   }
 
   if (results.some((result) => !result.ok)) {
