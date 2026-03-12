@@ -462,4 +462,5 @@ write_control_file
 echo "[e2e] running playwright tests"
 E2E_BASE_URL="http://127.0.0.1:$APP_PORT" \
 E2E_GAME_API_URL="$GAME_API_URL" \
+E2E_ARENA_WRITE_KEY="$E2E_ARENA_WRITE_KEY" \
   bunx playwright test --config "$APP_DIR/tests/e2e/playwright.config.ts" "$@"
