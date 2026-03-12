@@ -35,9 +35,16 @@ function parseArgs(): ChainKey {
 const chain = parseArgs();
 const artifactRoot = resolveArtifactRoot(`e2e-${chain}`);
 const appRoot = path.join(process.cwd(), `packages/hyperbet-${chain}/app`);
+const anchorRoot = path.join(process.cwd(), "packages/hyperbet-solana/anchor");
+const evmRoot =
+  chain === "solana"
+    ? null
+    : path.join(process.cwd(), "packages/evm-contracts");
 const statePath = path.join(appRoot, "tests/e2e/state.json");
 const controlPath = path.join(appRoot, "tests/e2e/control.json");
 const bootstrapKeypairPath = path.join(artifactRoot, "solana-bootstrap-keypair.json");
+const buildLogPath = path.join("/tmp", `hyperbet-${chain}-e2e-build.log`);
+const evmBuildLogPath = path.join("/tmp", `hyperbet-${chain}-e2e-evm-build.log`);
 const marketFlowGrepByChain: Record<ChainKey, string> = {
   solana:
     "solana predictions place YES and NO orders, resolve, and claim|solana prediction markets recover after keeper and proxy restarts|solana cancelled duel refunds and clears claim state",
@@ -61,13 +68,32 @@ async function ensureBootstrapWallet(): Promise<void> {
   }
 }
 
+async function prebuild(harnessEnv: NodeJS.ProcessEnv): Promise<void> {
+  await runCommand("bun", ["run", "--cwd", anchorRoot, "build"], {
+    env: harnessEnv,
+    stdoutFile: buildLogPath,
+    stderrFile: buildLogPath,
+  });
+
+  if (!evmRoot) return;
+
+  await runCommand("forge", ["build", "--root", evmRoot], {
+    env: harnessEnv,
+    stdoutFile: evmBuildLogPath,
+    stderrFile: evmBuildLogPath,
+  });
+}
+
 async function runGate(): Promise<void> {
   await ensureBootstrapWallet();
   const harnessEnv = {
     E2E_SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
     SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
     ANCHOR_WALLET: bootstrapKeypairPath,
+    E2E_SKIP_PREBUILD: "true",
   };
+
+  await prebuild(harnessEnv);
 
   await runCommand(
     "bash",
@@ -105,6 +131,8 @@ async function runGate(): Promise<void> {
 function collectArtifacts(): void {
   copyIntoArtifacts(artifactRoot, statePath, "state.json");
   copyIntoArtifacts(artifactRoot, controlPath, "control.json");
+  copyIntoArtifacts(artifactRoot, buildLogPath, "prebuild/anchor-build.log");
+  copyIntoArtifacts(artifactRoot, evmBuildLogPath, "prebuild/evm-build.log");
   if (!existsSync(controlPath)) return;
   const control = JSON.parse(readFileSync(controlPath, "utf8")) as ControlFile;
   writeJsonArtifact(artifactRoot, "control-summary.json", control);

@@ -6,6 +6,8 @@ DEMO_DIR="$(cd "$APP_DIR/.." && pwd)"
 ANCHOR_DIR="$(cd "$DEMO_DIR/../hyperbet-solana/anchor" && pwd)"
 KEEPER_DIR="$DEMO_DIR/keeper"
 EVM_DIR="$(cd "$DEMO_DIR/../evm-contracts" && pwd)"
+ANCHOR_BUILD_LOG="/tmp/hyperbet-bsc-e2e-build.log"
+EVM_BUILD_LOG="/tmp/hyperbet-bsc-e2e-evm-build.log"
 STATE_PATH="$APP_DIR/tests/e2e/state.json"
 CONTROL_PATH="$APP_DIR/tests/e2e/control.json"
 VALIDATOR_LOG="$APP_DIR/.e2e-validator.log"
@@ -424,11 +426,23 @@ rm -f \
   "$KEEPER_ENV_FILE" \
   "$CONTROL_PATH"
 
-echo "[e2e] building anchor programs"
-bun run --cwd "$ANCHOR_DIR" build >/tmp/hyperbet-bsc-e2e-build.log 2>&1
+if [[ "${E2E_SKIP_PREBUILD:-false}" != "true" ]]; then
+  echo "[e2e] building anchor programs"
+  if ! bun run --cwd "$ANCHOR_DIR" build >"$ANCHOR_BUILD_LOG" 2>&1; then
+    echo "[e2e] anchor build failed"
+    tail -n 200 "$ANCHOR_BUILD_LOG" || true
+    exit 1
+  fi
 
-echo "[e2e] compiling evm contracts"
-forge build --root "$EVM_DIR" >/tmp/hyperbet-bsc-e2e-evm-build.log 2>&1
+  echo "[e2e] compiling evm contracts"
+  if ! forge build --root "$EVM_DIR" >"$EVM_BUILD_LOG" 2>&1; then
+    echo "[e2e] evm build failed"
+    tail -n 200 "$EVM_BUILD_LOG" || true
+    exit 1
+  fi
+else
+  echo "[e2e] skipping shared prebuild"
+fi
 
 IDL_ORACLE_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/fight_oracle.json" 2>/dev/null || true)"
 IDL_MARKET_ID="$(jq -r '.address // .metadata.address // empty' "$ANCHOR_DIR/target/idl/gold_perps_market.json" 2>/dev/null || true)"
