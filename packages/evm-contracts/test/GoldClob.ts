@@ -265,6 +265,46 @@ describe("GoldClob", function () {
     expect(market.bestAsk).to.equal(800n);
   });
 
+  it("reverts instead of leaving crossed liquidity unmatched when the match loop cap is exceeded", async function () {
+    const { clob, oracle, operator, reporter, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-match-cap");
+
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+    await oracle
+      .connect(reporter)
+      .upsertDuel(
+        duel,
+        hashParticipant("agent-a"),
+        hashParticipant("agent-b"),
+        now,
+        now + 10_000n,
+        now + 10_100n,
+        "duel-match-cap",
+        DUEL_STATUS_BETTING_OPEN,
+      );
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    const makerAmount = 1000n;
+    for (let index = 0; index < 101; index += 1) {
+      await clob
+        .connect(traderA)
+        .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, makerAmount, {
+          value: quoteCost(SELL_SIDE, 600, makerAmount) + 20n,
+        });
+    }
+
+    await expect(
+      clob
+        .connect(traderB)
+        .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 101000n, {
+          value: quoteCost(BUY_SIDE, 600, 101000n) + 10_000n,
+        }),
+    ).to.be.revertedWithCustomError(clob, "MatchingLimitExceeded");
+  });
+
   it("settles from the duel oracle and routes winner claim fees to the market maker", async function () {
     const {
       clob,
@@ -313,11 +353,15 @@ describe("GoldClob", function () {
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
 
-    const claimTx = await clob
-      .connect(traderB)
-      .claim(duel, MARKET_KIND_DUEL_WINNER);
-    const claimReceipt = await claimTx.wait();
+    const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
     const claimFee = (amount * 200n) / 10_000n;
+    const expectedPayout = amount - claimFee;
+
+    await expect(
+      clob.connect(traderB).claim(duel, MARKET_KIND_DUEL_WINNER),
+    )
+      .to.emit(clob, "WinningsClaimed")
+      .withArgs(marketKey, traderB.address, amount, expectedPayout, claimFee);
 
     expect(await ethers.provider.getBalance(marketMaker.address)).to.equal(
       mmBefore + claimFee,
@@ -325,7 +369,6 @@ describe("GoldClob", function () {
     expect(await ethers.provider.getBalance(treasury.address)).to.equal(
       treasuryBefore,
     );
-    expect(claimReceipt?.status).to.equal(1);
   });
 
   it("refunds recorded stake on duel cancellation", async function () {
@@ -364,12 +407,12 @@ describe("GoldClob", function () {
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
 
-    await expectTxSuccess(
-      clob.connect(traderA).claim(duel, MARKET_KIND_DUEL_WINNER),
-    );
-    await expectTxSuccess(
-      clob.connect(traderB).claim(duel, MARKET_KIND_DUEL_WINNER),
-    );
+    await expect(clob.connect(traderA).claim(duel, MARKET_KIND_DUEL_WINNER))
+      .to.emit(clob, "CancellationRefundClaimed")
+      .withArgs(marketKey, traderA.address, sellerStake);
+    await expect(clob.connect(traderB).claim(duel, MARKET_KIND_DUEL_WINNER))
+      .to.emit(clob, "CancellationRefundClaimed")
+      .withArgs(marketKey, traderB.address, buyerStake);
 
     const aAfter = await clob.positions(marketKey, traderA.address);
     const bAfter = await clob.positions(marketKey, traderB.address);

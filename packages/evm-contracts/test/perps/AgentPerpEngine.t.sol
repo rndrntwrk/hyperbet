@@ -46,6 +46,9 @@ contract AgentPerpEngineTest is Test {
         // Initialize Oracle for MODEL_A
         vm.prank(admin);
         oracle.updateAgentSkill(agentId, 1500, 200); // mu: 1500, sigma: 200 => cons: 1500 - 3*200 = 900
+
+        vm.prank(admin);
+        engine.createMarket(agentId);
     }
 
     function testOracleConvergenceAndPrice() public {

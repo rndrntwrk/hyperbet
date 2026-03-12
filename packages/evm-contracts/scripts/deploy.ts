@@ -3,12 +3,14 @@ import path from "node:path";
 
 import { ethers, network } from "hardhat";
 
-const PRODUCTION_CHAIN_IDS = new Set([56, 8453]);
+const PRODUCTION_CHAIN_IDS = new Set([56, 8453, 43114]);
 const MANIFEST_NETWORK_KEYS = new Map<string, string>([
   ["bscTestnet", "bscTestnet"],
   ["bsc", "bsc"],
   ["baseSepolia", "baseSepolia"],
   ["base", "base"],
+  ["avaxFuji", "avaxFuji"],
+  ["avax", "avax"],
 ]);
 
 function isValidAddress(value: string): boolean {
@@ -39,16 +41,7 @@ function resolveManifestPaths(): string[] {
       __dirname,
       "..",
       "..",
-      "hyperbet-solana",
-      "deployments",
-      "contracts.json",
-    ),
-    path.resolve(
-      __dirname,
-      "..",
-      "..",
-      "hyperbet-bsc",
-      "deployments",
+      "hyperbet-deployments",
       "contracts.json",
     ),
   ];
@@ -95,9 +88,10 @@ function updateBettingManifest(
     };
 
     if (!manifest.evm || !manifest.evm[manifestKey]) {
-      throw new Error(
-        `Missing evm manifest entry '${manifestKey}' in ${manifestPath}`,
+      console.warn(
+        `Skipping manifest without evm entry '${manifestKey}': ${manifestPath}`,
       );
+      continue;
     }
 
     manifest.evm[manifestKey] = {

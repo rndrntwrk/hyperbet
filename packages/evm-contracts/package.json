@@ -7,7 +7,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "test:anvil": "bash scripts/run-anvil-contract-suite.sh",
-    "test:fuzz": "hardhat test test/GoldClob.fuzz.ts",
+    "test:fuzz": "forge test --match-path test/perps/AgentPerpEngineFuzz.t.sol --fuzz-runs 500",
+    "test:invariant": "forge test --match-path test/perps/AgentPerpEngineFuzz.t.sol --fuzz-runs 1000",
     "test:foundry": "forge test",
     "analyze:slither": "slither . --exclude-dependencies --filter-paths 'node_modules|out|cache|lib' --exclude timestamp,pragma,solc-version,cyclomatic-complexity",
     "deploy:bsc-testnet": "hardhat run scripts/deploy.ts --network bscTestnet",
@@ -22,6 +23,8 @@
         "deploy:duel-oracle:bsc": "hardhat run scripts/deploy-duel-oracle.ts --network bsc",
         "deploy:duel-oracle:base": "hardhat run scripts/deploy-duel-oracle.ts --network base",
         "deploy:duel-oracle:avax": "hardhat run scripts/deploy-duel-oracle.ts --network avax",
+        "deploy:perps:avax-fuji": "hardhat run scripts/deploy-perps.ts --network avaxFuji",
+        "deploy:perps:avax": "hardhat run scripts/deploy-perps.ts --network avax",
         "simulate:localnet": "hardhat run scripts/simulate-localnet.ts",
     "simulate:adversarial:anvil": "ts-node --transpile-only scripts/simulate-adversarial-localnet.ts"
     },

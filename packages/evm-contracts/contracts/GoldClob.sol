@@ -52,6 +52,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error MarketNotSettled();
     error InsufficientNativeValue();
     error CostTooLow();
+    error MatchingLimitExceeded();
 
     enum MarketStatus {
         NULL,
@@ -135,6 +136,14 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint16 price
     );
     event OrderCancelled(bytes32 indexed marketKey, uint64 indexed orderId);
+    event WinningsClaimed(
+        bytes32 indexed marketKey,
+        address indexed trader,
+        uint256 winningShares,
+        uint256 payout,
+        uint256 fee
+    );
+    event CancellationRefundClaimed(bytes32 indexed marketKey, address indexed trader, uint256 payout);
     event FeeConfigUpdated(
         uint256 tradeTreasuryFeeBps,
         uint256 tradeMarketMakerFeeBps,
@@ -358,10 +367,12 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             _clearPosition(position);
 
             if (fee > 0) payable(marketMaker).sendValue(fee);
+            emit WinningsClaimed(key, msg.sender, winningShares, payout, fee);
         } else if (status == MarketStatus.CANCELLED) {
             payout = uint256(position.aStake) + uint256(position.bStake);
             if (payout == 0) revert NothingToClaim();
             _clearPosition(position);
+            emit CancellationRefundClaimed(key, msg.sender, payout);
         } else {
             revert MarketNotSettled();
         }
@@ -488,6 +499,12 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             progress.boundaryPrice = market.bestAsk;
             progress.matchesCount += 1;
         }
+
+        if (
+            progress.remainingAmount > 0
+                && progress.boundaryPrice <= limitPrice
+                && progress.boundaryPrice < MAX_PRICE
+        ) revert MatchingLimitExceeded();
     }
 
     function _matchSellOrder(
@@ -555,6 +572,12 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             progress.boundaryPrice = market.bestBid;
             progress.matchesCount += 1;
         }
+
+        if (
+            progress.remainingAmount > 0
+                && progress.boundaryPrice >= limitPrice
+                && progress.boundaryPrice > 0
+        ) revert MatchingLimitExceeded();
     }
 
     function _restOrder(
