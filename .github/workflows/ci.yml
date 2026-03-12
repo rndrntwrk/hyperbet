@@ -19,7 +19,6 @@ on:
       - "scripts/**"
       - ".env.example"
       - "docs/development-setup.md"
-      - "packages/market-maker-bot/**"
       - "docs/hyperbet-production-deploy.md"
       - ".github/actions/setup-hyperbet/**"
       - ".github/workflows/ci.yml"
@@ -43,7 +42,6 @@ on:
       - "scripts/**"
       - ".env.example"
       - "docs/development-setup.md"
-      - "packages/market-maker-bot/**"
       - "docs/hyperbet-production-deploy.md"
       - ".github/actions/setup-hyperbet/**"
       - ".github/workflows/ci.yml"
@@ -71,9 +69,11 @@ jobs:
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
+        with:
+          install-foundry: "true"
 
       - name: Install root dependencies
-        run: bun install --frozen-lockfile
+        run: bash scripts/ci-install-verified.sh root
 
       - name: Run EVM contract validation
         run: node --import tsx scripts/ci-contracts.ts --target=fast
@@ -97,7 +97,7 @@ jobs:
         uses: ./.github/actions/setup-hyperbet
 
       - name: Install root dependencies
-        run: bun install --frozen-lockfile
+        run: bash scripts/ci-install-verified.sh root
 
       - name: Audit tracked env files
         run: node --import tsx scripts/ci-env-audit.ts --target=ci-shared
@@ -131,18 +131,21 @@ jobs:
       matrix:
         include:
           - package: hyperbet-solana
+            workspace_target: hyperbet-solana
             audit_target: pages:solana
             build_mode: mainnet-beta
             solana_cluster: mainnet-beta
             avax_chain_id: ""
             avax_gold_clob_address: ""
           - package: hyperbet-bsc
+            workspace_target: hyperbet-bsc
             audit_target: pages:bsc
             build_mode: mainnet-beta
             solana_cluster: mainnet-beta
             avax_chain_id: ""
             avax_gold_clob_address: ""
           - package: hyperbet-avax
+            workspace_target: hyperbet-avax
             audit_target: app:avax
             build_mode: testnet
             solana_cluster: testnet
@@ -170,9 +173,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
-          bun install --cwd packages/${{ matrix.package }}/app --frozen-lockfile
-          bun install --cwd packages/${{ matrix.package }}/keeper --frozen-lockfile
+          bash scripts/ci-install-verified.sh \
+            root \
+            ${{ matrix.workspace_target }} \
+            ${{ matrix.package }}-app \
+            ${{ matrix.package }}-keeper
 
       - name: Audit build env
         run: node --import tsx scripts/ci-env-audit.ts --target=${{ matrix.audit_target }}
@@ -204,7 +209,7 @@ jobs:
           PORT=18080 \
           ENABLE_KEEPER_BOT=false \
           SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
-          bun --bun packages/${{ matrix.package }}/keeper/src/service.ts >/tmp/${{ matrix.package }}-keeper.log 2>&1 &
+          bun run --cwd packages/${{ matrix.package }}/keeper service >/tmp/${{ matrix.package }}-keeper.log 2>&1 &
           KEEPER_PID=$!
           trap 'kill "$KEEPER_PID" >/dev/null 2>&1 || true' EXIT
 
@@ -228,45 +233,26 @@ jobs:
             echo "Unexpected source maps in production dist"
             exit 1
           fi
-          if rg -n "api-key=" packages/${{ matrix.package }}/app/dist; then
+          if grep -R -n "api-key=" packages/${{ matrix.package }}/app/dist; then
             echo "Provider key leak detected in dist"
             exit 1
           fi
 
-<<<<<<< HEAD
-  market-maker:
-    name: Validate market-maker-bot (${{ matrix.chain }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - chain: solana
-          - chain: bsc
-          - chain: avax
-=======
   evm-contract-proof-gate:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_prediction_market_gates }}
     name: EVM Contract Proof Gate
     runs-on: ubuntu-latest
->>>>>>> 3af8494 (ci: allow manual workflow dispatch)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-<<<<<<< HEAD
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.1.38
-=======
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
         with:
           install-foundry: "true"
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bash scripts/ci-install-verified.sh root
 
       - name: Run EVM contract proof gate
         run: node --import tsx scripts/ci-contracts.ts --target=proof
@@ -289,6 +275,8 @@ jobs:
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
+        with:
+          install-foundry: "true"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -299,7 +287,7 @@ jobs:
         run: python -m pip install --upgrade pip slither-analyzer
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bash scripts/ci-install-verified.sh root
 
       - name: Run EVM contract security gate
         run: node --import tsx scripts/ci-contracts.ts --target=security
@@ -326,7 +314,7 @@ jobs:
           install-foundry: "true"
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bash scripts/ci-install-verified.sh root
 
       - name: Audit shared env
         run: node --import tsx scripts/ci-env-audit.ts --target=ci-shared
@@ -353,12 +341,13 @@ jobs:
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
         with:
+          install-foundry: "true"
           install-rust: "true"
           install-solana: "true"
           install-anchor: "true"
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bash scripts/ci-install-verified.sh root
 
       - name: Audit shared env
         run: node --import tsx scripts/ci-env-audit.ts --target=ci-shared
@@ -423,26 +412,10 @@ jobs:
         uses: ./.github/actions/setup-hyperbet
         with:
           install-foundry: "true"
->>>>>>> 3af8494 (ci: allow manual workflow dispatch)
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
-<<<<<<< HEAD
-          bun install --cwd packages/market-maker-bot --frozen-lockfile
-
-      - name: Run market-maker unit tests
-        run: bun run --cwd packages/market-maker-bot test
-
-      - name: Run adversarial suite gate for ${{ matrix.chain }}
-        run: bun run --cwd packages/market-maker-bot simulate:adversarial:ci
-        env:
-          MM_ADVERSARIAL_CHAIN: ${{ matrix.chain }}
-          MM_ADVERSARIAL_MIN_PASSES: 6
-          MM_ADVERSARIAL_OUTPUT_DIR: packages/market-maker-bot/simulations/ci-${{ matrix.chain }}
-=======
-          bun install --cwd packages/hyperbet-bsc/app --frozen-lockfile
-          bun install --cwd packages/market-maker-bot --frozen-lockfile
+          bash scripts/ci-install-verified.sh root hyperbet-bsc-app market-maker-bot
 
       - name: Audit shared env
         run: node --import tsx scripts/ci-env-audit.ts --target=ci-shared
@@ -457,4 +430,3 @@ jobs:
           name: base-add-chain-smoke
           path: .ci-artifacts/base-add-chain-smoke
           if-no-files-found: ignore
->>>>>>> 3af8494 (ci: allow manual workflow dispatch)

@@ -57,8 +57,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
-          bun install --cwd packages/hyperbet-solana/keeper --frozen-lockfile
+          bash scripts/ci-install-verified.sh root hyperbet-solana-keeper
 
       - name: Audit deploy env
         run: node --import tsx scripts/ci-env-audit.ts --target=keeper:solana

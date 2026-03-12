@@ -51,6 +51,14 @@ runs:
       if: ${{ inputs.install-rust == 'true' || inputs.install-anchor == 'true' }}
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Install Linux system packages for Anchor
+      if: ${{ inputs.install-anchor == 'true' && runner.os == 'Linux' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y libssl-dev libudev-dev pkg-config
+
     - name: Cache Cargo registry
       if: ${{ inputs.install-rust == 'true' || inputs.install-anchor == 'true' }}
       uses: actions/cache@v4
