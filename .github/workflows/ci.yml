@@ -12,11 +12,15 @@ on:
       - "packages/hyperbet-avax/keeper/**"
       - "packages/hyperbet-ui/**"
       - "packages/hyperbet-chain-registry/**"
+      - "packages/hyperbet-mm-core/**"
+      - "packages/market-maker-bot/**"
+      - "packages/simulation-dashboard/**"
       - "scripts/**"
       - ".env.example"
       - "docs/development-setup.md"
       - "packages/market-maker-bot/**"
       - "docs/hyperbet-production-deploy.md"
+      - ".github/actions/setup-hyperbet/**"
       - ".github/workflows/ci.yml"
       - "package.json"
       - "bun.lock"
@@ -31,11 +35,15 @@ on:
       - "packages/hyperbet-avax/keeper/**"
       - "packages/hyperbet-ui/**"
       - "packages/hyperbet-chain-registry/**"
+      - "packages/hyperbet-mm-core/**"
+      - "packages/market-maker-bot/**"
+      - "packages/simulation-dashboard/**"
       - "scripts/**"
       - ".env.example"
       - "docs/development-setup.md"
       - "packages/market-maker-bot/**"
       - "docs/hyperbet-production-deploy.md"
+      - ".github/actions/setup-hyperbet/**"
       - ".github/workflows/ci.yml"
       - "package.json"
       - "bun.lock"
@@ -45,46 +53,75 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
+  shared-validation:
+    name: Shared Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Hyperbet toolchain
+        uses: ./.github/actions/setup-hyperbet
+
+      - name: Install root dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Audit tracked env files
+        run: node --import tsx scripts/ci-env-audit.ts --target=ci-shared
+
+      - name: Validate shared chain registry
+        run: |
+          bunx tsc --noEmit -p packages/hyperbet-chain-registry/tsconfig.json
+          bun test packages/hyperbet-chain-registry/tests/chainRegistry.test.ts
+
+      - name: Validate shared MM core
+        run: |
+          bun run --cwd packages/hyperbet-mm-core typecheck
+          bun run --cwd packages/hyperbet-mm-core test
+
+      - name: Validate market-maker bot
+        run: |
+          bun run --cwd packages/market-maker-bot typecheck
+          bun run --cwd packages/market-maker-bot test
+
+      - name: Validate simulation dashboard
+        run: |
+          bun run --cwd packages/simulation-dashboard build
+          bun run --cwd packages/simulation-dashboard test
+
+  validate-package:
     name: Validate ${{ matrix.package }}
     runs-on: ubuntu-latest
+    needs: shared-validation
     strategy:
       fail-fast: false
       matrix:
         include:
           - package: hyperbet-solana
-            build_env: |
-              VITE_SOLANA_CLUSTER=mainnet-beta
-              VITE_GAME_API_URL=https://api.hyperbet.win
-              VITE_GAME_WS_URL=wss://api.hyperbet.win/ws
-              VITE_USE_GAME_RPC_PROXY=true
-              VITE_USE_GAME_EVM_RPC_PROXY=true
+            audit_target: pages:solana
           - package: hyperbet-bsc
-            build_env: |
-              VITE_SOLANA_CLUSTER=mainnet-beta
-              VITE_GAME_API_URL=https://api.hyperbet.win
-              VITE_GAME_WS_URL=wss://api.hyperbet.win/ws
-              VITE_USE_GAME_RPC_PROXY=true
-              VITE_USE_GAME_EVM_RPC_PROXY=true
-              VITE_BSC_CHAIN_ID=56
-              VITE_BSC_GOLD_CLOB_ADDRESS=0x1224094aAe93bc9c52FA6F02a0B1F4700721E26E
+            audit_target: pages:bsc
           - package: hyperbet-avax
-            build_env: |
-              VITE_SOLANA_CLUSTER=mainnet-beta
-              VITE_GAME_API_URL=https://api.hyperbet.win
-              VITE_GAME_WS_URL=wss://api.hyperbet.win/ws
-              VITE_USE_GAME_RPC_PROXY=true
-              VITE_USE_GAME_EVM_RPC_PROXY=true
-              VITE_AVAX_CHAIN_ID=43114
-              VITE_AVAX_GOLD_CLOB_ADDRESS=0x0000000000000000000000000000000000000000
+            audit_target: ci-shared
+    env:
+      CF_PAGES_COMMIT_SHA: ${{ github.sha }}
+      VITE_GAME_API_URL: https://api.hyperbet.win
+      VITE_GAME_WS_URL: wss://api.hyperbet.win/ws
+      VITE_SOLANA_CLUSTER: mainnet-beta
+      VITE_USE_GAME_RPC_PROXY: "true"
+      VITE_USE_GAME_EVM_RPC_PROXY: "true"
+      VITE_BSC_CHAIN_ID: "56"
+      VITE_BSC_GOLD_CLOB_ADDRESS: "0x443C09B1E7bb7bA3392b02500772B185654A6F33"
+      VITE_BASE_CHAIN_ID: "8453"
+      VITE_BASE_GOLD_CLOB_ADDRESS: "0xb8c66D6895Bafd1B0027F2c0865865043064437C"
+      VITE_AVAX_CHAIN_ID: "43114"
+      VITE_AVAX_GOLD_CLOB_ADDRESS: ${{ vars.HYPERBET_AVAX_GOLD_CLOB_ADDRESS }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.1.38
+      - name: Setup Hyperbet toolchain
+        uses: ./.github/actions/setup-hyperbet
 
       - name: Install dependencies
         run: |
@@ -92,10 +129,8 @@ jobs:
           bun install --cwd packages/${{ matrix.package }}/app --frozen-lockfile
           bun install --cwd packages/${{ matrix.package }}/keeper --frozen-lockfile
 
-      - name: Validate shared chain registry
-        run: |
-          bunx tsc --noEmit -p packages/hyperbet-chain-registry/tsconfig.json
-          bun test packages/hyperbet-chain-registry/tests/chainRegistry.test.ts
+      - name: Audit build env
+        run: node --import tsx scripts/ci-env-audit.ts --target=${{ matrix.audit_target }}
 
       - name: Type check app
         run: bunx tsc --noEmit -p packages/${{ matrix.package }}/app/tsconfig.json
@@ -138,21 +173,8 @@ jobs:
           cat /tmp/${{ matrix.package }}-keeper.log
           exit 1
 
-      - name: Verify tracked env files are sanitized
-        run: |
-          if rg -n "^(HELIUS_API_KEY|BIRDEYE_API_KEY)=.{1,}$" packages/${{ matrix.package }}/.env.mainnet; then
-            echo "Tracked mainnet env file still contains provider secrets"
-            exit 1
-          fi
-
       - name: Build production app
-        run: |
-          set -a
-          eval "${{ matrix.build_env }}"
-          set +a
-          bun run --cwd packages/${{ matrix.package }}/app build --mode mainnet-beta
-        env:
-          CF_PAGES_COMMIT_SHA: ${{ github.sha }}
+        run: bun run --cwd packages/${{ matrix.package }}/app build --mode mainnet-beta
 
       - name: Verify build artifacts
         run: |
