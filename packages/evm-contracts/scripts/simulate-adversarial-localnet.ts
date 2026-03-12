@@ -3,15 +3,20 @@ import { join } from "node:path";
 
 import {
   ContractFactory,
+  type InterfaceAbi,
   JsonRpcProvider,
   ethers,
-  type Contract,
   type JsonRpcSigner,
 } from "ethers";
 
+import type {
+  DuelOutcomeOracleContract,
+  GoldClobContract,
+} from "../typed-contracts";
+
 type Artifact = {
-  abi: readonly unknown[];
-  bytecode: string;
+  abi: InterfaceAbi;
+  bytecode: string | { object: string };
 };
 
 type ScenarioResult = {
@@ -33,8 +38,8 @@ type Fixture = {
   retailBot: JsonRpcSigner;
   arbBot: JsonRpcSigner;
   attacker: JsonRpcSigner;
-  oracle: Contract;
-  clob: Contract;
+  oracle: DuelOutcomeOracleContract;
+  clob: GoldClobContract;
 };
 
 const MARKET_KIND_DUEL_WINNER = 0;
@@ -47,7 +52,7 @@ const ORDER_AMOUNT = 1_000n;
 function loadArtifact(projectDir: string, name: string): Artifact {
   return JSON.parse(
     readFileSync(
-      join(projectDir, "artifacts", "contracts", `${name}.sol`, `${name}.json`),
+      join(projectDir, "out", `${name}.sol`, `${name}.json`),
       "utf8",
     ),
   ) as Artifact;
@@ -64,6 +69,11 @@ function hashParticipant(label: string): string {
 function quoteCost(side: number, price: number, amount: bigint): bigint {
   const component = BigInt(side === BUY_SIDE ? price : 1000 - price);
   return (amount * component) / 1000n;
+}
+
+function normalizeBytecode(bytecode: Artifact["bytecode"]): string {
+  const resolved = typeof bytecode === "string" ? bytecode : bytecode.object;
+  return resolved.startsWith("0x") ? resolved : `0x${resolved}`;
 }
 
 async function deployFixture(
@@ -93,27 +103,27 @@ async function deployFixture(
 
   const oracleFactory = new ContractFactory(
     oracleArtifact.abi,
-    oracleArtifact.bytecode,
+    normalizeBytecode(oracleArtifact.bytecode),
     admin,
   );
-  const oracle = await oracleFactory.deploy(
+  const oracle = (await oracleFactory.deploy(
     await admin.getAddress(),
     await reporter.getAddress(),
-  );
+  )) as DuelOutcomeOracleContract;
   await oracle.waitForDeployment();
 
   const clobFactory = new ContractFactory(
     clobArtifact.abi,
-    clobArtifact.bytecode,
+    normalizeBytecode(clobArtifact.bytecode),
     admin,
   );
-  const clob = await clobFactory.deploy(
+  const clob = (await clobFactory.deploy(
     await admin.getAddress(),
     await operator.getAddress(),
     await oracle.getAddress(),
     await treasury.getAddress(),
     await marketMaker.getAddress(),
-  );
+  )) as GoldClobContract;
   await clob.waitForDeployment();
 
   return {
@@ -198,7 +208,7 @@ async function runLowLiquidityScenario(
   ).wait();
 
   const market = await fixture.clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
-  const queue = await fixture.clob.orderQueues(
+  const queue = await fixture.clob.getPriceLevel(
     duel,
     MARKET_KIND_DUEL_WINNER,
     SELL_SIDE,
@@ -264,7 +274,7 @@ async function runMevScenario(fixture: Fixture): Promise<ScenarioResult> {
   }
 
   const market = await fixture.clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
-  const queue = await fixture.clob.orderQueues(
+  const queue = await fixture.clob.getPriceLevel(
     duel,
     MARKET_KIND_DUEL_WINNER,
     BUY_SIDE,

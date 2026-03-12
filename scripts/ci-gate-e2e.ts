@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -37,6 +37,7 @@ const artifactRoot = resolveArtifactRoot(`e2e-${chain}`);
 const appRoot = path.join(process.cwd(), `packages/hyperbet-${chain}/app`);
 const statePath = path.join(appRoot, "tests/e2e/state.json");
 const controlPath = path.join(appRoot, "tests/e2e/control.json");
+const bootstrapKeypairPath = path.join(artifactRoot, "solana-bootstrap-keypair.json");
 const marketFlowGrepByChain: Record<ChainKey, string> = {
   solana:
     "solana predictions place YES and NO orders, resolve, and claim|solana prediction markets recover after keeper and proxy restarts|solana cancelled duel refunds and clears claim state",
@@ -46,7 +47,27 @@ const marketFlowGrepByChain: Record<ChainKey, string> = {
     "evm predictions place YES and NO orders, resolve, and claim|avax prediction markets recover after keeper and anvil restarts|avax cancelled prediction markets refund and clear positions",
 };
 
+async function ensureBootstrapWallet(): Promise<void> {
+  if (existsSync(bootstrapKeypairPath)) return;
+  mkdirSync(path.dirname(bootstrapKeypairPath), { recursive: true });
+  await runCommand(
+    "solana-keygen",
+    ["new", "--no-bip39-passphrase", "--silent", "--force", "-o", bootstrapKeypairPath],
+    {
+      stdoutFile: path.join(artifactRoot, "solana-keygen.out.log"),
+      stderrFile: path.join(artifactRoot, "solana-keygen.err.log"),
+    },
+  );
+}
+
 async function runGate(): Promise<void> {
+  await ensureBootstrapWallet();
+  const harnessEnv = {
+    E2E_SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
+    SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
+    ANCHOR_WALLET: bootstrapKeypairPath,
+  };
+
   await runCommand(
     "bash",
     [
@@ -57,6 +78,7 @@ async function runGate(): Promise<void> {
     ],
     {
       cwd: appRoot,
+      env: harnessEnv,
       stdoutFile: path.join(artifactRoot, "market-flows.out.log"),
       stderrFile: path.join(artifactRoot, "market-flows.err.log"),
     },
@@ -72,6 +94,7 @@ async function runGate(): Promise<void> {
     ],
     {
       cwd: appRoot,
+      env: harnessEnv,
       stdoutFile: path.join(artifactRoot, "api-smoke.out.log"),
       stderrFile: path.join(artifactRoot, "api-smoke.err.log"),
     },

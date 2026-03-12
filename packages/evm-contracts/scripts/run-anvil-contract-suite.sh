@@ -68,11 +68,6 @@ if ! wait_for_anvil_rpc; then
   exit 1
 fi
 
-echo "[anvil-suite] running hardhat tests against anvil"
-ANVIL_RPC_URL="$ANVIL_RPC_URL" \
-ANVIL_CHAIN_ID="$ANVIL_CHAIN_ID" \
-  "$ROOT_DIR/node_modules/.bin/hardhat" test --network anvil
-
 echo "[anvil-suite] running adversarial simulation against anvil"
 ANVIL_RPC_URL="$ANVIL_RPC_URL" \
 ANVIL_CHAIN_ID="$ANVIL_CHAIN_ID" \
