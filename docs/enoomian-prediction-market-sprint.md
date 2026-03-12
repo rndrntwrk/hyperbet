@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `20c3e52`
+- Latest recorded gate merged into base: `875d1a4`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-10-cross-chain-e2e`
+- Active gate branch: `enoomian/pm-11-ci-ops`
 
 ## Gate Status
 
@@ -29,7 +29,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 07 | `enoomian/pm-07-solana-bot-execution` | Complete | Yes | External market-maker bot now executes real Solana quote, cancel, refresh, and claim flows with validator-backed smoke coverage |
 | 08 | `enoomian/pm-08-solana-sim-backend` | Complete | Yes | Validator-backed Solana proof scenarios now run through the shared scenario backend contract |
 | 09 | `enoomian/pm-09-solana-scenario-gates` | Complete | Yes | Validator-backed Solana exploit families now run through deterministic gate scenarios with canonical and matrix verification |
-| 10 | `enoomian/pm-10-cross-chain-e2e` | Pending | No | Stabilize create -> seed -> trade -> lock -> resolve -> claim across Solana, BSC, and AVAX |
+| 10 | `enoomian/pm-10-cross-chain-e2e` | Complete | Yes | Cross-chain local E2E now covers full lifecycle, cancel/refund, and keeper restart recovery across Solana, BSC, and AVAX |
 | 11 | `enoomian/pm-11-ci-ops` | Pending | No | Wire gates into CI, add env safety checks, add-chain proof, and runbooks |
 
 ## Gate Results
@@ -316,6 +316,51 @@ Known remaining risk:
 - Solana validator runs still emit noisy websocket reconnect logs during teardown; they do not invalidate results, but the shutdown path is still rough.
 - The cancel/replace scenario is currently validated through same-level churn behind a persistent resting quote; broader order-book cancellation patterns still need to be exercised in Gate 10 cross-chain E2E.
 - The canonical stale-resolution and claim-refund scenarios have one fixed seed each today. They are deterministic and green, but higher-pressure seed matrices can still be added if Gate 10 uncovers path dependence.
+
+### Gate 10
+
+- Branch: `enoomian/pm-10-cross-chain-e2e`
+- Base commit after merge: `875d1a4`
+- Commits:
+  - `521d074` `e2e: add gate 10 process control and recovery specs`
+  - `3984410` `e2e: harden gate 10 recovery paths`
+  - `e143181` `runtime: persist lifecycle state and fix claim recovery`
+  - `875d1a4` `e2e: close gate 10 cross-chain reliability flows`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Added deterministic local process-control and recovery wiring for the Solana, BSC, and AVAX E2E stacks so the harness can restart keepers and chain readers inside a live run without production-only restart endpoints.
+- Persisted keeper stream-state snapshots across Solana, BSC, and AVAX services so the canonical lifecycle surface can recover duel identity and market refs after restarts instead of falling back to `UNKNOWN`.
+- Hardened shared EVM lifecycle and claim recovery by aligning the UI ABI/client expectations with the live `GoldClob` interface and surfacing richer E2E lifecycle debug state in the shared EVM and Solana panels.
+- Reworked the cross-chain reliability specs to use fresh isolated markets for restart and cancel/refund flows, which closes the prior false-coupling to already-resolved seeded markets.
+- Closed the real product-path assertions for full lifecycle, keeper restart recovery, cancel/refund cleanup, and health-surface parity across Solana, BSC, and AVAX.
+
+Targeted verification:
+
+- `bun test packages/hyperbet-ui/tests/predictionMarkets.test.ts`
+- `bunx tsc --noEmit -p packages/hyperbet-ui/tsconfig.verify.json`
+- `bunx tsc --noEmit -p packages/hyperbet-solana/app/tsconfig.json`
+- `bunx tsc --noEmit -p packages/hyperbet-solana/keeper/tsconfig.json`
+- `bunx tsc --noEmit -p packages/hyperbet-bsc/app/tsconfig.json`
+- `bunx tsc --noEmit -p packages/hyperbet-bsc/keeper/tsconfig.json`
+- `bunx tsc --noEmit -p packages/hyperbet-avax/app/tsconfig.json`
+- `bunx tsc --noEmit -p packages/hyperbet-avax/keeper/tsconfig.json`
+- `bash -n packages/hyperbet-solana/app/scripts/run-e2e-local.sh`
+- `bash -n packages/hyperbet-bsc/app/scripts/run-e2e-local.sh`
+- `bash -n packages/hyperbet-avax/app/scripts/run-e2e-local.sh`
+- `bash scripts/run-e2e-local.sh tests/e2e/market-flows.spec.ts --grep "solana predictions place YES and NO orders, resolve, and claim|solana prediction markets recover after keeper and proxy restarts|solana cancelled duel refunds and clears claim state"` in `packages/hyperbet-solana/app`
+- `bash scripts/run-e2e-local.sh tests/e2e/market-flows.spec.ts --grep "evm predictions place YES and NO orders, resolve, and claim|bsc prediction markets recover after keeper and anvil restarts|bsc cancelled prediction markets refund and clear positions"` in `packages/hyperbet-bsc/app`
+- `bash scripts/run-e2e-local.sh tests/e2e/market-flows.spec.ts --grep "evm predictions place YES and NO orders, resolve, and claim|avax prediction markets recover after keeper and anvil restarts|avax cancelled prediction markets refund and clear positions"` in `packages/hyperbet-avax/app`
+- `bash scripts/run-e2e-local.sh tests/e2e/app-tabs-and-apis.spec.ts --grep "keeper backend exposes all app-facing data endpoints"` in `packages/hyperbet-solana/app`
+- `bash scripts/run-e2e-local.sh tests/e2e/app-tabs-and-apis.spec.ts --grep "keeper backend exposes all app-facing data endpoints"` in `packages/hyperbet-bsc/app`
+- `bash scripts/run-e2e-local.sh tests/e2e/app-tabs-and-apis.spec.ts --grep "keeper backend exposes all app-facing data endpoints"` in `packages/hyperbet-avax/app`
+
+Known remaining risk:
+
+- The BSC and AVAX API smoke now asserts exact duel and contract identity but only enforces `marketRef` as a valid canonical hex32 or `null`; the stricter seeded-key equality is still exercised by the real product E2E flows, but the cold-start API record path remains slightly looser than the full lifecycle path.
+- Gate 10 closes local cross-chain reliability, but CI promotion, env/secret safety, add-chain proof for Base, and operator runbooks remain Gate 11 work.
+- Solana cancellation is now covered in the product path for fresh isolated markets, but any future protocol changes to order-book cancellation semantics should be re-exercised against these E2E flows, not only the validator scenario suite.
 
 ## Update Template
 
