@@ -4,7 +4,9 @@ import {
   cpSync,
   existsSync,
   writeFileSync,
+  readFileSync,
   createWriteStream,
+  type WriteStream,
   openSync,
   closeSync,
 } from "node:fs";
@@ -50,6 +52,26 @@ export function copyIntoArtifacts(
   cpSync(sourcePath, targetPath, { recursive: true });
 }
 
+export function materializeCiSolanaWallet(
+  walletPath: string,
+  homeDir: string,
+): void {
+  if (!existsSync(walletPath)) {
+    throw new Error(`missing bootstrap wallet at ${walletPath}`);
+  }
+
+  const payload = readFileSync(walletPath, "utf8");
+  const targets = [
+    path.join(homeDir, ".config", "solana", "id.json"),
+    path.join(homeDir, ".config", "solana", "hyperscape-keys", "deployer.json"),
+  ];
+
+  for (const target of targets) {
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, payload, "utf8");
+  }
+}
+
 export function runSync(
   command: string,
   args: string[],
@@ -75,7 +97,30 @@ export async function runCommand(
     stderrFile?: string;
   } = {},
 ): Promise<void> {
+  if (options.stdoutFile) {
+    mkdirSync(path.dirname(options.stdoutFile), { recursive: true });
+    writeFileSync(options.stdoutFile, "");
+  }
+  if (options.stderrFile) {
+    mkdirSync(path.dirname(options.stderrFile), { recursive: true });
+    writeFileSync(options.stderrFile, "");
+  }
   await new Promise<void>((resolve, reject) => {
+    const streams: WriteStream[] = [];
+    const finalizeStreams = () =>
+      Promise.all(
+        streams.map(
+          (stream) =>
+            new Promise<void>((streamResolve) => {
+              if (stream.closed || stream.destroyed) {
+                streamResolve();
+                return;
+              }
+              stream.once("finish", () => streamResolve());
+              stream.end();
+            }),
+        ),
+      );
     const child = spawn(command, args, {
       cwd: options.cwd ?? rootDir,
       env: { ...process.env, ...options.env },
@@ -86,24 +131,26 @@ export async function runCommand(
       ],
     });
     if (options.stdoutFile && child.stdout) {
-      mkdirSync(path.dirname(options.stdoutFile), { recursive: true });
       const out = createWriteStream(options.stdoutFile, { flags: "a" });
+      streams.push(out);
       child.stdout.pipe(process.stdout);
       child.stdout.pipe(out);
     }
     if (options.stderrFile && child.stderr) {
-      mkdirSync(path.dirname(options.stderrFile), { recursive: true });
       const err = createWriteStream(options.stderrFile, { flags: "a" });
+      streams.push(err);
       child.stderr.pipe(process.stderr);
       child.stderr.pipe(err);
     }
     child.once("error", reject);
     child.once("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${command} ${args.join(" ")} exited with ${code ?? 1}`));
+      void finalizeStreams().then(() => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(`${command} ${args.join(" ")} exited with ${code ?? 1}`));
+      }, reject);
     });
   });
 }
@@ -118,6 +165,7 @@ export async function spawnBackground(
   },
 ): Promise<{ pid: number; stop: () => void }> {
   mkdirSync(path.dirname(options.logFile), { recursive: true });
+  writeFileSync(options.logFile, "");
   const logFd = openSync(options.logFile, "a");
   const child = spawn(command, args, {
     cwd: options.cwd ?? rootDir,
@@ -129,6 +177,7 @@ export async function spawnBackground(
     throw new Error(`failed to start background command: ${command}`);
   }
   const pid = child.pid;
+  child.unref();
   return {
     pid,
     stop: () => {
@@ -154,16 +203,18 @@ export async function waitForJsonEndpoint(
   let lastError = "endpoint did not become ready";
   while (Date.now() < deadline) {
     try {
-      const response = spawnSync("curl", ["-fsS", url], {
-        cwd: rootDir,
-        encoding: "utf8",
-      });
-      if (response.status === 0) {
-        const payload = JSON.parse(response.stdout || "null");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      const text = await response.text();
+      if (!response.ok) {
+        lastError = text.trim() || `${response.status} ${response.statusText}`;
+      } else {
+        const payload = JSON.parse(text || "null");
         if (!options.validate || options.validate(payload)) return;
         lastError = `validation failed for ${url}`;
-      } else {
-        lastError = (response.stderr || "").trim() || `curl failed for ${url}`;
       }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -171,4 +222,33 @@ export async function waitForJsonEndpoint(
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
   throw new Error(lastError);
+}
+
+export async function findAvailablePort(preferredPort: number): Promise<number> {
+  const { createServer } = await import("node:net");
+
+  const tryPort = (port: number) =>
+    new Promise<number>((resolve, reject) => {
+      const server = createServer();
+      server.unref();
+      server.once("error", reject);
+      server.listen(port, "127.0.0.1", () => {
+        const address = server.address();
+        const assignedPort =
+          typeof address === "object" && address ? address.port : port;
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(assignedPort);
+        });
+      });
+    });
+
+  try {
+    return await tryPort(preferredPort);
+  } catch {
+    return tryPort(0);
+  }
 }

@@ -51,6 +51,7 @@ function resolveWalletPath(): string {
     const candidates = [
         process.env.ANCHOR_WALLET,
         process.env.E2E_SOLANA_BOOTSTRAP_KEYPAIR,
+        process.env.SOLANA_BOOTSTRAP_KEYPAIR,
         "~/.config/solana/hyperscape-keys/deployer.json",
         "~/.config/solana/id.json",
     ]

@@ -3,6 +3,8 @@ import path from "node:path";
 
 import {
   copyIntoArtifacts,
+  findAvailablePort,
+  materializeCiSolanaWallet,
   resolveArtifactRoot,
   runCommand,
   spawnBackground,
@@ -28,12 +30,13 @@ const artifactRoot = resolveArtifactRoot(
   target === "evm" ? "evm-exploit-gate" : "solana-exploit-gate",
 );
 const simRoot = path.join(process.cwd(), "packages/simulation-dashboard");
-const httpPort = target === "evm" ? "3401" : "3501";
-const wsPort = target === "evm" ? "3400" : "3500";
-const anvilPort = target === "evm" ? "18546" : "18547";
 const historyPath = path.join(artifactRoot, "scenario-history.json");
 const serverLog = path.join(artifactRoot, "simulation-server.log");
 const bootstrapKeypairPath = path.join(artifactRoot, "solana-bootstrap-keypair.json");
+const ciHome = path.join(artifactRoot, "home");
+let httpPort = target === "evm" ? "3401" : "3501";
+let wsPort = target === "evm" ? "3400" : "3500";
+let anvilPort = target === "evm" ? "18546" : "18547";
 
 const evmCanonical = [
   "stale-signal-sniping",
@@ -76,24 +79,29 @@ function scenarioEnv(): NodeJS.ProcessEnv {
   return {
     ANCHOR_WALLET: bootstrapKeypairPath,
     E2E_SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
+    HOME: ciHome,
     SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
   };
 }
 
 async function ensureBootstrapWallet(): Promise<void> {
-  if (target !== "solana" || existsSync(bootstrapKeypairPath)) {
+  if (target !== "solana") {
     return;
   }
 
-  mkdirSync(path.dirname(bootstrapKeypairPath), { recursive: true });
-  await runCommand(
-    "solana-keygen",
-    ["new", "--no-bip39-passphrase", "--silent", "--force", "-o", bootstrapKeypairPath],
-    {
-      stdoutFile: path.join(artifactRoot, "solana-keygen.out.log"),
-      stderrFile: path.join(artifactRoot, "solana-keygen.err.log"),
-    },
-  );
+  if (!existsSync(bootstrapKeypairPath)) {
+    mkdirSync(path.dirname(bootstrapKeypairPath), { recursive: true });
+    await runCommand(
+      "solana-keygen",
+      ["new", "--no-bip39-passphrase", "--silent", "--force", "-o", bootstrapKeypairPath],
+      {
+        stdoutFile: path.join(artifactRoot, "solana-keygen.out.log"),
+        stderrFile: path.join(artifactRoot, "solana-keygen.err.log"),
+      },
+    );
+  }
+
+  materializeCiSolanaWallet(bootstrapKeypairPath, ciHome);
 }
 
 async function runCli(args: string[], name: string): Promise<void> {
@@ -108,8 +116,30 @@ async function runCli(args: string[], name: string): Promise<void> {
 }
 
 let stopServer: (() => void) | null = null;
+let fatalError: unknown = null;
+
+async function allocateDistinctPort(
+  preferredPort: number,
+  usedPorts: Set<number>,
+): Promise<number> {
+  while (true) {
+    const candidate = await findAvailablePort(preferredPort);
+    if (!usedPorts.has(candidate)) {
+      usedPorts.add(candidate);
+      return candidate;
+    }
+  }
+}
 
 try {
+  const preferredHttpPort = target === "evm" ? 3401 : 3501;
+  const preferredWsPort = target === "evm" ? 3400 : 3500;
+  const preferredAnvilPort = target === "evm" ? 18546 : 18547;
+  const usedPorts = new Set<number>();
+  httpPort = String(await allocateDistinctPort(preferredHttpPort, usedPorts));
+  wsPort = String(await allocateDistinctPort(preferredWsPort, usedPorts));
+  anvilPort = String(await allocateDistinctPort(preferredAnvilPort, usedPorts));
+
   await ensureBootstrapWallet();
 
   await runCommand(
@@ -153,8 +183,16 @@ try {
   for (const scenarioId of matrix) {
     await runCli(["matrix", scenarioId, "--fresh"], `${scenarioId}-matrix`);
   }
+} catch (error) {
+  fatalError = error;
 } finally {
   stopServer?.();
   copyIntoArtifacts(artifactRoot, historyPath, "scenario-history.json");
   copyIntoArtifacts(artifactRoot, serverLog, "simulation-server.log");
 }
+
+if (fatalError) {
+  throw fatalError;
+}
+
+process.exit(0);

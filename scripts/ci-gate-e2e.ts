@@ -48,16 +48,17 @@ const marketFlowGrepByChain: Record<ChainKey, string> = {
 };
 
 async function ensureBootstrapWallet(): Promise<void> {
-  if (existsSync(bootstrapKeypairPath)) return;
-  mkdirSync(path.dirname(bootstrapKeypairPath), { recursive: true });
-  await runCommand(
-    "solana-keygen",
-    ["new", "--no-bip39-passphrase", "--silent", "--force", "-o", bootstrapKeypairPath],
-    {
-      stdoutFile: path.join(artifactRoot, "solana-keygen.out.log"),
-      stderrFile: path.join(artifactRoot, "solana-keygen.err.log"),
-    },
-  );
+  if (!existsSync(bootstrapKeypairPath)) {
+    mkdirSync(path.dirname(bootstrapKeypairPath), { recursive: true });
+    await runCommand(
+      "solana-keygen",
+      ["new", "--no-bip39-passphrase", "--silent", "--force", "-o", bootstrapKeypairPath],
+      {
+        stdoutFile: path.join(artifactRoot, "solana-keygen.out.log"),
+        stderrFile: path.join(artifactRoot, "solana-keygen.err.log"),
+      },
+    );
+  }
 }
 
 async function runGate(): Promise<void> {

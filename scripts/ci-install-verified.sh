@@ -83,7 +83,7 @@ target_requires_root_install() {
 
 target_requires_nested_install() {
   case "$1" in
-    hyperbet-solana-app|hyperbet-bsc-app|hyperbet-avax-app|hyperbet-solana-anchor)
+    hyperbet-solana-app|hyperbet-solana-keeper|hyperbet-bsc-app|hyperbet-bsc-keeper|hyperbet-avax-app|hyperbet-avax-keeper|hyperbet-solana-anchor)
       return 0
       ;;
     *)
