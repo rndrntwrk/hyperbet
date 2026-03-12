@@ -2,6 +2,8 @@
 
 This is the recommended production topology for the Hyperbet stack in this repo.
 
+Operator runbooks are in [docs/runbooks/README.md](/Users/mac/Desktop/hyperbet/docs/runbooks/README.md).
+
 - Primary frontend (`/packages/hyperbet-solana/app`): Cloudflare Pages (`hyperbet.win`)
 - Secondary frontend (`/packages/hyperbet-bsc/app`): optional additional Pages project or subdomain
 - Primary betting API (`/packages/hyperbet-solana/keeper`): Railway

@@ -7,6 +7,8 @@ on:
       - "packages/hyperbet-solana/keeper/**"
       - "packages/market-maker-bot/src/**"
       - "packages/market-maker-bot/package.json"
+      - "scripts/**"
+      - ".github/actions/setup-hyperbet/**"
       - ".github/workflows/deploy-solana-keeper.yml"
       - "docs/hyperbet-production-deploy.md"
       - "package.json"
@@ -32,10 +34,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.1.38
+      - name: Setup Hyperbet toolchain
+        uses: ./.github/actions/setup-hyperbet
 
       - name: Detect keeper source changes
         id: keeper_changes
@@ -59,6 +59,12 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun install --cwd packages/hyperbet-solana/keeper --frozen-lockfile
+
+      - name: Audit deploy env
+        run: node --import tsx scripts/ci-env-audit.ts --target=keeper:solana
+        env:
+          CI_AUDIT_REQUIRE_RUNTIME: "true"
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
 
       - name: Run keeper tests
         run: |
@@ -148,6 +154,8 @@ jobs:
           done
 
           curl -fsSL "${HYPERBET_KEEPER_URL}/status" | jq -e '.ok == true'
+          curl -fsSL "${HYPERBET_KEEPER_URL}/api/arena/prediction-markets/active" | jq -e '.duel != null and .markets != null'
+          curl -fsSL "${HYPERBET_KEEPER_URL}/api/keeper/bot-health" | jq -e '.ok == true and .markets != null'
           curl -fsSL "${HYPERBET_KEEPER_URL}/api/streaming/duel-context" | jq -e '.type == "STREAMING_DUEL_CONTEXT"'
           curl -fsSL "${HYPERBET_KEEPER_URL}/api/streaming/leaderboard/details" | jq -e '.leaderboard != null and .cycle != null'
           curl -fsSL "${HYPERBET_KEEPER_URL}/api/perps/markets" | jq -e '.markets != null'
