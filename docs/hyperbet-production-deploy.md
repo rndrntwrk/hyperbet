@@ -2,13 +2,13 @@
 
 This is the recommended production topology for the Hyperbet stack in this repo.
 
-Operator runbooks are in [docs/runbooks/README.md](/Users/mac/Desktop/hyperbet/docs/runbooks/README.md).
+Operator runbooks are in [docs/runbooks/README.md](runbooks/README.md).
 
-- Primary frontend (`/packages/hyperbet-solana/app`): Cloudflare Pages (`hyperbet.win`)
-- Secondary frontend (`/packages/hyperbet-bsc/app`): optional additional Pages project or subdomain
-- Primary betting API (`/packages/hyperbet-solana/keeper`): Railway
-- Secondary betting API (`/packages/hyperbet-bsc/keeper`): optional second Railway service if you split by chain
-- Live duel/stream source (`/packages/server` or Vast duel stack): separate upstream that the keeper polls
+- Primary frontend (`packages/hyperbet-solana/app`): Cloudflare Pages (`hyperbet.win`)
+- Secondary frontend (`packages/hyperbet-bsc/app`): optional additional Pages project or subdomain
+- Primary betting API (`packages/hyperbet-solana/keeper`): Railway
+- Secondary betting API (`packages/hyperbet-bsc/keeper`): optional second Railway service if you split by chain
+- Live duel/stream source (`packages/server` or Vast duel stack): separate upstream that the keeper polls
 - DDoS/WAF/edge cache: Cloudflare proxy in front of the betting API
 - Contracts/state: Solana + EVM (configured by env vars below, proxied server-side)
 
@@ -126,10 +126,11 @@ Health:
 - `https://api.yourdomain.com/api/proxy/evm/rpc?chain=bsc` (POST JSON-RPC smoke test)
 - `https://bet.yourdomain.com/build-info.json`
 
-End-to-end checks from repo root:
+Repo-backed checks from repo root:
 
 ```bash
-bun run duel:verify --server-url=https://your-stream-source.example --betting-url=https://bet.yourdomain.com --require-destinations=youtube
+./scripts/check-streaming-status.sh https://your-stream-source.example
+bun run --cwd packages/hyperbet-solana build:mainnet
 ```
 
 ## 6) Security notes

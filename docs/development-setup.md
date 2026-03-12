@@ -35,6 +35,6 @@ These commands wrap the existing package-local demo scripts and fail early if th
 
 ## Environment Templates
 
-The shared keeper template is in [`.env.example`](/Users/mac/Desktop/hyperbet/.env.example).
+The shared keeper template is in [`.env.example`](../.env.example).
 
 Local e2e demo scripts still generate package-specific `.env.e2e` files inside the app folders as part of their seed/setup flow.

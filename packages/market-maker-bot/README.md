@@ -43,7 +43,7 @@ Optional:
 bun run start:multi -- --config wallets.generated.json --dry-run
 ```
 
-Use [wallets.example.json](/Users/mac/Desktop/hyperbet/packages/market-maker-bot/wallets.example.json) as the schema reference.
+Use [wallets.example.json](wallets.example.json) as the schema reference.
 
 ## Export generated Solana wallets to UI env
 
