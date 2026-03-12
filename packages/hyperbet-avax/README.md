@@ -1,116 +1,46 @@
 # Hyperbet AVAX
 
-Avalanche C-Chain focused Hyperbet package for betting, CLOB, and futures interfaces backed by the shared duel oracle.
+Avalanche-themed wrapper over the canonical EVM Hyperbet runtime.
 
-## What this includes
+## Role in the architecture
 
-- `app`: standalone Vite app for wallet connect, market creation, bet placement, EVM GOLD token interactions, settlement, and claiming on Avalanche.
-- `keeper`: EVM automation scripts for market-maker seeding and oracle resolution on Avalanche.
-- `deployments/contracts.json`: shared source of truth for AVAX contract addresses, chain IDs, and RPC env var names.
+- `packages/hyperbet-evm` is the canonical EVM runtime.
+- `packages/hyperbet-avax` exists to provide Avalanche-specific deployment defaults, theme, and branded package entrypoints.
+- Keeper ownership stays with `hyperbet-evm`; this wrapper delegates keeper scripts back to the canonical EVM package.
 
-## EVM Chain Configuration
+## What this package should own
 
-- **Mainnet**: Avalanche C-Chain (chain ID `43114`)
-- **Testnet**: Avalanche Fuji (chain ID `43113`)
+- Avalanche app theme and chain-facing copy
+- Avalanche deployment defaults and manifests
+- Avalanche package-level scripts for app builds and chain deployments
 
-Contract addresses are populated in `deployments/contracts.json` after EVM deployment. The app reads these at build time; override with env vars at runtime.
+## What this package should not own long term
 
-## UI E2E tests (headless wallet + mock GOLD localnet)
+- separate keeper implementation
+- separate market logic
+- separate shared UI components
+- separate contract logic
 
-From `packages/hyperbet-avax/app`:
-
-```bash
-bun run test:e2e
-```
-
-What this command does:
-
-- compiles EVM contracts
-- starts local Anvil for EVM (chain id 43113)
-- deploys local `MockERC20` + `GoldClob`, seeds an open EVM match, and configures headless EVM wallet
-- creates one resolved historical market and one open current market
-- runs Playwright headless tests that exercise EVM UI actions and verify txs on-chain:
-  - EVM: refresh, place order, resolve match, claim, create match
-  - chain-level validation:
-    - EVM tx hashes are confirmed with successful receipts on local Anvil RPC
-
-The app runs in `--mode e2e` with generated `/app/.env.e2e`.
-
-## UI E2E tests on public clusters (headless wallet)
-
-From `packages/hyperbet-avax/app`:
-
-```bash
-bun run test:e2e:testnet
-bun run test:e2e:mainnet
-```
-
-## Run the Vite app
+## Common commands
 
 From `packages/hyperbet-avax`:
 
 ```bash
 bun run dev
-```
-
-Raw app-only local mode:
-
-```bash
-bun run dev:app-local
-```
-
-For mainnet mode:
-
-```bash
-bun run dev:mainnet
-```
-
-For testnet mode:
-
-```bash
-bun run dev:testnet
-```
-
-Build:
-
-```bash
 bun run build
-bun run build:testnet
-bun run build:mainnet
-```
-
-## Keeper
-
-From `packages/hyperbet-avax/keeper`:
-
-```bash
-bun install
-bun run bot
-```
-
-## Deployment prep
-
-Preflight the repo before touching real chains:
-
-```bash
-bun run deploy:preflight:testnet
-bun run deploy:preflight:mainnet
-```
-
-Deploy EVM GoldClob contracts to Avalanche:
-
-```bash
 bun run deploy:evm:avax-fuji
 bun run deploy:evm:avax
 ```
 
-The EVM deploy script writes a receipt to `packages/evm-contracts/deployments/<network>.json`
-and updates `packages/hyperbet-avax/deployments/contracts.json` automatically.
+Keeper commands delegate to `hyperbet-evm`:
 
-Private env files stay local:
+```bash
+bun run keeper:service
+bun run keeper:bot
+```
 
-- `packages/hyperbet-avax/.env.mainnet`
-- `packages/hyperbet-avax/.env.testnet`
-- `packages/hyperbet-avax/app/.env.mainnet`
+App E2E commands also delegate to the canonical EVM app:
 
-These should hold RPC URLs, signer paths, and private API keys. They should not be treated as public deployment metadata.
+```bash
+bun run --cwd app test:e2e
+```

@@ -73,10 +73,12 @@ function uniqueList(values: string[]): string[] {
 }
 
 function resolveEnvironment(): Environment {
-  // VITE_SOLANA_CLUSTER is used across all chain packages to set the app environment
-  const explicitCluster = readEnvString("VITE_SOLANA_CLUSTER")?.toLowerCase();
-  if (explicitCluster && ENVIRONMENT_ALIASES[explicitCluster]) {
-    return ENVIRONMENT_ALIASES[explicitCluster];
+  const explicitEnvironment =
+    readEnvString("VITE_APP_ENV")?.toLowerCase() ??
+    readEnvString("VITE_BETTING_ENV")?.toLowerCase() ??
+    readEnvString("VITE_SOLANA_CLUSTER")?.toLowerCase();
+  if (explicitEnvironment && ENVIRONMENT_ALIASES[explicitEnvironment]) {
+    return ENVIRONMENT_ALIASES[explicitEnvironment];
   }
 
   const viteMode = readEnvString("MODE")?.toLowerCase();
@@ -139,6 +141,7 @@ function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
     case "avaxFuji":
       return "https://api.avax-test.network/ext/bc/C/rpc";
   }
+  return "https://api.avax-test.network/ext/bc/C/rpc";
 }
 
 function buildEvmConfig(
@@ -149,6 +152,9 @@ function buildEvmConfig(
   | "avaxChainId"
   | "avaxGoldClobAddress"
   | "avaxGoldTokenAddress"
+  | "avaxPerpMarginTokenAddress"
+  | "avaxSkillOracleAddress"
+  | "avaxPerpEngineAddress"
 > {
   const defaults = resolveBettingEvmDefaults(
     asDeploymentEnvironment(environment),
@@ -158,6 +164,9 @@ function buildEvmConfig(
     avaxChainId: defaults.avax.chainId,
     avaxGoldClobAddress: defaults.avax.goldClobAddress,
     avaxGoldTokenAddress: defaults.avax.goldTokenAddress,
+    avaxPerpMarginTokenAddress: defaults.avax.perpMarginTokenAddress,
+    avaxSkillOracleAddress: defaults.avax.skillOracleAddress,
+    avaxPerpEngineAddress: defaults.avax.perpEngineAddress,
   };
 }
 
@@ -184,6 +193,9 @@ export interface EnvConfig {
   avaxChainId: number;
   avaxGoldClobAddress: string;
   avaxGoldTokenAddress: string;
+  avaxPerpMarginTokenAddress: string;
+  avaxSkillOracleAddress: string;
+  avaxPerpEngineAddress: string;
 }
 
 const DEFAULT_STREAM_URL = "https://www.twitch.tv/hyperscapeai";
@@ -339,6 +351,15 @@ export const CONFIG: EnvConfig = {
   avaxGoldTokenAddress:
     readEnvString("VITE_AVAX_GOLD_TOKEN_ADDRESS") ??
     baseEnvConfig.avaxGoldTokenAddress,
+  avaxPerpMarginTokenAddress:
+    readEnvString("VITE_AVAX_PERP_MARGIN_TOKEN_ADDRESS") ??
+    baseEnvConfig.avaxPerpMarginTokenAddress,
+  avaxSkillOracleAddress:
+    readEnvString("VITE_AVAX_SKILL_ORACLE_ADDRESS") ??
+    baseEnvConfig.avaxSkillOracleAddress,
+  avaxPerpEngineAddress:
+    readEnvString("VITE_AVAX_PERP_ENGINE_ADDRESS") ??
+    baseEnvConfig.avaxPerpEngineAddress,
   walletConnectProjectId:
     readEnvString("VITE_WALLETCONNECT_PROJECT_ID") ??
     baseEnvConfig.walletConnectProjectId,
@@ -408,3 +429,7 @@ export const AVAX_RPC_URL: string = getEvmRpcUrl("avax");
 export const AVAX_CHAIN_ID: number = CONFIG.avaxChainId;
 export const AVAX_GOLD_CLOB_ADDRESS: string = CONFIG.avaxGoldClobAddress;
 export const AVAX_GOLD_TOKEN_ADDRESS: string = CONFIG.avaxGoldTokenAddress;
+export const AVAX_PERP_MARGIN_TOKEN_ADDRESS: string =
+  CONFIG.avaxPerpMarginTokenAddress;
+export const AVAX_SKILL_ORACLE_ADDRESS: string = CONFIG.avaxSkillOracleAddress;
+export const AVAX_PERP_ENGINE_ADDRESS: string = CONFIG.avaxPerpEngineAddress;

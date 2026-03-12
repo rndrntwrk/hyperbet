@@ -45,9 +45,7 @@ function assertPublicBuildSecrets(
   if (!isPublicBuild) return;
 
   const publicRpcVars = [
-    "VITE_SOLANA_RPC_URL",
     "VITE_BSC_RPC_URL",
-    "VITE_BASE_RPC_URL",
   ] as const;
   for (const name of publicRpcVars) {
     if (looksLikePublicSecretUrl(env[name]?.trim())) {
@@ -306,37 +304,11 @@ export default defineConfig(async ({ mode }) => {
   };
   plugins.push(buildInfoPlugin);
 
-  const solanaRpcTarget = env.VITE_SOLANA_RPC_URL?.trim();
-  const solanaWsTarget = env.VITE_SOLANA_WS_URL?.trim();
-  const useLocalSolanaProxy =
-    Boolean(solanaRpcTarget) &&
-    /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(?::\d+)?/i.test(
-      solanaRpcTarget,
-    );
-  const solanaProxyConfig = useLocalSolanaProxy
-    ? {
-        "/__solana/rpc": {
-          target: solanaRpcTarget,
-          changeOrigin: true,
-          secure: false,
-          rewrite: () => "/",
-        },
-        "/__solana/ws": {
-          target: solanaWsTarget || solanaRpcTarget,
-          changeOrigin: true,
-          secure: false,
-          ws: true,
-          rewrite: () => "/",
-        },
-      }
-    : undefined;
-
   const config: UserConfig = {
     plugins,
     server: {
       host: true,
       port: 4179,
-      proxy: solanaProxyConfig,
       watch: {
         ignored: [
           "**/test-results/**",
@@ -354,7 +326,6 @@ export default defineConfig(async ({ mode }) => {
     },
     preview: {
       host: true,
-      proxy: solanaProxyConfig,
     },
     resolve: {
       alias,
@@ -363,11 +334,6 @@ export default defineConfig(async ({ mode }) => {
         "react-dom",
         "react/jsx-runtime",
         "react/jsx-dev-runtime",
-        "@solana/wallet-adapter-base",
-        "@solana/wallet-adapter-react",
-        "@solana/wallet-adapter-react-ui",
-        "@solana/wallet-adapter-phantom",
-        "@solana/web3.js",
         "wagmi",
         "@wagmi/core",
         "@rainbow-me/rainbowkit",

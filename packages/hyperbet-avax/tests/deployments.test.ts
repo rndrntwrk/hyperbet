@@ -15,7 +15,7 @@ describe("betting deployment manifest", () => {
     expect(normalizeSolanaCluster("stream-ui")).toBe("devnet");
   });
 
-  test("resolves solana deployments from the shared manifest", () => {
+  test("includes shared solana deployments in the unified manifest", () => {
     const testnet = resolveBettingSolanaDeployment("testnet");
     expect(testnet.fightOracleProgramId).toBe(
       BETTING_DEPLOYMENTS.solana.testnet.fightOracleProgramId,
@@ -31,8 +31,14 @@ describe("betting deployment manifest", () => {
   test("maps app environments to the correct default evm networks", () => {
     const testnetDefaults = resolveBettingEvmDefaults("testnet");
     expect(testnetDefaults.avax.networkKey).toBe("avaxFuji");
+    expect(testnetDefaults.avax.perpMarginTokenAddress).toBe(
+      BETTING_DEPLOYMENTS.evm.avaxFuji.perpMarginTokenAddress,
+    );
 
     const mainnetDefaults = resolveBettingEvmDefaults("mainnet-beta");
     expect(mainnetDefaults.avax.networkKey).toBe("avax");
+    expect(mainnetDefaults.avax.perpMarginTokenAddress).toBe(
+      BETTING_DEPLOYMENTS.evm.avax.perpMarginTokenAddress,
+    );
   });
 });

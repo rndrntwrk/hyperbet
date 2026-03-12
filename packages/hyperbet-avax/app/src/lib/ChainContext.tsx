@@ -4,5 +4,6 @@ export { useChain } from "@hyperbet/ui/lib/ChainContext";
 
 export const ChainProvider = createChainProvider({
   e2eDefaultChain: "avax",
+  defaultChain: "avax",
   chains: ["avax"],
 });

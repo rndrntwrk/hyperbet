@@ -2,6 +2,10 @@ import { HyperbetEVMClient } from "./evm/client";
 import { HyperbetSolanaClient } from "./solana/client";
 import { HyperbetStreamClient } from "./stream/client";
 import { SdkConfig, CreateOrderParams, CancelOrderParams, ClaimParams, OrderSide } from "./types";
+import {
+  BETTING_EVM_DEPLOYMENTS,
+  type BettingEvmDeployment,
+} from "../../hyperbet-deployments";
 
 export * from "./types";
 export { HyperbetEVMClient, HyperbetSolanaClient, HyperbetStreamClient };
@@ -18,28 +22,44 @@ export class HyperbetClient {
   public static readonly DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com";
   public static readonly DEFAULT_STREAM_URL = "wss://api.hyperbet.gg/ws";
 
-  // TODO: Insert real deployed addresses
-  public static readonly BSC_CLOB_ADDRESS = "0x123...";
-  public static readonly BSC_ORACLE_ADDRESS = "0x456...";
-  public static readonly AVAX_CLOB_ADDRESS = "0x123...";
-  public static readonly AVAX_ORACLE_ADDRESS = "0x456...";
+  public static readonly BSC_CLOB_ADDRESS =
+    BETTING_EVM_DEPLOYMENTS.bsc.goldClobAddress;
+  public static readonly BSC_ORACLE_ADDRESS =
+    BETTING_EVM_DEPLOYMENTS.bsc.duelOracleAddress;
+  public static readonly AVAX_CLOB_ADDRESS =
+    BETTING_EVM_DEPLOYMENTS.avax.goldClobAddress;
+  public static readonly AVAX_ORACLE_ADDRESS =
+    BETTING_EVM_DEPLOYMENTS.avax.duelOracleAddress;
   public static readonly SOLANA_CLOB_PROGRAM_ID = "C1obMarket11111111111111111111111111111111";
   public static readonly SOLANA_ORACLE_PROGRAM_ID = "F1ghtOrac1e11111111111111111111111111111111";
 
   constructor(config: SdkConfig) {
+    const bscDeployment = resolveBscDeployment(config);
+    const avaxDeployment = resolveAvaxDeployment(config);
+
     if (config.evmPrivateKey) {
-      this.evmBsc = new HyperbetEVMClient(
-        config.bscRpcUrl || HyperbetClient.DEFAULT_BSC_RPC,
-        config.evmPrivateKey,
-        HyperbetClient.BSC_CLOB_ADDRESS,
-        HyperbetClient.BSC_ORACLE_ADDRESS
-      );
-      this.evmAvax = new HyperbetEVMClient(
-        config.avaxRpcUrl || HyperbetClient.DEFAULT_AVAX_RPC,
-        config.evmPrivateKey,
-        HyperbetClient.AVAX_CLOB_ADDRESS,
-        HyperbetClient.AVAX_ORACLE_ADDRESS
-      );
+      if (
+        bscDeployment.goldClobAddress &&
+        bscDeployment.duelOracleAddress
+      ) {
+        this.evmBsc = new HyperbetEVMClient(
+          config.bscRpcUrl || HyperbetClient.DEFAULT_BSC_RPC,
+          config.evmPrivateKey,
+          bscDeployment.goldClobAddress,
+          bscDeployment.duelOracleAddress
+        );
+      }
+      if (
+        avaxDeployment.goldClobAddress &&
+        avaxDeployment.duelOracleAddress
+      ) {
+        this.evmAvax = new HyperbetEVMClient(
+          config.avaxRpcUrl || HyperbetClient.DEFAULT_AVAX_RPC,
+          config.evmPrivateKey,
+          avaxDeployment.goldClobAddress,
+          avaxDeployment.duelOracleAddress
+        );
+      }
     }
 
     if (config.solanaPrivateKey) {
@@ -64,4 +84,12 @@ export class HyperbetClient {
     if (this.solana) promises.push(this.solana.placeOrder(params));
     return Promise.allSettled(promises);
   }
+}
+
+function resolveBscDeployment(config: SdkConfig): BettingEvmDeployment {
+  return BETTING_EVM_DEPLOYMENTS[config.bscNetwork ?? "bsc"];
+}
+
+function resolveAvaxDeployment(config: SdkConfig): BettingEvmDeployment {
+  return BETTING_EVM_DEPLOYMENTS[config.avaxNetwork ?? "avax"];
 }

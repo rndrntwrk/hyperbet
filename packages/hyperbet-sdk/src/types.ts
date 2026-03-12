@@ -18,7 +18,9 @@ export interface ClaimParams {
 
 export interface SdkConfig {
   evmPrivateKey?: string;
+  bscNetwork?: "bscTestnet" | "bsc";
   bscRpcUrl?: string; // Fallback to public node if missing
+  avaxNetwork?: "avaxFuji" | "avax";
   avaxRpcUrl?: string; // Fallback to public node if missing
   solanaPrivateKey?: string; // Base58 encoded secret key
   solanaRpcUrl?: string; // Fallback to mainnet-beta if missing

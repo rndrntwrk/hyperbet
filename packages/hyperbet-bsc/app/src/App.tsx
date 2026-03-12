@@ -600,9 +600,9 @@ const EvmBettingPanel = lazy(() =>
     default: module.EvmBettingPanel,
   })),
 );
-const ModelsMarketView = lazy(() =>
-  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
-    default: module.ModelsMarketView,
+const EvmModelsMarketView = lazy(() =>
+  import("@hyperbet/ui/components/EvmModelsMarketView").then((module) => ({
+    default: module.EvmModelsMarketView,
   })),
 );
 const PointsLeaderboard = lazy(() =>
@@ -656,6 +656,12 @@ function PanelFallback({
 export function App() {
   const { address: evmWalletAddress } = useAccount();
   const { activeChain, setActiveChain, availableChains } = useChain();
+  const activeChainLabel =
+    activeChain === "base"
+      ? "BASE"
+      : activeChain === "avax"
+        ? "AVAX"
+        : "BSC";
   const [locale, setLocale] = useState<UiLocale>(() => resolveUiLocale());
   const copy = useMemo(() => getAppCopy(locale), [locale]);
   const isE2eMode = import.meta.env.MODE === "e2e";
@@ -1598,8 +1604,14 @@ export function App() {
                 <PanelFallback label={copy.loadingModelMarkets} minHeight={480} />
               }
             >
-              <ModelsMarketView
-                activeMatchup={`${effA1.name} vs ${effA2.name}`}
+              <EvmModelsMarketView
+                fightingAgentA={effA1.name}
+                fightingAgentB={effA2.name}
+                locale={locale}
+                gameApiUrl={GAME_API_URL}
+                mockData={null}
+                collateralSymbol={activeChainLabel}
+                chainLabel={activeChainLabel}
               />
             </Suspense>
           </div>

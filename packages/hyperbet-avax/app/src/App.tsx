@@ -34,14 +34,14 @@ import {
 } from "@hyperbet/ui/lib/invite";
 import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
 import { ChainSelector } from "@hyperbet/ui/components/ChainSelector";
-import { ThemeSelector } from "./components/ThemeSelector";
+import { ThemeSelector } from "@hyperbet/ui/components/ThemeSelector";
 
 import { useChain } from "./lib/ChainContext";
 import { useStreamingState } from "@hyperbet/ui/spectator/useStreamingState";
 import { useDuelContext } from "@hyperbet/ui/spectator/useDuelContext";
 import { useResizePanel, useIsMobile } from "@hyperbet/ui/lib/useResizePanel";
 import { ResizeHandle } from "@hyperbet/ui/components/ResizeHandle";
-import { HmChart, type HmChartPoint } from "./components/HmChart";
+import { HmChart, type HmChartPoint } from "@hyperbet/ui/components/HmChart";
 import {
   getMarketMeta,
   createEvmPublicClient,
@@ -384,9 +384,9 @@ const EvmBettingPanel = lazy(() =>
     default: module.EvmBettingPanel,
   })),
 );
-const AvaxModelsMarketView = lazy(() =>
-  import("./components/AvaxModelsMarketView").then((module) => ({
-    default: module.AvaxModelsMarketView,
+const EvmModelsMarketView = lazy(() =>
+  import("@hyperbet/ui/components/EvmModelsMarketView").then((module) => ({
+    default: module.EvmModelsMarketView,
   })),
 );
 const PointsLeaderboard = lazy(() =>
@@ -1439,10 +1439,14 @@ const [hmBottomTab, setHmBottomTab] = useState<
                 <PanelFallback label={copy.loadingModelMarkets} minHeight={480} />
               }
             >
-              <AvaxModelsMarketView
+              <EvmModelsMarketView
                 fightingAgentA={effA1.name}
                 fightingAgentB={effA2.name}
                 locale={locale}
+                gameApiUrl={GAME_API_URL}
+                mockData={mockData}
+                collateralSymbol="AVAX"
+                chainLabel="AVAX"
               />
             </Suspense>
           </div>
