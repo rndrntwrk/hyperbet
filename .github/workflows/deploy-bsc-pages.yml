@@ -66,13 +66,29 @@ jobs:
             fi
           fi
 
+          if [ "${deploy_target}" = "staging" ]; then
+            if [ -z "${{ vars.HYPERBET_BSC_STAGING_GOLD_CLOB_ADDRESS }}" ] || [ -z "${{ vars.HYPERBET_BASE_STAGING_GOLD_CLOB_ADDRESS }}" ] || [ -z "${{ vars.HYPERBET_BSC_STAGING_CHAIN_ID }}" ] || [ -z "${{ vars.HYPERBET_BASE_STAGING_CHAIN_ID }}" ]; then
+              echo "Missing BSC Pages staging chain configuration" >&2
+              exit 1
+            fi
+          fi
+
           echo "DEPLOY_TARGET=${deploy_target}" >> "${GITHUB_ENV}"
           echo "PAGES_PROJECT_NAME=${pages_project_name}" >> "${GITHUB_ENV}"
           echo "PAGES_EXPECTED_URL=${pages_expected_url}" >> "${GITHUB_ENV}"
           echo "HYPERBET_API_URL=${api_url}" >> "${GITHUB_ENV}"
           echo "HYPERBET_WS_URL=${ws_url}" >> "${GITHUB_ENV}"
-          echo "HYPERBET_BSC_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS || '0x443C09B1E7bb7bA3392b02500772B185654A6F33' }}" >> "${GITHUB_ENV}"
-          echo "HYPERBET_BASE_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS || '0xb8c66D6895Bafd1B0027F2c0865865043064437C' }}" >> "${GITHUB_ENV}"
+          if [ "${deploy_target}" = "staging" ]; then
+            echo "HYPERBET_BSC_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BSC_STAGING_GOLD_CLOB_ADDRESS }}" >> "${GITHUB_ENV}"
+            echo "HYPERBET_BASE_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BASE_STAGING_GOLD_CLOB_ADDRESS }}" >> "${GITHUB_ENV}"
+            echo "HYPERBET_BSC_CHAIN_ID=${{ vars.HYPERBET_BSC_STAGING_CHAIN_ID }}" >> "${GITHUB_ENV}"
+            echo "HYPERBET_BASE_CHAIN_ID=${{ vars.HYPERBET_BASE_STAGING_CHAIN_ID }}" >> "${GITHUB_ENV}"
+          else
+            echo "HYPERBET_BSC_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BSC_GOLD_CLOB_ADDRESS || '0x443C09B1E7bb7bA3392b02500772B185654A6F33' }}" >> "${GITHUB_ENV}"
+            echo "HYPERBET_BASE_GOLD_CLOB_ADDRESS=${{ vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS != '' && vars.HYPERBET_BASE_GOLD_CLOB_ADDRESS || '0xb8c66D6895Bafd1B0027F2c0865865043064437C' }}" >> "${GITHUB_ENV}"
+            echo "HYPERBET_BSC_CHAIN_ID=56" >> "${GITHUB_ENV}"
+            echo "HYPERBET_BASE_CHAIN_ID=8453" >> "${GITHUB_ENV}"
+          fi
 
       - name: Configure Wrangler auth
         env:
@@ -100,16 +116,16 @@ jobs:
           bash scripts/ci-install-verified.sh root hyperbet-bsc-app
 
       - name: Audit deploy env
-        run: node --import tsx scripts/ci-env-audit.ts --target=pages:bsc
+        run: node --import tsx scripts/ci-env-audit.ts --target=pages:bsc --deployment=${DEPLOY_TARGET}
         env:
           VITE_GAME_API_URL: ${{ env.HYPERBET_API_URL }}
           VITE_GAME_WS_URL: ${{ env.HYPERBET_WS_URL }}
           VITE_SOLANA_CLUSTER: mainnet-beta
           VITE_USE_GAME_RPC_PROXY: "true"
           VITE_USE_GAME_EVM_RPC_PROXY: "true"
-          VITE_BSC_CHAIN_ID: "56"
+          VITE_BSC_CHAIN_ID: ${{ env.HYPERBET_BSC_CHAIN_ID }}
           VITE_BSC_GOLD_CLOB_ADDRESS: ${{ env.HYPERBET_BSC_GOLD_CLOB_ADDRESS }}
-          VITE_BASE_CHAIN_ID: "8453"
+          VITE_BASE_CHAIN_ID: ${{ env.HYPERBET_BASE_CHAIN_ID }}
           VITE_BASE_GOLD_CLOB_ADDRESS: ${{ env.HYPERBET_BASE_GOLD_CLOB_ADDRESS }}
 
       - name: Build production app
@@ -121,8 +137,8 @@ jobs:
           VITE_SOLANA_CLUSTER: mainnet-beta
           VITE_USE_GAME_RPC_PROXY: "true"
           VITE_USE_GAME_EVM_RPC_PROXY: "true"
-          VITE_BSC_CHAIN_ID: "56"
-          VITE_BASE_CHAIN_ID: "8453"
+          VITE_BSC_CHAIN_ID: ${{ env.HYPERBET_BSC_CHAIN_ID }}
+          VITE_BASE_CHAIN_ID: ${{ env.HYPERBET_BASE_CHAIN_ID }}
           VITE_BSC_GOLD_CLOB_ADDRESS: ${{ env.HYPERBET_BSC_GOLD_CLOB_ADDRESS }}
           VITE_BASE_GOLD_CLOB_ADDRESS: ${{ env.HYPERBET_BASE_GOLD_CLOB_ADDRESS }}
 

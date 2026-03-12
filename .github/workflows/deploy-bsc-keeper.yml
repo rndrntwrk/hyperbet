@@ -89,10 +89,13 @@ jobs:
           bash scripts/ci-install-verified.sh root hyperbet-bsc-keeper
 
       - name: Audit deploy env
-        run: node --import tsx scripts/ci-env-audit.ts --target=keeper:bsc
+        run: node --import tsx scripts/ci-env-audit.ts --target=keeper:bsc --deployment=${DEPLOY_TARGET}
         env:
           CI_AUDIT_REQUIRE_RUNTIME: "true"
+          RAILWAY_ENVIRONMENT_ID: ${{ env.RAILWAY_ENVIRONMENT_ID }}
           BSC_RPC_URL: https://bsc-dataseed.binance.org
+          BSC_GOLD_CLOB_ADDRESS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' && vars.HYPERBET_BSC_STAGING_GOLD_CLOB_ADDRESS || '' }}
+          BASE_GOLD_CLOB_ADDRESS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' && vars.HYPERBET_BASE_STAGING_GOLD_CLOB_ADDRESS || '' }}
 
       - name: Run keeper tests
         run: |

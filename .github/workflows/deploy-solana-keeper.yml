@@ -90,9 +90,10 @@ jobs:
           bash scripts/ci-install-verified.sh root hyperbet-solana-keeper
 
       - name: Audit deploy env
-        run: node --import tsx scripts/ci-env-audit.ts --target=keeper:solana
+        run: node --import tsx scripts/ci-env-audit.ts --target=keeper:solana --deployment=${DEPLOY_TARGET}
         env:
           CI_AUDIT_REQUIRE_RUNTIME: "true"
+          RAILWAY_ENVIRONMENT_ID: ${{ env.RAILWAY_ENVIRONMENT_ID }}
           SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
 
       - name: Run keeper tests

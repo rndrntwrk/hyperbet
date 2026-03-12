@@ -1,5 +1,6 @@
 import {
   BETTING_EVM_CHAIN_ORDER,
+  resolveBettingEvmDeploymentForChain,
   resolveBettingEvmRuntimeEnv,
   type BettingEvmChain,
 } from "@hyperbet/chain-registry";
@@ -28,6 +29,8 @@ export type CheckResult = {
   ok: boolean;
   details: string;
 };
+
+type DeploymentMode = "production" | "staging";
 
 export function validateConfiguredAddress(
   rawAddress: string,
@@ -138,9 +141,86 @@ function expectedChainIdEnvVar(chain: BettingEvmChain): string {
   return `${chain.toUpperCase()}_EXPECTED_CHAIN_ID`;
 }
 
+function parseDeployment(args: string[]): DeploymentMode {
+  const argValue = args.find((arg) => arg.startsWith("--deployment="))?.slice("--deployment=".length);
+  const envValue = process.env.HYPERBET_VERIFY_DEPLOYMENT?.trim();
+  const value = argValue || envValue || "production";
+  if (value !== "production" && value !== "staging") {
+    throw new Error(`unsupported deployment mode: ${value}`);
+  }
+  return value;
+}
+
+function firstNonEmptyValue(...values: Array<string | undefined>): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function resolveStagingEvmCheck(
+  chain: BettingEvmChain,
+):
+  | {
+      chain: BettingEvmChain;
+      rpcUrl: string;
+      expectedChainId: bigint;
+      clobAddress: string;
+    }
+  | CheckResult {
+  const chainUpper = chain.toUpperCase();
+  const deployment = resolveBettingEvmDeploymentForChain(chain, "mainnet-beta");
+  const rpcUrl = firstNonEmptyValue(
+    process.env[`${chainUpper}_STAGING_RPC_URL`],
+    process.env[`EVM_${chainUpper}_STAGING_RPC_URL`],
+  );
+  if (!rpcUrl) {
+    return {
+      chain,
+      ok: false,
+      details: `${chainUpper}_STAGING_RPC_URL not configured`,
+    };
+  }
+
+  const addressValidation = validateConfiguredAddress(
+    firstNonEmptyValue(
+      process.env[`CLOB_CONTRACT_ADDRESS_${chainUpper}_STAGING`],
+      process.env[`${chainUpper}_STAGING_GOLD_CLOB_ADDRESS`],
+      "",
+    ) ?? "",
+    "goldClobAddress",
+  );
+  if ("details" in addressValidation) {
+    return {
+      chain,
+      ok: false,
+      details: addressValidation.details,
+    };
+  }
+
+  const expectedChainId = BigInt(
+    firstNonEmptyValue(
+      process.env[expectedChainIdEnvVar(chain)],
+      process.env[`${chainUpper}_STAGING_CHAIN_ID`],
+      `${deployment.chainId}`,
+    )!,
+  );
+
+  return {
+    chain,
+    rpcUrl,
+    expectedChainId,
+    clobAddress: addressValidation.address,
+  };
+}
+
 async function run() {
   const args = process.argv.slice(2);
   const jsonOutput = args.includes("--json");
+  const deployment = parseDeployment(args);
   const chainsArg = args.find((arg) => arg.startsWith("--chains="));
   const requestedChains = new Set(
     (chainsArg?.slice("--chains=".length).split(",") ?? [])
@@ -154,6 +234,14 @@ async function run() {
   const includeSolana = includeAll || requestedChains.has("solana");
 
   const evmChecks = evmChains.map((chain) => {
+    if (deployment === "staging") {
+      const resolved = resolveStagingEvmCheck(chain);
+      if ("ok" in resolved) {
+        return Promise.resolve(resolved);
+      }
+      return verifyEvmChain(resolved);
+    }
+
     const runtime = resolveBettingEvmRuntimeEnv(chain, "mainnet-beta", process.env);
     const addressValidation = validateConfiguredAddress(
       runtime.goldClobAddress,
@@ -190,6 +278,7 @@ async function run() {
   if (jsonOutput) {
     console.log(JSON.stringify(results, null, 2));
   } else {
+    console.log(`deployment=${deployment}`);
     console.log("chain | status | details");
     for (const result of results) {
       console.log(

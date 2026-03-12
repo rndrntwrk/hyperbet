@@ -339,10 +339,17 @@ function runJsonCommand<T>(
 function runExpectedAuditFailure(
   target: "app:avax" | "keeper:avax",
   env: Record<string, string>,
+  deployment: "production" | "staging" = "production",
 ): { passed: boolean; output: string } {
   const result = spawnSync(
     "node",
-    ["--import", "tsx", "scripts/ci-env-audit.ts", `--target=${target}`],
+    [
+      "--import",
+      "tsx",
+      "scripts/ci-env-audit.ts",
+      `--target=${target}`,
+      `--deployment=${deployment}`,
+    ],
     {
       cwd: process.cwd(),
       env: { ...process.env, ...env },
@@ -369,9 +376,9 @@ function runVerifyChains(readOnly: {
   }
 
   if (readOnly.bsc) {
-    env.BSC_RPC_URL = requireEnv("HYPERBET_BSC_STAGING_RPC_URL");
+    env.BSC_STAGING_RPC_URL = requireEnv("HYPERBET_BSC_STAGING_RPC_URL");
     if (readOnly.bsc.canonicalMarket?.contractAddress) {
-      env.BSC_GOLD_CLOB_ADDRESS = readOnly.bsc.canonicalMarket.contractAddress;
+      env.BSC_STAGING_GOLD_CLOB_ADDRESS = readOnly.bsc.canonicalMarket.contractAddress;
     }
   }
 
@@ -382,7 +389,8 @@ function runVerifyChains(readOnly: {
       "--bun",
       "packages/market-maker-bot/src/verify-chains.ts",
       "--json",
-      "--chains=solana,bsc,avax",
+      "--deployment=staging",
+      "--chains=solana,bsc",
     ],
     env,
   );
@@ -390,9 +398,28 @@ function runVerifyChains(readOnly: {
   return results;
 }
 
+function runProductionAvaxVerify(): CheckResult {
+  const results = runJsonCommand<CheckResult[]>(
+    "verify-chains-avax-production",
+    "bun",
+    [
+      "--bun",
+      "packages/market-maker-bot/src/verify-chains.ts",
+      "--json",
+      "--deployment=production",
+      "--chains=avax",
+    ],
+  );
+  writeJsonArtifact(artifactRoot, "verify-chains-avax-production.json", results);
+  const avax = results.find((result) => result.chain === "avax");
+  if (!avax) {
+    throw new Error("missing AVAX verification result");
+  }
+  return avax;
+}
+
 function proveAvaxFailClosed(
   readOnly: { solana?: ReadOnlyChainResult },
-  verifyResults: CheckResult[],
 ): AvaxFailClosedResult {
   const appAudit = runExpectedAuditFailure("app:avax", {
     VITE_GAME_API_URL: readOnly.solana
@@ -405,20 +432,16 @@ function proveAvaxFailClosed(
     VITE_USE_GAME_RPC_PROXY: "true",
     VITE_USE_GAME_EVM_RPC_PROXY: "true",
     VITE_AVAX_CHAIN_ID: "43114",
-  });
+  }, "production");
   const keeperAudit = runExpectedAuditFailure("keeper:avax", {
     CI_AUDIT_REQUIRE_RUNTIME: "true",
     HYPERBET_KEEPER_URL: "https://avax-stage.invalid",
     RAILWAY_PROJECT_ID: "staging",
-    RAILWAY_PRODUCTION_ENVIRONMENT_ID: "staging",
+    RAILWAY_ENVIRONMENT_ID: "production",
     RAILWAY_KEEPER_SERVICE_ID: "staging",
     AVAX_RPC_URL: "https://api.avax.network/ext/bc/C/rpc",
-  });
-
-  const verification = verifyResults.find((result) => result.chain === "avax");
-  if (!verification) {
-    throw new Error("missing AVAX verification result");
-  }
+  }, "production");
+  const verification = runProductionAvaxVerify();
 
   const summary: AvaxFailClosedResult = {
     appAuditPassed: appAudit.passed,
@@ -517,10 +540,7 @@ async function main(): Promise<void> {
     );
   }
 
-  summary.avaxFailClosed = proveAvaxFailClosed(
-    summary.readOnly ?? {},
-    verifyResults,
-  );
+  summary.avaxFailClosed = proveAvaxFailClosed(summary.readOnly ?? {});
   if (
     !summary.avaxFailClosed.appAuditPassed ||
     !summary.avaxFailClosed.keeperAuditPassed ||
