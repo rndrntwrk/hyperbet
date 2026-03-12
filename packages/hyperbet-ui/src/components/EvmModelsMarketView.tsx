@@ -1286,15 +1286,15 @@ export function EvmModelsMarketView({
                       <LineChart data={oracleHistory}>
                         <XAxis
                           dataKey="label"
-                          tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
+                          tick={{ fill: "var(--hm-text-faint)", fontSize: 10 }}
                           tickLine={false}
-                          axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+                          axisLine={{ stroke: "var(--hm-border-soft)" }}
                           interval="preserveStartEnd"
                         />
                         <YAxis
-                          tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
+                          tick={{ fill: "var(--hm-text-faint)", fontSize: 10 }}
                           tickLine={false}
-                          axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+                          axisLine={{ stroke: "var(--hm-border-soft)" }}
                           width={42}
                           tickFormatter={(v: number) => `$${v.toFixed(0)}`}
                         />
@@ -1302,14 +1302,14 @@ export function EvmModelsMarketView({
                         {selectedMarket?.spotIndex && (
                           <ReferenceLine
                             y={selectedMarket.spotIndex}
-                            stroke="rgba(229,184,74,0.25)"
+                            stroke="var(--hm-gold-border-light)"
                             strokeDasharray="4 4"
                           />
                         )}
                         <Line
                           type="monotone"
                           dataKey="spotIndex"
-                          stroke="#e5b84a"
+                          stroke="var(--hm-accent-gold)"
                           strokeWidth={2}
                           dot={false}
                           isAnimationActive={false}

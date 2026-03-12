@@ -593,7 +593,7 @@ function CountdownDisplay({ count }: { count: number }) {
           fontWeight: "bold",
           fontFamily: "var(--hm-font-display)",
           letterSpacing: -5,
-          color: isFight ? "#ff6b6b" : "#f2d08a",
+          color: isFight ? "var(--hm-danger-soft)" : "var(--hm-accent-gold-bright)",
           textShadow: isFight
             ? "0 0 40px rgba(255,107,107,0.8), 0 0 80px rgba(255,107,107,0.4)"
             : "0 0 40px rgba(242,208,138,0.8), 0 0 80px rgba(242,208,138,0.4)",

@@ -82,7 +82,7 @@ export function AgentStats({
           ...themeStyle,
           textAlign: "center",
           padding: "32px 0",
-          color: "rgba(255,255,255,0.3)",
+          color: "var(--hm-text-faint)",
           fontSize: 13,
           fontWeight: 900,
           fontFamily: "var(--hm-font-display)",
@@ -121,7 +121,7 @@ export function AgentStats({
             height: 56,
             borderRadius: 14,
             background:
-              "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
+              "linear-gradient(180deg, var(--hm-border-soft) 0%, var(--hm-surface-soft) 100%)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -129,7 +129,7 @@ export function AgentStats({
             fontWeight: 900,
             fontFamily: "var(--hm-font-display)",
             border: `1px solid ${accentColor}44`,
-            boxShadow: `0 4px 16px ${accentColor}18, inset 0 1px 0 rgba(255,255,255,0.1)`,
+            boxShadow: `0 4px 16px ${accentColor}18, inset 0 1px 0 var(--hm-border-light)`,
             color: accentColor,
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
@@ -147,7 +147,7 @@ export function AgentStats({
               fontFamily: "var(--hm-font-display)",
               textTransform: "uppercase",
               lineHeight: 1,
-              color: "#fff",
+              color: "var(--hm-text-primary)",
             }}
           >
             {agent.name}
@@ -155,7 +155,7 @@ export function AgentStats({
           <div
             style={{
               fontSize: 10,
-              color: "rgba(255,255,255,0.4)",
+              color: "var(--hm-text-faint)",
               marginTop: 4,
               fontWeight: 800,
               letterSpacing: 1.5,
@@ -185,12 +185,12 @@ export function AgentStats({
       <div
         style={{
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
+            "linear-gradient(180deg, var(--hm-border-subtle) 0%, var(--hm-surface-soft) 100%)",
           padding: 12,
           borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
+          border: "1px solid var(--hm-border-soft)",
           boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.1)",
+            "inset 0 1px 0 var(--hm-border-subtle), 0 2px 8px rgba(0,0,0,0.1)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
         }}
@@ -207,7 +207,7 @@ export function AgentStats({
             letterSpacing: 2,
           }}
         >
-          <span style={{ color: "rgba(255,255,255,0.4)" }}>{copy.hpStatus}</span>
+          <span style={{ color: "var(--hm-text-faint)" }}>{copy.hpStatus}</span>
           <span
             style={{
               color: isLowHp
@@ -221,10 +221,10 @@ export function AgentStats({
         <div
           style={{
             height: 14,
-            background: "rgba(0,0,0,0.4)",
+            background: "var(--hm-surface-elevated)",
             borderRadius: 7,
             overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.08)",
+            border: "1px solid var(--hm-border-soft)",
             padding: 2,
             boxShadow: "inset 0 2px 4px rgba(0,0,0,0.3)",
           }}
@@ -250,7 +250,7 @@ export function AgentStats({
           style={{
             fontSize: 14,
             fontWeight: 900,
-            color: "rgba(255,255,255,0.3)",
+            color: "var(--hm-text-faint)",
             textTransform: "uppercase",
             letterSpacing: 2,
             marginBottom: 10,
@@ -274,21 +274,21 @@ export function AgentStats({
                 style={{
                   aspectRatio: "1",
                   background: item
-                    ? "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)"
-                    : "rgba(0,0,0,0.2)",
+                    ? "linear-gradient(180deg, var(--hm-border-soft) 0%, var(--hm-surface-glass) 100%)"
+                    : "var(--hm-surface-panel-soft, rgba(0,0,0,0.2))",
                   border: item
                     ? `1px solid ${accentColor}33`
-                    : "1px solid rgba(255,255,255,0.06)",
+                    : "1px solid var(--hm-border-subtle)",
                   borderRadius: 8,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   position: "relative",
-                  color: "#fff",
+                  color: "var(--hm-text-primary)",
                   fontSize: 10,
                   boxShadow: item
                     ? `inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 6px ${accentColor}10`
-                    : "inset 0 1px 0 rgba(255,255,255,0.03)",
+                    : "inset 0 1px 0 var(--hm-surface-glass)",
                   backdropFilter: "blur(8px)",
                   WebkitBackdropFilter: "blur(8px)",
                 }}
@@ -303,7 +303,7 @@ export function AgentStats({
                       fontSize: 9,
                       fontWeight: 900,
                       fontFamily: "var(--hm-font-mono)",
-                      background: "rgba(0,0,0,0.6)",
+                      background: "var(--hm-overlay-strong)",
                       padding: "0 3px",
                       borderRadius: 4,
                       backdropFilter: "blur(8px)",
