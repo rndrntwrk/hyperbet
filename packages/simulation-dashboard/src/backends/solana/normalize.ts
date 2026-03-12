@@ -20,6 +20,12 @@ function pushGate(
     });
 }
 
+const LAMPORTS_PER_SOL = 1_000_000_000;
+
+function lamportsToSol(value: bigint): number {
+    return Number(value) / LAMPORTS_PER_SOL;
+}
+
 function buildMitigationGates(outcome: SolanaProofOutcome): {
     gates: MitigationGate[];
     scenarioGates: MitigationGate[];
@@ -226,9 +232,31 @@ export function normalizeSolanaProofOutcome(
             winningsMmBps: outcome.fees.winningsMmBps.toString(),
             treasuryAccruedWei: outcome.fees.treasuryAccruedLamports.toString(),
             mmAccruedWei: outcome.fees.mmAccruedLamports.toString(),
+            treasuryAccruedAtomic: outcome.fees.treasuryAccruedLamports.toString(),
+            mmAccruedAtomic: outcome.fees.mmAccruedLamports.toString(),
+            accrualUnit: "lamports",
+            displaySymbol: "SOL",
+            displayDecimals: 9,
         },
         activeRun: null,
-        agents: [],
+        agents: outcome.actors.map((actor) => ({
+            enabled: true,
+            name: actor.name,
+            strategy: actor.role,
+            description: actor.description,
+            color: actor.color,
+            address: actor.address,
+            balance: lamportsToSol(actor.balance.lamports),
+            pnl: actor.balance.pnlSol,
+            tradeCount: actor.tradeCount,
+            activeOrders: actor.activeOrders,
+            position: {
+                aShares: actor.position.aShares.toString(),
+                bShares: actor.position.bShares.toString(),
+                aStake: lamportsToSol(actor.position.aLockedLamports),
+                bStake: lamportsToSol(actor.position.bLockedLamports),
+            },
+        })),
         book: {
             bids: outcome.book.bids.map((level) => ({
                 price: level.price,

@@ -28,7 +28,27 @@ describe("normalizeSolanaProofOutcome", () => {
                 treasuryAccruedLamports: 14n,
                 mmAccruedLamports: 20n,
             },
-            actors: [],
+            actors: [
+                {
+                    name: "Solana MM",
+                    role: "market-maker",
+                    description: "Provides resting liquidity.",
+                    color: "#22d3ee",
+                    address: "Actor11111111111111111111111111111111111",
+                    tradeCount: 2,
+                    activeOrders: 1,
+                    balance: {
+                        lamports: 2_500_000_000n,
+                        pnlSol: 0.125,
+                    },
+                    position: {
+                        aShares: 3n,
+                        bShares: 1n,
+                        aLockedLamports: 400_000_000n,
+                        bLockedLamports: 100_000_000n,
+                    },
+                },
+            ],
             book: {
                 bids: [],
                 asks: [],
@@ -101,5 +121,34 @@ describe("normalizeSolanaProofOutcome", () => {
             totalAShares: "0",
             totalBShares: "0",
         });
+        expect(normalized.state.fees).toMatchObject({
+            treasuryAccruedWei: "14",
+            mmAccruedWei: "20",
+            treasuryAccruedAtomic: "14",
+            mmAccruedAtomic: "20",
+            accrualUnit: "lamports",
+            displaySymbol: "SOL",
+            displayDecimals: 9,
+        });
+        expect(normalized.state.agents).toEqual([
+            {
+                enabled: true,
+                name: "Solana MM",
+                strategy: "market-maker",
+                description: "Provides resting liquidity.",
+                color: "#22d3ee",
+                address: "Actor11111111111111111111111111111111111",
+                balance: 2.5,
+                pnl: 0.125,
+                tradeCount: 2,
+                activeOrders: 1,
+                position: {
+                    aShares: "3",
+                    bShares: "1",
+                    aStake: 0.4,
+                    bStake: 0.1,
+                },
+            },
+        ]);
     });
 });
