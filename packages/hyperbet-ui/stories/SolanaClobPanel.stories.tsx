@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { SolanaClobPanel } from "../src/components/SolanaClobPanel";
-import { StorySurface } from "./storySupport";
+import { StorySurface, ThemeMatrix } from "./storySupport";
 
 const meta = {
   title: "Components/SolanaClobPanel",
@@ -25,3 +25,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(520px, 1fr))">
+      {(theme) => (
+        <StorySurface width={560}>
+          <SolanaClobPanel {...args} theme={theme} />
+        </StorySurface>
+      )}
+    </ThemeMatrix>
+  ),
+};

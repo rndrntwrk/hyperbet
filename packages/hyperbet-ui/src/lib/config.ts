@@ -2,10 +2,10 @@ import { PublicKey } from "@solana/web3.js";
 
 import {
   type BettingAppEnvironment,
-  type BettingEvmNetwork,
   resolveBettingEvmDefaults,
+  type BettingEvmNetwork,
   resolveBettingSolanaDeployment,
-} from "../../../hyperbet-bsc/deployments";
+} from "../../../hyperbet-deployments";
 
 export type SolanaCluster = "localnet" | "devnet" | "testnet" | "mainnet-beta";
 
@@ -78,9 +78,12 @@ function uniqueList(values: string[]): string[] {
 }
 
 function resolveEnvironment(): Environment {
-  const explicitCluster = readEnvString("VITE_SOLANA_CLUSTER")?.toLowerCase();
-  if (explicitCluster && ENVIRONMENT_ALIASES[explicitCluster]) {
-    return ENVIRONMENT_ALIASES[explicitCluster];
+  const explicitEnvironment =
+    readEnvString("VITE_APP_ENV")?.toLowerCase() ??
+    readEnvString("VITE_BETTING_ENV")?.toLowerCase() ??
+    readEnvString("VITE_SOLANA_CLUSTER")?.toLowerCase();
+  if (explicitEnvironment && ENVIRONMENT_ALIASES[explicitEnvironment]) {
+    return ENVIRONMENT_ALIASES[explicitEnvironment];
   }
 
   const viteMode = readEnvString("MODE")?.toLowerCase();
@@ -188,14 +191,23 @@ function buildEvmConfig(
   | "bscChainId"
   | "bscGoldClobAddress"
   | "bscGoldTokenAddress"
+  | "bscSkillOracleAddress"
+  | "bscPerpEngineAddress"
+  | "bscPerpMarginTokenAddress"
   | "baseRpcUrl"
   | "baseChainId"
   | "baseGoldClobAddress"
   | "baseGoldTokenAddress"
+  | "baseSkillOracleAddress"
+  | "basePerpEngineAddress"
+  | "basePerpMarginTokenAddress"
   | "avaxRpcUrl"
   | "avaxChainId"
   | "avaxGoldClobAddress"
   | "avaxGoldTokenAddress"
+  | "avaxSkillOracleAddress"
+  | "avaxPerpEngineAddress"
+  | "avaxPerpMarginTokenAddress"
 > {
   const defaults = resolveBettingEvmDefaults(
     asDeploymentEnvironment(environment),
@@ -205,14 +217,23 @@ function buildEvmConfig(
     bscChainId: defaults.bsc.chainId,
     bscGoldClobAddress: defaults.bsc.goldClobAddress,
     bscGoldTokenAddress: defaults.bsc.goldTokenAddress,
+    bscSkillOracleAddress: defaults.bsc.skillOracleAddress,
+    bscPerpEngineAddress: defaults.bsc.perpEngineAddress,
+    bscPerpMarginTokenAddress: defaults.bsc.perpMarginTokenAddress,
     baseRpcUrl: defaultRpcUrlForEvmNetwork(defaults.base.networkKey),
     baseChainId: defaults.base.chainId,
     baseGoldClobAddress: defaults.base.goldClobAddress,
     baseGoldTokenAddress: defaults.base.goldTokenAddress,
+    baseSkillOracleAddress: defaults.base.skillOracleAddress,
+    basePerpEngineAddress: defaults.base.perpEngineAddress,
+    basePerpMarginTokenAddress: defaults.base.perpMarginTokenAddress,
     avaxRpcUrl: defaultAvaxRpcUrlForEnvironment(environment),
     avaxChainId: defaultAvaxChainIdForEnvironment(environment),
-    avaxGoldClobAddress: "",
-    avaxGoldTokenAddress: "",
+    avaxGoldClobAddress: defaults.avax.goldClobAddress,
+    avaxGoldTokenAddress: defaults.avax.goldTokenAddress,
+    avaxSkillOracleAddress: defaults.avax.skillOracleAddress,
+    avaxPerpEngineAddress: defaults.avax.perpEngineAddress,
+    avaxPerpMarginTokenAddress: defaults.avax.perpMarginTokenAddress,
   };
 }
 
@@ -251,14 +272,23 @@ export interface EnvConfig {
   bscChainId: number;
   bscGoldClobAddress: string;
   bscGoldTokenAddress: string;
+  bscSkillOracleAddress: string;
+  bscPerpEngineAddress: string;
+  bscPerpMarginTokenAddress: string;
   baseRpcUrl: string;
   baseChainId: number;
   baseGoldClobAddress: string;
   baseGoldTokenAddress: string;
+  baseSkillOracleAddress: string;
+  basePerpEngineAddress: string;
+  basePerpMarginTokenAddress: string;
   avaxRpcUrl: string;
   avaxChainId: number;
   avaxGoldClobAddress: string;
   avaxGoldTokenAddress: string;
+  avaxSkillOracleAddress: string;
+  avaxPerpEngineAddress: string;
+  avaxPerpMarginTokenAddress: string;
 
   walletConnectProjectId: string;
 }
@@ -485,6 +515,15 @@ export const CONFIG: EnvConfig = {
   bscGoldTokenAddress:
     readEnvString("VITE_BSC_GOLD_TOKEN_ADDRESS") ??
     baseEnvConfig.bscGoldTokenAddress,
+  bscSkillOracleAddress:
+    readEnvString("VITE_BSC_SKILL_ORACLE_ADDRESS") ??
+    baseEnvConfig.bscSkillOracleAddress,
+  bscPerpEngineAddress:
+    readEnvString("VITE_BSC_PERP_ENGINE_ADDRESS") ??
+    baseEnvConfig.bscPerpEngineAddress,
+  bscPerpMarginTokenAddress:
+    readEnvString("VITE_BSC_PERP_MARGIN_TOKEN_ADDRESS") ??
+    baseEnvConfig.bscPerpMarginTokenAddress,
   baseRpcUrl: readEnvString("VITE_BASE_RPC_URL") ?? baseEnvConfig.baseRpcUrl,
   baseChainId: readEnvNumber("VITE_BASE_CHAIN_ID", baseEnvConfig.baseChainId),
   baseGoldClobAddress:
@@ -493,6 +532,15 @@ export const CONFIG: EnvConfig = {
   baseGoldTokenAddress:
     readEnvString("VITE_BASE_GOLD_TOKEN_ADDRESS") ??
     baseEnvConfig.baseGoldTokenAddress,
+  baseSkillOracleAddress:
+    readEnvString("VITE_BASE_SKILL_ORACLE_ADDRESS") ??
+    baseEnvConfig.baseSkillOracleAddress,
+  basePerpEngineAddress:
+    readEnvString("VITE_BASE_PERP_ENGINE_ADDRESS") ??
+    baseEnvConfig.basePerpEngineAddress,
+  basePerpMarginTokenAddress:
+    readEnvString("VITE_BASE_PERP_MARGIN_TOKEN_ADDRESS") ??
+    baseEnvConfig.basePerpMarginTokenAddress,
   avaxRpcUrl: readEnvString("VITE_AVAX_RPC_URL") ?? baseEnvConfig.avaxRpcUrl,
   avaxChainId: readEnvNumber("VITE_AVAX_CHAIN_ID", baseEnvConfig.avaxChainId),
   avaxGoldClobAddress:
@@ -501,6 +549,15 @@ export const CONFIG: EnvConfig = {
   avaxGoldTokenAddress:
     readEnvString("VITE_AVAX_GOLD_TOKEN_ADDRESS") ??
     baseEnvConfig.avaxGoldTokenAddress,
+  avaxSkillOracleAddress:
+    readEnvString("VITE_AVAX_SKILL_ORACLE_ADDRESS") ??
+    baseEnvConfig.avaxSkillOracleAddress,
+  avaxPerpEngineAddress:
+    readEnvString("VITE_AVAX_PERP_ENGINE_ADDRESS") ??
+    baseEnvConfig.avaxPerpEngineAddress,
+  avaxPerpMarginTokenAddress:
+    readEnvString("VITE_AVAX_PERP_MARGIN_TOKEN_ADDRESS") ??
+    baseEnvConfig.avaxPerpMarginTokenAddress,
   walletConnectProjectId:
     readEnvString("VITE_WALLETCONNECT_PROJECT_ID") ??
     baseEnvConfig.walletConnectProjectId,
@@ -657,11 +714,19 @@ export const BSC_RPC_URL: string = getEvmRpcUrl("bsc");
 export const BSC_CHAIN_ID: number = CONFIG.bscChainId;
 export const BSC_GOLD_CLOB_ADDRESS: string = CONFIG.bscGoldClobAddress;
 export const BSC_GOLD_TOKEN_ADDRESS: string = CONFIG.bscGoldTokenAddress;
+export const BSC_SKILL_ORACLE_ADDRESS: string = CONFIG.bscSkillOracleAddress;
+export const BSC_PERP_ENGINE_ADDRESS: string = CONFIG.bscPerpEngineAddress;
+export const BSC_PERP_MARGIN_TOKEN_ADDRESS: string =
+  CONFIG.bscPerpMarginTokenAddress;
 
 export const BASE_RPC_URL: string = getEvmRpcUrl("base");
 export const BASE_CHAIN_ID: number = CONFIG.baseChainId;
 export const BASE_GOLD_CLOB_ADDRESS: string = CONFIG.baseGoldClobAddress;
 export const BASE_GOLD_TOKEN_ADDRESS: string = CONFIG.baseGoldTokenAddress;
+export const BASE_SKILL_ORACLE_ADDRESS: string = CONFIG.baseSkillOracleAddress;
+export const BASE_PERP_ENGINE_ADDRESS: string = CONFIG.basePerpEngineAddress;
+export const BASE_PERP_MARGIN_TOKEN_ADDRESS: string =
+  CONFIG.basePerpMarginTokenAddress;
 
 export const AVAX_RPC_URL: string =
   shouldUseGameEvmRpcProxy()
@@ -670,3 +735,7 @@ export const AVAX_RPC_URL: string =
 export const AVAX_CHAIN_ID: number = CONFIG.avaxChainId;
 export const AVAX_GOLD_CLOB_ADDRESS: string = CONFIG.avaxGoldClobAddress;
 export const AVAX_GOLD_TOKEN_ADDRESS: string = CONFIG.avaxGoldTokenAddress;
+export const AVAX_SKILL_ORACLE_ADDRESS: string = CONFIG.avaxSkillOracleAddress;
+export const AVAX_PERP_ENGINE_ADDRESS: string = CONFIG.avaxPerpEngineAddress;
+export const AVAX_PERP_MARGIN_TOKEN_ADDRESS: string =
+  CONFIG.avaxPerpMarginTokenAddress;

@@ -3,11 +3,37 @@ import React from "react";
 import { PredictionMarketPanel } from "../src/components/PredictionMarketPanel";
 import {
   StorySurface,
+  ThemeMatrix,
   sampleAsks,
   sampleBids,
   sampleChartData,
   sampleTrades,
 } from "./storySupport";
+import type { HyperbetThemeId } from "../src/lib/theme";
+
+function PredictionMarketPanelThemePreview({
+  args,
+  theme,
+}: {
+  args: React.ComponentProps<typeof PredictionMarketPanel>;
+  theme: HyperbetThemeId;
+}) {
+  const [side, setSide] = React.useState<"YES" | "NO">("YES");
+  const [amountInput, setAmountInput] = React.useState("2.5");
+
+  return (
+    <StorySurface width={560}>
+      <PredictionMarketPanel
+        {...args}
+        side={side}
+        setSide={setSide}
+        amountInput={amountInput}
+        setAmountInput={setAmountInput}
+        theme={theme}
+      />
+    </StorySurface>
+  );
+}
 
 const meta = {
   title: "Components/PredictionMarketPanel",
@@ -80,3 +106,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(520px, 1fr))">
+      {(theme) => <PredictionMarketPanelThemePreview args={args} theme={theme} />}
+    </ThemeMatrix>
+  ),
+};

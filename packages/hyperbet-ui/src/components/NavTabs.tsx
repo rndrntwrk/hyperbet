@@ -1,4 +1,5 @@
 import { startTransition, type ReactNode } from "react";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 export interface NavTab {
   id: string;
@@ -11,13 +12,23 @@ interface NavTabsProps {
   activeTab: string;
   onChange: (id: string) => void;
   variant?: "header" | "mobile";
+  theme?: HyperbetThemeId;
 }
 
-export function NavTabs({ tabs, activeTab, onChange, variant = "header" }: NavTabsProps) {
+export function NavTabs({
+  tabs,
+  activeTab,
+  onChange,
+  variant = "header",
+  theme,
+}: NavTabsProps) {
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   return (
     <nav
       className={`hm-nav-tabs hm-nav-tabs--${variant}`}
       aria-label="Navigation"
+      data-hyperbet-theme={themeAttribute}
+      style={themeStyle}
     >
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;

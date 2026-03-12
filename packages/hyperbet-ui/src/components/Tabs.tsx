@@ -1,16 +1,21 @@
 import React from "react";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 interface TabsProps {
   tabs: { id: string; label: React.ReactNode }[];
   activeTab: string;
   onChange: (id: string) => void;
   style?: React.CSSProperties;
+  theme?: HyperbetThemeId;
 }
 
-export function Tabs({ tabs, activeTab, onChange, style }: TabsProps) {
+export function Tabs({ tabs, activeTab, onChange, style, theme }: TabsProps) {
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   return (
     <div
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         display: "flex",
         background: "rgba(0,0,0,0.4)",
         borderRadius: 12,

@@ -42,6 +42,7 @@ import {
   sendViaHeliusSender,
   startHeliusSenderWarmup,
 } from "../lib/solanaRpc";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
   PredictionMarketPanel,
@@ -223,6 +224,7 @@ interface SolanaClobPanelProps {
   compact?: boolean;
   onMarketSnapshot?: (snapshot: SolanaClobMarketSnapshot) => void;
   locale?: UiLocale;
+  theme?: HyperbetThemeId;
 }
 
 export interface SolanaClobMarketSnapshot {
@@ -242,8 +244,10 @@ export function SolanaClobPanel({
   compact = false,
   onMarketSnapshot,
   locale,
+  theme,
 }: SolanaClobPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const isE2eMode = import.meta.env.MODE === "e2e";
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -1079,7 +1083,11 @@ export function SolanaClobPanel({
   ].join("\n");
 
   return (
-    <div data-testid={isE2eMode ? "solana-clob-panel" : undefined}>
+    <div
+      data-testid={isE2eMode ? "solana-clob-panel" : undefined}
+      data-hyperbet-theme={themeAttribute}
+      style={themeStyle}
+    >
       <PredictionMarketPanel
         yesPercent={yesPercent}
         noPercent={noPercent}
@@ -1107,9 +1115,11 @@ export function SolanaClobPanel({
             walletAddress={walletAddress}
             compact={compact}
             locale={resolvedLocale}
+            theme={theme}
           />
         }
         locale={resolvedLocale}
+        theme={theme}
       >
         <div
           style={{

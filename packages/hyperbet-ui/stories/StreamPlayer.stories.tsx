@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { StreamPlayer } from "../src/components/StreamPlayer";
-import { StorySurface } from "./storySupport";
+import { StorySurface, ThemeMatrix } from "./storySupport";
 
 const meta = {
   title: "Components/StreamPlayer",
@@ -31,3 +31,24 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(320px, 1fr))">
+      {(theme) => (
+        <StorySurface width={360}>
+          <div
+            style={{
+              height: 220,
+              borderRadius: 18,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <StreamPlayer {...args} theme={theme} />
+          </div>
+        </StorySurface>
+      )}
+    </ThemeMatrix>
+  ),
+};

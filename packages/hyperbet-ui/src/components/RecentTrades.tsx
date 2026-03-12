@@ -6,6 +6,7 @@ import {
   resolveUiLocale,
   type UiLocale,
 } from "@hyperbet/ui/i18n";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 export interface Trade {
   id: string; // unique
@@ -24,6 +25,7 @@ interface RecentTradesProps {
   locale?: UiLocale;
   assetSymbol?: string;
   trades: Trade[]; // Real trades
+  theme?: HyperbetThemeId;
 }
 
 export function RecentTrades({
@@ -34,9 +36,11 @@ export function RecentTrades({
   locale,
   assetSymbol = "GOLD",
   trades,
+  theme,
 }: RecentTradesProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getUiCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   // We'll use a tick to keep "time ago" fresh
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -45,7 +49,7 @@ export function RecentTrades({
   }, []);
 
   return (
-    <>
+    <div data-hyperbet-theme={themeAttribute} style={themeStyle}>
       <style>{`
         @keyframes flashNewTrade {
           0% { background: rgba(255,255,255,0.25); }
@@ -197,6 +201,6 @@ export function RecentTrades({
       </div>
 
 
-    </>
+    </div>
   );
 }

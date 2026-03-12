@@ -1,10 +1,12 @@
 import React, { useState } from "react";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 interface SidebarProps {
   side: "left" | "right";
   children: React.ReactNode;
   width?: number;
   defaultExpanded?: boolean;
+  theme?: HyperbetThemeId;
 }
 
 export function Sidebar({
@@ -12,12 +14,16 @@ export function Sidebar({
   children,
   width = 420,
   defaultExpanded = true,
+  theme,
 }: SidebarProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
 
   return (
     <div
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         position: "relative",
         width: isExpanded ? `min(${width}px, calc(100vw - 48px))` : 48,
         height: "100%",

@@ -53,8 +53,14 @@ export function toDuelKeyHex(duelKeyHex: string): Hex {
   return `0x${duelKeyHex}` as Hex;
 }
 
+export function toPerpAgentKey(characterId: string): Hex {
+  return `0x${characterId.padEnd(64, "0").slice(0, 64)}` as Hex;
+}
+
 export function createEvmPublicClient(_chainConfig: EvmChainConfig) {
   return {
+    readContract: async () => null,
+    getBalance: async () => 8_240_000_000_000_000_000n,
     waitForTransactionReceipt: async () => ({ status: "success" }),
   };
 }
@@ -119,6 +125,71 @@ export async function getPosition() {
 
 export async function getNativeBalance() {
   return 8_240_000_000_000_000_000n;
+}
+
+export async function getPerpMarketConfig() {
+  return {
+    exists: true,
+    status: 1,
+    maxLeverageBps: 50_000n,
+    maintenanceMarginBps: 1_000n,
+    liquidationFeeBps: 50n,
+    maxPositionSize: 50_000_000_000_000_000_000n,
+    oracleMaxAge: 120_000n,
+    skewScale: 10_000_000_000_000_000_000n,
+  };
+}
+
+export async function getPerpMarketState() {
+  return {
+    indexPrice: 18_000_000_000_000_000_000n,
+    lastOraclePrice: 18_000_000_000_000_000_000n,
+    lastOracleTimestamp: BigInt(Math.floor(Date.now() / 1000)),
+    totalLongSize: 8_000_000_000_000_000_000n,
+    totalShortSize: 5_000_000_000_000_000_000n,
+    cumulativeFundingRate: 100_000_000_000_000n,
+    insuranceFund: 3_200_000_000_000_000_000n,
+    vaultBalance: 15_000_000_000_000_000_000n,
+    badDebt: 0n,
+  };
+}
+
+export async function getPerpPosition() {
+  return {
+    size: 2_000_000_000_000_000_000n,
+    margin: 1_100_000_000_000_000_000n,
+    entryPrice: 17_500_000_000_000_000_000n,
+    lastCumulativeFundingRate: 0n,
+  };
+}
+
+export async function getPerpPositionHealth() {
+  return {
+    isOpen: true,
+    notional: 2_050_000_000_000_000_000n,
+    unrealizedPnl: 120_000_000_000_000_000n,
+    accruedFunding: 5_000_000_000_000_000n,
+    equity: 1_215_000_000_000_000_000n,
+    maintenanceMargin: 205_000_000_000_000_000n,
+    marginRatioBps: 5_926n,
+    liquidationPrice: 14_200_000_000_000_000_000n,
+  };
+}
+
+export async function ensureErc20Approval(): Promise<Hash | null> {
+  return null;
+}
+
+export async function modifyPerpPosition(): Promise<Hash> {
+  return "0xa11ce0000000000000000000000000000000000000000000000000000000000f" as Hash;
+}
+
+export function formatToken18(value: bigint): number {
+  return Number(value) / 1e18;
+}
+
+export function parseToken18(value: string | number): bigint {
+  return BigInt(Math.round(Number(value) * 1e18));
 }
 
 export async function getOrder() {

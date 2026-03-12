@@ -5,11 +5,13 @@ import {
   type UiLocale,
 } from "@hyperbet/ui/i18n";
 import { GAME_API_URL } from "../lib/config";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 interface PointsDisplayProps {
   walletAddress: string | null;
   compact?: boolean;
   locale?: UiLocale;
+  theme?: HyperbetThemeId;
 }
 
 interface PointsData {
@@ -215,9 +217,11 @@ export function PointsDisplay({
   walletAddress,
   compact = false,
   locale,
+  theme,
 }: PointsDisplayProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getPointsDisplayCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const [points, setPoints] = useState<PointsData | null>(null);
   const [rank, setRank] = useState<RankData | null>(null);
   const [multiplierDetail, setMultiplierDetail] =
@@ -305,7 +309,11 @@ export function PointsDisplay({
 
   if (!walletAddress) {
     return (
-      <div data-testid="points-display-placeholder" style={placeholderStyle}>
+      <div
+        data-testid="points-display-placeholder"
+        data-hyperbet-theme={themeAttribute}
+        style={{ ...themeStyle, ...placeholderStyle }}
+      >
         {copy.connectWallet}
       </div>
     );
@@ -313,7 +321,11 @@ export function PointsDisplay({
 
   if (loading && !points) {
     return (
-      <div data-testid="points-display-loading" style={placeholderStyle}>
+      <div
+        data-testid="points-display-loading"
+        data-hyperbet-theme={themeAttribute}
+        style={{ ...themeStyle, ...placeholderStyle }}
+      >
         {copy.loadingPoints}
       </div>
     );
@@ -325,8 +337,10 @@ export function PointsDisplay({
   return (
     <div
       data-testid={compact ? "points-display-compact" : "points-display"}
+      data-hyperbet-theme={themeAttribute}
       className={compact ? "points-pill points-pill-compact" : "points-pill"}
       style={{
+        ...themeStyle,
         display: "flex",
         alignItems: "center",
         gap: compact ? 6 : 10,

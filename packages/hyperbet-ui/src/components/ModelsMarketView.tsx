@@ -38,6 +38,7 @@ import {
   resolveUiLocale,
   type UiLocale,
 } from "@hyperbet/ui/i18n";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 const PROGRAM_ID = new PublicKey(
   CONFIG.goldPerpsMarketProgramId || goldPerpsIdl.address,
@@ -67,6 +68,7 @@ type TradeDirection = "LONG" | "SHORT";
 
 interface ModelsMarketViewProps {
   activeMatchup: string;
+  theme?: HyperbetThemeId;
 }
 
 interface ConfigAccountState {
@@ -620,9 +622,13 @@ function applySignedOi(
   };
 }
 
-export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
+export function ModelsMarketView({
+  activeMatchup,
+  theme,
+}: ModelsMarketViewProps) {
   const locale = resolveUiLocale();
   const copy = getModelsMarketCopy(locale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const { connection } = useConnection();
   const wallet = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
@@ -1380,7 +1386,12 @@ export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
   };
 
   return (
-    <div className="models-market-view" data-testid="models-market-view">
+    <div
+      className="models-market-view"
+      data-testid="models-market-view"
+      data-hyperbet-theme={themeAttribute}
+      style={themeStyle}
+    >
       <Toaster theme="dark" position="bottom-right" />
 
       <section className="models-market-hero">

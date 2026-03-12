@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { FightOverlay } from "../src/components/FightOverlay";
-import { sampleFightAgent1, sampleFightAgent2 } from "./storySupport";
+import { ThemeMatrix, sampleFightAgent1, sampleFightAgent2 } from "./storySupport";
 
 const meta = {
   title: "Components/FightOverlay",
@@ -37,3 +37,25 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(320px, 1fr))">
+      {(theme) => (
+        <div
+          style={{
+            position: "relative",
+            height: 420,
+            borderRadius: 18,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background:
+              "radial-gradient(circle at center, rgba(229,184,74,0.14), transparent 38%), #05070d",
+          }}
+        >
+          <FightOverlay {...args} theme={theme} />
+        </div>
+      )}
+    </ThemeMatrix>
+  ),
+};

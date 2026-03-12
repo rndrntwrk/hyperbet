@@ -6,6 +6,7 @@ import { useChain } from "../lib/ChainContext";
 import { type ChainId } from "../lib/chainConfig";
 import { getLocalizedChainDisplay } from "@hyperbet/ui/tokens";
 import { resolveUiLocale } from "@hyperbet/ui/i18n";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 function ChainIcon({
   icon,
@@ -29,14 +30,19 @@ function ChainIcon({
   return <>{icon}</>;
 }
 
-export function ChainSelector() {
+export function ChainSelector({ theme }: { theme?: HyperbetThemeId } = {}) {
   const { activeChain, setActiveChain, availableChains } = useChain();
   const locale = resolveUiLocale();
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
 
   if (availableChains.length <= 1) {
     const display = getLocalizedChainDisplay(activeChain, locale);
     return (
-      <div className="chain-badge">
+      <div
+        className="chain-badge"
+        data-hyperbet-theme={themeAttribute}
+        style={themeStyle}
+      >
         <span className="chain-badge-icon">
           <ChainIcon icon={display.icon} name={display.name} />
         </span>
@@ -46,7 +52,11 @@ export function ChainSelector() {
   }
 
   return (
-    <div className="chain-select-wrap">
+    <div
+      className="chain-select-wrap"
+      data-hyperbet-theme={themeAttribute}
+      style={themeStyle}
+    >
       <select
         id="chain-selector"
         className="chain-select"

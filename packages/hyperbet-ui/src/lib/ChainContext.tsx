@@ -21,6 +21,7 @@ type ChainContextValue = {
 
 type ChainProviderOptions = {
   e2eDefaultChain?: ChainId;
+  defaultChain?: ChainId;
   /** Pin the available chains instead of deriving from env/config. */
   chains?: ChainId[];
 };
@@ -31,7 +32,11 @@ const ChainCtx = createContext<ChainContextValue>({
   availableChains: ["solana"],
 });
 
-function getDefaultChain(e2eDefaultChain?: ChainId, chains?: ChainId[]): ChainId {
+function getDefaultChain(
+  e2eDefaultChain?: ChainId,
+  chains?: ChainId[],
+  defaultChain?: ChainId,
+): ChainId {
   const available = chains ?? getAvailableChains();
 
   try {
@@ -63,21 +68,27 @@ function getDefaultChain(e2eDefaultChain?: ChainId, chains?: ChainId[]): ChainId
   if (available.includes("bsc")) return "bsc";
   if (available.includes("avax")) return "avax";
 
-  return available[0] ?? "solana";
+  if (defaultChain && available.includes(defaultChain)) {
+    return defaultChain;
+  }
+
+  return available[0] ?? defaultChain ?? "solana";
 }
 
 function ChainProviderBase({
   children,
   e2eDefaultChain,
+  defaultChain,
   chains,
 }: {
   children: ReactNode;
   e2eDefaultChain?: ChainId;
+  defaultChain?: ChainId;
   chains?: ChainId[];
 }) {
   const availableChains = useMemo(() => chains ?? getAvailableChains(), [chains]);
   const [activeChain, setActiveChainRaw] = useState<ChainId>(() =>
-    getDefaultChain(e2eDefaultChain, chains),
+    getDefaultChain(e2eDefaultChain, chains, defaultChain),
   );
 
   const setActiveChain = useCallback(
@@ -96,9 +107,9 @@ function ChainProviderBase({
 
   useEffect(() => {
     if (!availableChains.includes(activeChain)) {
-      setActiveChainRaw(availableChains[0] ?? "solana");
+      setActiveChainRaw(availableChains[0] ?? defaultChain ?? "solana");
     }
-  }, [availableChains, activeChain]);
+  }, [availableChains, activeChain, defaultChain]);
 
   const value = useMemo<ChainContextValue>(
     () => ({
@@ -115,7 +126,11 @@ function ChainProviderBase({
 export function createChainProvider(options: ChainProviderOptions = {}) {
   function ChainProvider({ children }: { children: ReactNode }) {
     return (
-      <ChainProviderBase e2eDefaultChain={options.e2eDefaultChain} chains={options.chains}>
+      <ChainProviderBase
+        e2eDefaultChain={options.e2eDefaultChain}
+        defaultChain={options.defaultChain}
+        chains={options.chains}
+      >
         {children}
       </ChainProviderBase>
     );

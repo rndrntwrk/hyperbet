@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { OrderBook, type OrderLevel } from "./OrderBook";
 import { RecentTrades, type Trade } from "./RecentTrades";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 type BetSide = "YES" | "NO";
 
@@ -50,6 +51,7 @@ interface PredictionMarketPanelProps {
   compactHeader?: ReactNode;
   /** Sidebar compact mode: single-column layout, hm-* gold theme, hides chart/orderbook/trades cols */
   compact?: boolean;
+  theme?: HyperbetThemeId;
 }
 
 export function PredictionMarketPanel({
@@ -82,9 +84,11 @@ export function PredictionMarketPanel({
   onViewAgent2,
   compactHeader,
   compact = false,
+  theme,
 }: PredictionMarketPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getUiCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const [activeTab, setActiveTab] = useState<"buy" | "sell">("buy");
 
   const yesSelected = side === "YES";
@@ -129,7 +133,7 @@ export function PredictionMarketPanel({
       : Number.parseFloat(String(noPool).replace(/[^\d.-]+/g, "")) || 0;
 
   return (
-    <>
+    <div data-hyperbet-theme={themeAttribute} style={themeStyle}>
       {/* Layout: 4-column wide OR single-column compact sidebar */}
       <div
         className={compact ? "pm-compact" : "pm-grid"}
@@ -997,6 +1001,7 @@ export function PredictionMarketPanel({
                 bids={bids}
                 asks={asks}
                 midPrice={yesPercent / 100}
+                theme={theme}
               />
             </div>
 
@@ -1029,6 +1034,7 @@ export function PredictionMarketPanel({
                 locale={resolvedLocale}
                 assetSymbol={marketAssetSymbol}
                 trades={recentTrades}
+                theme={theme}
               />
             </div>
           </>
@@ -1188,6 +1194,6 @@ export function PredictionMarketPanel({
           }
         }
       `}</style>
-    </>
+    </div>
   );
 }

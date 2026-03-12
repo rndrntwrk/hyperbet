@@ -5,6 +5,7 @@ import {
   type UiLocale,
 } from "@hyperbet/ui/i18n";
 import { GAME_API_URL } from "../lib/config";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 interface LeaderboardEntry {
   rank: number;
@@ -70,9 +71,16 @@ function truncateWallet(wallet: string): string {
   return `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
 }
 
-export function PointsLeaderboard({ locale }: { locale?: UiLocale } = {}) {
+export function PointsLeaderboard({
+  locale,
+  theme,
+}: {
+  locale?: UiLocale;
+  theme?: HyperbetThemeId;
+} = {}) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getLeaderboardCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +144,9 @@ export function PointsLeaderboard({ locale }: { locale?: UiLocale } = {}) {
   return (
     <div
       data-testid="points-leaderboard"
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         display: "flex",
         flexDirection: "column",
         gap: 8,

@@ -16,12 +16,21 @@ import {
   BSC_RPC_URL,
   BSC_CHAIN_ID,
   BSC_GOLD_CLOB_ADDRESS,
+  BSC_PERP_ENGINE_ADDRESS,
+  BSC_PERP_MARGIN_TOKEN_ADDRESS,
+  BSC_SKILL_ORACLE_ADDRESS,
   BASE_RPC_URL,
   BASE_CHAIN_ID,
   BASE_GOLD_CLOB_ADDRESS,
+  BASE_PERP_ENGINE_ADDRESS,
+  BASE_PERP_MARGIN_TOKEN_ADDRESS,
+  BASE_SKILL_ORACLE_ADDRESS,
   AVAX_RPC_URL,
   AVAX_CHAIN_ID,
   AVAX_GOLD_CLOB_ADDRESS,
+  AVAX_PERP_ENGINE_ADDRESS,
+  AVAX_PERP_MARGIN_TOKEN_ADDRESS,
+  AVAX_SKILL_ORACLE_ADDRESS,
 } from "./config";
 
 // ============================================================================
@@ -37,6 +46,9 @@ export type EvmChainConfig = {
   shortName: string;
   rpcUrl: string;
   goldClobAddress: string;
+  skillOracleAddress: string;
+  perpEngineAddress: string;
+  perpMarginTokenAddress: string;
   nativeCurrency: { name: string; symbol: string; decimals: number };
   blockExplorer: string;
   wagmiChain: Chain;
@@ -126,6 +138,9 @@ const BSC_CONFIG: EvmChainConfig = {
   shortName: "BSC",
   rpcUrl: BSC_RPC_URL,
   goldClobAddress: BSC_GOLD_CLOB_ADDRESS,
+  skillOracleAddress: BSC_SKILL_ORACLE_ADDRESS,
+  perpEngineAddress: BSC_PERP_ENGINE_ADDRESS,
+  perpMarginTokenAddress: BSC_PERP_MARGIN_TOKEN_ADDRESS,
   nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
   blockExplorer:
     BSC_CHAIN_ID === 56
@@ -150,6 +165,9 @@ const BASE_CONFIG: EvmChainConfig = {
   shortName: "Base",
   rpcUrl: BASE_RPC_URL,
   goldClobAddress: BASE_GOLD_CLOB_ADDRESS,
+  skillOracleAddress: BASE_SKILL_ORACLE_ADDRESS,
+  perpEngineAddress: BASE_PERP_ENGINE_ADDRESS,
+  perpMarginTokenAddress: BASE_PERP_MARGIN_TOKEN_ADDRESS,
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   blockExplorer:
     BASE_CHAIN_ID === 8453
@@ -174,6 +192,9 @@ const AVAX_CONFIG: EvmChainConfig = {
   shortName: "AVALANCHE",
   rpcUrl: AVAX_RPC_URL,
   goldClobAddress: AVAX_GOLD_CLOB_ADDRESS,
+  skillOracleAddress: AVAX_SKILL_ORACLE_ADDRESS,
+  perpEngineAddress: AVAX_PERP_ENGINE_ADDRESS,
+  perpMarginTokenAddress: AVAX_PERP_MARGIN_TOKEN_ADDRESS,
   nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
   blockExplorer:
     AVAX_CHAIN_ID === 43114

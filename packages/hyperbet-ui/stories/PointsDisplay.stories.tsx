@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { PointsDisplay } from "../src/components/PointsDisplay";
-import { StorySurface, sampleSolanaWallet } from "./storySupport";
+import { StorySurface, ThemeMatrix, sampleSolanaWallet } from "./storySupport";
 
 const meta = {
   title: "Components/PointsDisplay",
@@ -21,3 +21,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(260px, 1fr))">
+      {(theme) => (
+        <StorySurface width={280}>
+          <PointsDisplay {...args} theme={theme} />
+        </StorySurface>
+      )}
+    </ThemeMatrix>
+  ),
+};

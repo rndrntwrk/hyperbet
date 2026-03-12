@@ -5,6 +5,7 @@ import {
   resolveUiLocale,
   type UiLocale,
 } from "@hyperbet/ui/i18n";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 export interface OrderLevel {
   price: number;
@@ -23,6 +24,7 @@ interface OrderBookProps {
   asks?: OrderLevel[];
   midPrice?: number;
   spread?: number;
+  theme?: HyperbetThemeId;
 }
 
 function LevelRow({
@@ -142,9 +144,11 @@ export function OrderBook({
   asks = [],
   midPrice,
   spread,
+  theme,
 }: OrderBookProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getUiCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const displayMid = midPrice ?? (totalPot > 0 ? yesPot / totalPot : 0.5);
   const displaySpread = spread ?? 0;
 
@@ -152,7 +156,7 @@ export function OrderBook({
   const maxAskTotal = asks.reduce((m, a) => Math.max(m, a.total), 1);
 
   return (
-    <>
+    <div data-hyperbet-theme={themeAttribute} style={themeStyle}>
       <div
         style={{
           display: "flex",
@@ -285,6 +289,6 @@ export function OrderBook({
       </div>
 
 
-    </>
+    </div>
   );
 }

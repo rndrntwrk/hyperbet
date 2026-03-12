@@ -3,6 +3,7 @@ import type { MockAgentContext } from "../lib/useMockStreamingEngine";
 import type { StreamingPhase } from "../spectator/types";
 import { GAME_API_URL } from "../lib/config";
 import { resolveUiLocale, getUiCopy } from "../i18n";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 interface FightOverlayProps {
   phase: StreamingPhase;
@@ -13,6 +14,7 @@ interface FightOverlayProps {
   winnerId: string | null;
   winnerName: string | null;
   winReason: string | null;
+  theme?: HyperbetThemeId;
 }
 
 interface ManifestItemRecord {
@@ -769,14 +771,18 @@ export function FightOverlay({
   winnerId,
   winnerName: _winnerName,
   winReason,
+  theme,
 }: FightOverlayProps) {
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const showHPBars = phase === "FIGHTING" || phase === "COUNTDOWN";
   const winnerAgent =
     winnerId === agent1.id ? agent1 : winnerId === agent2.id ? agent2 : null;
 
   return (
     <div
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         position: "fixed",
         top: 0,
         left: 0,

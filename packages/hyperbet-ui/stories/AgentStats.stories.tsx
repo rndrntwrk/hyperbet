@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { AgentStats } from "../src/components/AgentStats";
-import { StorySurface, sampleAgent } from "./storySupport";
+import { StorySurface, ThemeMatrix, sampleAgent } from "./storySupport";
 
 const meta = {
   title: "Components/AgentStats",
@@ -21,3 +21,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(220px, 1fr))">
+      {(theme) => (
+        <StorySurface width={260}>
+          <AgentStats {...args} theme={theme} />
+        </StorySurface>
+      )}
+    </ThemeMatrix>
+  ),
+};

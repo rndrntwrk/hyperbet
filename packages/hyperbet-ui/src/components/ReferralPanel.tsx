@@ -6,6 +6,7 @@ import {
 } from "@hyperbet/ui/i18n";
 import type { ChainId } from "../lib/chainConfig";
 import { buildArenaWriteHeaders, GAME_API_URL } from "../lib/config";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 type EvmPlatform = "BSC" | "BASE" | "AVAX";
 
@@ -172,6 +173,7 @@ export function ReferralPanel(props: {
   evmWallet: string | null;
   evmWalletPlatform: EvmPlatform | null;
   locale?: UiLocale;
+  theme?: HyperbetThemeId;
 }) {
   const {
     activeChain,
@@ -179,9 +181,11 @@ export function ReferralPanel(props: {
     evmWallet,
     evmWalletPlatform,
     locale,
+    theme,
   } = props;
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getReferralCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
 
   const primaryWallet = useMemo(() => {
     if (activeChain === "solana" && solanaWallet) return solanaWallet;
@@ -396,7 +400,9 @@ export function ReferralPanel(props: {
   return (
     <div
       data-testid="referral-panel"
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         display: "flex",
         flexDirection: "column",
         gap: 10,

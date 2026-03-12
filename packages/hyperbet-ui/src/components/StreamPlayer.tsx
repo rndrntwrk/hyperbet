@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import Hls from "hls.js";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 interface StreamPlayerProps {
   streamUrl: string;
@@ -9,6 +10,7 @@ interface StreamPlayerProps {
   className?: string;
   style?: React.CSSProperties;
   onStreamUnavailable?: () => void;
+  theme?: HyperbetThemeId;
 }
 
 export const StreamPlayer: React.FC<StreamPlayerProps> = ({
@@ -19,7 +21,9 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
   className,
   style,
   onStreamUnavailable,
+  theme,
 }) => {
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const videoRef = useRef<HTMLVideoElement>(null);
   const embedUrl = useMemo(
     () => resolveEmbedUrl(streamUrl, autoPlay, muted),
@@ -295,8 +299,10 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
   if (!embedUrl) {
     return (
       <div
+        data-hyperbet-theme={themeAttribute}
         className={className}
         style={{
+          ...themeStyle,
           position: "relative",
           width: "100%",
           height: "100%",
@@ -334,8 +340,15 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
 
   return (
     <div
+      data-hyperbet-theme={themeAttribute}
       className={className}
-      style={{ position: "relative", width: "100%", height: "100%", ...style }}
+      style={{
+        ...themeStyle,
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        ...style,
+      }}
     >
       <iframe
         key={`${embedUrl}|${poster ?? ""}`}

@@ -1,5 +1,6 @@
 import React from "react";
 import { resolveUiLocale, type UiLocale } from "@hyperbet/ui/i18n";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 type StreamingInventoryItem = {
   slot: number;
@@ -33,6 +34,7 @@ interface AgentStatsProps {
   agent: StreamingAgentContext | null;
   side?: "left" | "right";
   locale?: UiLocale;
+  theme?: HyperbetThemeId;
 }
 
 function getAgentStatsCopy(locale: UiLocale) {
@@ -67,13 +69,17 @@ export function AgentStats({
   agent,
   side = "left",
   locale,
+  theme,
 }: AgentStatsProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getAgentStatsCopy(resolvedLocale);
+  const { themeDefinition, themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   if (!agent) {
     return (
       <div
+        data-hyperbet-theme={themeAttribute}
         style={{
+          ...themeStyle,
           textAlign: "center",
           padding: "32px 0",
           color: "rgba(255,255,255,0.3)",
@@ -91,11 +97,16 @@ export function AgentStats({
 
   const hpPercent = Math.max(0, Math.min(100, (agent.hp / agent.maxHp) * 100));
   const isLowHp = hpPercent < 25;
-  const accentColor = side === "left" ? "#00ffcc" : "#ff0d3c";
+  const accentColor =
+    side === "left"
+      ? themeDefinition.accentColor
+      : "var(--hm-accent-red, #ef4444)";
 
   return (
     <div
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         display: "flex",
         flexDirection: "column",
         gap: 16,
@@ -197,7 +208,13 @@ export function AgentStats({
           }}
         >
           <span style={{ color: "rgba(255,255,255,0.4)" }}>{copy.hpStatus}</span>
-          <span style={{ color: isLowHp ? "#ff0d3c" : "#00ffcc" }}>
+          <span
+            style={{
+              color: isLowHp
+                ? "var(--hm-accent-red, #ef4444)"
+                : themeDefinition.accentColor,
+            }}
+          >
             {agent.hp} / {agent.maxHp}
           </span>
         </div>
@@ -218,10 +235,10 @@ export function AgentStats({
               width: `${hpPercent}%`,
               borderRadius: 5,
               background: isLowHp
-                ? "linear-gradient(180deg, #ff3d5c 0%, #cc0a30 100%)"
-                : "linear-gradient(180deg, #33ffdd 0%, #00d4aa 100%)",
+                ? "linear-gradient(180deg, var(--hm-accent-red, #ff3d5c) 0%, #cc0a30 100%)"
+                : `linear-gradient(180deg, ${themeDefinition.accentColor} 0%, var(--hm-accent-gold-bright, ${themeDefinition.accentColor}) 100%)`,
               transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-              boxShadow: `0 0 12px ${isLowHp ? "rgba(255,13,60,0.4)" : "rgba(0,255,204,0.4)"}, inset 0 1px 0 rgba(255,255,255,0.3)`,
+              boxShadow: `0 0 12px ${isLowHp ? "rgba(255,13,60,0.4)" : `${themeDefinition.accentColor}66`}, inset 0 1px 0 rgba(255,255,255,0.3)`,
             }}
           />
         </div>

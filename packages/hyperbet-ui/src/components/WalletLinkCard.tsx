@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { resolveUiLocale, type UiLocale } from "@hyperbet/ui/i18n";
 import type { ChainId } from "../lib/chainConfig";
 import { GAME_API_URL, buildArenaWriteHeaders } from "../lib/config";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 type EvmPlatform = "BSC" | "BASE" | "AVAX";
 
@@ -57,6 +58,7 @@ export function WalletLinkCard(props: {
   evmWallet: string | null;
   evmWalletPlatform: EvmPlatform | null;
   locale?: UiLocale;
+  theme?: HyperbetThemeId;
 }) {
   const {
     activeChain,
@@ -64,9 +66,11 @@ export function WalletLinkCard(props: {
     evmWallet,
     evmWalletPlatform,
     locale,
+    theme,
   } = props;
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getWalletLinkCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const [status, setStatus] = useState("");
   const [isBusy, setIsBusy] = useState(false);
 
@@ -128,7 +132,9 @@ export function WalletLinkCard(props: {
 
   return (
     <div
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         display: "flex",
         flexDirection: "column",
         gap: 10,

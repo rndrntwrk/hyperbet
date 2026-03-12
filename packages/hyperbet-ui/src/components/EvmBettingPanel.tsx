@@ -44,6 +44,7 @@ import {
 import { type OrderLevel } from "./OrderBook";
 import { PointsDisplay } from "./PointsDisplay";
 import { type Trade } from "./RecentTrades";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 type BetSide = "YES" | "NO";
 
@@ -68,6 +69,7 @@ interface EvmBettingPanelProps {
   agent2Name: string;
   compact?: boolean;
   locale?: UiLocale;
+  theme?: HyperbetThemeId;
 }
 
 function getEvmPanelCopy(locale: UiLocale) {
@@ -181,9 +183,11 @@ export function EvmBettingPanel({
   agent2Name,
   compact = false,
   locale,
+  theme,
 }: EvmBettingPanelProps) {
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const resolvedLocale = resolveUiLocale(locale);
-  const copy = getEvmPanelCopy(resolvedLocale);
+  const copy = useMemo(() => getEvmPanelCopy(resolvedLocale), [resolvedLocale]);
   const { activeChain } = useChain();
   const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
@@ -671,7 +675,11 @@ export function EvmBettingPanel({
     : "";
 
   return (
-    <div data-testid={isE2eMode ? "evm-panel" : undefined}>
+    <div
+      data-testid={isE2eMode ? "evm-panel" : undefined}
+      data-hyperbet-theme={themeAttribute}
+      style={themeStyle}
+    >
       <PredictionMarketPanel
         yesPercent={yesPercent}
         noPercent={noPercent}
@@ -724,6 +732,7 @@ export function EvmBettingPanel({
           ) : null
         }
         compact={compact}
+        theme={theme}
       >
         <div
           style={{

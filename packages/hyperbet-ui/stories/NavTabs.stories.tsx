@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { NavTabs } from "../src/components/NavTabs";
+import { ThemeMatrix } from "./storySupport";
 
 const sampleTabs = [
   { id: "fights", label: "⚔️ Fights" },
@@ -26,4 +27,12 @@ export const Header: Story = {};
 
 export const Mobile: Story = {
   args: { variant: "mobile" },
+};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(220px, 1fr))">
+      {(theme) => <NavTabs {...args} theme={theme} />}
+    </ThemeMatrix>
+  ),
 };

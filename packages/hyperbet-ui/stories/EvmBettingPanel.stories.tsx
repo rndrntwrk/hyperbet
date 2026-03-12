@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { EvmBettingPanel } from "../src/components/EvmBettingPanel";
-import { StorySurface } from "./storySupport";
+import { StorySurface, ThemeMatrix } from "./storySupport";
 
 const meta = {
   title: "Components/EvmBettingPanel",
@@ -26,3 +26,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(520px, 1fr))">
+      {(theme) => (
+        <StorySurface width={560}>
+          <EvmBettingPanel {...args} theme={theme} />
+        </StorySurface>
+      )}
+    </ThemeMatrix>
+  ),
+};

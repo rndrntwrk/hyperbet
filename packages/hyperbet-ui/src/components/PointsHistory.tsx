@@ -5,6 +5,7 @@ import {
   type UiLocale,
 } from "@hyperbet/ui/i18n";
 import { GAME_API_URL } from "../lib/config";
+import { type HyperbetThemeId, useHyperbetThemeSurface } from "../lib/theme";
 
 interface HistoryEntry {
   id: number;
@@ -139,12 +140,15 @@ function truncateWallet(wallet: string): string {
 export function PointsHistory({
   walletAddress,
   locale,
+  theme,
 }: {
   walletAddress: string | null;
   locale?: UiLocale;
+  theme?: HyperbetThemeId;
 }) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getHistoryCopy(resolvedLocale);
+  const { themeStyle, themeAttribute } = useHyperbetThemeSurface(theme);
   const eventLabels = getEventLabels(resolvedLocale);
   const eventFilters = getEventFilters(resolvedLocale);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
@@ -207,7 +211,9 @@ export function PointsHistory({
     return (
       <div
         data-testid="points-history-placeholder"
+        data-hyperbet-theme={themeAttribute}
         style={{
+          ...themeStyle,
           padding: "16px",
           borderRadius: 12,
           border: "1px solid rgba(255,255,255,0.08)",
@@ -226,7 +232,9 @@ export function PointsHistory({
   return (
     <div
       data-testid="points-history"
+      data-hyperbet-theme={themeAttribute}
       style={{
+        ...themeStyle,
         display: "flex",
         flexDirection: "column",
         gap: 8,

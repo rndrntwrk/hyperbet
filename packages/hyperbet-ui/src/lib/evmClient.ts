@@ -3,9 +3,13 @@ import {
   createWalletClient,
   custom,
   encodeFunctionData,
+  formatUnits,
   http,
+  maxUint256,
+  parseUnits,
   parseAbiItem,
   toHex,
+  stringToHex,
   type Address,
   type Hash,
   type Hex,
@@ -67,6 +71,46 @@ export type ContractWriteClient = {
   writeContract: WalletClient["writeContract"];
 };
 
+export type PerpMarketConfig = {
+  skewScale: bigint;
+  maxLeverage: bigint;
+  maintenanceMarginBps: bigint;
+  liquidationRewardBps: bigint;
+  maxOracleDelay: bigint;
+  exists: boolean;
+};
+
+export type PerpMarketState = {
+  totalLongOI: bigint;
+  totalShortOI: bigint;
+  currentFundingRate: bigint;
+  cumulativeFundingRate: bigint;
+  lastFundingTimestamp: bigint;
+  lastOraclePrice: bigint;
+  lastConservativeSkill: bigint;
+  lastOracleTimestamp: bigint;
+  vaultBalance: bigint;
+  insuranceFund: bigint;
+  badDebt: bigint;
+  status: number;
+};
+
+export type PerpPosition = {
+  size: bigint;
+  margin: bigint;
+  entryPrice: bigint;
+  lastCumulativeFundingRate: bigint;
+};
+
+export type PerpPositionHealth = {
+  markPrice: bigint;
+  notional: bigint;
+  unrealizedPnl: bigint;
+  equity: bigint;
+  maintenanceMargin: bigint;
+  liquidatable: boolean;
+};
+
 export const SIDE_ENUM = {
   NONE: 0,
   A: 1,
@@ -89,12 +133,145 @@ const SIDE_MAP: Record<number, Side> = {
   2: "B",
 };
 
+const AGENT_PERP_ENGINE_ABI = [
+  {
+    type: "function",
+    name: "marketConfigs",
+    stateMutability: "view",
+    inputs: [{ type: "bytes32" }],
+    outputs: [
+      {
+        components: [
+          { name: "skewScale", type: "uint256" },
+          { name: "maxLeverage", type: "uint256" },
+          { name: "maintenanceMarginBps", type: "uint256" },
+          { name: "liquidationRewardBps", type: "uint256" },
+          { name: "maxOracleDelay", type: "uint256" },
+          { name: "exists", type: "bool" },
+        ],
+        type: "tuple",
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "markets",
+    stateMutability: "view",
+    inputs: [{ type: "bytes32" }],
+    outputs: [
+      {
+        components: [
+          { name: "totalLongOI", type: "uint256" },
+          { name: "totalShortOI", type: "uint256" },
+          { name: "currentFundingRate", type: "int256" },
+          { name: "cumulativeFundingRate", type: "int256" },
+          { name: "lastFundingTimestamp", type: "uint256" },
+          { name: "lastOraclePrice", type: "uint256" },
+          { name: "lastConservativeSkill", type: "int256" },
+          { name: "lastOracleTimestamp", type: "uint256" },
+          { name: "vaultBalance", type: "uint256" },
+          { name: "insuranceFund", type: "uint256" },
+          { name: "badDebt", type: "uint256" },
+          { name: "status", type: "uint8" },
+        ],
+        type: "tuple",
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "positions",
+    stateMutability: "view",
+    inputs: [{ type: "bytes32" }, { type: "address" }],
+    outputs: [
+      {
+        components: [
+          { name: "size", type: "int256" },
+          { name: "margin", type: "uint256" },
+          { name: "entryPrice", type: "uint256" },
+          { name: "lastCumulativeFundingRate", type: "int256" },
+        ],
+        type: "tuple",
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "getPositionHealth",
+    stateMutability: "view",
+    inputs: [{ type: "bytes32" }, { type: "address" }],
+    outputs: [
+      {
+        components: [
+          { name: "markPrice", type: "uint256" },
+          { name: "notional", type: "uint256" },
+          { name: "unrealizedPnl", type: "int256" },
+          { name: "equity", type: "int256" },
+          { name: "maintenanceMargin", type: "uint256" },
+          { name: "liquidatable", type: "bool" },
+        ],
+        type: "tuple",
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "modifyPosition",
+    stateMutability: "nonpayable",
+    inputs: [
+      { type: "bytes32" },
+      { type: "int256" },
+      { type: "int256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "withdrawMargin",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32" }, { type: "uint256" }],
+    outputs: [],
+  },
+] as const;
+
+const ERC20_ABI = [
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [{ type: "address" }, { type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "address" }, { type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
+
 export function toDuelKeyHex(duelKeyHex: string): Hex {
   const normalized = duelKeyHex.trim().toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(normalized)) {
     throw new Error("duelKeyHex must be a 32-byte hex string");
   }
   return `0x${normalized}`;
+}
+
+export function toPerpAgentKey(characterId: string): Hex {
+  const trimmed = characterId.trim();
+  if (!trimmed) {
+    throw new Error("characterId is required");
+  }
+  return stringToHex(trimmed, { size: 32 }) as Hex;
 }
 
 export function createEvmPublicClient(
@@ -342,6 +519,157 @@ export async function getFeeBps(
   ])) as [bigint, bigint];
 
   return Number(treasuryFee + marketMakerFee);
+}
+
+export async function getPerpMarketConfig(
+  client: PublicClient,
+  contractAddress: Address,
+  agentKey: Hex,
+): Promise<PerpMarketConfig> {
+  return (await client.readContract({
+    address: contractAddress,
+    abi: AGENT_PERP_ENGINE_ABI,
+    functionName: "marketConfigs",
+    args: [agentKey],
+  })) as PerpMarketConfig;
+}
+
+export async function getPerpMarketState(
+  client: PublicClient,
+  contractAddress: Address,
+  agentKey: Hex,
+): Promise<PerpMarketState> {
+  return (await client.readContract({
+    address: contractAddress,
+    abi: AGENT_PERP_ENGINE_ABI,
+    functionName: "markets",
+    args: [agentKey],
+  })) as PerpMarketState;
+}
+
+export async function getPerpPosition(
+  client: PublicClient,
+  contractAddress: Address,
+  agentKey: Hex,
+  trader: Address,
+): Promise<PerpPosition> {
+  return (await client.readContract({
+    address: contractAddress,
+    abi: AGENT_PERP_ENGINE_ABI,
+    functionName: "positions",
+    args: [agentKey, trader],
+  })) as PerpPosition;
+}
+
+export async function getPerpPositionHealth(
+  client: PublicClient,
+  contractAddress: Address,
+  agentKey: Hex,
+  trader: Address,
+): Promise<PerpPositionHealth> {
+  return (await client.readContract({
+    address: contractAddress,
+    abi: AGENT_PERP_ENGINE_ABI,
+    functionName: "getPositionHealth",
+    args: [agentKey, trader],
+  })) as PerpPositionHealth;
+}
+
+export async function getErc20Allowance(
+  client: PublicClient,
+  tokenAddress: Address,
+  owner: Address,
+  spender: Address,
+): Promise<bigint> {
+  return (await client.readContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [owner, spender],
+  })) as bigint;
+}
+
+export async function getErc20Balance(
+  client: PublicClient,
+  tokenAddress: Address,
+  owner: Address,
+): Promise<bigint> {
+  return (await client.readContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [owner],
+  })) as bigint;
+}
+
+export async function ensureErc20Approval(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  tokenAddress: Address,
+  owner: Address,
+  spender: Address,
+  minimumAmount: bigint,
+): Promise<Hash | null> {
+  const allowance = await getErc20Allowance(
+    publicClient,
+    tokenAddress,
+    owner,
+    spender,
+  );
+  if (allowance >= minimumAmount) {
+    return null;
+  }
+  return walletClient.writeContract({
+    chain: walletClient.chain,
+    account: owner,
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: "approve",
+    args: [spender, maxUint256],
+  });
+}
+
+export async function modifyPerpPosition(
+  walletClient: WalletClient,
+  contractAddress: Address,
+  owner: Address,
+  agentKey: Hex,
+  marginDelta: bigint,
+  sizeDelta: bigint,
+): Promise<Hash> {
+  return walletClient.writeContract({
+    chain: walletClient.chain,
+    account: owner,
+    address: contractAddress,
+    abi: AGENT_PERP_ENGINE_ABI,
+    functionName: "modifyPosition",
+    args: [agentKey, marginDelta, sizeDelta],
+  });
+}
+
+export async function withdrawPerpMargin(
+  walletClient: WalletClient,
+  contractAddress: Address,
+  owner: Address,
+  agentKey: Hex,
+  amount: bigint,
+): Promise<Hash> {
+  return walletClient.writeContract({
+    chain: walletClient.chain,
+    account: owner,
+    address: contractAddress,
+    abi: AGENT_PERP_ENGINE_ABI,
+    functionName: "withdrawMargin",
+    args: [agentKey, amount],
+  });
+}
+
+export function formatToken18(value: bigint): number {
+  return Number(formatUnits(value, 18));
+}
+
+export function parseToken18(value: string | number): bigint {
+  return parseUnits(String(value), 18);
 }
 
 export async function getNativeBalance(

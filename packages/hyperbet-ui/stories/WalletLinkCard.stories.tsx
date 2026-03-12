@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { WalletLinkCard } from "../src/components/WalletLinkCard";
 import {
   StorySurface,
+  ThemeMatrix,
   sampleEvmWallet,
   sampleSolanaWallet,
 } from "./storySupport";
@@ -30,3 +31,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(240px, 1fr))">
+      {(theme) => (
+        <StorySurface width={280}>
+          <WalletLinkCard {...args} theme={theme} />
+        </StorySurface>
+      )}
+    </ThemeMatrix>
+  ),
+};

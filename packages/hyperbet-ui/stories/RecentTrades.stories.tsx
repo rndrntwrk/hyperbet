@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { RecentTrades } from "../src/components/RecentTrades";
-import { StorySurface, sampleTrades } from "./storySupport";
+import { StorySurface, ThemeMatrix, sampleTrades } from "./storySupport";
 
 const meta = {
   title: "Components/RecentTrades",
@@ -38,3 +38,24 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const ThemeMatrixStory: Story = {
+  render: (args) => (
+    <ThemeMatrix columns="repeat(auto-fit, minmax(280px, 1fr))">
+      {(theme) => (
+        <StorySurface width={320}>
+          <div
+            style={{
+              padding: 16,
+              borderRadius: 16,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <RecentTrades {...args} theme={theme} />
+          </div>
+        </StorySurface>
+      )}
+    </ThemeMatrix>
+  ),
+};
