@@ -445,12 +445,15 @@ echo "[e2e] starting app on :$APP_PORT"
 kill_listeners "$APP_PORT"
 rm -rf "$APP_DIR/node_modules/.vite"
 echo "[e2e] pre-bundling vite dependencies"
-(
+if ! (
   cd "$APP_DIR"
   env \
     VITE_GAME_API_URL="$GAME_API_URL" \
     ./node_modules/.bin/vite optimize --force --mode e2e
-) >/tmp/hyperbet-solana-e2e-vite-optimize.log 2>&1
+) >/tmp/hyperbet-solana-e2e-vite-optimize.log 2>&1; then
+  echo "[e2e] warning: vite optimize failed; continuing with dev server startup"
+  tail -n 80 /tmp/hyperbet-solana-e2e-vite-optimize.log || true
+fi
 (
   cd "$APP_DIR"
   env \
