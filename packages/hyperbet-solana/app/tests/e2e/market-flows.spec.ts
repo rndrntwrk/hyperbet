@@ -28,6 +28,9 @@ import {
 
 import {
   cancelDuel,
+  deriveClobVaultPda,
+  deriveMarketStatePda,
+  initializeCanonicalMarket,
   SIDE_ASK,
   SIDE_BID,
   deriveOrderPda,
@@ -39,6 +42,7 @@ import {
   reportDuelResult,
   syncMarketFromDuel,
   upsertDuel,
+  uniqueDuelKey,
 } from "../../../anchor/tests/clob-test-helpers";
 
 type E2eState = {
@@ -61,6 +65,8 @@ type E2eState = {
 type UserBalanceAccount = {
   aShares?: unknown;
   bShares?: unknown;
+  aLockedLamports?: unknown;
+  bLockedLamports?: unknown;
 };
 
 type MarketStateAccount = {
@@ -211,6 +217,18 @@ async function fetchJson<T>(
   return (await response.json()) as T;
 }
 
+async function postJson<T>(
+  request: APIRequestContext,
+  pathname: string,
+  body: unknown,
+): Promise<T> {
+  const response = await request.post(`${GAME_API_URL}${pathname}`, {
+    data: body,
+  });
+  expect(response.ok(), `POST ${pathname} should succeed`).toBeTruthy();
+  return (await response.json()) as T;
+}
+
 async function fetchPredictionMarkets(
   request: APIRequestContext,
 ): Promise<PredictionMarketsResponse> {
@@ -273,6 +291,119 @@ function findPredictionMarket(
   chainKey: string,
 ) {
   return payload.markets.find((market) => market.chainKey === chainKey) ?? null;
+}
+
+async function createFreshSolanaOpenMarket(
+  request: APIRequestContext,
+  state: E2eState,
+  authority: Keypair,
+  fightProgram: Program<Idl>,
+  clobProgram: Program<Idl>,
+  label: string,
+): Promise<{
+  duelKey: number[];
+  duelKeyHex: string;
+  duelId: string;
+  duelState: PublicKey;
+  marketState: PublicKey;
+}> {
+  const duelKey = uniqueDuelKey(label);
+  const duelKeyHex = Buffer.from(duelKey).toString("hex");
+  const duelId = `${Date.now()}`;
+  const now = Math.floor(Date.now() / 1000);
+  const duelState = await upsertDuel(fightProgram as never, authority, duelKey, {
+    status: duelStatusBettingOpen(),
+    betOpenTs: now - 60,
+    betCloseTs: now + 600,
+    duelStartTs: now + 660,
+      metadataUri: "https://hyperscape.gg/tests/e2e/fresh-open",
+  });
+  const derivedMarketState = deriveMarketStatePda(
+    clobProgram.programId,
+    duelState,
+  );
+  let marketState = derivedMarketState;
+  try {
+    ({ marketState } = await initializeCanonicalMarket(
+      clobProgram as never,
+      authority,
+      duelState,
+      duelKey,
+      new PublicKey(state.clobConfig || ""),
+    ));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/already in use/i.test(message)) {
+      throw error;
+    }
+    marketState = derivedMarketState;
+  }
+  await syncMarketFromDuel(clobProgram as never, marketState, duelState);
+
+  await postJson<{ ok: boolean; seq: number }>(
+    request,
+    "/api/streaming/state/publish",
+    {
+      cycle: {
+        cycleId: `gate10-solana-${duelId}`,
+        phase: "ANNOUNCEMENT",
+        duelId,
+        duelKeyHex,
+        cycleStartTime: Date.now() - 90_000,
+        phaseStartTime: Date.now() - 5_000,
+        phaseEndTime: Date.now() + 300_000,
+        betOpenTime: Date.now() - 15_000,
+        betCloseTime: Date.now() + 300_000,
+        fightStartTime: Date.now() + 60_000,
+        duelEndTime: null,
+        countdown: 300,
+        timeRemaining: 300_000,
+        winnerId: null,
+        winnerName: null,
+        winReason: null,
+        seed: null,
+        replayHash: null,
+        agent1: {
+          id: "e2e-solana-agent-a",
+          name: "Agent A",
+          provider: "Hyperscape",
+          model: "alpha-local",
+          hp: 80,
+          maxHp: 100,
+          combatLevel: 88,
+          wins: 12,
+          losses: 4,
+          damageDealtThisFight: 148,
+          inventory: [],
+          monologues: [],
+        },
+        agent2: {
+          id: "e2e-solana-agent-b",
+          name: "Agent B",
+          provider: "OpenRouter",
+          model: "beta-local",
+          hp: 76,
+          maxHp: 100,
+          combatLevel: 84,
+          wins: 10,
+          losses: 5,
+          damageDealtThisFight: 131,
+          inventory: [],
+          monologues: [],
+        },
+      },
+      leaderboard: [],
+      cameraTarget: null,
+    },
+  );
+
+  return {
+    duelKey,
+    duelKeyHex,
+    duelId,
+    duelState,
+    marketState,
+  };
 }
 
 function buildMockSolanaPredictionMarketsResponse(
@@ -483,6 +614,11 @@ async function seedClobLiquidity(
   connection: Connection,
   state: E2eState,
   side: number,
+  overrides?: {
+    marketState?: PublicKey;
+    duelState?: PublicKey;
+    vault?: PublicKey;
+  },
 ): Promise<void> {
   const walletPath = state.bootstrapWalletPath?.trim() || "";
   if (!walletPath) throw new Error("Missing bootstrapWalletPath in e2e state");
@@ -494,7 +630,12 @@ async function seedClobLiquidity(
     preflightCommitment: "confirmed",
   });
   const clobProgram = new Program(goldClobIdl, provider);
-  const marketState = new PublicKey(state.clobMarketState || "");
+  const marketState =
+    overrides?.marketState ?? new PublicKey(state.clobMarketState || "");
+  const duelState =
+    overrides?.duelState ?? new PublicKey(state.clobDuelState || "");
+  const vault =
+    overrides?.vault ?? deriveClobVaultPda(clobProgram.programId, marketState);
   const clobAccounts = clobProgram.account as Record<
     string,
     AccountNamespaceFetcher
@@ -519,7 +660,7 @@ async function seedClobLiquidity(
     .placeOrder(new BN(nextOrderId.toString()), side, 500, new BN("1000000000"))
     .accountsPartial({
       marketState,
-      duelState: new PublicKey(state.clobDuelState || ""),
+      duelState,
       userBalance: deriveUserBalancePda(
         clobProgram.programId,
         marketState,
@@ -535,7 +676,7 @@ async function seedClobLiquidity(
       config: new PublicKey(state.clobConfig || ""),
       treasury: new PublicKey(state.clobTreasury || ""),
       marketMaker: new PublicKey(state.clobMarketMaker || ""),
-      vault: new PublicKey(state.clobVault || ""),
+      vault,
       user: authority.publicKey,
       systemProgram: SystemProgram.programId,
     })
@@ -771,24 +912,49 @@ test.describe("market flows", () => {
       state.solanaRpcUrl || "http://127.0.0.1:8899",
       "confirmed",
     );
-    const userBalanceAddress = new PublicKey(state.clobUserBalance || "");
+    const trader = new PublicKey(state.solanaTraderPublicKey || "");
     const clobProgram = createReadonlyClobProgram(connection, state);
     const { authority, fightProgram, clobProgram: writableClobProgram } =
       createWritablePrograms(connection, state);
-    const duelKey = duelKeyHexToBytes(state.currentDuelKeyHex);
-    const duelState = new PublicKey(state.clobDuelState || "");
-    const marketState = new PublicKey(state.clobMarketState || "");
+    const { duelKey, duelKeyHex, duelId, duelState, marketState } =
+      await createFreshSolanaOpenMarket(
+        request,
+        state,
+        authority,
+        fightProgram,
+        writableClobProgram,
+        "gate10-solana-resolve-claim",
+      );
+    const userBalanceAddress = deriveUserBalancePda(
+      clobProgram.programId,
+      marketState,
+      trader,
+    );
 
-    const initialPredictionMarkets = await fetchPredictionMarkets(request);
-    const initialSolanaMarket = findPredictionMarket(
-      initialPredictionMarkets,
-      "solana",
-    );
-    expect(initialPredictionMarkets.duel.duelId).toBe(state.currentDuelId || null);
-    expect(initialPredictionMarkets.duel.duelKey).toBe(
-      state.currentDuelKeyHex || null,
-    );
-    expect(initialSolanaMarket?.marketRef).toBe(state.clobMarketState || null);
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const solanaMarket = findPredictionMarket(
+            predictionMarkets,
+            "solana",
+          );
+          return {
+            duelKey: predictionMarkets.duel.duelKey,
+            marketRef: solanaMarket?.marketRef ?? null,
+            lifecycleStatus: solanaMarket?.lifecycleStatus ?? null,
+          };
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toEqual({
+        duelKey: duelKeyHex,
+        marketRef: marketState.toBase58(),
+        lifecycleStatus: "OPEN",
+      });
 
     await gotoApp(page);
     await selectChain(page, "solana");
@@ -798,14 +964,14 @@ test.describe("market flows", () => {
     }
     await ensureWalletConnected(page);
 
-    if (state.currentDuelId) {
-      await expect(page.getByTestId("current-match-id")).toContainText(
-        state.currentDuelId,
-        { timeout: 60_000 },
-      );
-    }
+    await expect(page.getByTestId("current-match-id")).toContainText(duelId, {
+      timeout: 60_000,
+    });
 
-    await seedClobLiquidity(connection, state, SIDE_ASK);
+    await seedClobLiquidity(connection, state, SIDE_ASK, {
+      marketState,
+      duelState,
+    });
     await page.getByTestId("refresh-market").click();
 
     const beforeBalance = (await clobProgram.account.userBalance.fetchNullable(
@@ -864,7 +1030,10 @@ test.describe("market flows", () => {
       );
     }
 
-    await seedClobLiquidity(connection, state, SIDE_BID);
+    await seedClobLiquidity(connection, state, SIDE_BID, {
+      marketState,
+      duelState,
+    });
     await page.getByTestId("refresh-market").click();
     await page.getByTestId("prediction-select-no").click({ force: true });
     await page.getByTestId("prediction-submit").click({ force: true });
@@ -990,19 +1159,49 @@ test.describe("market flows", () => {
       state.solanaRpcUrl || "http://127.0.0.1:8899",
       "confirmed",
     );
-    const userBalanceAddress = new PublicKey(state.clobUserBalance || "");
+    const trader = new PublicKey(state.solanaTraderPublicKey || "");
     const clobProgram = createReadonlyClobProgram(connection, state);
     const { authority, fightProgram, clobProgram: writableClobProgram } =
       createWritablePrograms(connection, state);
-    const duelKey = duelKeyHexToBytes(state.currentDuelKeyHex);
-    const duelState = new PublicKey(state.clobDuelState || "");
-    const marketState = new PublicKey(state.clobMarketState || "");
-
-    await waitForKeeperBotHealth(
-      request,
-      "solana",
-      state.clobMarketState || null,
+    const { duelKey, duelKeyHex, duelState, marketState } =
+      await createFreshSolanaOpenMarket(
+        request,
+        state,
+        authority,
+        fightProgram,
+        writableClobProgram,
+        "gate10-solana-restart",
+      );
+    const userBalanceAddress = deriveUserBalancePda(
+      clobProgram.programId,
+      marketState,
+      trader,
     );
+
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const solanaMarket = findPredictionMarket(
+            predictionMarkets,
+            "solana",
+          );
+          return {
+            duelKey: predictionMarkets.duel.duelKey,
+            marketRef: solanaMarket?.marketRef ?? null,
+            lifecycleStatus: solanaMarket?.lifecycleStatus ?? null,
+          };
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toEqual({
+        duelKey: duelKeyHex,
+        marketRef: marketState.toBase58(),
+        lifecycleStatus: "OPEN",
+      });
 
     await gotoApp(page);
     await selectChain(page, "solana");
@@ -1011,22 +1210,10 @@ test.describe("market flows", () => {
       await expandButton.click();
     }
     await ensureWalletConnected(page);
-
-    const openNow = Math.floor(Date.now() / 1000);
-    await upsertDuel(fightProgram as never, authority, duelKey, {
-      status: duelStatusBettingOpen(),
-      betOpenTs: openNow - 60,
-      betCloseTs: openNow + 600,
-      duelStartTs: openNow + 660,
-      metadataUri: "https://hyperscape.gg/tests/e2e/open-cancel",
-    });
-    await syncMarketFromDuel(
-      writableClobProgram as never,
+    await seedClobLiquidity(connection, state, SIDE_ASK, {
       marketState,
       duelState,
-    );
-
-    await seedClobLiquidity(connection, state, SIDE_ASK);
+    });
     await page.getByTestId("refresh-market").click();
     await page.getByTestId("prediction-amount-input").fill("1");
     await page.getByTestId("prediction-select-yes").click({ force: true });
@@ -1057,7 +1244,7 @@ test.describe("market flows", () => {
     await waitForKeeperBotHealth(
       request,
       "solana",
-      state.clobMarketState || null,
+      marketState.toBase58(),
     );
 
     await expect
@@ -1080,8 +1267,8 @@ test.describe("market flows", () => {
         },
       )
       .toEqual({
-        duelKey: state.currentDuelKeyHex || null,
-        marketRef: state.clobMarketState || null,
+        duelKey: duelKeyHex,
+        marketRef: marketState.toBase58(),
         lifecycleStatus: "OPEN",
       });
 
@@ -1142,7 +1329,7 @@ test.describe("market flows", () => {
     await waitForKeeperBotHealth(
       request,
       "solana",
-      state.clobMarketState || null,
+      marketState.toBase58(),
     );
 
     await page.getByTestId("refresh-market").click();
@@ -1175,13 +1362,49 @@ test.describe("market flows", () => {
       state.solanaRpcUrl || "http://127.0.0.1:8899",
       "confirmed",
     );
-    const userBalanceAddress = new PublicKey(state.clobUserBalance || "");
+    const trader = new PublicKey(state.solanaTraderPublicKey || "");
     const clobProgram = createReadonlyClobProgram(connection, state);
     const { authority, fightProgram, clobProgram: writableClobProgram } =
       createWritablePrograms(connection, state);
-    const duelKey = duelKeyHexToBytes(state.currentDuelKeyHex);
-    const duelState = new PublicKey(state.clobDuelState || "");
-    const marketState = new PublicKey(state.clobMarketState || "");
+    const { duelKey, duelKeyHex, duelState, marketState } =
+      await createFreshSolanaOpenMarket(
+        request,
+        state,
+        authority,
+        fightProgram,
+        writableClobProgram,
+        "gate10-solana-cancel",
+      );
+    const userBalanceAddress = deriveUserBalancePda(
+      clobProgram.programId,
+      marketState,
+      trader,
+    );
+
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const solanaMarket = findPredictionMarket(
+            predictionMarkets,
+            "solana",
+          );
+          return {
+            duelKey: predictionMarkets.duel.duelKey,
+            marketRef: solanaMarket?.marketRef ?? null,
+            lifecycleStatus: solanaMarket?.lifecycleStatus ?? null,
+          };
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toEqual({
+        duelKey: duelKeyHex,
+        marketRef: marketState.toBase58(),
+        lifecycleStatus: "OPEN",
+      });
 
     await gotoApp(page);
     await selectChain(page, "solana");
@@ -1191,7 +1414,10 @@ test.describe("market flows", () => {
     }
     await ensureWalletConnected(page);
 
-    await seedClobLiquidity(connection, state, SIDE_ASK);
+    await seedClobLiquidity(connection, state, SIDE_ASK, {
+      marketState,
+      duelState,
+    });
     await page.getByTestId("refresh-market").click();
     await page.getByTestId("prediction-amount-input").fill("1");
     await page.getByTestId("prediction-select-yes").click({ force: true });
@@ -1241,9 +1467,58 @@ test.describe("market flows", () => {
       )
       .toBe("CANCELLED");
 
+    await expect
+      .poll(
+        async () => {
+          const balance = (await clobProgram.account.userBalance.fetchNullable(
+            userBalanceAddress,
+          )) as UserBalanceAccount | null;
+          return {
+            aShares: Number(bnLikeToBigInt(balance?.aShares)),
+            bShares: Number(bnLikeToBigInt(balance?.bShares)),
+            aLockedLamports: Number(bnLikeToBigInt(balance?.aLockedLamports)),
+            bLockedLamports: Number(bnLikeToBigInt(balance?.bLockedLamports)),
+          };
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toMatchObject({
+        aShares: expect.any(Number),
+        aLockedLamports: expect.any(Number),
+      });
+    const cancelledBalance = (await clobProgram.account.userBalance.fetchNullable(
+      userBalanceAddress,
+    )) as UserBalanceAccount | null;
+    expect(
+      bnLikeToBigInt(cancelledBalance?.aLockedLamports) > 0n,
+      "cancelled Solana position should retain refundable locked lamports",
+    ).toBeTruthy();
+
     await page.getByTestId("refresh-market").click();
+    const lifecycleDebug = page.getByTestId("solana-clob-lifecycle-debug");
+    const walletDebug = page.getByTestId("solana-clob-wallet-debug");
+    await expect(walletDebug).toContainText(/aShares=\d+/i);
     const claimButton = page.getByRole("button", { name: /claim/i }).first();
-    await expect(claimButton).toBeEnabled({ timeout: 30_000 });
+    await expect
+      .poll(
+        async () => ({
+          lifecycle: (await lifecycleDebug.textContent()) ?? "",
+          wallet: (await walletDebug.textContent()) ?? "",
+          claimEnabled: await claimButton.isEnabled(),
+        }),
+        {
+          timeout: 30_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toMatchObject({
+        lifecycle: expect.stringMatching(/lifecycleStatus=CANCELLED/),
+        wallet: expect.stringMatching(/refundableAmount=[1-9]\d*/),
+        claimEnabled: true,
+      });
     await claimButton.click({ force: true });
 
     await expect

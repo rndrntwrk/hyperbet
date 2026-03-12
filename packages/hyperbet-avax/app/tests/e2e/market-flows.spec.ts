@@ -15,6 +15,9 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  keccak256,
+  parseUnits,
+  stringToHex,
   type Address,
   type Hash,
 } from "viem";
@@ -134,11 +137,19 @@ const duelOutcomeOracleArtifact = readFirstExistingJson(
     ),
   ],
 ) as { abi: readonly unknown[] };
+const goldClobArtifact = readFirstExistingJson(
+  [
+    path.join(evmArtifactsDir, "GoldClob.sol", "GoldClob.json"),
+    path.join(evmFoundryOutDir, "GoldClob.sol", "GoldClob.json"),
+  ],
+) as { abi: readonly unknown[] };
 const perpsCoder = new BorshAccountsCoder(goldPerpsIdl);
 const perpsProgramId = new PublicKey(
   (goldPerpsIdl as Idl & { address: string }).address,
 );
 const MARKET_KIND_DUEL_WINNER = 0;
+const DUEL_STATUS_BETTING_OPEN = 2;
+const SELL_SIDE = 2;
 
 function loadState(): E2eState {
   return JSON.parse(fs.readFileSync(statePath, "utf8")) as E2eState;
@@ -198,6 +209,18 @@ async function fetchJson<T>(
 ): Promise<T> {
   const response = await request.get(`${GAME_API_URL}${pathname}`);
   expect(response.ok(), `GET ${pathname} should succeed`).toBeTruthy();
+  return (await response.json()) as T;
+}
+
+async function postJson<T>(
+  request: APIRequestContext,
+  pathname: string,
+  body: unknown,
+): Promise<T> {
+  const response = await request.post(`${GAME_API_URL}${pathname}`, {
+    data: body,
+  });
+  expect(response.ok(), `POST ${pathname} should succeed`).toBeTruthy();
   return (await response.json()) as T;
 }
 
@@ -263,6 +286,136 @@ function findPredictionMarket(
   chainKey: string,
 ) {
   return payload.markets.find((market) => market.chainKey === chainKey) ?? null;
+}
+
+function hashLabel(label: string): Hash {
+  return keccak256(stringToHex(label));
+}
+
+function quoteCost(side: number, price: number, amount: bigint): bigint {
+  const component = BigInt(side === 1 ? price : 1000 - price);
+  return (amount * component) / 1000n;
+}
+
+async function createFreshEvmOpenMarket(
+  request: APIRequestContext,
+  publicClient: ReturnType<typeof createPublicClient>,
+  adminWalletClient: ReturnType<typeof createWalletClient>,
+  oracleAddress: Address,
+  contractAddress: Address,
+  chainKey: "bsc" | "avax",
+): Promise<{ duelKey: Hash; marketKey: Hash }> {
+  const uniqueKey = `${chainKey}-gate10-${Date.now()}`;
+  const duelKey = keccak256(stringToHex(uniqueKey));
+  const latestBlock = await publicClient.getBlock({ blockTag: "latest" });
+  const duelId = `${Date.now()}`;
+  const betOpenTs = latestBlock.timestamp - 15n;
+  const betCloseTs = betOpenTs + 300n;
+  const duelStartTs = betCloseTs + 60n;
+
+  const upsertTx = await adminWalletClient.writeContract({
+    address: oracleAddress,
+    abi: duelOutcomeOracleArtifact.abi,
+    functionName: "upsertDuel",
+    args: [
+      duelKey,
+      hashLabel(`${chainKey}-fresh-agent-a`),
+      hashLabel(`${chainKey}-fresh-agent-b`),
+      betOpenTs,
+      betCloseTs,
+      duelStartTs,
+      `${uniqueKey}-open`,
+      DUEL_STATUS_BETTING_OPEN,
+    ],
+  });
+  await waitForEvmReceipt(publicClient, upsertTx);
+
+  const createMarketTx = await adminWalletClient.writeContract({
+    address: contractAddress,
+    abi: goldClobArtifact.abi,
+    functionName: "createMarketForDuel",
+    args: [duelKey, MARKET_KIND_DUEL_WINNER],
+  });
+  await waitForEvmReceipt(publicClient, createMarketTx);
+
+  const seedAmount = parseUnits("1", 18);
+  const seedPrice = 600;
+  const seedCost = quoteCost(SELL_SIDE, seedPrice, seedAmount);
+  const seedFee = seedCost / 100n;
+  const seedOrderTx = await adminWalletClient.writeContract({
+    address: contractAddress,
+    abi: GOLD_CLOB_ABI,
+    functionName: "placeOrder",
+    args: [duelKey, MARKET_KIND_DUEL_WINNER, SELL_SIDE, seedPrice, seedAmount],
+    value: seedCost + seedFee + seedFee,
+  });
+  await waitForEvmReceipt(publicClient, seedOrderTx);
+
+  const marketKey = (await publicClient.readContract({
+    address: contractAddress,
+    abi: GOLD_CLOB_ABI,
+    functionName: "marketKey",
+    args: [duelKey, MARKET_KIND_DUEL_WINNER],
+  })) as Hash;
+
+  await postJson<{ ok: boolean; seq: number }>(
+    request,
+    "/api/streaming/state/publish",
+    {
+      cycle: {
+        cycleId: `${uniqueKey}-cycle`,
+        phase: "FIGHTING",
+        duelId,
+        duelKeyHex: duelKey.slice(2),
+        cycleStartTime: Date.now() - 90_000,
+        phaseStartTime: Date.now() - 30_000,
+        phaseEndTime: Date.now() + 30_000,
+        betOpenTime: Date.now() - 15_000,
+        betCloseTime: Date.now() + 300_000,
+        fightStartTime: Date.now() + 60_000,
+        duelEndTime: null,
+        countdown: 30,
+        timeRemaining: 30_000,
+        winnerId: null,
+        winnerName: null,
+        winReason: null,
+        seed: null,
+        replayHash: null,
+        agent1: {
+          id: `${chainKey}-fresh-agent-a`,
+          name: "Agent A",
+          provider: "Hyperscape",
+          model: "alpha-local",
+          hp: 80,
+          maxHp: 100,
+          combatLevel: 88,
+          wins: 12,
+          losses: 4,
+          damageDealtThisFight: 148,
+          inventory: [],
+          monologues: [],
+        },
+        agent2: {
+          id: `${chainKey}-fresh-agent-b`,
+          name: "Agent B",
+          provider: "OpenRouter",
+          model: "beta-local",
+          hp: 76,
+          maxHp: 100,
+          combatLevel: 84,
+          wins: 10,
+          losses: 5,
+          damageDealtThisFight: 131,
+          inventory: [],
+          monologues: [],
+        },
+      },
+      leaderboard: [],
+      cameraTarget: null,
+    },
+  );
+
+  return { duelKey, marketKey };
 }
 
 function buildMockEvmPredictionMarketsResponse(
@@ -1245,8 +1398,6 @@ test.describe("market flows", () => {
     const chainId = Number(state.evmChainId || 97);
     const userAddress = state.evmHeadlessAddress as Address;
     const contractAddress = state.evmGoldClobAddress as Address;
-    const marketKey = normalizeHex32(state.evmMarketKey, "evmMarketKey");
-    const duelKey = normalizeHex32(state.evmDuelKeyHex, "evmDuelKeyHex");
     const oracleAddress = state.evmOracleAddress as Address;
     const adminPrivateKey = state.evmAdminPrivateKey as `0x${string}`;
     const publicClient = createPublicClient({
@@ -1275,8 +1426,38 @@ test.describe("market flows", () => {
       },
       transport: http(rpcUrl),
     });
+    const { duelKey, marketKey } = await createFreshEvmOpenMarket(
+      request,
+      publicClient,
+      adminWalletClient,
+      oracleAddress,
+      contractAddress,
+      "avax",
+    );
 
-    await waitForKeeperBotHealth(request, "avax", state.evmMarketKey || null);
+    runProcessControl(control, "restart", "keeper");
+    await waitForKeeperBotHealth(request, "avax", marketKey);
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const avaxMarket = findPredictionMarket(predictionMarkets, "avax");
+          return {
+            duelKey: predictionMarkets.duel.duelKey,
+            marketRef: avaxMarket?.marketRef ?? null,
+            lifecycleStatus: avaxMarket?.lifecycleStatus ?? null,
+          };
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toEqual({
+        duelKey: duelKey.slice(2),
+        marketRef: marketKey,
+        lifecycleStatus: "OPEN",
+      });
 
     await gotoApp(page);
     await selectChain(page, "avax");
@@ -1313,11 +1494,11 @@ test.describe("market flows", () => {
       .toBeGreaterThan(0n);
 
     runProcessControl(control, "restart", "keeper");
-    await waitForKeeperBotHealth(request, "avax", state.evmMarketKey || null);
+    await waitForKeeperBotHealth(request, "avax", marketKey);
 
     runProcessControl(control, "restart", "anvil");
     runProcessControl(control, "restart", "keeper");
-    await waitForKeeperBotHealth(request, "avax", state.evmMarketKey || null);
+    await waitForKeeperBotHealth(request, "avax", marketKey);
     await page.reload({ waitUntil: "domcontentloaded" });
     await gotoApp(page);
     await selectChain(page, "avax");
@@ -1341,7 +1522,7 @@ test.describe("market flows", () => {
       )
       .toEqual({
         duelKey: duelKey.slice(2),
-        marketRef: state.evmMarketKey || null,
+        marketRef: marketKey,
         lifecycleStatus: "OPEN",
       });
 
@@ -1413,12 +1594,11 @@ test.describe("market flows", () => {
     request,
   }) => {
     const state = loadState();
+    const control = loadControl();
     const rpcUrl = state.evmRpcUrl || "http://127.0.0.1:8545";
     const chainId = Number(state.evmChainId || 97);
     const userAddress = state.evmHeadlessAddress as Address;
     const contractAddress = state.evmGoldClobAddress as Address;
-    const marketKey = normalizeHex32(state.evmMarketKey, "evmMarketKey");
-    const duelKey = normalizeHex32(state.evmDuelKeyHex, "evmDuelKeyHex");
     const oracleAddress = state.evmOracleAddress as Address;
     const adminPrivateKey = state.evmAdminPrivateKey as `0x${string}`;
     const publicClient = createPublicClient({
@@ -1447,6 +1627,38 @@ test.describe("market flows", () => {
       },
       transport: http(rpcUrl),
     });
+    const { duelKey, marketKey } = await createFreshEvmOpenMarket(
+      request,
+      publicClient,
+      adminWalletClient,
+      oracleAddress,
+      contractAddress,
+      "avax",
+    );
+
+    runProcessControl(control, "restart", "keeper");
+    await waitForKeeperBotHealth(request, "avax", marketKey);
+    await expect
+      .poll(
+        async () => {
+          const predictionMarkets = await fetchPredictionMarkets(request);
+          const avaxMarket = findPredictionMarket(predictionMarkets, "avax");
+          return {
+            duelKey: predictionMarkets.duel.duelKey,
+            marketRef: avaxMarket?.marketRef ?? null,
+            lifecycleStatus: avaxMarket?.lifecycleStatus ?? null,
+          };
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toEqual({
+        duelKey: duelKey.slice(2),
+        marketRef: marketKey,
+        lifecycleStatus: "OPEN",
+      });
 
     await gotoApp(page);
     await selectChain(page, "avax");

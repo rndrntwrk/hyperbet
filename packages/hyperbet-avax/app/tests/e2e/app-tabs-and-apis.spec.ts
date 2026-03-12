@@ -139,6 +139,11 @@ function loadState(): E2eState {
   return JSON.parse(fs.readFileSync(statePath, "utf8")) as E2eState;
 }
 
+function normalizeHexValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.trim().toLowerCase().replace(/^0x/, "");
+}
+
 function truncateWallet(wallet: string): string {
   if (wallet.length <= 12) return wallet;
   return `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
@@ -315,7 +320,8 @@ test.describe("app tabs and api coverage", () => {
       state.evmGoldClobAddress || null,
     );
     expect(
-      avaxMarket?.marketRef == null || avaxMarket?.marketRef === state.evmMarketKey,
+      avaxMarket?.marketRef == null ||
+        /^[0-9a-f]{64}$/i.test(normalizeHexValue(avaxMarket?.marketRef) || ""),
     ).toBe(true);
     expect(["OPEN", "LOCKED", "RESOLVED", "CANCELLED", "PENDING", "UNKNOWN"])
       .toContain(avaxMarket?.lifecycleStatus);
