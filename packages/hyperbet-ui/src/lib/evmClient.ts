@@ -199,7 +199,6 @@ export async function getMarketMeta(
   const result = rawResult as {
     exists: boolean;
     duelKey: Hex;
-    marketKind: number;
     status: number;
     winner: number;
     nextOrderId: bigint;
@@ -212,7 +211,7 @@ export async function getMarketMeta(
   return {
     exists: result.exists,
     duelKey: result.duelKey,
-    marketKind: Number(result.marketKind),
+    marketKind,
     status: MARKET_STATUS_MAP[Number(result.status)] ?? "NULL",
     winner: SIDE_MAP[Number(result.winner)] ?? "NONE",
     nextOrderId: result.nextOrderId,

@@ -75,7 +75,6 @@ export const GOLD_CLOB_ABI = [
         components: [
           { internalType: "bool", name: "exists", type: "bool" },
           { internalType: "bytes32", name: "duelKey", type: "bytes32" },
-          { internalType: "uint8", name: "marketKind", type: "uint8" },
           { internalType: "uint8", name: "status", type: "uint8" },
           { internalType: "uint8", name: "winner", type: "uint8" },
           { internalType: "uint64", name: "nextOrderId", type: "uint64" },

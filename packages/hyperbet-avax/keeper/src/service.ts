@@ -140,6 +140,10 @@ const KEEPER_BOT_HEALTH_FILE = (
   process.env.KEEPER_BOT_HEALTH_FILE ||
   path.resolve(keeperRoot, ".status", "keeper-bot-health.json")
 ).trim();
+const KEEPER_STREAM_STATE_FILE = (
+  process.env.KEEPER_STREAM_STATE_FILE ||
+  path.resolve(keeperRoot, ".status", "stream-state.json")
+).trim();
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 function loadKeeperBotHealthSnapshot(): KeeperBotHealthSnapshot | null {
@@ -151,6 +155,34 @@ function loadKeeperBotHealthSnapshot(): KeeperBotHealthSnapshot | null {
   } catch (error) {
     console.warn("[service] Failed to read keeper bot health snapshot:", error);
     return null;
+  }
+}
+
+function loadStreamStateSnapshot(): StreamState | null {
+  if (!KEEPER_STREAM_STATE_FILE || !fs_node.existsSync(KEEPER_STREAM_STATE_FILE)) {
+    return null;
+  }
+  try {
+    return JSON.parse(fs_node.readFileSync(KEEPER_STREAM_STATE_FILE, "utf8"));
+  } catch (error) {
+    console.warn("[service] Failed to read stream state snapshot:", error);
+    return null;
+  }
+}
+
+function persistStreamStateSnapshot(next: StreamState): void {
+  if (!KEEPER_STREAM_STATE_FILE) return;
+  try {
+    fs_node.mkdirSync(path.dirname(KEEPER_STREAM_STATE_FILE), {
+      recursive: true,
+    });
+    fs_node.writeFileSync(
+      KEEPER_STREAM_STATE_FILE,
+      `${JSON.stringify(next, null, 2)}\n`,
+      "utf8",
+    );
+  } catch (error) {
+    console.warn("[service] Failed to persist stream state snapshot:", error);
   }
 }
 
@@ -306,7 +338,15 @@ const defaultAgentB = {
 };
 
 let streamSeq = 1;
-let streamState: StreamState = {
+const persistedStreamState = loadStreamStateSnapshot();
+if (
+  persistedStreamState &&
+  typeof persistedStreamState.seq === "number" &&
+  Number.isFinite(persistedStreamState.seq)
+) {
+  streamSeq = Math.max(1, Math.trunc(persistedStreamState.seq));
+}
+let streamState: StreamState = persistedStreamState ?? {
   type: "STREAMING_STATE_UPDATE",
   cycle: {
     cycleId: "boot-cycle",
@@ -327,7 +367,10 @@ let streamState: StreamState = {
   seq: streamSeq,
   emittedAt: Date.now(),
 };
-let streamLastUpdatedAt = Date.now();
+let streamLastUpdatedAt =
+  typeof streamState.emittedAt === "number" && Number.isFinite(streamState.emittedAt)
+    ? streamState.emittedAt
+    : Date.now();
 let streamLastSourcePollAt: number | null = null;
 let streamLastSourceError: string | null = null;
 let streamSourcePollInFlight = false;
@@ -1218,6 +1261,13 @@ function resolvePhaseFromLifecycleStatus(
   }
 }
 
+function normalizeHex32(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) return null;
+  return trimmed.toLowerCase();
+}
+
 function selectBotHealthMarket(
   botHealthSnapshot: KeeperBotHealthSnapshot | null,
   chainKey: "avax",
@@ -1307,8 +1357,8 @@ function buildPredictionMarketLifecycleRecords(
       typeof snapshot?.duelId === "string" ? snapshot.duelId : null;
     const currentMatch = snapshot?.currentMatch as Record<string, any> | undefined;
     const marketKey =
-      (typeof snapshot?.marketKey === "string" ? snapshot.marketKey : null) ??
-      fallbackHealth?.marketRef ??
+      normalizeHex32(snapshot?.marketKey) ??
+      normalizeHex32(fallbackHealth?.marketRef) ??
       null;
     const lifecycleStatus = resolveEvmLifecycleStatus(currentMatch, fallbackHealth);
     records.push({
@@ -1320,7 +1370,7 @@ function buildPredictionMarketLifecycleRecords(
       lifecycleStatus,
       winner: resolveWinnerFromEvmStatus(currentMatch?.winner),
       betCloseTime,
-      contractAddress: snapshot?.contractAddress ?? null,
+      contractAddress: snapshot?.contractAddress ?? avaxContractAddress ?? null,
       programId: null,
       txRef: null,
       syncedAt: parsers.avax.lastSuccessAt ?? botHealthSnapshot?.updatedAtMs ?? null,
@@ -1623,6 +1673,7 @@ function publishStreamState(next: StreamState, sourceLabel: string): void {
   };
   streamLastUpdatedAt = Date.now();
   streamLastSourceError = null;
+  persistStreamStateSnapshot(streamState);
   broadcastStreamState(streamState, "state");
   console.log(
     `[${nowIso()}] [stream] updated from ${sourceLabel} cycle=${streamState.cycle?.cycleId ?? "unknown"} phase=${streamState.cycle?.phase ?? "unknown"}`,

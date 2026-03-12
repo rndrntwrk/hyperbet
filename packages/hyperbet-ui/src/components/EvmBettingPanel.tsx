@@ -397,6 +397,7 @@ export function EvmBettingPanel({
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [lastOrderTx, setLastOrderTx] = useState("-");
   const [lastClaimTx, setLastClaimTx] = useState("-");
+  const [lastRefreshError, setLastRefreshError] = useState<string | null>(null);
 
   const lastSnapshotRef = useRef<{ a: bigint; b: bigint }>({ a: 0n, b: 0n });
 
@@ -552,6 +553,7 @@ export function EvmBettingPanel({
 
     try {
       if (!duelKeyHex) {
+        setLastRefreshError("missing-duel-key");
         setMarketMeta(null);
         setPosition(null);
         setBids([]);
@@ -571,6 +573,7 @@ export function EvmBettingPanel({
       );
 
       if (!market.exists) {
+        setLastRefreshError("missing-market");
         setMarketMeta(null);
         setPosition(null);
         setBids([]);
@@ -580,57 +583,21 @@ export function EvmBettingPanel({
       }
 
       setMarketMeta(market);
+      setLastRefreshError(null);
       updateChartAndTrades(market.totalAShares, market.totalBShares);
-      const [feeBpsResult, orderBookResult, tradesResult] =
-        await Promise.allSettled([
-          getFeeBps(publicClient, contractAddr),
-          getOrderBook(
-            publicClient,
-            contractAddr,
-            duelKey,
-            MARKET_KIND_DUEL_WINNER,
-            market,
-          ),
-          getRecentTrades(publicClient, contractAddr, market.marketKey),
-        ]);
-
-      if (feeBpsResult.status === "fulfilled") {
-        setTradeFeeBps(feeBpsResult.value);
-      }
-
-      if (orderBookResult.status === "fulfilled") {
-        setBids(
-          orderBookResult.value.bids.map((entry) => ({
-            price: entry.price,
-            amount: Number(formatUnits(entry.amount, nativeDecimals)),
-            total: Number(formatUnits(entry.total, nativeDecimals)),
-          })),
-        );
-        setAsks(
-          orderBookResult.value.asks.map((entry) => ({
-            price: entry.price,
-            amount: Number(formatUnits(entry.amount, nativeDecimals)),
-            total: Number(formatUnits(entry.total, nativeDecimals)),
-          })),
-        );
-      } else {
-        setBids([]);
-        setAsks([]);
-      }
-
-      if (tradesResult.status === "fulfilled") {
-        setRecentTrades(
-          tradesResult.value.map((trade) => ({
-            id: trade.id,
-            side: trade.side,
-            amount: Number(formatUnits(trade.amount, nativeDecimals)),
-            price: trade.price,
-            time: trade.time,
-          })),
-        );
-      } else {
-        setRecentTrades([]);
-      }
+      const feeBpsPromise = getFeeBps(publicClient, contractAddr);
+      const orderBookPromise = getOrderBook(
+        publicClient,
+        contractAddr,
+        duelKey,
+        MARKET_KIND_DUEL_WINNER,
+        market,
+      );
+      const tradesPromise = getRecentTrades(
+        publicClient,
+        contractAddr,
+        market.marketKey,
+      );
 
       if (effectiveAddress) {
         const [userPosition, balance] = await Promise.all([
@@ -695,8 +662,55 @@ export function EvmBettingPanel({
           ) ?? copy.waitingForMarketOperator,
         );
       }
+
+      const [feeBpsResult, orderBookResult, tradesResult] =
+        await Promise.allSettled([
+          feeBpsPromise,
+          orderBookPromise,
+          tradesPromise,
+        ]);
+
+      if (feeBpsResult.status === "fulfilled") {
+        setTradeFeeBps(feeBpsResult.value);
+      }
+
+      if (orderBookResult.status === "fulfilled") {
+        setBids(
+          orderBookResult.value.bids.map((entry) => ({
+            price: entry.price,
+            amount: Number(formatUnits(entry.amount, nativeDecimals)),
+            total: Number(formatUnits(entry.total, nativeDecimals)),
+          })),
+        );
+        setAsks(
+          orderBookResult.value.asks.map((entry) => ({
+            price: entry.price,
+            amount: Number(formatUnits(entry.amount, nativeDecimals)),
+            total: Number(formatUnits(entry.total, nativeDecimals)),
+          })),
+        );
+      } else {
+        setBids([]);
+        setAsks([]);
+      }
+
+      if (tradesResult.status === "fulfilled") {
+        setRecentTrades(
+          tradesResult.value.map((trade) => ({
+            id: trade.id,
+            side: trade.side,
+            amount: Number(formatUnits(trade.amount, nativeDecimals)),
+            price: trade.price,
+            time: trade.time,
+          })),
+        );
+      } else {
+        setRecentTrades([]);
+      }
     } catch (error) {
-      setStatus(copy.refreshFailed((error as Error).message));
+      const message = (error as Error).message;
+      setLastRefreshError(message);
+      setStatus(copy.refreshFailed(message));
     }
   }, [
     chainConfig,
@@ -924,6 +938,27 @@ export function EvmBettingPanel({
       `wallet=${effectiveWalletClient ? "yes" : "no"}`,
       `addr=${headlessAccountAddress ?? "-"}`,
       `err=${e2eAccountResult.error ?? "-"}`,
+    ].join(" ")
+    : "";
+  const e2eLifecycleDebug = isE2eMode
+    ? [
+      `duel=${duelKeyHex ?? "-"}`,
+      `duelId=${duelId ?? "-"}`,
+      `life=${effectiveLifecycleMarket?.lifecycleStatus ?? "-"}`,
+      `winner=${effectiveLifecycleMarket?.winner ?? "-"}`,
+      `ref=${effectiveLifecycleMarket?.marketRef ?? "-"}`,
+      `meta=${marketMeta ? "yes" : "no"}`,
+      `metaStatus=${marketMeta?.status ?? "-"}`,
+      `metaWinner=${marketMeta?.winner ?? "-"}`,
+      `metaKey=${marketMeta?.marketKey ?? "-"}`,
+      `aShares=${effectivePosition?.aShares?.toString() ?? "0"}`,
+      `bShares=${effectivePosition?.bShares?.toString() ?? "0"}`,
+      `aStake=${effectivePosition?.aStake?.toString() ?? "0"}`,
+      `bStake=${effectivePosition?.bStake?.toString() ?? "0"}`,
+      `claim=${uiState.canClaim ? "yes" : "no"}`,
+      `claimKind=${uiState.claimKind}`,
+      `balance=${nativeBalance.toString()}`,
+      `refreshErr=${lastRefreshError ?? "-"}`,
     ].join(" ")
     : "";
 
@@ -1242,6 +1277,9 @@ export function EvmBettingPanel({
           </div>
           {isE2eMode ? (
             <div data-testid="evm-wallet-debug">{e2eWalletDebug}</div>
+          ) : null}
+          {isE2eMode ? (
+            <div data-testid="evm-lifecycle-debug">{e2eLifecycleDebug}</div>
           ) : null}
         </div>
       </PredictionMarketPanel>

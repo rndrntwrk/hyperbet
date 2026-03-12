@@ -135,6 +135,10 @@ const KEEPER_BOT_HEALTH_FILE = (
   process.env.KEEPER_BOT_HEALTH_FILE ||
   path.resolve(keeperRoot, ".status", "keeper-bot-health.json")
 ).trim();
+const KEEPER_STREAM_STATE_FILE = (
+  process.env.KEEPER_STREAM_STATE_FILE ||
+  path.resolve(keeperRoot, ".status", "stream-state.json")
+).trim();
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 function loadKeeperBotHealthSnapshot(): KeeperBotHealthSnapshot | null {
@@ -146,6 +150,34 @@ function loadKeeperBotHealthSnapshot(): KeeperBotHealthSnapshot | null {
   } catch (error) {
     console.warn("[service] Failed to read keeper bot health snapshot:", error);
     return null;
+  }
+}
+
+function loadStreamStateSnapshot(): StreamState | null {
+  if (!KEEPER_STREAM_STATE_FILE || !fs_node.existsSync(KEEPER_STREAM_STATE_FILE)) {
+    return null;
+  }
+  try {
+    return JSON.parse(fs_node.readFileSync(KEEPER_STREAM_STATE_FILE, "utf8"));
+  } catch (error) {
+    console.warn("[service] Failed to read stream state snapshot:", error);
+    return null;
+  }
+}
+
+function persistStreamStateSnapshot(next: StreamState): void {
+  if (!KEEPER_STREAM_STATE_FILE) return;
+  try {
+    fs_node.mkdirSync(path.dirname(KEEPER_STREAM_STATE_FILE), {
+      recursive: true,
+    });
+    fs_node.writeFileSync(
+      KEEPER_STREAM_STATE_FILE,
+      `${JSON.stringify(next, null, 2)}\n`,
+      "utf8",
+    );
+  } catch (error) {
+    console.warn("[service] Failed to persist stream state snapshot:", error);
   }
 }
 
@@ -248,29 +280,48 @@ const defaultAgentB = {
   maxHp: 10,
 };
 
-let streamSeq = 1;
+const initialStreamState =
+  loadStreamStateSnapshot() ?? {
+    type: "STREAMING_STATE_UPDATE",
+    cycle: {
+      cycleId: "boot-cycle",
+      phase: "IDLE",
+      countdown: null,
+      timeRemaining: 0,
+      winnerId: null,
+      winnerName: null,
+      winReason: null,
+      agent1: defaultAgentA,
+      agent2: defaultAgentB,
+    },
+    leaderboard: [
+      { id: defaultAgentA.id, name: defaultAgentA.name, wins: 0, losses: 0 },
+      { id: defaultAgentB.id, name: defaultAgentB.name, wins: 0, losses: 0 },
+    ],
+    cameraTarget: null,
+    seq: 1,
+    emittedAt: Date.now(),
+  };
+let streamSeq =
+  typeof initialStreamState.seq === "number" &&
+    Number.isFinite(initialStreamState.seq) &&
+    initialStreamState.seq > 0
+    ? initialStreamState.seq
+    : 1;
 let streamState: StreamState = {
+  ...initialStreamState,
   type: "STREAMING_STATE_UPDATE",
-  cycle: {
-    cycleId: "boot-cycle",
-    phase: "IDLE",
-    countdown: null,
-    timeRemaining: 0,
-    winnerId: null,
-    winnerName: null,
-    winReason: null,
-    agent1: defaultAgentA,
-    agent2: defaultAgentB,
-  },
-  leaderboard: [
-    { id: defaultAgentA.id, name: defaultAgentA.name, wins: 0, losses: 0 },
-    { id: defaultAgentB.id, name: defaultAgentB.name, wins: 0, losses: 0 },
-  ],
-  cameraTarget: null,
   seq: streamSeq,
-  emittedAt: Date.now(),
+  emittedAt:
+    typeof initialStreamState.emittedAt === "number" &&
+      Number.isFinite(initialStreamState.emittedAt)
+      ? initialStreamState.emittedAt
+      : Date.now(),
 };
-let streamLastUpdatedAt = Date.now();
+let streamLastUpdatedAt =
+  typeof streamState.emittedAt === "number" && Number.isFinite(streamState.emittedAt)
+    ? streamState.emittedAt
+    : Date.now();
 let streamLastSourcePollAt: number | null = null;
 let streamLastSourceError: string | null = null;
 let streamSourcePollInFlight = false;
@@ -1311,6 +1362,7 @@ function publishStreamState(next: StreamState, sourceLabel: string): void {
   };
   streamLastUpdatedAt = Date.now();
   streamLastSourceError = null;
+  persistStreamStateSnapshot(streamState);
   broadcastStreamState(streamState, "state");
   console.log(
     `[${nowIso()}] [stream] updated from ${sourceLabel} cycle=${streamState.cycle?.cycleId ?? "unknown"} phase=${streamState.cycle?.phase ?? "unknown"}`,

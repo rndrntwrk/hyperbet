@@ -1240,11 +1240,11 @@
             "type": "u64"
           },
           {
-            "name": "a_stake",
+            "name": "a_locked_lamports",
             "type": "u64"
           },
           {
-            "name": "b_stake",
+            "name": "b_locked_lamports",
             "type": "u64"
           }
         ]

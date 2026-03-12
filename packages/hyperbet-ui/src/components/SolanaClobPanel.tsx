@@ -1283,6 +1283,25 @@ export function SolanaClobPanel({
   const noPercent = 100 - yesPercent;
   const canClaim = uiState.canClaim;
   const marketStateText = activeMarket?.marketState.toBase58() ?? "-";
+  const lifecycleDebugText = [
+    `duelKey=${lifecycleMarket?.duelKey ?? lifecycleDuel?.duelKey ?? duelKeyHex ?? "-"}`,
+    `marketRef=${lifecycleMarket?.marketRef ?? activeMarket?.marketState.toBase58() ?? "-"}`,
+    `lifecycleStatus=${uiState.lifecycleStatus}`,
+    `winner=${uiState.winner}`,
+    `marketStatus=${activeMarket?.marketStatus ?? "-"}`,
+    `marketWinner=${activeMarket?.winner ?? "-"}`,
+    `claimKind=${uiState.claimKind}`,
+    `claimableAmount=${uiState.claimableAmount.toString()}`,
+    `canClaim=${uiState.canClaim ? "true" : "false"}`,
+  ].join("\n");
+  const walletDebugText = [
+    `wallet=${walletAddress ?? "-"}`,
+    `aShares=${position.aShares.toString()}`,
+    `bShares=${position.bShares.toString()}`,
+    `aLockedLamports=${position.aLockedLamports.toString()}`,
+    `bLockedLamports=${position.bLockedLamports.toString()}`,
+    `refundableAmount=${walletSnapshot.refundableAmount.toString()}`,
+  ].join("\n");
   const adminPanelText = [
     `${copy.adminStatus} ${status}`,
     `${copy.match} ${marketStateText}`,
@@ -1431,6 +1450,38 @@ export function SolanaClobPanel({
             {copy.match}: {marketStateText}
           </div>
           <div data-testid="solana-clob-status">{status}</div>
+          <pre
+            data-testid="solana-clob-lifecycle-debug"
+            style={{
+              margin: 0,
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid rgba(148,163,184,0.22)",
+              background: "rgba(10,10,10,0.45)",
+              color: "#d4d4d8",
+              whiteSpace: "pre-wrap",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {lifecycleDebugText}
+          </pre>
+          <pre
+            data-testid="solana-clob-wallet-debug"
+            style={{
+              margin: 0,
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid rgba(148,163,184,0.22)",
+              background: "rgba(10,10,10,0.45)",
+              color: "#d4d4d8",
+              whiteSpace: "pre-wrap",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {walletDebugText}
+          </pre>
           <div data-testid="solana-clob-place-order-tx">{lastPlaceOrderTx}</div>
           <div data-testid="solana-clob-place-order-error">{lastPlaceOrderError}</div>
           <div data-testid="solana-clob-init-config-tx">-</div>
