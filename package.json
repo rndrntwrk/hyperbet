@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Hyperbet private monorepo for betting, prediction, and futures products",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "packages/*/app",
+    "packages/*/keeper"
   ],
   "scripts": {
     "build": "turbo run build",
