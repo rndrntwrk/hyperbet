@@ -24,6 +24,7 @@ anchor/target/*
 !anchor/target/types/
 !anchor/target/types/*.ts
 !anchor/target/deploy/
+anchor/target/deploy/*
 !anchor/target/deploy/*-keypair.json
 anchor/test-ledger
 .DS_Store

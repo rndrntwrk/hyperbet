@@ -6,8 +6,13 @@ import { copyIntoArtifacts, resolveArtifactRoot, runCommand } from "./ci-lib";
 const artifactRoot = resolveArtifactRoot("solana-program-build-gate");
 const anchorRoot = path.join(process.cwd(), "packages/hyperbet-solana/anchor");
 const buildLogPath = path.join(artifactRoot, "anchor-build.log");
+const deployRoot = path.join(anchorRoot, "target", "deploy");
+const deployArtifacts = [
+  "fight_oracle.so",
+  "gold_clob_market.so",
+  "gold_perps_market.so",
+];
 const trackedArtifactPaths = [
-  "packages/hyperbet-solana/anchor/target/deploy",
   "packages/hyperbet-solana/anchor/target/idl",
   "packages/hyperbet-solana/app/src/idl",
   "packages/hyperbet-solana/keeper/src/idl",
@@ -44,4 +49,11 @@ try {
   }
 } finally {
   copyIntoArtifacts(artifactRoot, buildLogPath, "anchor-build.log");
+  for (const artifact of deployArtifacts) {
+    copyIntoArtifacts(
+      artifactRoot,
+      path.join(deployRoot, artifact),
+      path.join("deploy", artifact),
+    );
+  }
 }
