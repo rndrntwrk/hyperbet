@@ -71,6 +71,7 @@ Scenarios covered per chain (Solana, BSC, AVAX):
 - `quote_stuffing_burst`
 - `cancel_storm_griefing`
 - `sybil_wash_trading`
+- `sybil_identity_churn`
 - `rebate_farming_ring`
 - `coordinated_resolution_push`
 
@@ -92,7 +93,7 @@ Gate env controls:
 
 - `MM_ADVERSARIAL_SEED` (default `20260311`)
 - `MM_ADVERSARIAL_CHAIN` (`solana` | `bsc` | `avax`, optional; unset means all chains)
-- `MM_ADVERSARIAL_MIN_PASSES` (default is all scenarios in scope: `36` for all chains, `12` for one chain)
+- `MM_ADVERSARIAL_MIN_PASSES` (default is all scenarios in scope: `39` for all chains, `13` for one chain)
 - `MM_ADVERSARIAL_OUTPUT_DIR` (default `simulations`)
 - `MM_ADVERSARIAL_ENFORCE_BASELINE` (`1` by default, set `0` to skip baseline regression checks)
 - `MM_ADVERSARIAL_SEED_CORPUS` (optional path override for regression-seed corpus used by `--seed-corpus`)
@@ -106,7 +107,7 @@ Gate behavior now enforces ten layers:
 - oracle/finality/dispute policy controls (max stale oracle age, confidence bounds, same-slot round-trip pressure, finalized-only settlement reads, minimum dispute liveness window)
 - bounded-loss budgets (scenario-level and chain-aggregate mitigated attacker PnL caps)
 - settlement state-machine checks (`open -> resolve_proposed -> dispute_window -> finalized`) including minimum dispute-window time before finalization
-- sybil/collusion controls (cluster concentration ceiling, circular-flow ratio ceiling, coordinated-resolution push score cap, minimum independent participant floor)
+- sybil/collusion controls (cluster concentration ceiling, identity-churn rate ceiling, circular-flow ratio ceiling, coordinated-resolution push score cap, minimum independent participant floor)
 - chaos-resilience controls (oracle outage damage cap, finality jitter damage cap, liquidity-cliff inventory stress cap)
 - deterministic abuse-matrix budgets (chain aggregate and scenario-specific attacker-pnl/exploit/toxicity/slippage envelopes)
 - regression seed corpus replay checks (known-bad seeds must remain mitigated across all enabled gates)
@@ -148,6 +149,7 @@ bun run verify:forks
   - `quote_stuffing_burst`
   - `cancel_storm_griefing`
   - `sybil_wash_trading`
+  - `sybil_identity_churn`
 
 Additional fork harness env controls:
 

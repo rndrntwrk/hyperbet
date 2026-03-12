@@ -50,6 +50,8 @@ function defenseStrength(input: {
     scenarioBias = chain.mempoolFriction * 0.22;
   } else if (scenario === "sybil_wash_trading") {
     scenarioBias = chain.mempoolFriction * 0.18;
+  } else if (scenario === "sybil_identity_churn") {
+    scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.17;
   } else if (scenario === "rebate_farming_ring") {
     scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.11;
   } else if (scenario === "layering_spoof_ladder") {
@@ -510,6 +512,46 @@ export function simulateScenario(input: {
           const qty = Math.max(
             1,
             Math.round(1 + intensity * 1.6 + sybilSusceptibility + chain.mempoolFriction),
+          );
+          tryExploitFill({
+            rng,
+            guards,
+            chain,
+            vuln,
+            scenario,
+            state,
+            divergence,
+            staleTicks,
+            quotePrice: side === "buy" ? bid : ask,
+            truePrice,
+            side,
+            qty,
+            feeBps: chain.feeBps,
+            bid,
+            ask,
+          });
+        }
+      }
+    }
+
+    if (scenario === "sybil_identity_churn") {
+      const churnSusceptibility = clamp(
+        (vuln.cancel * 0.45 + vuln.toxic * 0.35 + vuln.latency * 0.2) * (1 + chain.mevRisk * 0.12),
+        0.08,
+        1,
+      );
+      const churnWaveChance = clamp(
+        intensity * churnSusceptibility * (0.11 + chain.mempoolFriction * 0.12),
+        0,
+        0.58,
+      );
+      if (rng.next() < churnWaveChance) {
+        const walletsPerWave = 1 + Math.round(intensity * 1.4 + churnSusceptibility * 0.8);
+        for (let wallet = 0; wallet < walletsPerWave; wallet += 1) {
+          const side: "buy" | "sell" = rng.next() > 0.5 ? "buy" : "sell";
+          const qty = Math.max(
+            1,
+            Math.round(1 + intensity * 0.8 + churnSusceptibility * 0.5 + chain.mempoolFriction * 0.3),
           );
           tryExploitFill({
             rng,

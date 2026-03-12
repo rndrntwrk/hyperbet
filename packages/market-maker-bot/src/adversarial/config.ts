@@ -10,6 +10,7 @@ export const SCENARIOS: ScenarioId[] = [
   "liquidation_cascade",
   "gas_auction_backrun",
   "sybil_wash_trading",
+  "sybil_identity_churn",
   "rebate_farming_ring",
   "coordinated_resolution_push",
   "layering_spoof_ladder",

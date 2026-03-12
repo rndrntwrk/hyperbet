@@ -11,6 +11,7 @@ export type ScenarioId =
   | "quote_stuffing_burst"
   | "cancel_storm_griefing"
   | "sybil_wash_trading"
+  | "sybil_identity_churn"
   | "rebate_farming_ring"
   | "coordinated_resolution_push";
 

@@ -146,6 +146,17 @@ export const SCENARIO_RISK_BUDGETS: Record<ScenarioId, ScenarioRiskBudget> = {
     maxAdverseSlippageBps: 120,
     minAttackerPnlReductionRatio: 0.3,
   },
+  sybil_identity_churn: {
+    requiredControls: [
+      "sybil.max_identity_churn_rate",
+      "sybil.max_cluster_concentration_pct",
+    ],
+    maxMitigatedAttackerPnl: 18,
+    maxExploitEvents: 15,
+    maxToxicFillRate: 0.35,
+    maxAdverseSlippageBps: 165,
+    minAttackerPnlReductionRatio: 0.3,
+  },
   rebate_farming_ring: {
     requiredControls: [
       "sybil.max_circular_flow_ratio",
