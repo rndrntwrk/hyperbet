@@ -237,6 +237,7 @@ async function main(): Promise<void> {
   const latestBlock = await publicClient.getBlock({ blockTag: "latest" });
   const now = Number(latestBlock.timestamp);
   const openTx = await reporterClient.writeContract({
+    chain: undefined,
     address: oracleAddress,
     abi: duelOracleAbi,
     functionName: "upsertDuel",
@@ -254,6 +255,7 @@ async function main(): Promise<void> {
   await waitForReceipt(publicClient, openTx);
 
   const createMarketTx = await reporterClient.writeContract({
+    chain: undefined,
     address: clobAddress,
     abi: goldClobAdminAbi,
     functionName: "createMarketForDuel",
@@ -302,6 +304,7 @@ async function main(): Promise<void> {
   const fees = (cost * (treasuryFeeBps + marketMakerFeeBps)) / 10_000n;
 
   const placeOrderTx = await canaryClient.writeContract({
+    chain: undefined,
     address: clobAddress,
     abi: GOLD_CLOB_ABI,
     functionName: "placeOrder",
@@ -311,6 +314,7 @@ async function main(): Promise<void> {
   await waitForReceipt(publicClient, placeOrderTx);
 
   const cancelTx = await reporterClient.writeContract({
+    chain: undefined,
     address: oracleAddress,
     abi: duelOracleAbi,
     functionName: "cancelDuel",
@@ -319,6 +323,7 @@ async function main(): Promise<void> {
   await waitForReceipt(publicClient, cancelTx);
 
   const syncTx = await reporterClient.writeContract({
+    chain: undefined,
     address: clobAddress,
     abi: GOLD_CLOB_ABI,
     functionName: "syncMarketFromOracle",
@@ -336,6 +341,7 @@ async function main(): Promise<void> {
   );
 
   const claimTx = await canaryClient.writeContract({
+    chain: undefined,
     address: clobAddress,
     abi: GOLD_CLOB_ABI,
     functionName: "claim",

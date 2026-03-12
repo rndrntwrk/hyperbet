@@ -30,6 +30,7 @@ import {
   duelKeyHexToBytes,
   FIGHT_ORACLE_PROGRAM_ID,
   findDuelStatePda,
+  findMarketConfigPda,
   findMarketPda,
   getSenderUrl,
   GOLD_CLOB_MARKET_PROGRAM_ID,
@@ -801,10 +802,26 @@ type ExternalBetVerificationInput = {
   duelKey: string | null;
 };
 
+type VerifiedExternalBetRecord = {
+  chain: RecordedBetChain;
+  txSignature: string;
+  bettorWallet: string;
+  duelKey: string | null;
+  marketRef: string;
+  sourceAsset: "SOL";
+  sourceAmount: number;
+  goldAmount: number;
+  feeBps: number;
+  feeAmount: number;
+  pointsBasisAmount: number;
+};
+
 const GOLD_CLOB_PLACE_ORDER_DISCRIMINATOR = createHash("sha256")
   .update("global:place_order")
   .digest()
   .subarray(0, 8);
+const GOLD_CLOB_PLACE_ORDER_DATA_LENGTH = 27;
+const SOL_DISPLAY_DECIMALS = 9;
 
 function normalizeDuelKeyHex(value: string | null): string | null {
   if (!value) return null;
@@ -892,6 +909,83 @@ function isPlaceOrderInstructionData(data: unknown): boolean {
     );
   } catch {
     return false;
+  }
+}
+
+function toNumberLike(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") return Number(value);
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toNumber" in value &&
+    typeof (value as { toNumber?: () => number }).toNumber === "function"
+  ) {
+    return (value as { toNumber: () => number }).toNumber();
+  }
+  return 0;
+}
+
+function formatAtomicAmount(value: bigint, decimals: number): number {
+  const negative = value < 0n;
+  const absolute = negative ? -value : value;
+  const base = 10n ** BigInt(decimals);
+  const whole = absolute / base;
+  const fraction = absolute % base;
+  const fractionText = fraction
+    .toString()
+    .padStart(decimals, "0")
+    .replace(/0+$/, "");
+  const rendered = fractionText
+    ? `${whole.toString()}.${fractionText}`
+    : whole.toString();
+  return Number(negative ? `-${rendered}` : rendered);
+}
+
+function calculateQuoteCostAtomic(
+  side: number,
+  price: number,
+  amount: bigint,
+): bigint | null {
+  if ((side !== 1 && side !== 2) || price < 0 || price > 1000 || amount <= 0n) {
+    return null;
+  }
+  const priceComponent = BigInt(side === 1 ? price : 1000 - price);
+  const total = amount * priceComponent;
+  if (total <= 0n || total % 1000n !== 0n) {
+    return null;
+  }
+  const cost = total / 1000n;
+  return cost > 0n ? cost : null;
+}
+
+function calculateBpsFeeAtomic(amount: bigint, feeBps: number): bigint {
+  if (amount <= 0n || feeBps <= 0) return 0n;
+  return (amount * BigInt(feeBps)) / 10_000n;
+}
+
+function decodePlaceOrderInstructionData(
+  data: unknown,
+): { side: number; price: number; amount: bigint } | null {
+  if (!isPlaceOrderInstructionData(data) || typeof data !== "string") {
+    return null;
+  }
+  try {
+    const raw = Buffer.from(bs58.decode(data));
+    if (raw.length < GOLD_CLOB_PLACE_ORDER_DATA_LENGTH) {
+      return null;
+    }
+    const side = raw.readUInt8(16);
+    const price = raw.readUInt16LE(17);
+    const amount = raw.readBigUInt64LE(19);
+    return {
+      side,
+      price,
+      amount,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -1361,8 +1455,8 @@ async function verifyRecordedBet(
   bettorWallet: string,
   txSignature: string,
   expected: ExternalBetVerificationInput,
-): Promise<boolean> {
-  if (!solanaCtx) return false;
+): Promise<VerifiedExternalBetRecord | null> {
+  if (!solanaCtx) return null;
   const normalizedWallet = normalizeBase58Key(bettorWallet);
   const rawMarketRef = expected.marketRef?.trim() || null;
   const rawDuelKey = expected.duelKey?.trim() || null;
@@ -1371,13 +1465,13 @@ async function verifyRecordedBet(
     : null;
   const normalizedDuelKey = normalizeDuelKeyHex(rawDuelKey);
   if (!normalizedWallet || !txSignature.trim()) {
-    return false;
+    return null;
   }
   if ((rawMarketRef && !normalizedMarketRef) || (rawDuelKey && !normalizedDuelKey)) {
-    return false;
+    return null;
   }
   if (!normalizedMarketRef && !normalizedDuelKey) {
-    return false;
+    return null;
   }
 
   const expectedDuelState = normalizedDuelKey
@@ -1397,7 +1491,7 @@ async function verifyRecordedBet(
     derivedMarketRef &&
     normalizedMarketRef !== derivedMarketRef
   ) {
-    return false;
+    return null;
   }
   const expectedMarketRef = normalizedMarketRef ?? derivedMarketRef;
 
@@ -1410,7 +1504,7 @@ async function verifyRecordedBet(
       },
     );
     if (!transaction || transaction.meta?.err) {
-      return false;
+      return null;
     }
 
     const walletSigned = transaction.transaction.message.accountKeys.some(
@@ -1420,7 +1514,7 @@ async function verifyRecordedBet(
           normalizedWallet,
     );
     if (!walletSigned) {
-      return false;
+      return null;
     }
 
     for (const instruction of transaction.transaction.message.instructions) {
@@ -1428,16 +1522,13 @@ async function verifyRecordedBet(
       if (programId !== GOLD_CLOB_MARKET_PROGRAM_ID.toBase58()) {
         continue;
       }
-      if (
-        !(
-          typeof instruction === "object" &&
-          instruction !== null &&
-          "data" in instruction &&
-          isPlaceOrderInstructionData(
+      const decodedOrder =
+        typeof instruction === "object" && instruction !== null && "data" in instruction
+          ? decodePlaceOrderInstructionData(
             (instruction as { data?: unknown }).data,
           )
-        )
-      ) {
+          : null;
+      if (!decodedOrder) {
         continue;
       }
       const accounts = extractInstructionAccounts(instruction);
@@ -1447,11 +1538,44 @@ async function verifyRecordedBet(
       if (user !== normalizedWallet) continue;
       if (expectedMarketRef && marketState !== expectedMarketRef) continue;
       if (expectedDuelState && duelState !== expectedDuelState) continue;
-      return true;
+      if (!marketState) continue;
+
+      const marketConfig = await solanaCtx.marketProgram.account.marketConfig.fetch(
+        findMarketConfigPda(solanaCtx.marketProgramId),
+      );
+      const totalFeeBps =
+        toNumberLike(marketConfig?.tradeTreasuryFeeBps) +
+        toNumberLike(marketConfig?.tradeMarketMakerFeeBps);
+      const quoteCostAtomic = calculateQuoteCostAtomic(
+        decodedOrder.side,
+        decodedOrder.price,
+        decodedOrder.amount,
+      );
+      if (quoteCostAtomic == null) {
+        continue;
+      }
+      const feeAmountAtomic = calculateBpsFeeAtomic(quoteCostAtomic, totalFeeBps);
+      const totalSpendAtomic = quoteCostAtomic + feeAmountAtomic;
+      const totalSpend = formatAtomicAmount(totalSpendAtomic, SOL_DISPLAY_DECIMALS);
+      const feeAmount = formatAtomicAmount(feeAmountAtomic, SOL_DISPLAY_DECIMALS);
+
+      return {
+        chain: toRecordedBetChain("solana"),
+        txSignature: txSignature.trim(),
+        bettorWallet: normalizedWallet,
+        duelKey: normalizedDuelKey,
+        marketRef: marketState,
+        sourceAsset: "SOL",
+        sourceAmount: totalSpend,
+        goldAmount: totalSpend,
+        feeBps: totalFeeBps,
+        feeAmount,
+        pointsBasisAmount: totalSpend,
+      };
     }
-    return false;
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -1460,11 +1584,9 @@ async function authorizeExternalBetRecord(
   bettorWallet: string,
   txSignature: string,
   expected: ExternalBetVerificationInput,
-): Promise<boolean> {
-  if (hasPrivilegedWriteAuth(req)) return true;
-
+): Promise<VerifiedExternalBetRecord | null> {
   if (!isAllowedAppOrigin(req.headers.get("origin")) || !txSignature.trim()) {
-    return false;
+    return null;
   }
 
   return verifyRecordedBet(bettorWallet, txSignature, expected);
@@ -1957,48 +2079,64 @@ async function handleBetRecord(req: Request): Promise<Response> {
       : null;
   const duelKeyRaw = payload.duelKey ? String(payload.duelKey).trim() : null;
   const authorizedByWriteKey = hasPrivilegedWriteAuth(req);
-  if (
-    !(await authorizeExternalBetRecord(req, walletRaw, txSignature, {
+  const verifiedExternalBet = authorizedByWriteKey
+    ? null
+    : await authorizeExternalBetRecord(req, walletRaw, txSignature, {
       marketRef: marketRefRaw,
       duelKey: duelKeyRaw,
-    }))
-  ) {
+    });
+  if (!authorizedByWriteKey && !verifiedExternalBet) {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  const sourceAmount = parseNumberInput(payload.sourceAmount, 0);
-  const goldAmount = parseNumberInput(payload.goldAmount, sourceAmount);
-  const feeBps = Math.max(0, parseNumberInput(payload.feeBps, 0));
+  const sourceAmount = verifiedExternalBet
+    ? verifiedExternalBet.sourceAmount
+    : parseNumberInput(payload.sourceAmount, 0);
+  const goldAmount = verifiedExternalBet
+    ? verifiedExternalBet.goldAmount
+    : parseNumberInput(payload.goldAmount, sourceAmount);
+  const feeBps = verifiedExternalBet
+    ? Math.max(0, verifiedExternalBet.feeBps)
+    : Math.max(0, parseNumberInput(payload.feeBps, 0));
   const recordedAt = Date.now();
 
   const normalizedWallet = rememberWalletCase(walletRaw);
   ensureIdentity(normalizedWallet);
+  const pointsBasisAmount = verifiedExternalBet
+    ? Math.max(verifiedExternalBet.pointsBasisAmount, 0)
+    : Math.max(goldAmount, sourceAmount);
   const pointsAwarded = Math.max(
     1,
-    Math.round(Math.max(goldAmount, sourceAmount) * 10),
+    Math.round(pointsBasisAmount * 10),
   );
+  const canonicalTxSignature = verifiedExternalBet?.txSignature ?? txSignature;
+  const canonicalMarketRef = verifiedExternalBet?.marketRef ?? marketRefRaw;
+  const canonicalDuelKey = verifiedExternalBet?.duelKey ?? duelKeyRaw;
+  const canonicalSourceAsset =
+    verifiedExternalBet?.sourceAsset ?? String(payload.sourceAsset || "GOLD");
+  const canonicalExternalBetRef = authorizedByWriteKey
+    ? payload.externalBetRef
+      ? String(payload.externalBetRef)
+      : canonicalTxSignature
+        ? `solana:${canonicalTxSignature}`
+        : null
+    : canonicalTxSignature
+      ? `solana:${canonicalTxSignature}`
+      : null;
   const record: BetRecord = {
     id: `${recordedAt}-${Math.random().toString(36).slice(2, 10)}`,
     bettorWallet: displayWallet(normalizedWallet),
     chain: toRecordedBetChain("solana"),
-    sourceAsset: String(payload.sourceAsset || "GOLD"),
+    sourceAsset: canonicalSourceAsset,
     sourceAmount,
     goldAmount,
     feeBps,
-    txSignature,
-    marketPda: marketRefRaw,
-    duelKey: duelKeyRaw,
+    txSignature: canonicalTxSignature,
+    marketPda: canonicalMarketRef,
+    duelKey: canonicalDuelKey,
     duelId: payload.duelId ? String(payload.duelId).trim() : null,
     inviteCode: null,
-    externalBetRef: authorizedByWriteKey
-      ? payload.externalBetRef
-        ? String(payload.externalBetRef)
-        : txSignature
-          ? `solana:${txSignature}`
-          : null
-      : txSignature
-        ? `solana:${txSignature}`
-        : null,
+    externalBetRef: canonicalExternalBetRef,
     recordedAt,
   };
 
@@ -2054,7 +2192,9 @@ async function handleBetRecord(req: Request): Promise<Response> {
     referrerPoints.referralPoints += referralPointsAwarded;
     saveWalletPoints(referrer.wallet, referrerPoints);
 
-    const betFeeGold = (Math.max(goldAmount, 0) * Math.max(feeBps, 0)) / 10_000;
+    const betFeeGold = verifiedExternalBet
+      ? Math.max(verifiedExternalBet.feeAmount, 0)
+      : (Math.max(goldAmount, 0) * Math.max(feeBps, 0)) / 10_000;
     const referralFeeShare = betFeeGold * 0.5;
     const newFeeShare =
       (referralFeeShareGoldByWallet.get(referrer.wallet) ?? 0) +

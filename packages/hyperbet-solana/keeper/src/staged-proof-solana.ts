@@ -11,6 +11,7 @@ import {
   findClobVaultPda,
   findDuelStatePda,
   findMarketConfigPda,
+  findOrderPda,
   findOracleConfigPda,
   findPriceLevelPda,
   findUserBalancePda,

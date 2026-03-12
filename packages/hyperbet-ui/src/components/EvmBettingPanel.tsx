@@ -122,6 +122,8 @@ function getEvmPanelCopy(locale: UiLocale) {
       claimReady: "可领取结算",
       claimLocked: "暂无可领取结算",
       claimHelp: "对局结算后，可在这里领取胜出份额或取消退款。",
+      claimCleanupReady: "清理已结算仓位",
+      claimCleanupHelp: "若本局已判定负方，可在这里清理残留仓位状态。",
       sideYes: "买入 A",
       sideNo: "买入 B",
       walletReady: "钱包已连接",
@@ -173,6 +175,9 @@ function getEvmPanelCopy(locale: UiLocale) {
     claimLocked: "Nothing claimable yet",
     claimHelp:
       "Once the duel resolves, claim winning shares or cancelled refunds here.",
+    claimCleanupReady: "Clear resolved position",
+    claimCleanupHelp:
+      "If this market resolved against you, use this once to clear the stale position state.",
     sideYes: "Buy A",
     sideNo: "Buy B",
     walletReady: "Wallet connected",
@@ -456,6 +461,8 @@ export function EvmBettingPanel({
     () => ({
       aShares: effectivePosition?.aShares ?? 0n,
       bShares: effectivePosition?.bShares ?? 0n,
+      aStake: effectivePosition?.aStake ?? 0n,
+      bStake: effectivePosition?.bStake ?? 0n,
       refundableAmount:
         (effectivePosition?.aStake ?? 0n) + (effectivePosition?.bStake ?? 0n),
     }),
@@ -625,6 +632,8 @@ export function EvmBettingPanel({
           {
             aShares: userPosition.aShares,
             bShares: userPosition.bShares,
+            aStake: userPosition.aStake,
+            bStake: userPosition.bStake,
             refundableAmount: userPosition.aStake + userPosition.bStake,
           },
           {
@@ -927,6 +936,16 @@ export function EvmBettingPanel({
     ? (effectivePosition?.aShares ?? 0n)
     : (effectivePosition?.bShares ?? 0n);
   const canClaim = uiState.canClaim;
+  const claimActionLabel =
+    uiState.claimKind === "LOSER_CLEANUP" && canClaim
+      ? copy.claimCleanupReady
+      : canClaim
+        ? copy.claimReady
+        : copy.claimLocked;
+  const claimHelpText =
+    uiState.claimKind === "LOSER_CLEANUP" && canClaim
+      ? copy.claimCleanupHelp
+      : copy.claimHelp;
   const programsReady = Boolean(
     chainConfig && duelKeyHex && uiState.canTrade,
   );
@@ -1264,7 +1283,7 @@ export function EvmBettingPanel({
               !canClaim,
             )}
           >
-            {canClaim ? copy.claimReady : copy.claimLocked}
+            {claimActionLabel}
           </button>
           <div
             style={{
@@ -1273,7 +1292,7 @@ export function EvmBettingPanel({
               lineHeight: 1.45,
             }}
           >
-            {copy.claimHelp}
+            {claimHelpText}
           </div>
           {isE2eMode ? (
             <div data-testid="evm-wallet-debug">{e2eWalletDebug}</div>

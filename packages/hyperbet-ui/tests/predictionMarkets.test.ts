@@ -191,6 +191,8 @@ describe("prediction market ui state", () => {
       {
         aShares: 10n,
         bShares: 20n,
+        aStake: 0n,
+        bStake: 0n,
         refundableAmount: 30n,
       },
     );
@@ -233,6 +235,8 @@ describe("prediction market ui state", () => {
       {
         aShares: 25n,
         bShares: 0n,
+        aStake: 0n,
+        bStake: 0n,
         refundableAmount: 0n,
       },
     );
@@ -276,6 +280,8 @@ describe("prediction market ui state", () => {
       {
         aShares: 0n,
         bShares: 42n,
+        aStake: 0n,
+        bStake: 0n,
         refundableAmount: 0n,
       },
     );
@@ -318,6 +324,8 @@ describe("prediction market ui state", () => {
       {
         aShares: 0n,
         bShares: 0n,
+        aStake: 0n,
+        bStake: 0n,
         refundableAmount: 11n,
       },
     );
@@ -348,6 +356,8 @@ describe("prediction market ui state", () => {
       {
         aShares: 0n,
         bShares: 0n,
+        aStake: 0n,
+        bStake: 0n,
         refundableAmount: 0n,
       },
       {
@@ -367,6 +377,8 @@ describe("prediction market ui state", () => {
       {
         aShares: 0n,
         bShares: 0n,
+        aStake: 0n,
+        bStake: 0n,
         refundableAmount: 9n,
       },
       {
@@ -378,5 +390,27 @@ describe("prediction market ui state", () => {
     expect(uiState.canClaim).toBe(true);
     expect(uiState.claimKind).toBe("REFUND");
     expect(uiState.claimableAmount).toBe(9n);
+  });
+
+  it("enables loser cleanup claims for resolved stale EVM positions", () => {
+    const uiState = derivePredictionMarketUiState(
+      null,
+      {
+        aShares: 0n,
+        bShares: 12n,
+        aStake: 0n,
+        bStake: 7n,
+        refundableAmount: 0n,
+      },
+      {
+        lifecycleStatus: "RESOLVED",
+        winner: "A",
+      },
+    );
+
+    expect(uiState.canTrade).toBe(false);
+    expect(uiState.canClaim).toBe(true);
+    expect(uiState.claimKind).toBe("LOSER_CLEANUP");
+    expect(uiState.claimableAmount).toBe(0n);
   });
 });

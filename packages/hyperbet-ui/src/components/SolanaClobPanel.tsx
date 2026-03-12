@@ -48,7 +48,7 @@ import {
   sendViaHeliusSender,
   startHeliusSenderWarmup,
 } from "../lib/solanaRpc";
-import { CONFIG, DEFAULT_BET_FEE_BPS } from "../lib/config";
+import { CONFIG } from "../lib/config";
 import {
   normalizePredictionMarketDuelKeyHex,
   usePredictionMarketLifecycle,
@@ -464,6 +464,8 @@ export function SolanaClobPanel({
     () => ({
       aShares: position.aShares,
       bShares: position.bShares,
+      aStake: position.aLockedLamports,
+      bStake: position.bLockedLamports,
       refundableAmount: position.aLockedLamports + position.bLockedLamports,
     }),
     [position],
@@ -842,6 +844,8 @@ export function SolanaClobPanel({
       {
         aShares: userPosition.aShares,
         bShares: userPosition.bShares,
+        aStake: userPosition.aLockedLamports,
+        bStake: userPosition.bLockedLamports,
         refundableAmount:
           userPosition.aLockedLamports + userPosition.bLockedLamports,
       },
@@ -1165,9 +1169,9 @@ export function SolanaClobPanel({
         chainKey: "solana",
         bettorWallet: wallet.publicKey.toBase58(),
         sourceAsset: "SOL",
-        sourceAmount: fmtAmount(amount),
-        goldAmount: fmtAmount(amount),
-        feeBps: DEFAULT_BET_FEE_BPS,
+        sourceAmount: 0,
+        goldAmount: 0,
+        feeBps: 0,
         txSignature: signature,
         marketRef: activeMarket.marketState.toBase58(),
         duelKey: activeMarket.duelKeyHex,

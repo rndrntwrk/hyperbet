@@ -7,6 +7,8 @@ import type {
 export type PredictionMarketWalletSnapshot = {
   aShares: bigint;
   bShares: bigint;
+  aStake: bigint;
+  bStake: bigint;
   refundableAmount: bigint;
 };
 
@@ -19,7 +21,8 @@ export type PredictionMarketClaimKind =
   | "NONE"
   | "WINNER_A"
   | "WINNER_B"
-  | "REFUND";
+  | "REFUND"
+  | "LOSER_CLEANUP";
 
 export type PredictionMarketUiState = {
   hasCanonicalLifecycle: boolean;
@@ -35,6 +38,8 @@ export const EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT: PredictionMarketWalletSnap
   {
     aShares: 0n,
     bShares: 0n,
+    aStake: 0n,
+    bStake: 0n,
     refundableAmount: 0n,
   };
 
@@ -72,6 +77,13 @@ export function derivePredictionMarketUiState(
       } else if (source.winner === "B" && wallet.bShares > 0n) {
         claimableAmount = wallet.bShares;
         claimKind = "WINNER_B";
+      } else if (
+        wallet.aShares > 0n ||
+        wallet.bShares > 0n ||
+        wallet.aStake > 0n ||
+        wallet.bStake > 0n
+      ) {
+        claimKind = "LOSER_CLEANUP";
       }
       break;
     case "CANCELLED":
@@ -87,7 +99,7 @@ export function derivePredictionMarketUiState(
   return {
     ...source,
     canTrade: source.lifecycleStatus === "OPEN",
-    canClaim: claimableAmount > 0n,
+    canClaim: claimableAmount > 0n || claimKind === "LOSER_CLEANUP",
     claimableAmount,
     claimKind,
   };
