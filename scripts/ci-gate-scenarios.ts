@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -32,6 +33,7 @@ const wsPort = target === "evm" ? "3400" : "3500";
 const anvilPort = target === "evm" ? "18546" : "18547";
 const historyPath = path.join(artifactRoot, "scenario-history.json");
 const serverLog = path.join(artifactRoot, "simulation-server.log");
+const bootstrapKeypairPath = path.join(artifactRoot, "solana-bootstrap-keypair.json");
 
 const evmCanonical = [
   "stale-signal-sniping",
@@ -66,10 +68,39 @@ const solanaMatrix = [
   "solana-cross-market-validation-abuse",
 ];
 
+function scenarioEnv(): NodeJS.ProcessEnv {
+  if (target !== "solana") {
+    return {};
+  }
+
+  return {
+    ANCHOR_WALLET: bootstrapKeypairPath,
+    E2E_SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
+    SOLANA_BOOTSTRAP_KEYPAIR: bootstrapKeypairPath,
+  };
+}
+
+async function ensureBootstrapWallet(): Promise<void> {
+  if (target !== "solana" || existsSync(bootstrapKeypairPath)) {
+    return;
+  }
+
+  mkdirSync(path.dirname(bootstrapKeypairPath), { recursive: true });
+  await runCommand(
+    "solana-keygen",
+    ["new", "--no-bip39-passphrase", "--silent", "--force", "-o", bootstrapKeypairPath],
+    {
+      stdoutFile: path.join(artifactRoot, "solana-keygen.out.log"),
+      stderrFile: path.join(artifactRoot, "solana-keygen.err.log"),
+    },
+  );
+}
+
 async function runCli(args: string[], name: string): Promise<void> {
   await runCommand("bun", ["run", "--cwd", "packages/simulation-dashboard", "scenario", ...args], {
     env: {
       SIM_API_URL: `http://127.0.0.1:${httpPort}`,
+      ...scenarioEnv(),
     },
     stdoutFile: path.join(artifactRoot, `${name}.out.log`),
     stderrFile: path.join(artifactRoot, `${name}.err.log`),
@@ -79,6 +110,8 @@ async function runCli(args: string[], name: string): Promise<void> {
 let stopServer: (() => void) | null = null;
 
 try {
+  await ensureBootstrapWallet();
+
   await runCommand(
     "bun",
     ["run", "--cwd", "packages/evm-contracts", "build:foundry"],
@@ -98,6 +131,7 @@ try {
         SIM_WS_PORT: wsPort,
         SIM_ANVIL_PORT: anvilPort,
         SIM_SCENARIO_HISTORY_PATH: historyPath,
+        ...scenarioEnv(),
       },
       logFile: serverLog,
     },
