@@ -8,8 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { toAddress } from "@solana/client";
-import { useSolanaClient } from "@solana/react-hooks";
+import { PublicKey } from "@solana/web3.js";
 import {
   resolveUiLocale,
   type UiLocale,
@@ -646,7 +645,6 @@ export function App() {
   const locale = resolveUiLocale();
   const copy = getAppCopy(locale);
   const { connection } = useAppConnection();
-  const client = useSolanaClient();
   const wallet = useAppWallet();
   const { setVisible: setSolModalVisible } = useAppWalletModal();
   const isE2eMode = import.meta.env.MODE === "e2e";
@@ -678,6 +676,8 @@ export function App() {
   const [inviteShareStatus, setInviteShareStatus] = useState("");
   const [streamSourceIndex, setStreamSourceIndex] = useState(0);
   const [showPointsDrawer, setShowPointsDrawer] = useState(false);
+  const rpcUnavailableStatus =
+    "Refresh unavailable: missing Solana RPC/wallet context";
 
   // ── Resizable panels ─────────────────────────────────────────────────────
   // Track mobile breakpoint — inline resize styles must NOT apply on mobile
@@ -821,19 +821,28 @@ export function App() {
       setProgramDeployment({ checked: true, oracle: true, market: true });
       return;
     }
+    if (
+      !connection ||
+      typeof (connection as { getAccountInfo?: unknown }).getAccountInfo !==
+        "function"
+    ) {
+      setProgramDeployment({ checked: true, oracle: false, market: false });
+      setStatus(rpcUnavailableStatus);
+      return;
+    }
 
     let cancelled = false;
     void (async () => {
       try {
         const [oracleInfo, marketInfo] = await Promise.all([
-          client.actions.fetchAccount(
-            toAddress(
+          connection.getAccountInfo(
+            new PublicKey(
               CONFIG.fightOracleProgramId || FIGHT_ORACLE_PROGRAM_ADDRESS,
             ),
             "confirmed",
           ),
-          client.actions.fetchAccount(
-            toAddress(
+          connection.getAccountInfo(
+            new PublicKey(
               CONFIG.goldClobMarketProgramId || GOLD_CLOB_MARKET_PROGRAM_ADDRESS,
             ),
             "confirmed",
@@ -842,8 +851,8 @@ export function App() {
         if (cancelled) return;
         setProgramDeployment({
           checked: true,
-          oracle: Boolean(oracleInfo.executable),
-          market: Boolean(marketInfo.executable),
+          oracle: Boolean(oracleInfo?.executable),
+          market: Boolean(marketInfo?.executable),
         });
       } catch {
         if (cancelled) return;
@@ -853,7 +862,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [client.actions, shouldPollChainData]);
+  }, [connection, rpcUnavailableStatus, shouldPollChainData]);
 
   useEffect(() => {
     if (!programDeployment.checked) return;
@@ -871,6 +880,14 @@ export function App() {
 
   useEffect(() => {
     if (!shouldPollChainData) return;
+    if (
+      !connection ||
+      typeof (connection as { getProgramAccounts?: unknown }).getProgramAccounts !==
+        "function"
+    ) {
+      setStatus(rpcUnavailableStatus);
+      return;
+    }
     let cancelled = false;
 
     void (async () => {
@@ -980,6 +997,7 @@ export function App() {
     refreshNonce,
     fixedMatchId,
     UI_SYNC_DELAY_MS,
+    rpcUnavailableStatus,
   ]);
 
   const handleRefresh = () => {
