@@ -6,14 +6,16 @@ Avalanche C-Chain focused Hyperbet package for betting, CLOB, and futures interf
 
 - `app`: standalone Vite app for wallet connect, market creation, bet placement, EVM GOLD token interactions, settlement, and claiming on Avalanche.
 - `keeper`: EVM automation scripts for market-maker seeding and oracle resolution on Avalanche.
-- `deployments/contracts.json`: shared source of truth for AVAX contract addresses, chain IDs, and RPC env var names.
+- `deployments/contracts.json`: package-local deployment receipts for AVAX contract work. Canonical production truth lives in the shared chain registry.
 
 ## EVM Chain Configuration
 
 - **Mainnet**: Avalanche C-Chain (chain ID `43114`)
 - **Testnet**: Avalanche Fuji (chain ID `43113`)
 
-Contract addresses are populated in `deployments/contracts.json` after EVM deployment. The app reads these at build time; override with env vars at runtime.
+Mainnet AVAX is intentionally fail-closed in shared CI and deploy flows until the shared chain registry contains canonical AVAX deployment addresses. Local and testnet flows still work with explicit env overrides.
+
+`deployments/contracts.json` is updated after manual EVM deployment work, but it must not be treated as canonical production metadata. The app and keeper should use the shared chain registry for production defaults and only use explicit env overrides for local or testnet operation.
 
 ## UI E2E tests (headless wallet + mock GOLD localnet)
 
@@ -106,6 +108,8 @@ bun run deploy:evm:avax
 
 The EVM deploy script writes a receipt to `packages/evm-contracts/deployments/<network>.json`
 and updates `packages/hyperbet-avax/deployments/contracts.json` automatically.
+
+Those receipts are local package metadata only. They do not make AVAX production-ready on their own; production readiness is controlled by canonical addresses committed to the shared chain registry.
 
 Private env files stay local:
 

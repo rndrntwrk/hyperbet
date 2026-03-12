@@ -12,6 +12,8 @@ Operator runbooks are in [docs/runbooks/README.md](/Users/mac/Desktop/hyperbet/d
 - DDoS/WAF/edge cache: Cloudflare proxy in front of the betting API
 - Contracts/state: Solana + EVM (configured by env vars below, proxied server-side)
 
+AVAX does not have a production frontend deployment path in this repo today. Until canonical AVAX deployment addresses are committed to the shared chain registry, AVAX production builds and keeper deploys should be treated as intentionally disabled.
+
 ## 1) Deploy the keeper to Railway
 
 From repo root, deploy the keeper service path:
@@ -36,7 +38,7 @@ Set these Railway variables at minimum:
 - `BSC_GOLD_CLOB_ADDRESS=...`
 - `BASE_RPC_URL=...`
 - `BASE_GOLD_CLOB_ADDRESS=...`
-- `AVAX_RPC_URL=...` if you proxy Avalanche RPC through the keeper
+- `AVAX_RPC_URL=...` only for local/testnet use or for future AVAX production enablement after canonical registry values exist
 - `BIRDEYE_API_KEY=...` if token-price proxying is enabled
 
 Persistence:
@@ -101,6 +103,8 @@ Frontend env vars (Cloudflare Pages):
 - `VITE_STREAM_SOURCES=https://your-hls-or-embed-source,...`
 
 Do not set provider-keyed values in any `VITE_*RPC_URL` variable for production builds. The betting app build fails intentionally if a public RPC URL looks like a Helius / Alchemy / Infura / QuickNode / dRPC secret endpoint.
+
+Do not treat `packages/hyperbet-avax/deployments/contracts.json` as production deployment truth. The shared chain registry is the canonical production source, and AVAX remains fail-closed until that registry is populated with real addresses.
 
 Cloudflare Pages headers/SPA rules are already added in:
 
