@@ -129,61 +129,138 @@ try {
 } catch {
   // Column already exists.
 }
+db.run(`CREATE TABLE IF NOT EXISTS bets_duplicate_conflicts (
+  original_id TEXT PRIMARY KEY,
+  chain TEXT NOT NULL,
+  tx_signature TEXT NOT NULL DEFAULT '',
+  external_bet_ref TEXT,
+  recorded_at INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  archived_at INTEGER NOT NULL
+)`);
 
-type DuplicateBetRow = {
+type DuplicateBetKeyRow = {
   value: string;
-  count: number;
 };
 
-type DuplicateChainTxRow = {
+type DuplicateChainTxKeyRow = {
   chain: string;
   txSignature: string;
-  count: number;
 };
 
-function assertNoDuplicateRecordedBets(): void {
-  const duplicateExternalRefs = db
-    .prepare(
-      `SELECT external_bet_ref AS value, COUNT(*) AS count
-         FROM bets
-        WHERE external_bet_ref IS NOT NULL
-        GROUP BY external_bet_ref
-       HAVING COUNT(*) > 1
-        LIMIT 10`,
-    )
-    .all() as DuplicateBetRow[];
-  const duplicateChainTxSignatures = db
-    .prepare(
-      `SELECT chain, tx_signature AS txSignature, COUNT(*) AS count
-         FROM bets
-        WHERE tx_signature <> ''
-        GROUP BY chain, tx_signature
-       HAVING COUNT(*) > 1
-        LIMIT 10`,
-    )
-    .all() as DuplicateChainTxRow[];
-  if (
-    duplicateExternalRefs.length === 0 &&
-    duplicateChainTxSignatures.length === 0
-  ) {
-    return;
-  }
+type DuplicateBetCandidate = {
+  rowid: number;
+  id: string;
+  chain: string;
+  txSignature: string;
+  externalBetRef: string | null;
+  recordedAt: number;
+};
 
-  const details = [
-    ...duplicateExternalRefs.map(
-      (row) => `external_bet_ref=${row.value} (count=${row.count})`,
-    ),
-    ...duplicateChainTxSignatures.map(
-      (row) =>
-        `chain=${row.chain} tx_signature=${row.txSignature} (count=${row.count})`,
-    ),
-  ];
-  throw new Error(
-    `[keeper-db] Duplicate recorded bets detected. Clean the keeper DB before startup: ${details.join("; ")}`,
-  );
+function resolveDuplicateRecordedBets(): void {
+  const quarantinedCount = db.transaction(() => {
+    const archivedAt = Date.now();
+    let quarantined = 0;
+    const archiveConflict = db.prepare(
+      `INSERT OR REPLACE INTO bets_duplicate_conflicts (
+        original_id,
+        chain,
+        tx_signature,
+        external_bet_ref,
+        recorded_at,
+        reason,
+        archived_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const deleteBet = db.prepare(`DELETE FROM bets WHERE rowid = ?`);
+    const loadRowsByChainTx = db.prepare(
+      `SELECT
+         rowid,
+         id,
+         chain,
+         tx_signature AS txSignature,
+         external_bet_ref AS externalBetRef,
+         recorded_at AS recordedAt
+       FROM bets
+      WHERE chain = ? AND tx_signature = ?
+      ORDER BY recorded_at ASC, rowid ASC`,
+    );
+    const loadRowsByExternalRef = db.prepare(
+      `SELECT
+         rowid,
+         id,
+         chain,
+         tx_signature AS txSignature,
+         external_bet_ref AS externalBetRef,
+         recorded_at AS recordedAt
+       FROM bets
+      WHERE external_bet_ref = ?
+      ORDER BY recorded_at ASC, rowid ASC`,
+    );
+    const quarantineRows = (
+      rows: DuplicateBetCandidate[],
+      reasonPrefix: string,
+    ) => {
+      if (rows.length <= 1) return;
+      const [canonical, ...duplicates] = rows;
+      for (const duplicate of duplicates) {
+        archiveConflict.run(
+          duplicate.id,
+          duplicate.chain,
+          duplicate.txSignature,
+          duplicate.externalBetRef,
+          duplicate.recordedAt,
+          `${reasonPrefix}; canonical_id=${canonical.id}`,
+          archivedAt,
+        );
+        deleteBet.run(duplicate.rowid);
+        quarantined += 1;
+      }
+    };
+
+    const duplicateChainTxSignatures = db
+      .prepare(
+        `SELECT chain, tx_signature AS txSignature
+           FROM bets
+          WHERE tx_signature <> ''
+          GROUP BY chain, tx_signature
+         HAVING COUNT(*) > 1`,
+      )
+      .all() as DuplicateChainTxKeyRow[];
+    for (const row of duplicateChainTxSignatures) {
+      quarantineRows(
+        loadRowsByChainTx.all(row.chain, row.txSignature) as DuplicateBetCandidate[],
+        `duplicate chain+tx_signature (${row.chain}:${row.txSignature})`,
+      );
+    }
+
+    const duplicateExternalRefs = db
+      .prepare(
+        `SELECT external_bet_ref AS value
+           FROM bets
+          WHERE external_bet_ref IS NOT NULL
+          GROUP BY external_bet_ref
+         HAVING COUNT(*) > 1`,
+      )
+      .all() as DuplicateBetKeyRow[];
+    for (const row of duplicateExternalRefs) {
+      quarantineRows(
+        loadRowsByExternalRef.all(row.value) as DuplicateBetCandidate[],
+        `duplicate external_bet_ref (${row.value})`,
+      );
+    }
+
+    return quarantined;
+  })();
+
+  if (quarantinedCount > 0) {
+    console.warn(
+      `[keeper-db] Quarantined ${quarantinedCount} duplicate recorded bet row(s) into bets_duplicate_conflicts before enforcing uniqueness.`,
+    );
+  }
 }
 
-assertNoDuplicateRecordedBets();
+resolveDuplicateRecordedBets();
 
 db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_external_bet_ref_unique
   ON bets (external_bet_ref)

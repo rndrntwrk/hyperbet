@@ -287,6 +287,7 @@ describe("mm-core", () => {
             duelKey: "0xabc",
             marketRef: "market-1",
             lifecycleStatus: "OPEN",
+            winner: "NONE",
             fairValue: 500,
             bidPrice: 490,
             askPrice: 510,

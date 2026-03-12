@@ -7,6 +7,7 @@ import {
   type BettingEvmChain,
   type PredictionMarketLifecycleRecord,
   type PredictionMarketLifecycleStatus,
+  normalizeSolanaCluster,
   resolveBettingEvmRuntimeEnv,
   resolveBettingSolanaDeployment,
 } from "@hyperbet/chain-registry";
@@ -384,13 +385,14 @@ function buildMarketMakerConfig(): MarketMakerConfig {
 }
 
 function defaultSolanaRpcUrl(environment: BettingAppEnvironment): string {
-  if (environment === "localnet") {
+  const cluster = normalizeSolanaCluster(environment);
+  if (cluster === "localnet") {
     return "http://127.0.0.1:8899";
   }
-  if (environment === "devnet") {
+  if (cluster === "devnet") {
     return "https://api.devnet.solana.com";
   }
-  if (environment === "mainnet-beta") {
+  if (cluster === "mainnet-beta") {
     return "https://api.mainnet-beta.solana.com";
   }
   return "https://api.testnet.solana.com";
@@ -399,15 +401,7 @@ function defaultSolanaRpcUrl(environment: BettingAppEnvironment): string {
 function solanaClusterForEnvironment(
   environment: BettingAppEnvironment,
 ): "localnet" | "devnet" | "testnet" | "mainnet-beta" {
-  if (
-    environment === "localnet" ||
-    environment === "devnet" ||
-    environment === "testnet" ||
-    environment === "mainnet-beta"
-  ) {
-    return environment;
-  }
-  return "testnet";
+  return normalizeSolanaCluster(environment);
 }
 
 const decodeSolanaSecretKey = (raw: string): Uint8Array => {

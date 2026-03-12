@@ -2,6 +2,7 @@ import type {
   BettingChainKey,
   PredictionMarketLifecycleRecord,
   PredictionMarketLifecycleStatus,
+  PredictionMarketWinner,
 } from "@hyperbet/chain-registry";
 
 export interface MarketMakerConfig {
@@ -185,6 +186,7 @@ export interface KeeperMarketHealthRecord {
   duelKey: string | null;
   marketRef: string | null;
   lifecycleStatus: PredictionMarketLifecycleStatus;
+  winner: PredictionMarketWinner;
   fairValue: number | null;
   bidPrice: number | null;
   askPrice: number | null;

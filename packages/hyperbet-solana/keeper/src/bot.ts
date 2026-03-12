@@ -39,6 +39,7 @@ import {
   readKeypair,
   requireEnv,
 } from "./common";
+import type { PredictionMarketWinner } from "@hyperbet/chain-registry";
 import { buildResultHash } from "./resultHash";
 
 function asNum(value: unknown, fallback = 0): number {
@@ -1672,6 +1673,7 @@ type ActiveClobMatch = {
   lastClaimAtMs: number | null;
   lastQuoteSnapshot: MarketSnapshot | null;
   lastQuotePlan: QuotePlan | null;
+  winner: PredictionMarketWinner;
   yesBidOrder: ManagedClobOrder | null;
   noAskOrder: ManagedClobOrder | null;
 };
@@ -2229,6 +2231,7 @@ async function createOrSyncRound(
     lastClaimAtMs: null,
     lastQuoteSnapshot: null,
     lastQuotePlan: null,
+    winner: "NONE",
     yesBidOrder: null,
     noAskOrder: null,
   };
@@ -2366,6 +2369,7 @@ function buildManagedClobHealthRecord(
     duelKey: trackedMatch.duelKeyHex,
     marketRef: trackedMatch.marketState.toBase58(),
     lifecycleStatus: lifecycleStatusOverride ?? snapshot?.lifecycleStatus ?? "UNKNOWN",
+    winner: trackedMatch.winner,
     fairValue: plan?.fairValue ?? null,
     bidPrice: plan?.bidPrice ?? null,
     askPrice: plan?.askPrice ?? null,
@@ -2522,6 +2526,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   const duelState = await getDuelState(trackedMatch.duelState);
   if (duelState && enumIs(duelState.status, "resolved")) {
     await syncTrackedMarketFromOracle(trackedMatch);
+    trackedMatch.winner = winnerSide;
     trackedMatch.lastResolvedAtMs = Date.now();
     await captureSettledClobHealth(trackedMatch, "RESOLVED");
     activeClobMatches.delete(data.duelId);
@@ -2569,6 +2574,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   const resolutionRecordedAt = markRpcSuccess(trackedMatch);
   trackedMatch.lastOracleAtMs = resolutionRecordedAt;
   trackedMatch.lastResolvedAtMs = resolutionRecordedAt;
+  trackedMatch.winner = winnerSide;
 
   unresolvedOracleWarningMatches.delete(data.duelId);
   await syncTrackedMarketFromOracle(trackedMatch);

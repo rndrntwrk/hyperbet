@@ -1585,7 +1585,10 @@ function buildPredictionMarketLifecycleRecords(
       marketId: marketKey,
       marketRef: marketKey,
       lifecycleStatus,
-      winner: resolveWinnerFromEvmStatus(currentMatch?.winner),
+      winner:
+        currentMatch?.winner != null
+          ? resolveWinnerFromEvmStatus(currentMatch.winner)
+          : (fallbackHealth?.winner ?? "NONE"),
       betCloseTime,
       contractAddress:
         snapshot?.contractAddress ??
