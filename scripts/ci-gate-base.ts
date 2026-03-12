@@ -142,6 +142,16 @@ try {
   console.log("Base add-chain smoke: base runtime smoke passed");
 
   await runCommand(
+    "bash",
+    ["scripts/ci-install-verified.sh", "root", "hyperbet-bsc", "hyperbet-bsc-app"],
+    {
+      stdoutFile: path.join(artifactRoot, "base-app-install.out.log"),
+      stderrFile: path.join(artifactRoot, "base-app-install.err.log"),
+    },
+  );
+  console.log("Base add-chain smoke: shared EVM app dependencies installed");
+
+  await runCommand(
     "bun",
     ["run", "--cwd", "packages/hyperbet-bsc/app", "build", "--mode", "mainnet-beta"],
     {

@@ -1031,7 +1031,7 @@ async function ensureScenarioMarketLocked(
           : "stale-stream";
     updateActiveRunStage(`tick-${simTick}-lock-${lockReason}`);
 
-    const lockTx = await withTimeout(
+    const lockTx: any = await withTimeout(
         (oracle.connect(reporter) as any).upsertDuel(
             currentDuelKey,
             duel.participantAHash,
@@ -1051,7 +1051,7 @@ async function ensureScenarioMarketLocked(
         `tick ${simTick} lock duel receipt`,
     );
 
-    const syncTx = await withTimeout(
+    const syncTx: any = await withTimeout(
         (clob.connect(operator) as any).syncMarketFromOracle(
             currentDuelKey,
             MARKET_KIND_DUEL_WINNER,

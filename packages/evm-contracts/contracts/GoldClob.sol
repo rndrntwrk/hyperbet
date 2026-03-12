@@ -140,9 +140,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 tradeMarketMakerFeeBps,
         uint256 winningsMarketMakerFeeBps
     );
-    event TreasuryUpdated(address treasury);
-    event MarketMakerUpdated(address marketMaker);
-    event OracleUpdated(address oracle);
+    event TreasuryUpdated(address indexed treasury);
+    event MarketMakerUpdated(address indexed marketMaker);
+    event OracleUpdated(address indexed oracle);
 
     constructor(
         address admin,

@@ -28,8 +28,28 @@ describe("GoldClob Precision DoS", () => {
 
         // Taker buys 2000 amount at limit price 500 (requires 2000 * 500 / 1000 = 1000 value)
         // Match fillAmount = 2000 at boundary 250. This must succeed.
-        await expect(clob.connect(taker).placeOrder(duelKey, 0, 1, 500, 2000, { value: 1000 }))
-          .to.emit(clob, "OrderMatched")
-          .withArgs(expectedMarketKey, 1, 2, 2000, 250);
+        const tx = await clob
+            .connect(taker)
+            .placeOrder(duelKey, 0, 1, 500, 2000, { value: 1000 });
+        const receipt = await tx.wait();
+
+        expect(receipt).to.not.equal(null);
+
+        const matchedEvent = receipt!.logs
+            .map((log) => {
+                try {
+                    return clob.interface.parseLog(log as { topics: string[]; data: string });
+                } catch {
+                    return null;
+                }
+            })
+            .find((parsed) => parsed?.name === "OrderMatched");
+
+        expect(matchedEvent).to.not.equal(undefined);
+        expect(matchedEvent!.args[0]).to.equal(expectedMarketKey);
+        expect(matchedEvent!.args[1]).to.equal(1n);
+        expect(matchedEvent!.args[2]).to.equal(2n);
+        expect(matchedEvent!.args[3]).to.equal(2000n);
+        expect(matchedEvent!.args[4]).to.equal(250n);
     });
 });

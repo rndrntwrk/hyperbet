@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT_INSTALLED=0
 
+export TMPDIR="${TMPDIR:-/tmp/hyperbet-bun-install}"
+mkdir -p "$TMPDIR"
+
 if [[ "$#" -eq 0 ]]; then
   echo "usage: $0 <target> [<target> ...]" >&2
   exit 1
@@ -68,20 +71,9 @@ target_requires_root_install() {
   esac
 }
 
-target_requires_nested_lockfile_refresh() {
-  case "$1" in
-    hyperbet-solana-app|hyperbet-bsc-app|hyperbet-avax-app)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 target_requires_nested_install() {
   case "$1" in
-    hyperbet-solana-anchor)
+    hyperbet-solana-app|hyperbet-bsc-app|hyperbet-avax-app|hyperbet-solana-anchor)
       return 0
       ;;
     *)
@@ -126,6 +118,7 @@ install_target() {
   local target="$1"
   local cwd
   local lockfile
+  local backup_node_modules=""
 
   cwd="$(resolve_cwd "$target")"
   lockfile="$(resolve_lockfile "$cwd")"
@@ -134,12 +127,16 @@ install_target() {
     install_root_workspace
   fi
 
-  if target_requires_nested_lockfile_refresh "$target"; then
-    bun install --lockfile-only --cwd "$ROOT_DIR/$cwd"
-  fi
-
   if target_requires_nested_install "$target"; then
+    if [[ "$target" == hyperbet-*-app ]] && [[ -d "$ROOT_DIR/$cwd/node_modules" ]]; then
+      backup_node_modules="$ROOT_DIR/$cwd/node_modules.ci-backup.$$"
+      rm -rf "$backup_node_modules"
+      mv "$ROOT_DIR/$cwd/node_modules" "$backup_node_modules"
+    fi
     bun install --cwd "$ROOT_DIR/$cwd"
+    if [[ -n "$backup_node_modules" ]]; then
+      rm -rf "$backup_node_modules" || true
+    fi
   fi
 
   if [[ "$lockfile" != "bun.lock" ]] || target_requires_root_install "$target"; then
