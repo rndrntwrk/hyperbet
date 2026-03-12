@@ -39,7 +39,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 
 ## Current Branch State
 
-- Latest integrated implementation batch: `5d722dc`
+- Current branch head: `4663549`
+- Latest integrated code-hardening batch: `5d722dc`
+- Latest integrated doc/tracker refresh: `4663549`
 - Latest known fully green branch-check baseline: `f1824a0`
 - Current CI state on the latest fully green branch-check baseline:
   - `Hyperbet CI` green
@@ -80,6 +82,57 @@ The branch is therefore best understood as:
   `develop`-level integration
 - not yet a launch-complete branch under the trust-minimized, tri-chain
   mandatory launch bar
+
+### Integrated Scope Today
+
+Today, the sprint base includes the following integrated work:
+
+- Multichain foundation:
+  - shared chain/deployment registry
+  - shared `@hyperbet/mm-core`
+  - normalized prediction-market lifecycle/read-model surfaces
+  - workspace/bootstrap normalization required by the shared packages
+- EVM protocol and proof surface:
+  - GoldClob settlement cleanup
+  - EVM contract validation, proof, and security lanes
+  - deterministic EVM exploit/simulation coverage
+  - Base add-chain proof through the shared runtime model
+- Solana runtime and proof surface:
+  - validator-backed Solana proof backend
+  - Solana exploit gate
+  - Solana program build gate
+  - committed Solana runtime deploy artifacts for proof/runtime lanes
+  - Solana bot/runtime support for quote, cancel, refresh, and claim flows
+- Frontend/runtime parity:
+  - canonical lifecycle-driven Solana/BSC/AVAX shell behavior
+  - shared claim-state handling
+  - EVM loser-cleanup path exposed in the app
+  - Solana dashboard fixes for fee units and top-level agents
+- Keeper security and degraded-runtime correctness:
+  - strict external-bet tx verification
+  - insert-first/idempotent reward recording
+  - canonicalized external-bet economics
+  - exact trusted-origin enforcement
+  - graceful `verify:chains` failure for unconfigured AVAX
+  - fallback winner preservation for degraded BSC/AVAX lifecycle records
+  - deterministic duplicate-bet quarantine instead of startup outage
+  - Solana MM env normalization for `e2e` and `stream-ui`
+- CI, deploy, and operational hardening:
+  - fast CI plus heavyweight prediction-market gates
+  - verified install wrapper and env/deploy audit
+  - deploy rail hardening without topology redesign
+  - AVAX fail-closed production semantics
+  - deployed-environment proof rail scaffolding
+  - runbooks and release-prep documentation
+
+What remains is launch-completion work, not architecture bootstrap:
+
+- Gate `14` proof execution against a real deployed environment
+- trust-minimized resolution
+- full order semantics and self-trade prevention
+- durable production keeper/MM storage
+- AVAX production-canonical enablement
+- final deployed-environment proof, audit, and release-candidate signoff
 
 ## Next Phase
 

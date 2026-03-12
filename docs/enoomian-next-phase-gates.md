@@ -23,7 +23,9 @@ treated as an independent mergeable unit.
 
 ## Current State
 
-- Latest integrated implementation batch: `5d722dc`
+- Current branch head: `4663549`
+- Latest integrated code-hardening batch: `5d722dc`
+- Latest integrated doc/tracker refresh: `4663549`
 - Latest known fully green branch-check baseline: `f1824a0`
 - Gates `01-13` and `15` are complete on the sprint base.
 - Gate `14` is partially complete:
@@ -66,6 +68,45 @@ That means the branch is not launch-complete yet. The dominant open risks are:
 In other words, the branch already contains the architecture, CI, exploit,
 runtime, and deploy-hardening baseline. The remaining work is launch-completion
 and launch-evidence, not architecture bootstrap.
+
+### Integrated Scope Already On The Branch
+
+The current sprint base already contains:
+
+- shared multichain foundation:
+  - chain/deployment registry
+  - `@hyperbet/mm-core`
+  - normalized lifecycle/read-model scaffolding
+- EVM launch-hardening baseline:
+  - contract validation/proof/security
+  - deterministic exploit/simulation coverage
+  - settlement cleanup correctness
+- Solana launch-hardening baseline:
+  - validator-backed proof backend
+  - exploit gate
+  - dedicated Solana program build gate
+  - committed runtime deploy artifacts for proof/runtime lanes
+- frontend/runtime convergence:
+  - canonical lifecycle-driven Solana/BSC/AVAX shells
+  - shared claim-state handling
+  - EVM loser-cleanup UI support
+  - Solana dashboard fee/agent compatibility fixes
+- keeper and reward-integrity hardening:
+  - strict external-bet verification
+  - canonicalized external-bet economics
+  - idempotent insert-first reward recording
+  - exact origin auth
+  - degraded-runtime fallback winner preservation
+  - duplicate-bet startup quarantine
+  - Solana MM environment normalization
+- CI/deploy/proof scaffolding:
+  - fast CI plus heavyweight gate workflows
+  - Base add-chain proof
+  - AVAX fail-closed production posture
+  - deployed-environment proof rail and runbooks
+
+This next-phase plan therefore assumes the branch is an integration-capable
+baseline and focuses only on the remaining launch-completion work.
 
 ## Parallelization
 
