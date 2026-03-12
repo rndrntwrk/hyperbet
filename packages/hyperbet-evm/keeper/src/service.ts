@@ -803,7 +803,7 @@ function applyCors(req: Request, headers: Headers): void {
   headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
   headers.set(
     "access-control-allow-headers",
-    "content-type,x-arena-write-key,x-forwarded-for,solana-client,x-web3js-version",
+    "content-type,x-arena-write-key,x-forwarded-for",
   );
   headers.set("access-control-max-age", "86400");
 }

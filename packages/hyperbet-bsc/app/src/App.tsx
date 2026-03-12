@@ -1060,7 +1060,6 @@ const [hmBottomTab, setHmBottomTab] = useState<
                 <Suspense fallback={<PanelFallback label={copy.loadingReferral} />}>
                   <ReferralPanel
                     activeChain={activeChain}
-                    solanaWallet={null}
                     evmWallet={evmWalletAddress ?? null}
                     locale={locale}
                     evmWalletPlatform={activeChainLabel}

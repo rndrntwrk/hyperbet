@@ -75,8 +75,7 @@ function uniqueList(values: string[]): string[] {
 function resolveEnvironment(): Environment {
   const explicitEnvironment =
     readEnvString("VITE_APP_ENV")?.toLowerCase() ??
-    readEnvString("VITE_BETTING_ENV")?.toLowerCase() ??
-    readEnvString("VITE_SOLANA_CLUSTER")?.toLowerCase();
+    readEnvString("VITE_BETTING_ENV")?.toLowerCase();
   if (explicitEnvironment && ENVIRONMENT_ALIASES[explicitEnvironment]) {
     return ENVIRONMENT_ALIASES[explicitEnvironment];
   }

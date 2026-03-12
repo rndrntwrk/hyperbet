@@ -54,7 +54,7 @@ function shortWallet(value: string | null, notConnectedLabel: string): string {
 
 export function WalletLinkCard(props: {
   activeChain: ChainId;
-  solanaWallet: string | null;
+  solanaWallet?: string | null;
   evmWallet: string | null;
   evmWalletPlatform: EvmPlatform | null;
   locale?: UiLocale;
@@ -170,7 +170,7 @@ export function WalletLinkCard(props: {
             color: solanaWallet ? "var(--hm-chain-theme-color)" : "var(--hm-text-soft)",
           }}
         >
-          {shortWallet(solanaWallet, copy.notConnected)}
+          {shortWallet(solanaWallet ?? null, copy.notConnected)}
         </span>
         <span style={{ color: "var(--hm-text-muted)" }}>{copy.evm}</span>
         <span
