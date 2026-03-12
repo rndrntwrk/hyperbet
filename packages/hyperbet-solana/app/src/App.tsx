@@ -1004,6 +1004,7 @@ export function App() {
 
   const handleRefresh = () => {
     setRefreshNonce((value) => value + 1);
+    window.dispatchEvent(new CustomEvent("hyperbet:market-refresh"));
   };
 
   const handleSolanaClobSnapshot = useCallback(

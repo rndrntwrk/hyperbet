@@ -1387,6 +1387,23 @@ test.describe("market flows", () => {
     await waitForKeeperBotHealth(request, "bsc", state.evmMarketKey || null);
 
     await page.getByTestId("refresh-market").click();
+    await expect
+      .poll(
+        async () => {
+          const result = await readEvmPosition(
+            publicClient,
+            contractAddress,
+            marketKey,
+            userAddress,
+          );
+          return result[0];
+        },
+        {
+          timeout: 30_000,
+          intervals: [1_000, 2_000, 5_000],
+        },
+      )
+      .toBeGreaterThan(0n);
     await expect(claimButton).toBeEnabled({ timeout: 30_000 });
     const previousClaimTx = await readText(page, "evm-last-claim-tx");
     await claimButton.click();

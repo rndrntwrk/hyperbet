@@ -506,7 +506,7 @@ export function App() {
     activeChain === "bsc" || activeChain === "base" || activeChain === "avax"
       ? activeChain
       : "solana";
-  const { market: lifecycleMarket } = usePredictionMarketLifecycle(
+  const { duel: lifecycleDuel, market: lifecycleMarket } = usePredictionMarketLifecycle(
     lifecycleChainKey,
   );
   const streamSources = STREAM_URLS;
@@ -665,6 +665,7 @@ export function App() {
 
   const handleRefresh = () => {
     setRefreshNonce((value) => value + 1);
+    window.dispatchEvent(new CustomEvent("hyperbet:market-refresh"));
   };
 
   // ── Market data polling ───────────────────────────────────────────────────
@@ -2020,6 +2021,8 @@ const [hmBottomTab, setHmBottomTab] = useState<
                       agent2Name={effAgent2Name}
                       compact
                       locale={locale}
+                      lifecycleDuelOverride={lifecycleDuel}
+                      lifecycleMarketOverride={lifecycleMarket}
                     />
                   </Suspense>
                 </div>

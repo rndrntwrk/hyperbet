@@ -368,6 +368,8 @@ async function main(): Promise<void> {
   env.VITE_HEADLESS_EVM_ADDRESS = adminAccount.address;
   env.VITE_E2E_EVM_PRIVATE_KEY = adminPrivateKey;
   env.VITE_E2E_EVM_ADDRESS = adminAccount.address;
+  env.VITE_E2E_EVM_DUEL_KEY = duelKey.replace(/^0x/i, "");
+  env.VITE_E2E_EVM_DUEL_ID = String(existingState.evmMatchId ?? 1);
   await fs.writeFile(envPath, serializeDotEnv(env), "utf8");
 
   const state: E2eState = {

@@ -18,6 +18,7 @@ import {
 import {
   mergePredictionMarketsWithHealth,
   type KeeperBotHealthSnapshot,
+  type KeeperMarketHealthRecord,
 } from "@hyperbet/mm-core";
 import { PublicKey } from "@solana/web3.js";
 import { createPublicClient, http, type Address } from "viem";
@@ -1227,7 +1228,44 @@ function resolveWinnerFromSolanaState(
   }
 }
 
-function buildPredictionMarketLifecycleRecords(): PredictionMarketLifecycleRecord[] {
+function resolvePhaseFromLifecycleStatus(
+  lifecycleStatus: PredictionMarketLifecycleStatus | null | undefined,
+): string | null {
+  switch (lifecycleStatus) {
+    case "OPEN":
+      return "ANNOUNCEMENT";
+    case "LOCKED":
+      return "COUNTDOWN";
+    case "RESOLVED":
+    case "CANCELLED":
+      return "RESOLUTION";
+    default:
+      return null;
+  }
+}
+
+function selectBotHealthMarket(
+  botHealthSnapshot: KeeperBotHealthSnapshot | null,
+  chainKey: "bsc" | "base",
+): KeeperMarketHealthRecord | null {
+  return (
+    botHealthSnapshot?.markets.find((market) => market.chainKey === chainKey) ??
+    null
+  );
+}
+
+function resolveEvmLifecycleStatus(
+  currentMatch: Record<string, any> | undefined,
+  fallbackHealth: KeeperMarketHealthRecord | null,
+): PredictionMarketLifecycleStatus {
+  const parsedStatus = resolveLifecycleFromEvmStatus(currentMatch?.status);
+  if (parsedStatus !== "UNKNOWN") return parsedStatus;
+  return fallbackHealth?.lifecycleStatus ?? "UNKNOWN";
+}
+
+function buildPredictionMarketLifecycleRecords(
+  botHealthSnapshot: KeeperBotHealthSnapshot | null = null,
+): PredictionMarketLifecycleRecord[] {
   const duelKey = currentDuelKey();
   const duelId = currentDuelId();
   const betCloseTime = currentBetCloseTime();
@@ -1288,27 +1326,42 @@ function buildPredictionMarketLifecycleRecords(): PredictionMarketLifecycleRecor
 
   for (const chainKey of ["bsc", "base"] as const) {
     const parser = parsers[chainKey];
-    if (!parser.enabled && !parser.snapshot) continue;
+    const fallbackHealth = selectBotHealthMarket(botHealthSnapshot, chainKey);
+    if (!parser.enabled && !parser.snapshot && !fallbackHealth) continue;
     const snapshot = parser.snapshot as Record<string, any> | null;
+    const snapshotDuelKey =
+      typeof snapshot?.duelKey === "string" ? snapshot.duelKey : null;
+    const snapshotDuelId =
+      typeof snapshot?.duelId === "string" ? snapshot.duelId : null;
     const currentMatch = snapshot?.currentMatch as Record<string, any> | undefined;
-    const marketKey = snapshot?.marketKey ?? null;
+    const marketKey =
+      (typeof snapshot?.marketKey === "string" ? snapshot.marketKey : null) ??
+      fallbackHealth?.marketRef ??
+      null;
+    const lifecycleStatus = resolveEvmLifecycleStatus(currentMatch, fallbackHealth);
     records.push({
       chainKey,
-      duelKey,
-      duelId,
-      marketId: typeof marketKey === "string" ? marketKey : null,
-      marketRef: typeof marketKey === "string" ? marketKey : null,
-      lifecycleStatus: resolveLifecycleFromEvmStatus(currentMatch?.status),
+      duelKey: duelKey ?? snapshotDuelKey ?? fallbackHealth?.duelKey ?? null,
+      duelId: duelId ?? snapshotDuelId ?? fallbackHealth?.duelId ?? null,
+      marketId: marketKey,
+      marketRef: marketKey,
+      lifecycleStatus,
       winner: resolveWinnerFromEvmStatus(currentMatch?.winner),
       betCloseTime,
       contractAddress: snapshot?.contractAddress ?? null,
       programId: null,
       txRef: null,
-      syncedAt: parser.lastSuccessAt,
+      syncedAt: parser.lastSuccessAt ?? botHealthSnapshot?.updatedAtMs ?? null,
       metadata: {
         marketKey,
         yesPool: currentMatch?.yesPool ?? null,
         noPool: currentMatch?.noPool ?? null,
+        recoveredFromBotHealth:
+          Boolean(fallbackHealth) &&
+          (duelKey == null ||
+            duelId == null ||
+            snapshot == null ||
+            lifecycleStatus === fallbackHealth?.lifecycleStatus),
       },
     });
   }
@@ -1317,20 +1370,29 @@ function buildPredictionMarketLifecycleRecords(): PredictionMarketLifecycleRecor
 }
 
 function handlePredictionMarkets(req: Request): Response {
+  const botHealthSnapshot = loadKeeperBotHealthSnapshot();
+  const markets = buildPredictionMarketLifecycleRecords(botHealthSnapshot);
+  const fallbackMarket =
+    markets.find((market) => market.duelKey != null || market.duelId != null) ?? null;
+  const cyclePhase =
+    typeof streamState.cycle?.phase === "string"
+      ? streamState.cycle.phase
+      : resolvePhaseFromLifecycleStatus(fallbackMarket?.lifecycleStatus);
+  const cycleWinner = currentWinnerFromCycle();
   return jsonResponse(
     req,
     {
       duel: {
-        duelKey: currentDuelKey(),
-        duelId: currentDuelId(),
-        phase:
-          typeof streamState.cycle?.phase === "string"
-            ? streamState.cycle.phase
-            : null,
-        winner: currentWinnerFromCycle(),
-        betCloseTime: currentBetCloseTime(),
+        duelKey: currentDuelKey() ?? fallbackMarket?.duelKey ?? null,
+        duelId: currentDuelId() ?? fallbackMarket?.duelId ?? null,
+        phase: cyclePhase,
+        winner:
+          cycleWinner !== "NONE"
+            ? cycleWinner
+            : (fallbackMarket?.winner ?? "NONE"),
+        betCloseTime: currentBetCloseTime() ?? fallbackMarket?.betCloseTime ?? null,
       },
-      markets: buildPredictionMarketLifecycleRecords(),
+      markets,
       updatedAt: Date.now(),
     },
     200,
@@ -1866,8 +1928,23 @@ async function pollEvmSnapshot(
   const parser = parsers[label];
 
   try {
-    const duelKey = currentDuelKey();
+    const snapshotDuelKey =
+      typeof parser.snapshot?.duelKey === "string"
+        ? parser.snapshot.duelKey.trim().replace(/^0x/i, "").toLowerCase()
+        : null;
+    const snapshotDuelId =
+      typeof parser.snapshot?.duelId === "string"
+        ? parser.snapshot.duelId.trim()
+        : null;
+    const fallbackHealth = selectBotHealthMarket(
+      loadKeeperBotHealthSnapshot(),
+      label,
+    );
+    const duelKey =
+      currentDuelKey() ?? snapshotDuelKey ?? fallbackHealth?.duelKey ?? null;
     if (!duelKey) return;
+    const duelId =
+      currentDuelId() ?? snapshotDuelId ?? fallbackHealth?.duelId ?? null;
 
     const normalizedDuelKey = `0x${duelKey}` as `0x${string}`;
     const marketKey = (await client.readContract({
@@ -1890,6 +1967,8 @@ async function pollEvmSnapshot(
 
     parser.snapshot = {
       contractAddress,
+      duelKey,
+      duelId,
       marketKey,
       currentMatch: {
         status,
@@ -2692,8 +2771,10 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/status") {
-      const predictionMarkets = buildPredictionMarketLifecycleRecords();
       const botHealthSnapshotRaw = loadKeeperBotHealthSnapshot();
+      const predictionMarkets = buildPredictionMarketLifecycleRecords(
+        botHealthSnapshotRaw,
+      );
       const botHealthSnapshot = botHealthSnapshotRaw
         ? {
           ...botHealthSnapshotRaw,

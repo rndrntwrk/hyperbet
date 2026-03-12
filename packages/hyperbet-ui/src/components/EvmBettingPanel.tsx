@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { PredictionMarketLifecycleRecord } from "@hyperbet/chain-registry";
 import { resolveUiLocale, type UiLocale } from "@hyperbet/ui/i18n";
 import { useAccount, useWalletClient } from "wagmi";
 import {
@@ -39,6 +40,7 @@ import {
   SIDE_ENUM,
 } from "../lib/evmClient";
 import {
+  type PredictionMarketsDuelSnapshot,
   normalizePredictionMarketDuelKeyHex,
   usePredictionMarketLifecycle,
 } from "../lib/predictionMarkets";
@@ -80,6 +82,8 @@ interface EvmBettingPanelProps {
   agent2Name: string;
   compact?: boolean;
   locale?: UiLocale;
+  lifecycleDuelOverride?: PredictionMarketsDuelSnapshot | null;
+  lifecycleMarketOverride?: PredictionMarketLifecycleRecord | null;
 }
 
 function getEvmPanelCopy(locale: UiLocale) {
@@ -279,6 +283,8 @@ export function EvmBettingPanel({
   agent2Name,
   compact = false,
   locale,
+  lifecycleDuelOverride = null,
+  lifecycleMarketOverride = null,
 }: EvmBettingPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getEvmPanelCopy(resolvedLocale);
@@ -307,6 +313,12 @@ export function EvmBettingPanel({
     (import.meta.env.VITE_HEADLESS_EVM_ADDRESS as string | undefined) ??
     "",
   );
+  const configuredE2eDuelKey = normalizePredictionMarketDuelKeyHex(
+    (import.meta.env.VITE_E2E_EVM_DUEL_KEY as string | undefined) ?? "",
+  );
+  const configuredE2eDuelId = (
+    (import.meta.env.VITE_E2E_EVM_DUEL_ID as string | undefined) ?? ""
+  ).trim() || null;
 
   const e2eAccountResult = useMemo(() => {
     if (isE2eMode && configuredHeadlessAddress) {
@@ -401,19 +413,40 @@ export function EvmBettingPanel({
     activeChain === "bsc" || activeChain === "base" || activeChain === "avax"
       ? activeChain
       : null;
-  const { duel: lifecycleDuel, market: lifecycleMarket } =
+  const {
+    duel: lifecycleDuel,
+    market: lifecycleMarket,
+    refresh: refreshLifecycle,
+  } =
     usePredictionMarketLifecycle(lifecycleChainKey, {
-      disabled: !chainConfig,
+      disabled:
+        !chainConfig ||
+        lifecycleDuelOverride != null ||
+        lifecycleMarketOverride != null,
     });
+  const effectiveLifecycleDuel = lifecycleDuelOverride ?? lifecycleDuel;
+  const effectiveLifecycleMarket = lifecycleMarketOverride ?? lifecycleMarket;
   const duelKeyHex = useMemo(
     () =>
       normalizePredictionMarketDuelKeyHex(
-        lifecycleMarket?.duelKey ?? lifecycleDuel?.duelKey ?? streamedDuelKeyHex,
+        effectiveLifecycleMarket?.duelKey ??
+          effectiveLifecycleDuel?.duelKey ??
+          streamedDuelKeyHex ??
+          (isE2eMode ? configuredE2eDuelKey : null),
       ),
-    [lifecycleDuel?.duelKey, lifecycleMarket?.duelKey, streamedDuelKeyHex],
+    [
+      configuredE2eDuelKey,
+      effectiveLifecycleDuel?.duelKey,
+      effectiveLifecycleMarket?.duelKey,
+      isE2eMode,
+      streamedDuelKeyHex,
+    ],
   );
   const duelId =
-    lifecycleMarket?.duelId ?? lifecycleDuel?.duelId ?? streamedDuelId;
+    effectiveLifecycleMarket?.duelId ??
+    effectiveLifecycleDuel?.duelId ??
+    streamedDuelId ??
+    (isE2eMode ? configuredE2eDuelId : null);
   const effectivePosition = useMemo(
     () => mergePositionSnapshots(position, optimisticPosition),
     [optimisticPosition, position],
@@ -430,7 +463,7 @@ export function EvmBettingPanel({
   const uiState = useMemo(
     () =>
       derivePredictionMarketUiState(
-        lifecycleMarket,
+        effectiveLifecycleMarket,
         walletSnapshot,
         marketMeta
           ? {
@@ -439,7 +472,7 @@ export function EvmBettingPanel({
             }
           : null,
       ),
-    [lifecycleMarket, marketMeta, walletSnapshot],
+    [effectiveLifecycleMarket, marketMeta, walletSnapshot],
   );
   const lifecycleStatusLabel = useMemo(
     () =>
@@ -621,7 +654,7 @@ export function EvmBettingPanel({
         });
         setNativeBalance(balance);
         const nextUiState = derivePredictionMarketUiState(
-          lifecycleMarket,
+          effectiveLifecycleMarket,
           {
             aShares: userPosition.aShares,
             bShares: userPosition.bShares,
@@ -645,7 +678,7 @@ export function EvmBettingPanel({
         setPosition(null);
         setNativeBalance(0n);
         const nextUiState = derivePredictionMarketUiState(
-          lifecycleMarket,
+          effectiveLifecycleMarket,
           EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
           {
             lifecycleStatus: getFallbackLifecycleStatus(market.status),
@@ -672,7 +705,7 @@ export function EvmBettingPanel({
     cycleAgent2,
     duelKeyHex,
     effectiveAddress,
-    lifecycleMarket,
+    effectiveLifecycleMarket,
     nativeDecimals,
     publicClient,
     updateChartAndTrades,
@@ -683,6 +716,17 @@ export function EvmBettingPanel({
     const id = setInterval(() => void refreshData(), 5000);
     return () => clearInterval(id);
   }, [refreshData]);
+
+  useEffect(() => {
+    const handleMarketRefresh = () => {
+      void refreshLifecycle();
+      void refreshData();
+    };
+    window.addEventListener("hyperbet:market-refresh", handleMarketRefresh);
+    return () => {
+      window.removeEventListener("hyperbet:market-refresh", handleMarketRefresh);
+    };
+  }, [refreshData, refreshLifecycle]);
 
   useEffect(() => {
     setOptimisticPosition(null);
@@ -754,7 +798,8 @@ export function EvmBettingPanel({
         goldAmount: Number(formatUnits(totalValue, nativeDecimals)),
         feeBps: tradeFeeBps,
         txSignature: tx,
-        marketRef: lifecycleMarket?.marketRef ?? marketMeta?.marketKey ?? duelKey,
+        marketRef:
+          effectiveLifecycleMarket?.marketRef ?? marketMeta?.marketKey ?? duelKey,
         duelKey: duelKeyHex,
         duelId,
       });
@@ -783,7 +828,7 @@ export function EvmBettingPanel({
     refreshData,
     side,
     tradeFeeBps,
-    lifecycleMarket?.marketRef,
+    effectiveLifecycleMarket?.marketRef,
     marketMeta?.marketKey,
     duelId,
   ]);

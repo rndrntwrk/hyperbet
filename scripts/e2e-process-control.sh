@@ -150,7 +150,7 @@ start_solana_proxy() {
 start_anvil() {
   require_file "anvil env file" "$env_file"
   mkdir -p "$(dirname "$log_path")"
-  nohup bash -lc "set -a; source \"$env_file\"; set +a; anvil --silent --host 127.0.0.1 --port \"\$ANVIL_PORT\" --chain-id \"\$EVM_CHAIN_ID\" --state \"\$ANVIL_STATE_PATH\"" \
+  nohup bash -lc "set -a; source \"$env_file\"; set +a; anvil --silent --host 127.0.0.1 --port \"\$ANVIL_PORT\" --chain-id \"\$EVM_CHAIN_ID\" --state \"\$ANVIL_STATE_PATH\" --state-interval \"\${ANVIL_STATE_INTERVAL:-1}\"" \
     >>"$log_path" 2>&1 < /dev/null &
   printf '%s\n' "$!" >"$pid_file"
   if ! wait_for_anvil; then
