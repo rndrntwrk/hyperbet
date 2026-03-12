@@ -26,6 +26,7 @@ anchor/target/*
 !anchor/target/deploy/
 anchor/target/deploy/*
 !anchor/target/deploy/*-keypair.json
+!anchor/target/deploy/*.so
 anchor/test-ledger
 .DS_Store
 anchor/.tmp-ledger
