@@ -12,9 +12,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `875d1a4`
+- Latest recorded gate merged into base: `05c7882`
 - Last updated: `2026-03-11`
-- Active gate branch: `enoomian/pm-11-ci-ops`
+- Active gate branch: `none`
 
 ## Gate Status
 
@@ -30,7 +30,7 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 08 | `enoomian/pm-08-solana-sim-backend` | Complete | Yes | Validator-backed Solana proof scenarios now run through the shared scenario backend contract |
 | 09 | `enoomian/pm-09-solana-scenario-gates` | Complete | Yes | Validator-backed Solana exploit families now run through deterministic gate scenarios with canonical and matrix verification |
 | 10 | `enoomian/pm-10-cross-chain-e2e` | Complete | Yes | Cross-chain local E2E now covers full lifecycle, cancel/refund, and keeper restart recovery across Solana, BSC, and AVAX |
-| 11 | `enoomian/pm-11-ci-ops` | Pending | No | Wire gates into CI, add env safety checks, add-chain proof, and runbooks |
+| 11 | `enoomian/pm-11-ci-ops` | Complete | Yes | Prediction-market gates are enforced in CI, deploy envs fail closed, Base has a registry-only add-chain proof, and operator runbooks are in place |
 
 ## Gate Results
 
@@ -361,6 +361,46 @@ Known remaining risk:
 - The BSC and AVAX API smoke now asserts exact duel and contract identity but only enforces `marketRef` as a valid canonical hex32 or `null`; the stricter seeded-key equality is still exercised by the real product E2E flows, but the cold-start API record path remains slightly looser than the full lifecycle path.
 - Gate 10 closes local cross-chain reliability, but CI promotion, env/secret safety, add-chain proof for Base, and operator runbooks remain Gate 11 work.
 - Solana cancellation is now covered in the product path for fresh isolated markets, but any future protocol changes to order-book cancellation semantics should be re-exercised against these E2E flows, not only the validator scenario suite.
+
+### Gate 11
+
+- Branch: `enoomian/pm-11-ci-ops`
+- Base commit after merge: `05c7882`
+- Commits:
+  - `d91e5fc` `ci: add prediction market gate automation`
+  - `05c7882` `ops: harden deploy checks and add runbooks`
+- Status: complete and merged into sprint base
+
+Delivered:
+
+- Added a reusable GitHub Actions toolchain setup action for Bun `1.3.1` plus optional Foundry, Rust, Solana CLI, and Anchor installs.
+- Expanded fast CI to cover `@hyperbet/mm-core`, `@hyperbet/market-maker-bot`, `packages/simulation-dashboard`, shared env auditing, and production build hygiene.
+- Added a heavyweight `prediction-market-gates.yml` workflow with independent EVM exploit, Solana exploit, cross-chain E2E, and Base add-chain smoke jobs plus artifact upload on failure.
+- Added root CI wrapper scripts for env auditing, exploit gates, cross-chain E2E gate execution, Base add-chain proof, and shared artifact collection under `.ci-artifacts/`.
+- Added a machine-enforced env/deploy audit that validates tracked env placeholders, public RPC safety, required deploy vars, and canonical mainnet BSC/Base production settings.
+- Hardened Pages and keeper deploy workflows with the shared env audit plus post-deploy health verification for `/status`, `/api/arena/prediction-markets/active`, and `/api/keeper/bot-health`.
+- Added operator runbooks for quote disablement, stale oracle/stream handling, chain outage/RPC degradation, stuck market recovery, and claim backlog drainage.
+- Proved the Base path remains registry-driven with a direct add-chain smoke that exercises chain-registry tests, market-maker runtime smoke, and shared EVM app-shell build output without chain-specific strategy edits.
+
+Targeted verification:
+
+- `node --import tsx scripts/ci-env-audit.ts --target=ci-shared --json`
+- `VITE_GAME_API_URL=https://api.hyperbet.win VITE_GAME_WS_URL=wss://api.hyperbet.win/ws VITE_SOLANA_CLUSTER=mainnet-beta VITE_USE_GAME_RPC_PROXY=true VITE_USE_GAME_EVM_RPC_PROXY=true VITE_BSC_CHAIN_ID=56 VITE_BSC_GOLD_CLOB_ADDRESS=0x443C09B1E7bb7bA3392b02500772B185654A6F33 VITE_BASE_CHAIN_ID=8453 VITE_BASE_GOLD_CLOB_ADDRESS=0xb8c66D6895Bafd1B0027F2c0865865043064437C node --import tsx scripts/ci-env-audit.ts --target=pages:solana --json`
+- `VITE_GAME_API_URL=https://api.hyperbet.win VITE_GAME_WS_URL=wss://api.hyperbet.win/ws VITE_SOLANA_CLUSTER=mainnet-beta VITE_USE_GAME_RPC_PROXY=true VITE_USE_GAME_EVM_RPC_PROXY=true VITE_BSC_CHAIN_ID=56 VITE_BSC_GOLD_CLOB_ADDRESS=0x443C09B1E7bb7bA3392b02500772B185654A6F33 VITE_BASE_CHAIN_ID=8453 VITE_BASE_GOLD_CLOB_ADDRESS=0xb8c66D6895Bafd1B0027F2c0865865043064437C node --import tsx scripts/ci-env-audit.ts --target=pages:bsc --json`
+- `CI_AUDIT_REQUIRE_RUNTIME=true HYPERBET_KEEPER_URL=https://api.hyperbet.win RAILWAY_PROJECT_ID=test RAILWAY_PRODUCTION_ENVIRONMENT_ID=test RAILWAY_KEEPER_SERVICE_ID=test SOLANA_RPC_URL=https://api.mainnet-beta.solana.com node --import tsx scripts/ci-env-audit.ts --target=keeper:solana --json`
+- `CI_AUDIT_REQUIRE_RUNTIME=true HYPERBET_KEEPER_URL=https://bsc-api.hyperbet.win RAILWAY_PROJECT_ID=test RAILWAY_PRODUCTION_ENVIRONMENT_ID=test RAILWAY_KEEPER_SERVICE_ID=test BSC_RPC_URL=https://bsc-dataseed.binance.org node --import tsx scripts/ci-env-audit.ts --target=keeper:bsc --json`
+- `CI_AUDIT_REQUIRE_RUNTIME=true HYPERBET_KEEPER_URL=https://avax-api.hyperbet.win RAILWAY_PROJECT_ID=test RAILWAY_PRODUCTION_ENVIRONMENT_ID=test RAILWAY_KEEPER_SERVICE_ID=test AVAX_RPC_URL=https://api.avax.network/ext/bc/C/rpc node --import tsx scripts/ci-env-audit.ts --target=keeper:avax --json`
+- `MM_PREDICTION_MARKETS_API_URL=https://api.hyperbet.win/api/arena/prediction-markets/active EVM_BSC_RPC_URL=https://bsc-dataseed.binance.org CLOB_CONTRACT_ADDRESS_BSC=0x443C09B1E7bb7bA3392b02500772B185654A6F33 EVM_BASE_RPC_URL=https://mainnet.base.org CLOB_CONTRACT_ADDRESS_BASE=0xb8c66D6895Bafd1B0027F2c0865865043064437C EVM_AVAX_RPC_URL=https://api.avax.network/ext/bc/C/rpc CLOB_CONTRACT_ADDRESS_AVAX=0x1111111111111111111111111111111111111111 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com SOLANA_PRIVATE_KEY=[1,2,3] GOLD_CLOB_MARKET_PROGRAM_ID=Gold11111111111111111111111111111111111111 node --import tsx scripts/ci-env-audit.ts --target=bot --json`
+- `bun test packages/hyperbet-chain-registry/tests/chainRegistry.test.ts`
+- `bun run --cwd packages/market-maker-bot test`
+- `bun run --cwd packages/simulation-dashboard test`
+- `node --import tsx scripts/ci-gate-base.ts`
+
+Known remaining risk:
+
+- The new heavyweight CI workflow is wired and locally sanity-checked through the direct wrapper entrypoints, but the full GitHub Actions matrix has not yet been observed end-to-end on remote runners from this branch.
+- The direct Node/tsx wrapper entrypoints are the canonical Gate 11 verification path. On this local desktop sandbox, `bun run ci:gate:base` remains less reliable than invoking the wrapper directly, so the workflows intentionally call the wrappers themselves instead of shelling through package scripts.
+- Any new protocol-level exploit or deploy invariant uncovered by the CI gate workflows should land as a dedicated follow-up branch, not by weakening the gates.
 
 ## Update Template
 
