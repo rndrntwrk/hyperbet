@@ -415,7 +415,7 @@ describe("GoldClob", function () {
 
     await expect(
       clob.connect(traderA).claim(duel, MARKET_KIND_DUEL_WINNER),
-    ).to.be.revertedWith("market not settled");
+    ).to.be.revertedWithCustomError(clob, "MarketNotSettled");
   });
 
   it("refunds recorded stake on duel cancellation", async function () {

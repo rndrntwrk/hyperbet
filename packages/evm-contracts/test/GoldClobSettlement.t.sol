@@ -134,7 +134,7 @@ contract GoldClobSettlementTest is Test {
         bytes32 duel = _createOpenMarket("unresolved-claim");
         _matchTrade(duel, 600, 1_000);
 
-        vm.expectRevert(bytes("market not settled"));
+        vm.expectRevert(GoldClob.MarketNotSettled.selector);
         vm.prank(traderA);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }
