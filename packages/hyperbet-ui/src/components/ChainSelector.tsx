@@ -72,7 +72,11 @@ export function ChainSelector({ theme }: { theme?: HyperbetThemeId } = {}) {
               ? display.shortName
               : display.icon;
           return (
-            <option key={chain} value={chain} style={{ background: "#111" }}>
+            <option
+              key={chain}
+              value={chain}
+              style={{ background: "var(--hm-surface-elevated)" }}
+            >
               {optionIcon} {display.name}
             </option>
           );

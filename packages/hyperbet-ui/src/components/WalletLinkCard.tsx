@@ -76,10 +76,10 @@ export function WalletLinkCard(props: {
 
   const canLink = Boolean(solanaWallet && evmWallet && evmWalletPlatform);
   const statusColor = /failed|error/i.test(status)
-    ? "#fda4af"
+    ? "var(--hm-danger-soft)"
     : /linked|already|关联/.test(status)
-      ? "#86efac"
-      : "rgba(255,255,255,0.72)";
+      ? "var(--hm-success-soft)"
+      : "var(--hm-text-secondary)";
 
   const handleLinkWallets = useCallback(async () => {
     if (!solanaWallet || !evmWallet || !evmWalletPlatform) {
@@ -164,15 +164,17 @@ export function WalletLinkCard(props: {
           fontSize: 12,
         }}
       >
-        <span style={{ color: "rgba(255,255,255,0.5)" }}>{copy.solana}</span>
+        <span style={{ color: "var(--hm-text-muted)" }}>{copy.solana}</span>
         <span
-          style={{ color: solanaWallet ? "#c4b5fd" : "rgba(255,255,255,0.62)" }}
+          style={{
+            color: solanaWallet ? "var(--hm-chain-theme-color)" : "var(--hm-text-soft)",
+          }}
         >
           {shortWallet(solanaWallet, copy.notConnected)}
         </span>
-        <span style={{ color: "rgba(255,255,255,0.5)" }}>{copy.evm}</span>
+        <span style={{ color: "var(--hm-text-muted)" }}>{copy.evm}</span>
         <span
-          style={{ color: evmWallet ? "#93c5fd" : "rgba(255,255,255,0.62)" }}
+          style={{ color: evmWallet ? "var(--hm-info)" : "var(--hm-text-soft)" }}
         >
           {evmWallet
             ? `${shortWallet(evmWallet, copy.notConnected)}${evmWalletPlatform ? ` (${evmWalletPlatform})` : ""}`
@@ -187,9 +189,9 @@ export function WalletLinkCard(props: {
         style={{
           padding: "10px 12px",
           borderRadius: 8,
-          border: "1px solid rgba(96,165,250,0.45)",
-          background: "rgba(96,165,250,0.18)",
-          color: "#93c5fd",
+          border: "1px solid var(--hm-info-border)",
+          background: "var(--hm-info-bg)",
+          color: "var(--hm-info)",
           cursor: isBusy || !canLink ? "not-allowed" : "pointer",
           fontSize: 12,
           fontWeight: 700,

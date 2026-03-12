@@ -320,7 +320,7 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            backgroundColor: "#000",
+            backgroundColor: "var(--hm-black)",
           }}
         />
         <div
@@ -330,7 +330,8 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
             left: 0,
             right: 0,
             height: "30%",
-            background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)",
+            background:
+              "linear-gradient(to top, var(--hm-overlay-strong), transparent)",
             pointerEvents: "none",
           }}
         />
@@ -364,7 +365,7 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
           height: "100%",
           border: 0,
           display: "block",
-          backgroundColor: "#000",
+          backgroundColor: "var(--hm-black)",
         }}
       />
       <div
@@ -374,7 +375,8 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
           left: 0,
           right: 0,
           height: "30%",
-          background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)",
+          background:
+            "linear-gradient(to top, var(--hm-overlay-strong), transparent)",
           pointerEvents: "none",
         }}
       />

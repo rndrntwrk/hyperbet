@@ -24,6 +24,38 @@ type HyperbetThemeDefinition = {
   colorVariables: ThemeCssVariables;
 };
 
+const COMMON_COLOR_VARIABLES: ThemeCssVariables = {
+  "--hm-black": "#000000",
+  "--hm-text-primary": "#ffffff",
+  "--hm-text-strong": "rgba(255,255,255,0.85)",
+  "--hm-text-secondary": "rgba(255,255,255,0.72)",
+  "--hm-text-soft": "rgba(255,255,255,0.62)",
+  "--hm-text-muted": "rgba(255,255,255,0.5)",
+  "--hm-text-faint": "rgba(255,255,255,0.35)",
+  "--hm-border-subtle": "rgba(255,255,255,0.06)",
+  "--hm-border-soft": "rgba(255,255,255,0.08)",
+  "--hm-border-light": "rgba(255,255,255,0.12)",
+  "--hm-border-strong": "rgba(255,255,255,0.2)",
+  "--hm-surface-soft": "rgba(255,255,255,0.02)",
+  "--hm-surface-glass": "rgba(255,255,255,0.03)",
+  "--hm-surface-hover": "rgba(255,255,255,0.05)",
+  "--hm-surface-panel": "rgba(0,0,0,0.3)",
+  "--hm-surface-panel-strong": "rgba(0,0,0,0.35)",
+  "--hm-surface-elevated": "rgba(0,0,0,0.4)",
+  "--hm-overlay-strong": "rgba(0,0,0,0.8)",
+  "--hm-success": "#4ade80",
+  "--hm-success-soft": "#86efac",
+  "--hm-success-bg": "rgba(74,222,128,0.08)",
+  "--hm-success-border": "rgba(74,222,128,0.2)",
+  "--hm-warning": "#facc15",
+  "--hm-warning-soft": "#fbbf24",
+  "--hm-danger": "#ef4444",
+  "--hm-danger-soft": "#fca5a5",
+  "--hm-info": "#93c5fd",
+  "--hm-info-bg": "rgba(96,165,250,0.18)",
+  "--hm-info-border": "rgba(96,165,250,0.45)",
+};
+
 const HYPERBET_THEME_DEFINITIONS: Record<
   HyperbetThemeId,
   HyperbetThemeDefinition
@@ -33,6 +65,7 @@ const HYPERBET_THEME_DEFINITIONS: Record<
     accentColorForeground: "#0b0c0e",
     chainLabel: "EVM",
     colorVariables: {
+      ...COMMON_COLOR_VARIABLES,
       "--hm-accent-gold": "#e5b84a",
       "--hm-accent-gold-bright": "#f0d060",
       "--hm-accent-gold-dim": "#d4a84b",
@@ -61,6 +94,7 @@ const HYPERBET_THEME_DEFINITIONS: Record<
     accentColorForeground: "#ffffff",
     chainLabel: "AVAX",
     colorVariables: {
+      ...COMMON_COLOR_VARIABLES,
       "--hm-accent-gold": "#E84142",
       "--hm-accent-gold-bright": "#FF394A",
       "--hm-accent-gold-dim": "#c73030",
@@ -89,6 +123,7 @@ const HYPERBET_THEME_DEFINITIONS: Record<
     accentColorForeground: "#111111",
     chainLabel: "BSC",
     colorVariables: {
+      ...COMMON_COLOR_VARIABLES,
       "--hm-accent-gold": "#F0B90B",
       "--hm-accent-gold-bright": "#ffd24d",
       "--hm-accent-gold-dim": "#d39a00",
@@ -116,6 +151,7 @@ const HYPERBET_THEME_DEFINITIONS: Record<
     accentColorForeground: "#ffffff",
     chainLabel: "BASE",
     colorVariables: {
+      ...COMMON_COLOR_VARIABLES,
       "--hm-accent-gold": "#0052FF",
       "--hm-accent-gold-bright": "#4e86ff",
       "--hm-accent-gold-dim": "#003dc1",
@@ -143,6 +179,7 @@ const HYPERBET_THEME_DEFINITIONS: Record<
     accentColorForeground: "#ffffff",
     chainLabel: "SOLANA",
     colorVariables: {
+      ...COMMON_COLOR_VARIABLES,
       "--hm-accent-gold": "#9945FF",
       "--hm-accent-gold-bright": "#b87cff",
       "--hm-accent-gold-dim": "#7c3aed",

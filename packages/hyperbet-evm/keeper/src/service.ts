@@ -64,7 +64,7 @@ type LeaderboardAgent = {
 type BetRecord = {
   id: string;
   bettorWallet: string;
-  chain: "SOLANA" | "BSC" | "BASE" | "AVAX";
+  chain: "BSC" | "BASE" | "AVAX";
   sourceAsset: string;
   sourceAmount: number;
   goldAmount: number;
@@ -1781,7 +1781,6 @@ async function handleBetRecord(req: Request): Promise<Response> {
 
   const chain = String(payload.chain || "").trim().toUpperCase();
   const chainValue =
-    chain === "SOLANA" ||
     chain === "BSC" ||
     chain === "BASE" ||
     chain === "AVAX"
@@ -1790,7 +1789,7 @@ async function handleBetRecord(req: Request): Promise<Response> {
   if (!chainValue) {
     return jsonResponse(
       req,
-      { error: "Missing or invalid chain. Expected SOLANA, BSC, BASE, or AVAX" },
+      { error: "Missing or invalid chain. Expected BSC, BASE, or AVAX" },
       400,
     );
   }

@@ -408,8 +408,8 @@ export function ReferralPanel(props: {
         gap: 10,
         padding: 14,
         borderRadius: 12,
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "var(--hm-surface-glass)",
+        border: "1px solid var(--hm-border-soft)",
       }}
     >
       <div style={{ fontSize: 12, textTransform: "uppercase", opacity: 0.65 }}>
@@ -417,14 +417,14 @@ export function ReferralPanel(props: {
       </div>
 
       {noPrimaryWallet ? (
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+        <div style={{ fontSize: 12, color: "var(--hm-text-soft)" }}>
           {copy.loadWallet}
         </div>
       ) : (
         <>
           <div
             data-testid="referral-panel-points-scope"
-            style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}
+            style={{ fontSize: 12, color: "var(--hm-text-soft)" }}
           >
             {shortWallet(primaryWallet)} ·{" "}
             {formatPointsScope(points?.pointsScope, copy)} ·{" "}
@@ -436,18 +436,22 @@ export function ReferralPanel(props: {
               style={{
                 padding: "8px 10px",
                 borderRadius: 8,
-                background: "rgba(74,222,128,0.08)",
-                border: "1px solid rgba(74,222,128,0.2)",
+                background: "var(--hm-success-bg)",
+                border: "1px solid var(--hm-success-border)",
                 fontSize: 11,
                 marginBottom: 2,
               }}
             >
               <div
-                style={{ color: "#4ade80", fontWeight: 600, marginBottom: 2 }}
+                style={{
+                  color: "var(--hm-success)",
+                  fontWeight: 600,
+                  marginBottom: 2,
+                }}
               >
                 {copy.referredBy(shortWallet(points.referredBy.wallet))}
               </div>
-              <div style={{ color: "rgba(255,255,255,0.55)" }}>
+              <div style={{ color: "var(--hm-text-muted)" }}>
                 {points.referredBy.code}
               </div>
             </div>
@@ -518,9 +522,9 @@ export function ReferralPanel(props: {
               style={{
                 padding: "8px 10px",
                 borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(0,0,0,0.35)",
-                color: "#fff",
+                border: "1px solid var(--hm-border-light)",
+                background: "var(--hm-surface-panel-strong)",
+                color: "var(--hm-text-primary)",
                 cursor: invite?.inviteCode ? "pointer" : "not-allowed",
               }}
             >
@@ -541,9 +545,9 @@ export function ReferralPanel(props: {
             flex: 1,
             padding: "10px 12px",
             borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(0,0,0,0.35)",
-            color: "#fff",
+            border: "1px solid var(--hm-border-light)",
+            background: "var(--hm-surface-panel-strong)",
+            color: "var(--hm-text-primary)",
             fontSize: 12,
           }}
         />
@@ -555,9 +559,9 @@ export function ReferralPanel(props: {
           style={{
             padding: "10px 12px",
             borderRadius: 8,
-            border: "1px solid rgba(234,179,8,0.45)",
-            background: "rgba(234,179,8,0.2)",
-            color: "#fbbf24",
+            border: "1px solid var(--hm-gold-border-medium)",
+            background: "var(--hm-gold-glow-medium)",
+            color: "var(--hm-warning-soft)",
             cursor: busy || !primaryWallet ? "not-allowed" : "pointer",
             fontSize: 12,
             fontWeight: 700,
@@ -575,9 +579,9 @@ export function ReferralPanel(props: {
         style={{
           padding: "10px 12px",
           borderRadius: 8,
-          border: "1px solid rgba(96,165,250,0.45)",
-          background: "rgba(96,165,250,0.18)",
-          color: "#93c5fd",
+          border: "1px solid var(--hm-info-border)",
+          background: "var(--hm-info-bg)",
+          color: "var(--hm-info)",
           cursor: busy || !canLinkWallets ? "not-allowed" : "pointer",
           fontSize: 12,
           fontWeight: 700,
@@ -590,7 +594,7 @@ export function ReferralPanel(props: {
       {status ? (
         <div
           data-testid="referral-panel-status"
-          style={{ fontSize: 11, color: "rgba(255,255,255,0.68)" }}
+          style={{ fontSize: 11, color: "var(--hm-text-secondary)" }}
         >
           {status}
         </div>

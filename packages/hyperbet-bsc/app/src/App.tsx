@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useMockDataOptional } from "./lib/useMockAvaxStreamData";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 
@@ -19,6 +20,7 @@ import {
   type UiLocale,
 } from "@hyperbet/ui/i18n";
 import { LocaleSelector } from "@hyperbet/ui/components/LocaleSelector";
+import { NavTabs } from "@hyperbet/ui/components/NavTabs";
 
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
@@ -31,21 +33,21 @@ import {
   getStoredInviteCode,
 } from "@hyperbet/ui/lib/invite";
 import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
-import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
+import { ChainSelector } from "@hyperbet/ui/components/ChainSelector";
+import { ThemeSelector } from "@hyperbet/ui/components/ThemeSelector";
+
 import { useChain } from "./lib/ChainContext";
 import { useStreamingState } from "@hyperbet/ui/spectator/useStreamingState";
 import { useDuelContext } from "@hyperbet/ui/spectator/useDuelContext";
 import { useResizePanel, useIsMobile } from "@hyperbet/ui/lib/useResizePanel";
 import { ResizeHandle } from "@hyperbet/ui/components/ResizeHandle";
+import { HmChart, type HmChartPoint } from "@hyperbet/ui/components/HmChart";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
+  getMarketMeta,
+  createEvmPublicClient,
+  toDuelKeyHex,
+} from "@hyperbet/ui/lib/evmClient";
+import { getEvmChainConfig } from "@hyperbet/ui/lib/chainConfig";
 
 // ── Shared UI utilities ──────────────────────────────────────────────────────
 function formatGold(v: number, locale: UiLocale): string {
@@ -76,6 +78,61 @@ function truncateAddr(addr: string): string {
   if (addr.length <= 12) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
+
+const FOOTER_SOCIALS = [
+  {
+    id: "twitch",
+    label: "Twitch",
+    href: "https://www.twitch.tv/hyperscapeai",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M4 3h17v12l-4 4h-4l-3 3H7v-3H4V3zm15 11V5H6v12h3v2l2-2h5l3-3zm-8-6h2v5h-2V8zm5 0h2v5h-2V8z"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "twitter",
+    label: "Twitter",
+    href: "https://x.com/hyperscapeai",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M18.9 2H22l-6.78 7.75L23 22h-6.11l-4.79-6.95L6.02 22H2.9l7.25-8.29L1 2h6.27l4.33 6.31L18.9 2zm-1.07 18h1.69L6.35 3.9H4.53L17.83 20z"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "discord",
+    label: "Discord",
+    href: "https://discord.gg/hyperscape",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M20.32 4.37A16.57 16.57 0 0 0 16.2 3l-.2.4a15.3 15.3 0 0 1 3.7 1.42 12.8 12.8 0 0 0-3.6-1.11 12.3 12.3 0 0 0-8.2 1.1A15.1 15.1 0 0 1 11.6 3l-.2-.4a16.4 16.4 0 0 0-4.12 1.37C4.65 7.63 3.96 11.18 4.2 14.68A16.6 16.6 0 0 0 9.25 17l.67-1.1c-.93-.34-1.82-.78-2.65-1.3.22.17.46.33.7.47a11.87 11.87 0 0 0 8.1 0c.24-.14.48-.3.7-.47-.83.52-1.72.96-2.65 1.3l.67 1.1a16.53 16.53 0 0 0 5.05-2.32c.31-4.06-.53-7.58-2.52-10.31zM9.84 13.3c-.8 0-1.45-.74-1.45-1.65S9.03 10 9.84 10s1.47.74 1.45 1.65c0 .91-.65 1.65-1.45 1.65zm4.32 0c-.8 0-1.45-.74-1.45-1.65S13.35 10 14.16 10s1.47.74 1.45 1.65c0 .91-.65 1.65-1.45 1.65z"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "github",
+    label: "GitHub",
+    href: "https://github.com/hyperbet",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M12 2C6.48 2 2 6.6 2 12.26c0 4.52 2.87 8.35 6.84 9.7.5.1.68-.22.68-.5 0-.24-.01-1.04-.01-1.88-2.78.62-3.37-1.21-3.37-1.21-.45-1.2-1.11-1.52-1.11-1.52-.91-.64.07-.63.07-.63 1 .08 1.53 1.06 1.53 1.06.9 1.58 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.55-1.14-4.55-5.08 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.34 9.34 0 0 1 12 7.4c.85 0 1.7.12 2.5.36 1.9-1.33 2.74-1.05 2.74-1.05.56 1.4.21 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.95-2.33 4.82-4.56 5.07.36.32.68.95.68 1.92 0 1.39-.01 2.5-.01 2.84 0 .28.18.61.69.5A10.25 10.25 0 0 0 22 12.26C22 6.6 17.52 2 12 2z"
+        />
+      </svg>
+    ),
+  },
+];
 
 type BetSide = "YES" | "NO";
 
@@ -149,11 +206,11 @@ function getAppCopy(locale: UiLocale) {
       trades: "成交",
       orderBook: "订单簿",
       matchLog: "对局日志",
-      agents: "智能体",
+      agents: "代理",
       positions: "仓位",
       pool: "资金池",
       side: "方向",
-      agent: "智能体",
+      agent: "代理",
       price: "价格",
       amount: "数量",
       age: "时间",
@@ -203,279 +260,6 @@ function getAppCopy(locale: UiLocale) {
       statusOpen: "开放",
       statusResolved: "已结算",
       statusPending: "待定",
-    };
-  }
-
-  if (locale === "ko") {
-    return {
-      points: "포인트",
-      leaderboard: "리더보드",
-      history: "기록",
-      referral: "추천",
-      loadingLeaderboard: "리더보드 로딩 중",
-      loadingHistory: "기록 로딩 중",
-      loadingReferral: "추천 로딩 중",
-      loadingAgentStats: "에이전트 통계 로딩 중",
-      loadingModelMarkets: "모델 마켓 로딩 중",
-      loadingEvmMarket: "EVM 마켓 로딩 중",
-      debugTitle: "초간단 대전 베팅",
-      chain: "체인",
-      currentMatch: "현재 경기",
-      market: "마켓",
-      yesPool: "YES 풀",
-      noPool: "NO 풀",
-      refresh: "새로고침",
-      connectEvm: "EVM 연결",
-      wrongNet: "네트워크 오류",
-      duels: "듀얼",
-      models: "모델",
-      modelMarkets: "모델 마켓",
-      leaderboardAndStats: "리더보드 & 통계",
-      addEvmWallet: "EVM 지갑 추가",
-      switchNetwork: "네트워크 전환",
-      unmuteStream: "소리 켜기",
-      muteStream: "음소거",
-      source: "소스",
-      waitingForStream: "스트림 대기 중…",
-      trades: "거래",
-      orderBook: "호가창",
-      matchLog: "경기 로그",
-      agents: "에이전트",
-      positions: "포지션",
-      pool: "풀",
-      side: "방향",
-      agent: "에이전트",
-      price: "가격",
-      amount: "수량",
-      age: "시간",
-      trader: "트레이더",
-      buy: "매수",
-      sell: "매도",
-      bids: (name: string) => `매수호가 (${name})`,
-      asks: (name: string) => `매도호가 (${name})`,
-      spread: (value: number) => `스프레드: ${value}%`,
-      rank: "순위",
-      provider: "제공자",
-      wins: "승",
-      losses: "패",
-      winRate: "승률",
-      streak: "연승",
-      hp: "HP",
-      wl: "승/패",
-      dmg: "피해",
-      action: "행동",
-      thought: "생각",
-      result: "결과",
-      winner: (name: string, reason: string | null | undefined) =>
-        `${name} 승리!${reason ? ` ${reason}` : ""}`,
-      noOpenPositions: "미결 포지션 없음",
-      tradingControls: "거래 컨트롤",
-      closeTradingPanel: "거래 패널 닫기",
-      openTradingPanel: "거래 패널 열기",
-      placeBet: "베팅하기",
-      legalLead: "거래 시 동의한 것으로 간주됩니다:",
-      terms: "이용약관",
-      privacy: "개인정보",
-      round: (value: string) => `${value}라운드`,
-      modelsStatus: (count: number) => `모델 마켓 · ${count}개 랭크 모델`,
-      live: "라이브",
-      stable: "안정",
-      synthetic: "합성",
-      phaseLive: "라이브",
-      phaseStarting: (value: string | number | null) => `시작 중 ${value ?? ""}`,
-      phaseResolved: "정산 완료",
-      phaseNextMatch: "다음 경기",
-      phaseIdle: "대기",
-      bettingUnavailable: (cluster: string) =>
-        `${cluster}에서 베팅이 일시적으로 불가능합니다. 나중에 다시 시도하거나 체인을 변경하세요.`,
-      record: (wins: number, losses: number) => `${wins}승-${losses}패`,
-      streakValue: (value: number) => `${value}연승`,
-      level: (value: number) => ` · Lv.${value}`,
-      statusOpen: "진행 중",
-      statusResolved: "정산 완료",
-      statusPending: "대기 중",
-    };
-  }
-
-  if (locale === "pt") {
-    return {
-      points: "Pontos",
-      leaderboard: "Ranking",
-      history: "Histórico",
-      referral: "Indicação",
-      loadingLeaderboard: "Carregando ranking",
-      loadingHistory: "Carregando histórico",
-      loadingReferral: "Carregando indicação",
-      loadingAgentStats: "Carregando estatísticas do agente",
-      loadingModelMarkets: "Carregando mercados de modelos",
-      loadingEvmMarket: "Carregando mercado EVM",
-      debugTitle: "Aposta Simples de Luta",
-      chain: "Cadeia",
-      currentMatch: "Partida atual",
-      market: "Mercado",
-      yesPool: "Pool SIM",
-      noPool: "Pool NÃO",
-      refresh: "Atualizar",
-      connectEvm: "Conectar EVM",
-      wrongNet: "Rede errada",
-      duels: "Duelos",
-      models: "Modelos",
-      modelMarkets: "Mercado de Modelos",
-      leaderboardAndStats: "Ranking & Estatísticas",
-      addEvmWallet: "Adicionar Carteira EVM",
-      switchNetwork: "Trocar Rede",
-      unmuteStream: "Ativar som",
-      muteStream: "Silenciar",
-      source: "Fonte",
-      waitingForStream: "Aguardando transmissão…",
-      trades: "Negociações",
-      orderBook: "Livro de Ordens",
-      matchLog: "Log da Luta",
-      agents: "Agentes",
-      positions: "Posições",
-      pool: "Pool",
-      side: "Lado",
-      agent: "Agente",
-      price: "Preço",
-      amount: "Quantidade",
-      age: "Tempo",
-      trader: "Trader",
-      buy: "COMPRAR",
-      sell: "VENDER",
-      bids: (name: string) => `COMPRAS (${name})`,
-      asks: (name: string) => `VENDAS (${name})`,
-      spread: (value: number) => `Spread: ${value}%`,
-      rank: "Posição",
-      provider: "Provedor",
-      wins: "Vitórias",
-      losses: "Derrotas",
-      winRate: "Taxa de Vitória",
-      streak: "Sequência",
-      hp: "HP",
-      wl: "V/D",
-      dmg: "Dano",
-      action: "AÇÃO",
-      thought: "PEN",
-      result: "RESULTADO",
-      winner: (name: string, reason: string | null | undefined) =>
-        `${name} vence!${reason ? ` ${reason}` : ""}`,
-      noOpenPositions: "Sem posições abertas",
-      tradingControls: "Controles de negociação",
-      closeTradingPanel: "Fechar painel de negociação",
-      openTradingPanel: "Abrir painel de negociação",
-      placeBet: "Apostar",
-      legalLead: "Ao negociar, você concorda com nossos",
-      terms: "Termos",
-      privacy: "Privacidade",
-      round: (value: string) => `Rodada #${value}`,
-      modelsStatus: (count: number) => `MERCADO DE MODELOS · ${count} modelos classificados`,
-      live: "AO VIVO",
-      stable: "ESTÁVEL",
-      synthetic: "SINTÉTICO",
-      phaseLive: "AO VIVO",
-      phaseStarting: (value: string | number | null) => `Iniciando ${value ?? ""}`,
-      phaseResolved: "RESOLVIDO",
-      phaseNextMatch: "PRÓXIMA PARTIDA",
-      phaseIdle: "INATIVO",
-      bettingUnavailable: (cluster: string) =>
-        `Apostas temporariamente indisponíveis em ${cluster}. Tente novamente mais tarde ou troque de cadeia.`,
-      record: (wins: number, losses: number) => `${wins}V-${losses}D`,
-      streakValue: (value: number) => `${value}V`,
-      level: (value: number) => ` · Nv.${value}`,
-      statusOpen: "ABERTO",
-      statusResolved: "RESOLVIDO",
-      statusPending: "PENDENTE",
-    };
-  }
-
-  if (locale === "es") {
-    return {
-      points: "Puntos",
-      leaderboard: "Ranking",
-      history: "Historial",
-      referral: "Referido",
-      loadingLeaderboard: "Cargando clasificación",
-      loadingHistory: "Cargando historial",
-      loadingReferral: "Cargando referidos",
-      loadingAgentStats: "Cargando estadísticas del agente",
-      loadingModelMarkets: "Cargando mercados de modelos",
-      loadingEvmMarket: "Cargando mercado EVM",
-      debugTitle: "Apuesta Simple de Pelea",
-      chain: "Cadena",
-      currentMatch: "Partida actual",
-      market: "Mercado",
-      yesPool: "Pool SÍ",
-      noPool: "Pool NO",
-      refresh: "Actualizar",
-      connectEvm: "Conectar EVM",
-      wrongNet: "Red incorrecta",
-      duels: "Duelos",
-      models: "Modelos",
-      modelMarkets: "Mercado de Modelos",
-      leaderboardAndStats: "Ranking y Stats",
-      addEvmWallet: "Agregar Billetera EVM",
-      switchNetwork: "Cambiar Red",
-      unmuteStream: "Activar sonido",
-      muteStream: "Silenciar",
-      source: "Fuente",
-      waitingForStream: "Esperando transmisión…",
-      trades: "Trades",
-      orderBook: "Libro de Órdenes",
-      matchLog: "Registro de Pelea",
-      agents: "Agentes",
-      positions: "Posiciones",
-      pool: "Pool",
-      side: "Lado",
-      agent: "Agente",
-      price: "Precio",
-      amount: "Cantidad",
-      age: "Tiempo",
-      trader: "Trader",
-      buy: "COMPRAR",
-      sell: "VENDER",
-      bids: (name: string) => `COMPRAS (${name})`,
-      asks: (name: string) => `VENTAS (${name})`,
-      spread: (value: number) => `Spread: ${value}%`,
-      rank: "Rango",
-      provider: "Proveedor",
-      wins: "Victorias",
-      losses: "Derrotas",
-      winRate: "Tasa de Victoria",
-      streak: "Racha",
-      hp: "HP",
-      wl: "V/D",
-      dmg: "Daño",
-      action: "ACC",
-      thought: "PEN",
-      result: "RESULTADO",
-      winner: (name: string, reason: string | null | undefined) =>
-        `¡${name} gana!${reason ? ` ${reason}` : ""}`,
-      noOpenPositions: "Sin posiciones abiertas",
-      tradingControls: "Controles de operación",
-      closeTradingPanel: "Cerrar panel de operaciones",
-      openTradingPanel: "Abrir panel de operaciones",
-      placeBet: "Apostar",
-      legalLead: "Al operar, aceptas nuestros",
-      terms: "Términos",
-      privacy: "Privacidad",
-      round: (value: string) => `Ronda #${value}`,
-      modelsStatus: (count: number) => `MERCADO DE MODELOS · ${count} modelos clasificados`,
-      live: "EN VIVO",
-      stable: "ESTABLE",
-      synthetic: "SINTÉTICO",
-      phaseLive: "EN VIVO",
-      phaseStarting: (value: string | number | null) => `Iniciando ${value ?? ""}`,
-      phaseResolved: "RESUELTO",
-      phaseNextMatch: "SIGUIENTE PARTIDA",
-      phaseIdle: "INACTIVO",
-      bettingUnavailable: (cluster: string) =>
-        `Las apuestas no están disponibles temporalmente en ${cluster}. Intenta de nuevo más tarde o cambia de cadena.`,
-      record: (wins: number, losses: number) => `${wins}V-${losses}D`,
-      streakValue: (value: number) => `${value}V`,
-      level: (value: number) => ` · Nv.${value}`,
-      statusOpen: "ABIERTO",
-      statusResolved: "RESUELTO",
-      statusPending: "PENDIENTE",
     };
   }
 
@@ -654,22 +438,29 @@ function PanelFallback({
 }
 
 export function App() {
+  const mockData = useMockDataOptional();
   const { address: evmWalletAddress } = useAccount();
   const { activeChain, setActiveChain, availableChains } = useChain();
+  const activeEvmChain =
+    activeChain === "bsc" || activeChain === "base" || activeChain === "avax"
+      ? activeChain
+      : ((availableChains[0] as "bsc" | "base" | "avax" | undefined) ?? "bsc");
   const activeChainLabel =
-    activeChain === "base"
+    activeEvmChain === "base"
       ? "BASE"
-      : activeChain === "avax"
-        ? "AVAX"
-        : "BSC";
+      : activeEvmChain === "bsc"
+        ? "BSC"
+        : "AVAX";
   const [locale, setLocale] = useState<UiLocale>(() => resolveUiLocale());
   const copy = useMemo(() => getAppCopy(locale), [locale]);
   const isE2eMode = import.meta.env.MODE === "e2e";
+  const isStreamUiMode = import.meta.env.MODE === "stream-ui";
   const isE2eDebugMode =
     isE2eMode && new URLSearchParams(window.location.search).has("debug");
   // Only poll chain data when a wallet is connected (saves unnecessary RPC calls for spectators).
-  const shouldPollChainData = Boolean(isE2eMode || evmWalletAddress);
-  const pointsWalletAddress = evmWalletAddress ?? null;
+  const shouldPollChainData = Boolean(!isStreamUiMode && (isE2eMode || evmWalletAddress));
+  // In stream-ui mode treat wallet as disconnected so invite/points fetches don't fire.
+  const pointsWalletAddress = isStreamUiMode ? null : (evmWalletAddress ?? null);
   const invitePlatformQuery = "evm" as const;
 
   const [surfaceMode, setSurfaceMode] = useState<"DUELS" | "MODELS">("DUELS");
@@ -686,10 +477,16 @@ export function App() {
   const [streamSourceIndex, setStreamSourceIndex] = useState(0);
   const [showPointsDrawer, setShowPointsDrawer] = useState(false);
 
+  // ── Market data ──────────────────────────────────────────────────────────
+  const [chartData, setChartData] = useState<HmChartPoint[]>([]);
+  const [marketYesPercent, setMarketYesPercent] = useState(50);
+  const lastSharesRef = useRef<{ a: bigint; b: bigint }>({ a: 0n, b: 0n });
+
   // ── Resizable panels ─────────────────────────────────────────────────────
   // Track mobile breakpoint — inline resize styles must NOT apply on mobile
   // because they override CSS media-query layout (sidebar fixed sheet, etc.)
   const isMobile = useIsMobile(768);
+  const isStackedLayout = useIsMobile(960);
 
   // Sidebar width (right column)
   const { size: sidebarWidthPx, startDrag: startSidebarDrag } = useResizePanel({
@@ -841,9 +638,9 @@ export function App() {
     );
     const closeTs = normalizeTimestamp(
       liveCycle.betCloseTime ??
-      liveCycle.fightStartTime ??
-      liveCycle.duelEndTime ??
-      Math.floor(Date.now() / 1000),
+        liveCycle.fightStartTime ??
+        liveCycle.duelEndTime ??
+        Math.floor(Date.now() / 1000),
     );
     const resolvedTs =
       liveCycle.phase === "RESOLUTION" && liveCycle.duelEndTime
@@ -872,14 +669,87 @@ export function App() {
     setRefreshNonce((value) => value + 1);
   };
 
+  // ── Market data polling ───────────────────────────────────────────────────
+  // Runs independently of wallet connection — spectators see live odds too.
+  useEffect(() => {
+    const duelKeyHex =
+      typeof liveCycle?.duelKeyHex === "string" ? liveCycle.duelKeyHex : null;
+    const chainConfig = getEvmChainConfig(activeEvmChain);
+    if (!duelKeyHex || !chainConfig) return;
+
+    const publicClient = createEvmPublicClient(chainConfig);
+    const contractAddr = chainConfig.goldClobAddress as `0x${string}`;
+    const duelKey = toDuelKeyHex(duelKeyHex);
+    let cancelled = false;
+
+    const fetchMarket = async () => {
+      try {
+        const market = await getMarketMeta(
+          publicClient,
+          contractAddr,
+          duelKey,
+          0, // market kind 0 = duel winner
+        );
+        if (cancelled || !market.exists) return;
+
+        const total = market.totalAShares + market.totalBShares;
+        const pct = total > 0n ? Number((market.totalAShares * 100n) / total) : 50;
+        const prev = lastSharesRef.current;
+
+        if (
+          market.totalAShares !== prev.a ||
+          market.totalBShares !== prev.b
+        ) {
+          lastSharesRef.current = {
+            a: market.totalAShares,
+            b: market.totalBShares,
+          };
+          setMarketYesPercent(pct);
+          setChartData((prev) => {
+            const next = [...prev, { time: Date.now(), pct }];
+            return next.length > 200 ? next.slice(next.length - 200) : next;
+          });
+        }
+      } catch {
+        // network errors are silent — chart just doesn't update
+      }
+    };
+
+    void fetchMarket();
+    const id = window.setInterval(() => void fetchMarket(), 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [activeEvmChain, liveCycle?.duelKeyHex]);
+
+  // Reset chart when duel changes
+  useEffect(() => {
+    setChartData([]);
+    setMarketYesPercent(50);
+    lastSharesRef.current = { a: 0n, b: 0n };
+  }, [liveCycle?.cycleId]);
+
   const effYesPot = 0;
   const effNoPot = 0;
-  const effYesPercent = 50;
-  const effNoPercent = 50;
-  const effChartData: { time: number; pct: number }[] = [];
-  const effBids: { price: number; amount: number }[] = [];
-  const effAsks: { price: number; amount: number }[] = [];
-  const effRecentTrades: { id: string; side: "YES" | "NO"; amount: number; price: number; time: number; trader?: string }[] = [];
+  const effYesPercent = mockData ? mockData.yesPct : marketYesPercent;
+  const effNoPercent = 100 - effYesPercent;
+  const effChartData = mockData ? mockData.chartData : chartData;
+  const effBids: { price: number; amount: number }[] = mockData
+    ? mockData.bids.map((b) => ({ price: b.price, amount: b.size }))
+    : [];
+  const effAsks: { price: number; amount: number }[] = mockData
+    ? mockData.asks.map((a) => ({ price: a.price, amount: a.size }))
+    : [];
+  const effRecentTrades: { id: string; side: "YES" | "NO"; amount: number; price: number; time: number; trader?: string }[] = mockData
+    ? mockData.recentTrades.map((t, i) => ({
+        id: `mock-${i}`,
+        side: t.side === "buy" ? "YES" : "NO",
+        amount: t.size,
+        price: t.price,
+        time: t.timestamp,
+      }))
+    : [];
   const liveAgent1Name =
     liveCycle?.agent1?.name?.trim() && liveCycle.agent1.name.trim().length > 0
       ? liveCycle.agent1.name.trim()
@@ -888,9 +758,16 @@ export function App() {
     liveCycle?.agent2?.name?.trim() && liveCycle.agent2.name.trim().length > 0
       ? liveCycle.agent2.name.trim()
       : null;
-  const effAgent1Name = currentMatch?.agent1Name ?? liveAgent1Name ?? "Agent A";
-  const effAgent2Name = currentMatch?.agent2Name ?? liveAgent2Name ?? "Agent B";
-
+  const mockAgent1Name =
+    mockData?.streamingState?.state?.cycle.agent1.name?.trim() || null;
+  const mockAgent2Name =
+    mockData?.streamingState?.state?.cycle.agent2.name?.trim() || null;
+  const effAgent1Name =
+    currentMatch?.agent1Name ?? liveAgent1Name ?? mockAgent1Name ?? "Agent A";
+  const effAgent2Name =
+    currentMatch?.agent2Name ?? liveAgent2Name ?? mockAgent2Name ?? "Agent B";
+  const effStatusColor = status ? "#fda4af" : "rgba(255,255,255,0.78)";
+  const effStatus = status;
   const contextAgent1 = duelContext?.cycle.agent1 ?? null;
   const contextAgent2 = duelContext?.cycle.agent2 ?? null;
 
@@ -972,8 +849,7 @@ export function App() {
 
   // Sidebar bet state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const [hmBottomTab, setHmBottomTab] = useState<
+const [hmBottomTab, setHmBottomTab] = useState<
     "positions" | "orders" | "trades" | "topTraders" | "holders" | "news"
   >("trades");
   const [hmMuted, setHmMuted] = useState(true);
@@ -1069,7 +945,7 @@ export function App() {
                 style={{
                   fontSize: 18,
                   fontWeight: 900,
-                  fontFamily: "'Teko', sans-serif",
+                  fontFamily: "var(--hm-font-display)",
                   letterSpacing: 2,
                   textTransform: "uppercase",
                   color: "#f2d08a",
@@ -1153,10 +1029,10 @@ export function App() {
               })}
             </div>
 
-            {/* Non-compact points summary */}
-            <div style={{ marginBottom: 16, position: "relative", zIndex: 1 }}>
+            {/* Non-compact points summary — hidden for now */}
+            {/* <div style={{ marginBottom: 16, position: "relative", zIndex: 1 }}>
               <PointsDisplay walletAddress={pointsWalletAddress} locale={locale} />
-            </div>
+            </div> */}
 
             {/* Tab Content */}
             <div
@@ -1187,15 +1063,7 @@ export function App() {
                     solanaWallet={null}
                     evmWallet={evmWalletAddress ?? null}
                     locale={locale}
-                    evmWalletPlatform={
-                      activeChain === "bsc"
-                        ? "BSC"
-                        : activeChain === "base"
-                          ? "BASE"
-                          : activeChain === "avax"
-                            ? "AVAX"
-                            : null
-                    }
+                    evmWalletPlatform={activeChainLabel}
                   />
                 </Suspense>
               )}
@@ -1354,7 +1222,7 @@ export function App() {
               value={activeChain}
               onChange={(event) =>
                 setActiveChain(
-                  event.target.value as "solana" | "bsc" | "base" | "avax",
+                  event.target.value as typeof activeChain,
                 )
               }
             >
@@ -1397,11 +1265,8 @@ export function App() {
             {/* Row 1: Brand + quick controls */}
             <div className="hm-header-mob-row1">
               <div className="hm-logo">
-                <span className="hm-logo-text hm-logo-text--stacked">
-                  HYPERSCAPE
-                  <br />
-                  DUEL ARENA
-                </span>
+                <span className="hm-logo-text">HYPERBET</span>
+                <ChainSelector />
               </div>
               <div className="hm-header-mob-controls">
                 <LocaleSelector
@@ -1409,6 +1274,7 @@ export function App() {
                   onChange={handleLocaleChange}
                   compact
                 />
+                <ThemeSelector compact />
                 <button
                   type="button"
                   className="hm-header-mob-icon-btn"
@@ -1453,7 +1319,7 @@ export function App() {
                         className="hm-header-mob-wallet-btn hm-header-mob-wallet-btn--linked"
                         onClick={openAccountModal}
                       >
-                        ⬡ {account.displayName?.slice(0, 6) ?? "EVM"}
+                        ⬡ {account.displayName?.slice(0, 6) ?? activeChainLabel}
                       </button>
                     );
                   }}
@@ -1482,11 +1348,7 @@ export function App() {
                   {copy.models}
                 </button>
               </div>
-              {surfaceMode === "DUELS" ? (
-                <span className="hm-market-name">
-                  {effA1.name} vs {effA2.name}
-                </span>
-              ) : (
+              {surfaceMode !== "DUELS" && (
                 <div className="hm-mode-summary hm-mode-summary--mobile">
                   <span className="hm-market-name">{copy.modelMarkets}</span>
                 </div>
@@ -1498,49 +1360,30 @@ export function App() {
           <>
             <div className="hm-header-left">
               <div className="hm-logo">
-                <span className="hm-logo-text">HYPERSCAPE DUEL ARENA</span>
+                <span className="hm-logo-text">HYPERBET</span>
+                <ChainSelector />
               </div>
-              <div className="hm-view-tabs hm-view-tabs--header">
-                <button
-                  data-testid="surface-mode-duels"
-                  className={`hm-view-tab ${surfaceMode === "DUELS" ? "hm-view-tab--active" : ""}`}
-                  onClick={() => startTransition(() => setSurfaceMode("DUELS"))}
-                  type="button"
-                >
-                  {copy.duels}
-                </button>
-                <button
-                  data-testid="surface-mode-models"
-                  className={`hm-view-tab ${surfaceMode === "MODELS" ? "hm-view-tab--active" : ""}`}
-                  onClick={() =>
-                    startTransition(() => setSurfaceMode("MODELS"))
-                  }
-                  type="button"
-                >
-                  {copy.models}
-                </button>
-              </div>
+            </div>
 
-              {surfaceMode === "DUELS" ? (
-                <div className="hm-market-info">
-                  <span className="hm-market-name">
-                    {effA1.name} vs {effA2.name}
-                  </span>
-                </div>
-              ) : (
-                <div className="hm-mode-summary">
-                  <span className="hm-market-name">{copy.modelMarkets}</span>
-                </div>
-              )}
+            <div className="hm-header-center">
+              <NavTabs
+                activeTab={surfaceMode}
+                onChange={(id) => setSurfaceMode(id as "DUELS" | "MODELS")}
+                tabs={[
+                  { id: "DUELS", label: copy.duels, testId: "surface-mode-duels" },
+                  { id: "MODELS", label: copy.models, testId: "surface-mode-models" },
+                ]}
+              />
             </div>
 
             <div className="hm-header-right">
               <LocaleSelector locale={locale} onChange={handleLocaleChange} />
-              <PointsDisplay
+              <ThemeSelector />
+              {/* <PointsDisplay
                 walletAddress={pointsWalletAddress}
                 compact
                 locale={locale}
-              />
+              /> */}
               <button
                 type="button"
                 className="dock-collapse-btn"
@@ -1586,7 +1429,7 @@ export function App() {
                       className="hm-wallet-btn hm-wallet-btn--linked"
                       onClick={openAccountModal}
                     >
-                      EVM {account.displayName}
+                      {account.displayName}
                     </button>
                   );
                 }}
@@ -1609,7 +1452,7 @@ export function App() {
                 fightingAgentB={effA2.name}
                 locale={locale}
                 gameApiUrl={GAME_API_URL}
-                mockData={null}
+                mockData={mockData}
                 collateralSymbol={activeChainLabel}
                 chainLabel={activeChainLabel}
               />
@@ -1623,18 +1466,6 @@ export function App() {
             <div className="hm-content">
               <div className="hm-viewport-row">
                 {/* Phase status strip — only rendered on mobile, sits above the video */}
-                {isMobile && (
-                  <div className="hm-mob-phase-strip">
-                    <span
-                      className={`hm-phase-badge hm-phase-badge--${effCycle.phase.toLowerCase()}`}
-                    >
-                      {effPhaseLabel}
-                    </span>
-                    <span className="hm-mob-phase-strip-meta">
-                      {effA1.name} vs {effA2.name}
-                    </span>
-                  </div>
-                )}
 
                 {/* Game Viewport */}
                 <div className="hm-game-viewport">
@@ -1715,6 +1546,11 @@ export function App() {
 
                 {/* Odds Chart */}
                 <div className="hm-chart-panel">
+                  <div className="hm-chart-matchup-overlay">
+                    <span className="hm-chart-matchup-yes">{effA1.name}</span>
+                    <span className="hm-chart-matchup-vs">vs</span>
+                    <span className="hm-chart-matchup-no">{effA2.name}</span>
+                  </div>
                   <div className="hm-chart-toolbar">
                     <button className="hm-chart-tool-btn" type="button">
                       +
@@ -1728,73 +1564,35 @@ export function App() {
                   </div>
                   <div className="hm-chart-price-label">
                     <span className="hm-chart-price-current">
-                      {(effYesPercent / 100).toFixed(1)}
+                      {effYesPercent.toFixed(1)}%
                     </span>
                   </div>
                   <div className="hm-chart-container">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={effChartData}>
-                        <XAxis
-                          dataKey="time"
-                          tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
-                          tickFormatter={(v: number) => {
-                            const d = new Date(v);
-                            return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
-                          }}
-                        />
-                        <YAxis
-                          domain={[0, 100]}
-                          tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
-                          width={40}
-                          tickFormatter={(v: number) => `${v}%`}
-                        />
-                        <Tooltip
-                          content={({ active, payload }) =>
-                            active && payload?.length ? (
-                              <div className="hm-chart-tooltip">
-                                <span>{payload[0].value}%</span>
-                              </div>
-                            ) : null
-                          }
-                        />
-                        <ReferenceLine
-                          y={50}
-                          stroke="rgba(255,255,255,0.06)"
-                          strokeDasharray="4 4"
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="pct"
-                          stroke="#e5b84a"
-                          strokeWidth={2}
-                          dot={false}
-                          isAnimationActive
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <HmChart data={effChartData} />
                   </div>
                 </div>
               </div>
 
-              <ResizeHandle
-                direction="v"
-                onMouseDown={(e) => startBottomDrag(e, "y", true)}
-              />
+              {!isStackedLayout ? (
+                <ResizeHandle
+                  direction="v"
+                  onMouseDown={(e) => startBottomDrag(e, "y", true)}
+                />
+              ) : null}
 
               {/* Bottom Panel */}
               <div
                 className="hm-bottom-panel"
-                style={isMobile ? undefined : { height: bottomHeightPx }}
+                style={isStackedLayout ? undefined : { height: bottomHeightPx }}
               >
                 <nav className="hm-bottom-tabs" role="tablist">
                   {(
                     [
                       ["trades", copy.trades],
                       ["orders", copy.orderBook],
+                      ["news", copy.matchLog],
+                      ["holders", copy.agents],
+                      ["topTraders", copy.leaderboard],
                       ["positions", copy.positions],
                     ] as const
                   ).map(([key, label]) => (
@@ -1941,6 +1739,194 @@ export function App() {
                   </div>
                 )}
 
+                {hmBottomTab === "topTraders" && (
+                  <div
+                    className="hm-trades-panel"
+                    role="tabpanel"
+                    data-testid="duels-bottom-panel-topTraders"
+                  >
+                    <div className="hm-trades-table-wrap">
+                      <table className="hm-trades-table" role="grid">
+                        <thead>
+                          <tr>
+                            <th>{copy.rank}</th>
+                            <th>{copy.agent}</th>
+                            <th>{copy.provider}</th>
+                            <th>{copy.wins}</th>
+                            <th>{copy.losses}</th>
+                            <th>{copy.winRate}</th>
+                            <th>{copy.streak}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {effLeaderboard.map((entry) => (
+                            <tr key={entry.name}>
+                              <td className="hm-td-mono">#{entry.rank}</td>
+                              <td>
+                                <strong>{entry.name}</strong>
+                              </td>
+                              <td className="hm-td-dim">{entry.provider}</td>
+                              <td
+                                className="hm-td-mono"
+                                style={{ color: "#22c55e" }}
+                              >
+                                {entry.wins}
+                              </td>
+                              <td
+                                className="hm-td-mono"
+                                style={{ color: "#ef4444" }}
+                              >
+                                {entry.losses}
+                              </td>
+                              <td className="hm-td-mono">
+                                {entry.winRate.toFixed(1)}%
+                              </td>
+                              <td className="hm-td-mono">
+                                {entry.currentStreak > 0
+                                  ? copy.streakValue(entry.currentStreak)
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {hmBottomTab === "holders" && (
+                  <div
+                    className="hm-trades-panel"
+                    role="tabpanel"
+                    data-testid="duels-bottom-panel-holders"
+                  >
+                    <div className="hm-agents-detail">
+                      {[effA1, effA2].map((agent) => {
+                        const hpPct =
+                          agent.maxHp > 0
+                            ? Math.max(
+                                0,
+                                Math.min(100, (agent.hp / agent.maxHp) * 100),
+                              )
+                            : 0;
+                        const hpColor =
+                          agent.hp < 25
+                            ? "#ef4444"
+                            : agent.hp < 60
+                              ? "#f59e0b"
+                              : "#22c55e";
+                        return (
+                          <div key={agent.id} className="hm-agent-card">
+                            <div className="hm-agent-card-header">
+                              <strong>{agent.name}</strong>
+                              <span className="hm-agent-meta">
+                                {agent.provider}
+                                {agent.model ? ` · ${agent.model}` : ""}
+                                {agent.combatLevel
+                                  ? copy.level(agent.combatLevel)
+                                  : ""}
+                              </span>
+                            </div>
+                            {/* HP bar — always visible, quick health read */}
+                            <div className="hm-agent-hp-bar-wrap">
+                              <div
+                                className="hm-agent-hp-bar"
+                                style={{
+                                  width: `${hpPct}%`,
+                                  background: hpColor,
+                                }}
+                              />
+                            </div>
+                            <div className="hm-agent-stats-grid">
+                              <div className="hm-agent-stat">
+                                <span className="hm-agent-stat-label">{copy.hp}</span>
+                                <span
+                                  className={`hm-agent-stat-value ${agent.hp < 30 ? "hm-stat-value--negative" : "hm-stat-value--positive"}`}
+                                >
+                                  {agent.hp}/{agent.maxHp}
+                                </span>
+                              </div>
+                              <div className="hm-agent-stat">
+                                <span className="hm-agent-stat-label">{copy.wl}</span>
+                                <span className="hm-agent-stat-value">
+                                  {copy.record(agent.wins, agent.losses)}
+                                </span>
+                              </div>
+                              <div className="hm-agent-stat">
+                                <span className="hm-agent-stat-label">{copy.dmg}</span>
+                                <span className="hm-agent-stat-value">
+                                  {agent.damageDealtThisFight}
+                                </span>
+                              </div>
+                            </div>
+                            {agent.monologues &&
+                              agent.monologues.length > 0 && (
+                                <div className="hm-agent-monologues">
+                                  {agent.monologues
+                                    .slice(0, isMobile ? 1 : 3)
+                                    .map((m) => (
+                                      <div
+                                        key={m.id}
+                                        className={`hm-monologue hm-monologue--${m.type}`}
+                                      >
+                                        <span className="hm-monologue-type">
+                                          {m.type === "action"
+                                            ? copy.action
+                                            : copy.thought}
+                                        </span>
+                                        <span>{m.content}</span>
+                                      </div>
+                                    ))}
+                                </div>
+                              )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {hmBottomTab === "news" && (
+                  <div
+                    className="hm-trades-panel"
+                    role="tabpanel"
+                    data-testid="duels-bottom-panel-news"
+                  >
+                    <div className="hm-match-log">
+                      <div className="hm-log-entry">
+                        <span className="hm-log-phase">{effCycle.phase}</span>
+                        <span
+                          className="hm-log-text"
+                          style={{ color: effStatusColor }}
+                        >
+                          {effStatus}
+                        </span>
+                      </div>
+                      {effCycle.winnerName && (
+                        <div className="hm-log-entry hm-log-entry--winner">
+                          <span className="hm-log-phase">{copy.result}</span>
+                          <span className="hm-log-text">
+                            {copy.winner(
+                              effCycle.winnerName,
+                              effCycle.winReason,
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {[...effA1.monologues, ...effA2.monologues]
+                        .sort((a, b) => b.timestamp - a.timestamp)
+                        .slice(0, 10)
+                        .map((m) => (
+                          <div key={m.id} className="hm-log-entry">
+                            <span className="hm-log-phase">
+                              {m.type.toUpperCase()}
+                            </span>
+                            <span className="hm-log-text">{m.content}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
 
                 {hmBottomTab === "positions" && (
                   <div
@@ -1954,17 +1940,19 @@ export function App() {
               </div>
             </div>
 
-            <ResizeHandle
-              direction="h"
-              onMouseDown={(e) => startSidebarDrag(e, "x", true)}
-            />
+            {!isStackedLayout ? (
+              <ResizeHandle
+                direction="h"
+                onMouseDown={(e) => startSidebarDrag(e, "x", true)}
+              />
+            ) : null}
 
             {/* ── RIGHT SIDEBAR: Real betting or mock controls ──────────────── */}
             <aside
               className={`hm-sidebar${isSidebarOpen ? " hm-sidebar--open" : ""}`}
               aria-label={copy.tradingControls}
               style={
-                isMobile
+                isStackedLayout
                   ? undefined
                   : { width: sidebarWidthPx, minWidth: sidebarWidthPx }
               }
@@ -1988,7 +1976,33 @@ export function App() {
                   </button>
                 </div>
               </div>
-
+              <div className="hm-matchup">
+                <div className="hm-matchup-agent">
+                  <span className="hm-matchup-name" title={effA1.name}>
+                    {effA1.name}
+                  </span>
+                  <span className="hm-matchup-record">
+                    {copy.record(effA1.wins, effA1.losses)}
+                    {effA1.combatLevel ? copy.level(effA1.combatLevel) : ""}
+                  </span>
+                  <span className="hm-matchup-odds hm-matchup-odds--yes">
+                    {effYesPercent}%
+                  </span>
+                </div>
+                <span className="hm-matchup-vs">VS</span>
+                <div className="hm-matchup-agent hm-matchup-agent--right">
+                  <span className="hm-matchup-name" title={effA2.name}>
+                    {effA2.name}
+                  </span>
+                  <span className="hm-matchup-record">
+                    {copy.record(effA2.wins, effA2.losses)}
+                    {effA2.combatLevel ? copy.level(effA2.combatLevel) : ""}
+                  </span>
+                  <span className="hm-matchup-odds hm-matchup-odds--no">
+                    {effNoPercent}%
+                  </span>
+                </div>
+              </div>
 
               {/* Market type tabs + betting panels */}
               <div className="hm-market-panel-wrap">
@@ -2016,6 +2030,26 @@ export function App() {
                 {copy.legalLead} <a href="#terms">{copy.terms}</a> &amp;{" "}
                 <a href="#privacy">{copy.privacy}</a>
               </p>
+
+              <div className="hm-footer-socials" aria-label="Social links">
+                {FOOTER_SOCIALS.map((social) => (
+                  <a
+                    key={social.id}
+                    className="hm-footer-social"
+                    href={social.href}
+                    aria-label={social.label}
+                    title={social.label}
+                    target={social.href.startsWith("http") ? "_blank" : undefined}
+                    rel={
+                      social.href.startsWith("http")
+                        ? "noreferrer noopener"
+                        : undefined
+                    }
+                  >
+                    {social.icon}
+                  </a>
+                ))}
+              </div>
             </aside>
           </div>
 
@@ -2061,24 +2095,6 @@ export function App() {
         </>
       )}
 
-      {/* Status bar */}
-      <footer className="hm-statusbar" role="contentinfo">
-        <span className="hm-statusbar-link">
-          {surfaceMode === "DUELS"
-            ? `${effA1.name} vs ${effA2.name} · ${copy.round(effCycle.cycleId.split("-").pop() ?? "0")}`
-            : copy.modelsStatus(effLeaderboard.length)}
-        </span>
-        <div className="hm-statusbar-right">
-          <span className="hm-status-indicator" />
-          <span>
-            {surfaceMode === "DUELS"
-              ? effCycle.phase === "FIGHTING"
-                ? copy.live
-                : copy.stable
-              : copy.synthetic}
-          </span>
-        </div>
-      </footer>
     </div>
   );
 }

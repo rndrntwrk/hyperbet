@@ -629,8 +629,8 @@ function VictoryDisplay({
       <div
         style={{
           background:
-            "linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 100%)",
-          border: "3px solid #f2d08a",
+            "linear-gradient(180deg, rgba(0,0,0,0.95) 0%, var(--hm-overlay-strong) 100%)",
+          border: "3px solid var(--hm-accent-gold-bright)",
           borderRadius: 16,
           padding: "clamp(20px, 4vw, 40px) clamp(24px, 5vw, 60px)",
           textAlign: "center",
@@ -640,7 +640,7 @@ function VictoryDisplay({
       >
         <div
           style={{
-            color: "#f2d08a",
+            color: "var(--hm-accent-gold-bright)",
             fontSize: "1rem",
             fontWeight: "bold",
             letterSpacing: 8,
@@ -651,7 +651,7 @@ function VictoryDisplay({
         </div>
         <div
           style={{
-            color: "#fff",
+            color: "var(--hm-text-primary)",
             fontSize: "clamp(1.5rem, 4vw, 3rem)",
             fontWeight: "bold",
             marginBottom: 8,
@@ -662,7 +662,7 @@ function VictoryDisplay({
         </div>
         <div
           style={{
-            color: "rgba(255,255,255,0.7)",
+            color: "var(--hm-text-secondary)",
             fontSize: "1.2rem",
             marginBottom: 24,
             fontStyle: "italic",
@@ -678,18 +678,22 @@ function VictoryDisplay({
             gap: 24,
             marginTop: 16,
             paddingTop: 16,
-            borderTop: "1px solid rgba(242,208,138,0.2)",
+            borderTop: "1px solid var(--hm-gold-border-light)",
           }}
         >
           <div style={{ textAlign: "center" }}>
             <div
-              style={{ color: "#fff", fontSize: "1.5rem", fontWeight: "bold" }}
+              style={{
+                color: "var(--hm-text-primary)",
+                fontSize: "1.5rem",
+                fontWeight: "bold",
+              }}
             >
               {winner.wins}
             </div>
             <div
               style={{
-                color: "rgba(255,255,255,0.5)",
+                color: "var(--hm-text-muted)",
                 fontSize: "0.75rem",
                 textTransform: "uppercase",
                 letterSpacing: 1,
@@ -702,18 +706,22 @@ function VictoryDisplay({
             style={{
               width: 1,
               height: 40,
-              background: "rgba(255,255,255,0.2)",
+              background: "var(--hm-border-strong)",
             }}
           />
           <div style={{ textAlign: "center" }}>
             <div
-              style={{ color: "#fff", fontSize: "1.5rem", fontWeight: "bold" }}
+              style={{
+                color: "var(--hm-text-primary)",
+                fontSize: "1.5rem",
+                fontWeight: "bold",
+              }}
             >
               {winner.losses}
             </div>
             <div
               style={{
-                color: "rgba(255,255,255,0.5)",
+                color: "var(--hm-text-muted)",
                 fontSize: "0.75rem",
                 textTransform: "uppercase",
                 letterSpacing: 1,
@@ -731,7 +739,11 @@ function VictoryDisplay({
           />
           <div style={{ textAlign: "center" }}>
             <div
-              style={{ color: "#fff", fontSize: "1.5rem", fontWeight: "bold" }}
+              style={{
+                color: "var(--hm-text-primary)",
+                fontSize: "1.5rem",
+                fontWeight: "bold",
+              }}
             >
               {Math.round(
                 (winner.wins / Math.max(1, winner.wins + winner.losses)) * 100,
@@ -740,7 +752,7 @@ function VictoryDisplay({
             </div>
             <div
               style={{
-                color: "rgba(255,255,255,0.5)",
+                color: "var(--hm-text-muted)",
                 fontSize: "0.75rem",
                 textTransform: "uppercase",
                 letterSpacing: 1,

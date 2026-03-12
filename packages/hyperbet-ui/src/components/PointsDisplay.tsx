@@ -567,15 +567,15 @@ function GoldBonusPopupInline({
         right: 0,
         width: "min(320px, calc(100vw - 34px))",
         padding: 20,
-        background: "rgba(10, 12, 18, 0.85)",
+        background: "var(--hm-surface-elevated)",
         backdropFilter: "blur(32px) saturate(1.4)",
         WebkitBackdropFilter: "blur(32px) saturate(1.4)",
         borderRadius: 16,
         border: "1px solid rgba(242,208,138,0.2)",
         boxShadow:
-          "0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(255,255,255,0.04)",
+          "0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 var(--hm-border-soft), 0 0 0 1px var(--hm-surface-glass)",
         zIndex: 100,
-        color: "#fff",
+        color: "var(--hm-text-primary)",
       }}
     >
       {/* Top highlight */}
@@ -598,7 +598,7 @@ function GoldBonusPopupInline({
           alignItems: "center",
           marginBottom: 14,
           paddingBottom: 10,
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid var(--hm-border-subtle)",
         }}
       >
         <div
@@ -608,7 +608,7 @@ function GoldBonusPopupInline({
             fontFamily: "var(--hm-font-display)",
             letterSpacing: 1.5,
             textTransform: "uppercase",
-            color: "#f2d08a",
+            color: "var(--hm-accent-gold-bright)",
             textShadow: "0 0 8px rgba(242,208,138,0.3)",
           }}
         >
@@ -618,10 +618,10 @@ function GoldBonusPopupInline({
           type="button"
           onClick={onClose}
           style={{
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
+            background: "var(--hm-border-subtle)",
+            border: "1px solid var(--hm-border-light)",
             borderRadius: 8,
-            color: "rgba(255,255,255,0.5)",
+            color: "var(--hm-text-muted)",
             cursor: "pointer",
             fontSize: 14,
             padding: "4px 8px",

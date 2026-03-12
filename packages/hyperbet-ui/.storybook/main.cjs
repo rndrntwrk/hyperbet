@@ -2,8 +2,6 @@ const { resolve } = require("node:path");
 const { mergeConfig } = require("vite");
 
 const packageRoot = resolve(__dirname, "..");
-const appSrc = resolve(packageRoot, "../hyperbet-solana/app/src");
-const appSrcNormalized = `${appSrc.split("\\").join("/")}/`;
 const uiSrc = resolve(packageRoot, "./src");
 const uiSrcNormalized = `${uiSrc.split("\\").join("/")}/`;
 
@@ -23,10 +21,7 @@ function createScopedMockPlugin() {
     resolveId(source, importer) {
       if (!importer) return null;
       const normalizedImporter = importer.split("\\").join("/");
-      if (
-        !normalizedImporter.startsWith(appSrcNormalized) &&
-        !normalizedImporter.startsWith(uiSrcNormalized)
-      ) {
+      if (!normalizedImporter.startsWith(uiSrcNormalized)) {
         return null;
       }
       return overrides.get(source) ?? null;
@@ -45,7 +40,7 @@ module.exports = {
     name: "@storybook/react-vite",
     options: {},
   },
-  staticDirs: [resolve(packageRoot, "../hyperbet-solana/app/public")],
+  staticDirs: [resolve(packageRoot, "./public")],
   async viteFinal(baseConfig) {
     return mergeConfig(baseConfig, {
       plugins: [createScopedMockPlugin()],

@@ -216,10 +216,10 @@ export function PointsHistory({
           ...themeStyle,
           padding: "16px",
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(255,255,255,0.02)",
+          border: "1px solid var(--hm-border-soft)",
+          background: "var(--hm-surface-soft)",
           fontSize: 12,
-          color: "rgba(255,255,255,0.5)",
+          color: "var(--hm-text-muted)",
         }}
       >
         {copy.connectWallet}
@@ -238,7 +238,7 @@ export function PointsHistory({
         display: "flex",
         flexDirection: "column",
         gap: 8,
-        color: "#fff",
+        color: "var(--hm-text-primary)",
       }}
     >
       <div
@@ -254,7 +254,7 @@ export function PointsHistory({
             fontWeight: 700,
             textTransform: "uppercase",
             letterSpacing: 1.5,
-            color: "rgba(255,255,255,0.5)",
+            color: "var(--hm-text-muted)",
           }}
         >
           {copy.history}
@@ -267,9 +267,9 @@ export function PointsHistory({
           style={{
             padding: "5px 8px",
             borderRadius: 6,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(0,0,0,0.4)",
-            color: "rgba(255,255,255,0.7)",
+            border: "1px solid var(--hm-border-light)",
+            background: "var(--hm-surface-elevated)",
+            color: "var(--hm-text-secondary)",
             fontSize: 11,
             cursor: "pointer",
             outline: "none",
@@ -287,7 +287,7 @@ export function PointsHistory({
         <div
           style={{
             fontSize: 12,
-            color: "rgba(255,255,255,0.3)",
+            color: "var(--hm-text-faint)",
             padding: 16,
             textAlign: "center",
           }}
@@ -300,12 +300,12 @@ export function PointsHistory({
         <div
           style={{
             fontSize: 12,
-            color: error ? "#fca5a5" : "rgba(255,255,255,0.3)",
+            color: error ? "var(--hm-danger-soft)" : "var(--hm-text-faint)",
             padding: 24,
             textAlign: "center",
-            background: "rgba(0,0,0,0.2)",
+            background: "var(--hm-surface-panel-soft, rgba(0,0,0,0.2))",
             borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
+            border: "1px solid var(--hm-border-subtle)",
           }}
         >
           {error ?? copy.noActivity}
@@ -315,9 +315,9 @@ export function PointsHistory({
       {entries.length > 0 && (
         <div
           style={{
-            background: "rgba(0,0,0,0.3)",
+            background: "var(--hm-surface-panel)",
             borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
+            border: "1px solid var(--hm-border-subtle)",
             overflow: "hidden",
           }}
         >
@@ -337,11 +337,11 @@ export function PointsHistory({
                   alignItems: "center",
                   padding: "10px 14px",
                   gap: 10,
-                  borderBottom: "1px solid rgba(255,255,255,0.03)",
+                  borderBottom: "1px solid var(--hm-surface-glass)",
                   transition: "background 0.15s",
                 }}
                 onMouseEnter={(event) => {
-                  event.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                  event.currentTarget.style.background = "var(--hm-surface-glass)";
                 }}
                 onMouseLeave={(event) => {
                   event.currentTarget.style.background = "transparent";
@@ -356,7 +356,7 @@ export function PointsHistory({
                     style={{
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "rgba(255,255,255,0.85)",
+                      color: "var(--hm-text-strong)",
                     }}
                   >
                     {meta.label}
@@ -364,7 +364,7 @@ export function PointsHistory({
                   <div
                     style={{
                       fontSize: 10,
-                      color: "rgba(255,255,255,0.35)",
+                      color: "var(--hm-text-faint)",
                       display: "flex",
                       gap: 6,
                     }}
@@ -377,7 +377,9 @@ export function PointsHistory({
                       <span
                         style={{
                           color:
-                            entry.status === "PENDING" ? "#facc15" : "#fca5a5",
+                            entry.status === "PENDING"
+                              ? "var(--hm-warning)"
+                              : "var(--hm-danger-soft)",
                         }}
                       >
                         &middot; {formatEntryStatus(entry.status, resolvedLocale)}
@@ -390,7 +392,9 @@ export function PointsHistory({
                   style={{
                     fontSize: 13,
                     fontWeight: 700,
-                    color: isPositive ? "#4ade80" : "#fca5a5",
+                    color: isPositive
+                      ? "var(--hm-success)"
+                      : "var(--hm-danger-soft)",
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -408,7 +412,7 @@ export function PointsHistory({
               justifyContent: "space-between",
               alignItems: "center",
               padding: "8px 14px",
-              borderTop: "1px solid rgba(255,255,255,0.06)",
+              borderTop: "1px solid var(--hm-border-subtle)",
             }}
           >
             <button
@@ -418,13 +422,11 @@ export function PointsHistory({
               style={{
                 padding: "6px 14px",
                 borderRadius: 6,
-                border: "1px solid rgba(255,255,255,0.1)",
+                border: "1px solid var(--hm-border-light)",
                 background:
-                  page === 0 ? "transparent" : "rgba(255,255,255,0.05)",
+                  page === 0 ? "transparent" : "var(--hm-surface-hover)",
                 color:
-                  page === 0
-                    ? "rgba(255,255,255,0.2)"
-                    : "rgba(255,255,255,0.6)",
+                  page === 0 ? "var(--hm-border-strong)" : "var(--hm-text-soft)",
                 cursor: page === 0 ? "not-allowed" : "pointer",
                 fontSize: 11,
                 fontWeight: 600,
@@ -432,7 +434,7 @@ export function PointsHistory({
             >
               {copy.prev}
             </button>
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
+            <span style={{ fontSize: 11, color: "var(--hm-text-faint)" }}>
               {copy.page(page + 1, totalPages, total)}
             </span>
             <button
@@ -442,15 +444,15 @@ export function PointsHistory({
               style={{
                 padding: "6px 14px",
                 borderRadius: 6,
-                border: "1px solid rgba(255,255,255,0.1)",
+                border: "1px solid var(--hm-border-light)",
                 background:
                   page + 1 >= totalPages
                     ? "transparent"
-                    : "rgba(255,255,255,0.05)",
+                    : "var(--hm-surface-hover)",
                 color:
                   page + 1 >= totalPages
-                    ? "rgba(255,255,255,0.2)"
-                    : "rgba(255,255,255,0.6)",
+                    ? "var(--hm-border-strong)"
+                    : "var(--hm-text-soft)",
                 cursor: page + 1 >= totalPages ? "not-allowed" : "pointer",
                 fontSize: 11,
                 fontWeight: 600,

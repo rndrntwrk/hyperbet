@@ -17,11 +17,11 @@ export function Tabs({ tabs, activeTab, onChange, style, theme }: TabsProps) {
       style={{
         ...themeStyle,
         display: "flex",
-        background: "rgba(0,0,0,0.4)",
+        background: "var(--hm-surface-elevated)",
         borderRadius: 12,
         padding: 4,
         gap: 4,
-        border: "1px solid rgba(255,255,255,0.05)",
+        border: "1px solid var(--hm-surface-hover)",
         ...style,
       }}
     >
@@ -34,10 +34,10 @@ export function Tabs({ tabs, activeTab, onChange, style, theme }: TabsProps) {
             style={{
               flex: 1,
               padding: "8px 12px",
-              background: isActive ? "rgba(255,255,255,0.15)" : "transparent",
-              color: isActive ? "#fff" : "rgba(255,255,255,0.5)",
+              background: isActive ? "var(--hm-gold-glow-medium)" : "transparent",
+              color: isActive ? "var(--hm-text-primary)" : "var(--hm-text-muted)",
               border: isActive
-                ? "1px solid rgba(255,255,255,0.1)"
+                ? "1px solid var(--hm-border-light)"
                 : "1px solid transparent",
               borderRadius: 8,
               fontSize: 13,

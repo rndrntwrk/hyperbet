@@ -340,12 +340,12 @@ export function AgentStats({
               flexDirection: "column",
               gap: 6,
               background:
-                "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+                "linear-gradient(180deg, var(--hm-surface-hover) 0%, var(--hm-surface-soft) 100%)",
               padding: 10,
               borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.08)",
+              border: "1px solid var(--hm-border-soft)",
               boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.1)",
+                "inset 0 1px 0 var(--hm-border-subtle), 0 2px 8px rgba(0,0,0,0.1)",
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)",
               position: "relative",
@@ -356,13 +356,13 @@ export function AgentStats({
               <div
                 key={mono.id}
                 style={{
-                  background: "rgba(255,255,255,0.03)",
+                  background: "var(--hm-surface-glass)",
                   borderLeft: `2px solid ${mono.type === "action" ? accentColor : "#f2d08a"}`,
                   padding: "8px 12px",
                   borderRadius: "0 10px 10px 0",
                   fontSize: 12,
                   lineHeight: 1.4,
-                  color: "rgba(255,255,255,0.85)",
+                  color: "var(--hm-text-strong)",
                   position: "relative",
                   zIndex: 2,
                   fontFamily: "var(--hm-font-body)",
@@ -405,12 +405,12 @@ function StatBox({
     <div
       style={{
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
-        border: "1px solid rgba(255,255,255,0.08)",
+          "linear-gradient(180deg, var(--hm-border-subtle) 0%, var(--hm-surface-soft) 100%)",
+        border: "1px solid var(--hm-border-soft)",
         borderRadius: 14,
         padding: "10px 14px",
         boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.1)",
+          "inset 0 1px 0 var(--hm-border-subtle), 0 2px 8px rgba(0,0,0,0.1)",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
       }}
@@ -418,7 +418,7 @@ function StatBox({
       <div
         style={{
           fontSize: 10,
-          color: "rgba(255,255,255,0.4)",
+          color: "var(--hm-text-faint)",
           fontWeight: 800,
           textTransform: "uppercase",
           letterSpacing: 1,

@@ -1126,7 +1126,7 @@ export function SolanaClobPanel({
             display: "grid",
             gap: 10,
             padding: compact ? "0 16px 14px" : "12px 0 0",
-            color: "#d4d4d8",
+            color: "var(--hm-text-secondary)",
             fontFamily: "var(--hm-font-body)",
             fontSize: 12,
           }}
@@ -1148,8 +1148,8 @@ export function SolanaClobPanel({
             onClick={() => void handleClaim()}
             disabled={!canClaim}
             style={buttonStyle(
-              "#0f3f2b",
-              "rgba(34,197,94,0.35)",
+              "var(--hm-success)",
+              "var(--hm-success-border)",
               !canClaim,
             )}
           >
@@ -1163,7 +1163,7 @@ export function SolanaClobPanel({
           display: "flex",
           alignItems: "center",
           gap: 10,
-          color: "#d4d4d8",
+          color: "var(--hm-text-secondary)",
           fontFamily: "var(--hm-font-body)",
           fontSize: 12,
         }}
@@ -1178,9 +1178,9 @@ export function SolanaClobPanel({
             width: 88,
             padding: "6px 8px",
             borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(17,24,39,0.65)",
-            color: "#f4f4f5",
+            border: "1px solid var(--hm-border-light)",
+            background: "var(--hm-surface-panel-strong)",
+            color: "var(--hm-text-primary)",
           }}
         />
       </div>
@@ -1197,7 +1197,7 @@ export function SolanaClobPanel({
             data-testid="solana-clob-admin-toggle"
             aria-expanded={showAdminPanel ? "true" : "false"}
             onClick={() => setShowAdminPanel((open) => !open)}
-            style={buttonStyle("#111827", "rgba(148,163,184,0.28)")}
+            style={buttonStyle("var(--hm-text-muted)", "var(--hm-border-strong)")}
           >
             {showAdminPanel ? copy.hideAdminPanel : copy.showAdminPanel}
           </button>
@@ -1205,7 +1205,7 @@ export function SolanaClobPanel({
             type="button"
             data-testid="solana-clob-create-match"
             onClick={() => void refreshData()}
-            style={buttonStyle("#1e3a5f", "rgba(59,130,246,0.35)")}
+            style={buttonStyle("var(--hm-info)", "var(--hm-info-border)")}
           >
             Create Match
           </button>
