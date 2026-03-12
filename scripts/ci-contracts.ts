@@ -63,7 +63,7 @@ writeJsonArtifact(artifactRoot, "summary.json", {
 
 try {
   if (target === "fast") {
-    await runStep("hardhat-test", "bun", ["run", "test"]);
+    await runStep("foundry-fast", "bun", ["run", "test:foundry:fast"]);
   } else if (target === "proof") {
     await runStep("foundry-test", "bun", ["run", "test:foundry"]);
     await runStep("foundry-fuzz", "bun", ["run", "test:fuzz"]);
