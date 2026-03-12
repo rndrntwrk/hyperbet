@@ -15,6 +15,7 @@ import { evaluatePolicyBreaches } from "./policy.js";
 import { evaluateSettlementBreaches } from "./settlement.js";
 import { evaluateSybilBreaches } from "./sybil.js";
 import { evaluateChaosBreaches } from "./chaos.js";
+import { evaluateAdaptiveBreaches } from "./adaptive.js";
 import { evaluateMatrixBreaches } from "./matrix.js";
 import {
   DEFAULT_REPLAY_CORPUS_PATH,
@@ -177,6 +178,15 @@ export function runGate(
     return {
       ok: false,
       message: `chaos breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
+    };
+  }
+
+  const adaptiveBreaches = evaluateAdaptiveBreaches(report);
+  if (adaptiveBreaches.length > 0) {
+    const first = adaptiveBreaches[0]!;
+    return {
+      ok: false,
+      message: `adaptive breach ${first.chain} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
     };
   }
 

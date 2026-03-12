@@ -99,7 +99,7 @@ Gate env controls:
 - `MM_ADVERSARIAL_SEED_CORPUS` (optional path override for regression-seed corpus used by `--seed-corpus`)
 - `MM_ADVERSARIAL_REPLAY_CORPUS` (optional path override for historical replay corpus used by `--replay-corpus` and gate checks)
 
-Gate behavior now enforces ten layers:
+Gate behavior now enforces twelve layers:
 
 - mitigation pass threshold
 - hard invariants (`max mitigated attacker pnl`, `max exploit events`, `max inventory peak`, `max toxic fill rate`, `max adverse slippage`, `min loss reduction`)
@@ -108,6 +108,7 @@ Gate behavior now enforces ten layers:
 - bounded-loss budgets (scenario-level and chain-aggregate mitigated attacker PnL caps)
 - settlement state-machine checks (`open -> resolve_proposed -> dispute_window -> finalized`) including minimum dispute-window time before finalization
 - sybil/collusion controls (cluster concentration ceiling, identity-churn rate ceiling, circular-flow ratio ceiling, coordinated-resolution push score cap, minimum independent participant floor)
+- adaptive attacker-policy controls (max escalation score, max tactic-switch burden, minimum defense-recovery ratio, max terminal pressure)
 - chaos-resilience controls (oracle outage damage cap, finality jitter damage cap, liquidity-cliff inventory stress cap)
 - deterministic abuse-matrix budgets (chain aggregate and scenario-specific attacker-pnl/exploit/toxicity/slippage envelopes)
 - regression seed corpus replay checks (known-bad seeds must remain mitigated across all enabled gates)

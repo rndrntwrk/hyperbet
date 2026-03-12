@@ -20,6 +20,7 @@ The market maker must remain solvent and operational under adversarial order flo
   - bounded loss budgets
   - settlement state machine
   - sybil/collusion controls
+  - adaptive attacker-policy controls
   - chaos-resilience controls
   - deterministic abuse matrix budgets
   - regression seed corpus
