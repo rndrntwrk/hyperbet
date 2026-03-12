@@ -4,6 +4,8 @@ import {
   BETTING_DEPLOYMENTS,
   BETTING_EVM_CHAIN_ORDER,
   defaultRpcUrlForEvmNetwork,
+  getMissingBettingEvmCanonicalFields,
+  isBettingEvmDeploymentCanonicalReady,
   normalizeChainKey,
   normalizeSolanaCluster,
   parseBettingEvmChainList,
@@ -43,6 +45,68 @@ describe("chain registry", () => {
     const avax = resolveBettingEvmDeploymentForChain("avax", "mainnet-beta");
     expect(avax.chainId).toBe(BETTING_DEPLOYMENTS.evm.avax.chainId);
     expect(defaultRpcUrlForEvmNetwork(avax.networkKey)).toContain("avax");
+  });
+
+  test("reports canonical readiness for shared mainnet EVM deployments", () => {
+    expect(
+      isBettingEvmDeploymentCanonicalReady(BETTING_DEPLOYMENTS.evm.bsc),
+    ).toBe(true);
+    expect(
+      isBettingEvmDeploymentCanonicalReady(BETTING_DEPLOYMENTS.evm.base),
+    ).toBe(true);
+    expect(
+      isBettingEvmDeploymentCanonicalReady(BETTING_DEPLOYMENTS.evm.avax),
+    ).toBe(false);
+    expect(getMissingBettingEvmCanonicalFields(BETTING_DEPLOYMENTS.evm.avax))
+      .toEqual([
+        "duelOracleAddress",
+        "goldClobAddress",
+        "adminAddress",
+        "marketOperatorAddress",
+        "treasuryAddress",
+        "marketMakerAddress",
+      ]);
+  });
+
+  test("treats fully populated AVAX deployments as canonical-ready", () => {
+    const mainnetReady = {
+      ...BETTING_DEPLOYMENTS.evm.avax,
+      duelOracleAddress: "0x1111111111111111111111111111111111111111",
+      goldClobAddress: "0x2222222222222222222222222222222222222222",
+      adminAddress: "0x3333333333333333333333333333333333333333",
+      marketOperatorAddress: "0x4444444444444444444444444444444444444444",
+      treasuryAddress: "0x5555555555555555555555555555555555555555",
+      marketMakerAddress: "0x6666666666666666666666666666666666666666",
+    };
+    const fujiReady = {
+      ...BETTING_DEPLOYMENTS.evm.avaxFuji,
+      duelOracleAddress: "0x1111111111111111111111111111111111111111",
+      goldClobAddress: "0x2222222222222222222222222222222222222222",
+      adminAddress: "0x3333333333333333333333333333333333333333",
+      marketOperatorAddress: "0x4444444444444444444444444444444444444444",
+      treasuryAddress: "0x5555555555555555555555555555555555555555",
+      marketMakerAddress: "0x6666666666666666666666666666666666666666",
+    };
+
+    expect(isBettingEvmDeploymentCanonicalReady(mainnetReady)).toBe(true);
+    expect(getMissingBettingEvmCanonicalFields(mainnetReady)).toEqual([]);
+    expect(isBettingEvmDeploymentCanonicalReady(fujiReady)).toBe(true);
+    expect(getMissingBettingEvmCanonicalFields(fujiReady)).toEqual([]);
+  });
+
+  test("reports AVAX Fuji as incomplete until canonical values exist", () => {
+    expect(
+      isBettingEvmDeploymentCanonicalReady(BETTING_DEPLOYMENTS.evm.avaxFuji),
+    ).toBe(false);
+    expect(getMissingBettingEvmCanonicalFields(BETTING_DEPLOYMENTS.evm.avaxFuji))
+      .toEqual([
+        "duelOracleAddress",
+        "goldClobAddress",
+        "adminAddress",
+        "marketOperatorAddress",
+        "treasuryAddress",
+        "marketMakerAddress",
+      ]);
   });
 
   test("resolves EVM runtime env with shared override precedence", () => {

@@ -69,6 +69,18 @@ export interface BettingDeploymentManifest {
   evm: Record<BettingEvmNetwork, BettingEvmDeployment>;
 }
 
+export const BETTING_EVM_CANONICAL_ADDRESS_FIELDS = [
+  "duelOracleAddress",
+  "goldClobAddress",
+  "adminAddress",
+  "marketOperatorAddress",
+  "treasuryAddress",
+  "marketMakerAddress",
+] as const;
+
+export type BettingEvmCanonicalAddressField =
+  (typeof BETTING_EVM_CANONICAL_ADDRESS_FIELDS)[number];
+
 export interface EvmChainRuntimeConfig {
   chainKey: BettingEvmChain;
   chainId: number;
@@ -303,6 +315,20 @@ export const BETTING_DEPLOYMENTS: BettingDeploymentManifest = {
   solana: SOLANA_DEPLOYMENTS,
   evm: EVM_DEPLOYMENTS,
 };
+
+export function getMissingBettingEvmCanonicalFields(
+  deployment: BettingEvmDeployment,
+): BettingEvmCanonicalAddressField[] {
+  return BETTING_EVM_CANONICAL_ADDRESS_FIELDS.filter(
+    (field) => deployment[field].trim().length === 0,
+  );
+}
+
+export function isBettingEvmDeploymentCanonicalReady(
+  deployment: BettingEvmDeployment,
+): boolean {
+  return getMissingBettingEvmCanonicalFields(deployment).length === 0;
+}
 
 export function normalizeSolanaCluster(cluster: string): BettingSolanaCluster {
   switch (cluster.trim().toLowerCase()) {

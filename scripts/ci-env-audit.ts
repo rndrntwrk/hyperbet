@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
+  getMissingBettingEvmCanonicalFields,
+  isBettingEvmDeploymentCanonicalReady,
   resolveBettingEvmDeploymentForChain,
   type BettingEvmChain,
 } from "../packages/hyperbet-chain-registry/src/index";
@@ -12,6 +14,7 @@ type AuditTarget =
   | "ci-shared"
   | "pages:solana"
   | "pages:bsc"
+  | "app:avax"
   | "keeper:solana"
   | "keeper:bsc"
   | "keeper:avax"
@@ -49,6 +52,7 @@ const PROVIDER_SECRET_PATTERNS = [
 ];
 
 const PLACEHOLDER_ADDRESS_RE = /^0x0{40}$/i;
+const HEX_ADDRESS_RE = /^0x[a-f0-9]{40}$/i;
 
 function parseArgs(): { target: AuditTarget; json: boolean } {
   const args = process.argv.slice(2);
@@ -60,6 +64,7 @@ function parseArgs(): { target: AuditTarget; json: boolean } {
     target !== "ci-shared" &&
     target !== "pages:solana" &&
     target !== "pages:bsc" &&
+    target !== "app:avax" &&
     target !== "keeper:solana" &&
     target !== "keeper:bsc" &&
     target !== "keeper:avax" &&
@@ -133,6 +138,57 @@ function requireEnv(findings: Finding[], key: string, message?: string): string 
   return value;
 }
 
+function canonicalMainnetStatus(chain: BettingEvmChain): {
+  deployment: ReturnType<typeof resolveBettingEvmDeploymentForChain>;
+  missingFields: ReturnType<typeof getMissingBettingEvmCanonicalFields>;
+  ready: boolean;
+} {
+  const deployment = resolveBettingEvmDeploymentForChain(chain, "mainnet-beta");
+  const missingFields = getMissingBettingEvmCanonicalFields(deployment);
+  return {
+    deployment,
+    missingFields,
+    ready: isBettingEvmDeploymentCanonicalReady(deployment),
+  };
+}
+
+function assertCanonicalMainnetReady(
+  findings: Finding[],
+  chain: BettingEvmChain,
+  target: AuditTarget,
+): ReturnType<typeof canonicalMainnetStatus> {
+  const status = canonicalMainnetStatus(chain);
+  if (!status.ready) {
+    findings.push({
+      level: "error",
+      message: `${target} cannot treat ${chain} as production-ready; registry is missing ${status.missingFields.join(", ")}`,
+    });
+  }
+  return status;
+}
+
+function validateExactAddress(
+  findings: Finding[],
+  target: AuditTarget,
+  envKey: string,
+  value: string,
+  expected: string,
+): void {
+  if (!HEX_ADDRESS_RE.test(value) || PLACEHOLDER_ADDRESS_RE.test(value)) {
+    findings.push({
+      level: "error",
+      message: `${target} must provide a real EVM address for ${envKey}`,
+    });
+    return;
+  }
+  if (value.toLowerCase() !== expected.toLowerCase()) {
+    findings.push({
+      level: "error",
+      message: `${target} must use the canonical registry address for ${envKey}`,
+    });
+  }
+}
+
 function auditTrackedEnvSanitization(findings: Finding[]): void {
   for (const filePath of readTrackedEnvFiles()) {
     const envFile = parseEnvFile(filePath);
@@ -166,8 +222,8 @@ function auditPagesTarget(
   findings: Finding[],
   target: "pages:solana" | "pages:bsc",
 ): void {
-  const bsc = resolveBettingEvmDeploymentForChain("bsc", "mainnet-beta");
-  const base = resolveBettingEvmDeploymentForChain("base", "mainnet-beta");
+  const bsc = assertCanonicalMainnetReady(findings, "bsc", target).deployment;
+  const base = assertCanonicalMainnetReady(findings, "base", target).deployment;
   requireEnv(findings, "VITE_GAME_API_URL");
   requireEnv(findings, "VITE_GAME_WS_URL");
   const cluster = requireEnv(findings, "VITE_SOLANA_CLUSTER");
@@ -227,6 +283,79 @@ function auditPagesTarget(
   }
 }
 
+function auditAvaxAppTarget(findings: Finding[]): void {
+  const status = canonicalMainnetStatus("avax");
+  requireEnv(findings, "VITE_GAME_API_URL");
+  requireEnv(findings, "VITE_GAME_WS_URL");
+  const cluster = requireEnv(findings, "VITE_SOLANA_CLUSTER");
+  if ((process.env.VITE_USE_GAME_RPC_PROXY ?? "").trim() !== "true") {
+    findings.push({
+      level: "error",
+      message: "app:avax must enable VITE_USE_GAME_RPC_PROXY=true",
+    });
+  }
+  if ((process.env.VITE_USE_GAME_EVM_RPC_PROXY ?? "").trim() !== "true") {
+    findings.push({
+      level: "error",
+      message: "app:avax must enable VITE_USE_GAME_EVM_RPC_PROXY=true",
+    });
+  }
+
+  const avaxChainId = (process.env.VITE_AVAX_CHAIN_ID ?? "").trim();
+  const avaxClob = (process.env.VITE_AVAX_GOLD_CLOB_ADDRESS ?? "").trim();
+
+  if (!status.ready) {
+    if (cluster === "mainnet-beta") {
+      findings.push({
+        level: "error",
+        message: `app:avax must not build mainnet-beta while AVAX canonical registry values are missing (${status.missingFields.join(", ")})`,
+      });
+    }
+    if (avaxChainId && Number(avaxChainId) === status.deployment.chainId) {
+      findings.push({
+        level: "error",
+        message: "app:avax must not inject the AVAX mainnet chain id while canonical registry values are missing",
+      });
+    }
+    if (avaxClob) {
+      findings.push({
+        level: "error",
+        message: "app:avax must not inject VITE_AVAX_GOLD_CLOB_ADDRESS while AVAX canonical registry values are missing",
+      });
+    }
+    return;
+  }
+
+  if (cluster && cluster !== "mainnet-beta") {
+    findings.push({
+      level: "error",
+      message: "app:avax must build with VITE_SOLANA_CLUSTER=mainnet-beta when AVAX is canonicalized",
+    });
+  }
+
+  if (avaxChainId) {
+    if (Number(avaxChainId) !== status.deployment.chainId) {
+      findings.push({
+        level: "error",
+        message: `app:avax must use AVAX mainnet chain id ${status.deployment.chainId}`,
+      });
+    }
+  } else {
+    findings.push({
+      level: "error",
+      message: "app:avax requires VITE_AVAX_CHAIN_ID when AVAX is canonicalized",
+    });
+  }
+
+  validateExactAddress(
+    findings,
+    "app:avax",
+    "VITE_AVAX_GOLD_CLOB_ADDRESS",
+    requireEnv(findings, "VITE_AVAX_GOLD_CLOB_ADDRESS"),
+    status.deployment.goldClobAddress,
+  );
+}
+
 function auditKeeperTarget(
   findings: Finding[],
   target: "keeper:solana" | "keeper:bsc" | "keeper:avax",
@@ -246,8 +375,25 @@ function auditKeeperTarget(
   }
 
   const chainKey = target.endsWith(":bsc") ? "bsc" : "avax";
+  const canonical = assertCanonicalMainnetReady(findings, chainKey, target);
+  if (!canonical.ready) {
+    return;
+  }
   const runtimeEnvKey = chainKey === "bsc" ? "BSC_RPC_URL" : "AVAX_RPC_URL";
   requireEnv(findings, runtimeEnvKey, `${target} requires ${runtimeEnvKey} when audited locally`);
+  if (target === "keeper:avax") {
+    validateExactAddress(
+      findings,
+      target,
+      "AVAX_GOLD_CLOB_ADDRESS",
+      requireEnv(
+        findings,
+        "AVAX_GOLD_CLOB_ADDRESS",
+        `${target} requires AVAX_GOLD_CLOB_ADDRESS when audited locally`,
+      ),
+      canonical.deployment.goldClobAddress,
+    );
+  }
 }
 
 function auditBotTarget(findings: Finding[]): void {
@@ -257,12 +403,22 @@ function auditBotTarget(findings: Finding[]): void {
   if ((process.env.MM_ENABLE_BASE ?? "true").trim() === "true") enabledChains.push("base");
   if ((process.env.MM_ENABLE_AVAX ?? "true").trim() === "true") enabledChains.push("avax");
   for (const chain of enabledChains) {
-    const deployment = resolveBettingEvmDeploymentForChain(chain, "mainnet-beta");
+    const canonical = assertCanonicalMainnetReady(findings, chain, "bot");
+    if (!canonical.ready) {
+      continue;
+    }
+    const deployment = canonical.deployment;
     const rpcKey = `EVM_${chain.toUpperCase()}_RPC_URL`;
     const addressKey = `CLOB_CONTRACT_ADDRESS_${chain.toUpperCase()}`;
     requireEnv(findings, rpcKey);
     const address = requireEnv(findings, addressKey);
-    if (address && deployment.goldClobAddress && address.toLowerCase() !== deployment.goldClobAddress.toLowerCase()) {
+    if (chain === "avax") {
+      validateExactAddress(findings, "bot", addressKey, address, deployment.goldClobAddress);
+    } else if (
+      address &&
+      deployment.goldClobAddress &&
+      address.toLowerCase() !== deployment.goldClobAddress.toLowerCase()
+    ) {
       findings.push({
         level: "warning",
         message: `${addressKey} differs from the canonical registry address for ${chain}`,
@@ -286,6 +442,9 @@ function runAudit(target: AuditTarget): { ok: boolean; findings: Finding[] } {
     case "pages:solana":
     case "pages:bsc":
       auditPagesTarget(findings, target);
+      break;
+    case "app:avax":
+      auditAvaxAppTarget(findings);
       break;
     case "keeper:solana":
     case "keeper:bsc":
