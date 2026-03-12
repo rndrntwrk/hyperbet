@@ -24,14 +24,14 @@ if (doctor.missingTools.length > 0 || doctor.versionMismatches.length > 0) {
 
 run("bun", ["install"], rootDir);
 
-for (const cwd of [
-  "packages/hyperbet-solana/anchor",
-  "packages/hyperbet-solana/app",
-  "packages/hyperbet-solana/keeper",
-  "packages/hyperbet-bsc/app",
-  "packages/hyperbet-bsc/keeper",
-  "packages/hyperbet-avax/app",
-  "packages/hyperbet-avax/keeper",
-]) {
-  run("bun", ["install"], path.join(rootDir, cwd));
-}
+run("bash", [
+  "scripts/ci-install-verified.sh",
+  "root",
+  "hyperbet-solana-anchor",
+  "hyperbet-solana-app",
+  "hyperbet-solana-keeper",
+  "hyperbet-bsc-app",
+  "hyperbet-bsc-keeper",
+  "hyperbet-avax-app",
+  "hyperbet-avax-keeper",
+]);

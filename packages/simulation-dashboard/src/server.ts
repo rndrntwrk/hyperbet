@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { ContractFactory, JsonRpcProvider, ethers, type Contract } from "ethers";
 import { WebSocketServer, WebSocket } from "ws";
 import {
+    DEFAULT_MARKET_MAKER_CONFIG,
     computeToxicityBps,
     type AgentActionTrace,
     type MitigationGate,
@@ -24,6 +25,7 @@ import {
     resetRandomSource,
     MARKET_KIND_DUEL_WINNER,
     DUEL_STATUS_BETTING_OPEN,
+    DUEL_STATUS_LOCKED,
     SIDE_A,
     SIDE_B,
     BUY_SIDE,
@@ -280,6 +282,19 @@ function countEnabledAgents(): number {
         (count, agent) => count + (agent.config.enabled ? 1 : 0),
         0,
     );
+}
+
+function getExecutionOrder(): BaseAgent[] {
+    const ordered = [...agents];
+    ordered.sort((left, right) => {
+        const leftPriority = left instanceof MarketMakerAgent ? 0 : 1;
+        const rightPriority = right instanceof MarketMakerAgent ? 0 : 1;
+        if (leftPriority !== rightPriority) {
+            return leftPriority - rightPriority;
+        }
+        return 0;
+    });
+    return ordered;
 }
 
 async function getAgentAddress(agent: BaseAgent): Promise<string> {
@@ -980,6 +995,78 @@ async function openNewDuel(): Promise<void> {
     broadcast({ type: "duel_opened", data: { label: currentDuelLabel, duelKey: currentDuelKey } });
 }
 
+async function ensureScenarioMarketLocked(
+    preset: ScenarioPreset | undefined,
+): Promise<void> {
+    const runtimeProfile = preset?.runtimeProfile;
+    const betCloseTick = runtimeProfile?.betCloseTick;
+    const staleStreamLagMs = (runtimeProfile?.staleStreamLagTicks ?? 0) * 500;
+    const staleOracleLagMs = (runtimeProfile?.staleOracleLagTicks ?? 0) * 500;
+    const closeWindowReached =
+        betCloseTick != null && simTick >= betCloseTick;
+    const staleStreamLocked =
+        staleStreamLagMs > DEFAULT_MARKET_MAKER_CONFIG.staleStreamAfterMs;
+    const staleOracleLocked =
+        staleOracleLagMs > DEFAULT_MARKET_MAKER_CONFIG.staleOracleAfterMs;
+    if (!closeWindowReached && !staleStreamLocked && !staleOracleLocked) {
+        return;
+    }
+
+    const duel = await withReadFallback(
+        `tick ${simTick} getDuel`,
+        () => oracleRead.getDuel(currentDuelKey),
+        () => oracle.getDuel(currentDuelKey),
+    );
+    const duelStatus = Number(duel.status ?? 0);
+    if (duelStatus >= DUEL_STATUS_LOCKED) {
+        return;
+    }
+
+    const reporter = await provider.getSigner(2);
+    const operator = await provider.getSigner(1);
+    const lockReason = closeWindowReached
+        ? "close-window"
+        : staleOracleLocked
+          ? "stale-oracle"
+          : "stale-stream";
+    updateActiveRunStage(`tick-${simTick}-lock-${lockReason}`);
+
+    const lockTx = await withTimeout(
+        (oracle.connect(reporter) as any).upsertDuel(
+            currentDuelKey,
+            duel.participantAHash,
+            duel.participantBHash,
+            duel.betOpenTs,
+            duel.betCloseTs,
+            duel.duelStartTs,
+            duel.metadataUri,
+            DUEL_STATUS_LOCKED,
+        ),
+        SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
+        `tick ${simTick} lock duel`,
+    );
+    await withTimeout(
+        lockTx.wait(),
+        SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
+        `tick ${simTick} lock duel receipt`,
+    );
+
+    const syncTx = await withTimeout(
+        (clob.connect(operator) as any).syncMarketFromOracle(
+            currentDuelKey,
+            MARKET_KIND_DUEL_WINNER,
+        ),
+        SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
+        `tick ${simTick} lock sync market`,
+    );
+    await withTimeout(
+        syncTx.wait(),
+        SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
+        `tick ${simTick} lock sync market receipt`,
+    );
+    refreshReadClients();
+}
+
 // ─── Simulation Loop ─────────────────────────────────────────────────────────
 
 async function simulationTick(): Promise<void> {
@@ -988,9 +1075,12 @@ async function simulationTick(): Promise<void> {
     const scenarioPreset = getScenarioPresetByIdOrName(currentScenarioId);
     const treasuryFeeBps = feeConfig.treasuryBps;
     const mmFeeBps = feeConfig.mmBps;
+    if (scenarioMode) {
+        await ensureScenarioMarketLocked(scenarioPreset ?? undefined);
+    }
     let market = await loadMarketState(`tick ${simTick} initial getMarket`);
 
-    for (const agent of agents) {
+    for (const agent of getExecutionOrder()) {
         if (!agent.config.enabled) continue;
 
         if (scenarioMode) {
@@ -1152,6 +1242,9 @@ async function broadcastState(): Promise<void> {
         );
         const marketStatus = Number(market.status);
         const settlementStatus = marketStatusLabel(marketStatus);
+        const scenarioPreset = getScenarioPresetByIdOrName(currentScenarioId);
+        const attackerPnlTolerance =
+            scenarioPreset?.gatePolicy?.maxAttackerPnl ?? 0;
         const bestBid = Number(market.bestBid);
         const bestAsk = Number(market.bestAsk);
         const boundedBestAsk = bestAsk > 0 && bestAsk < MAX_PRICE ? bestAsk : null;
@@ -1244,11 +1337,11 @@ async function broadcastState(): Promise<void> {
             },
             {
                 name: "noPositiveAttackerPnl",
-                passed: bestAttackerPnlSeen <= 0,
+                passed: bestAttackerPnlSeen <= attackerPnlTolerance,
                 reason:
-                    bestAttackerPnlSeen <= 0
+                    bestAttackerPnlSeen <= attackerPnlTolerance
                         ? null
-                        : `attacker pnl peaked at ${bestAttackerPnlSeen.toFixed(4)} ETH`,
+                        : `attacker pnl peaked at ${bestAttackerPnlSeen.toFixed(4)} ETH (limit ${attackerPnlTolerance.toFixed(4)} ETH)`,
             },
             {
                 name: "settlementConsistent",

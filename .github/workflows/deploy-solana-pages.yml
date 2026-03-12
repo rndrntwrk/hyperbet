@@ -104,7 +104,7 @@ jobs:
             echo "Unexpected source maps in production dist"
             exit 1
           fi
-          if rg -n "api-key=" packages/hyperbet-solana/app/dist; then
+          if grep -R -n "api-key=" packages/hyperbet-solana/app/dist; then
             echo "Provider key leak detected in dist"
             exit 1
           fi

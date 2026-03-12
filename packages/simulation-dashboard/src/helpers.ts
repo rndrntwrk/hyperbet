@@ -5,6 +5,7 @@ import { ethers } from "ethers";
 // ─── Contract Constants ──────────────────────────────────────────────────────
 export const MARKET_KIND_DUEL_WINNER = 0;
 export const DUEL_STATUS_BETTING_OPEN = 2;
+export const DUEL_STATUS_LOCKED = 3;
 export const SIDE_A = 1;
 export const SIDE_B = 2;
 export const BUY_SIDE = 1;

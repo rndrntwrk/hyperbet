@@ -94,6 +94,16 @@ async function waitForAnvil(): Promise<void> {
 }
 
 try {
+  await runCommand(
+    "bun",
+    ["run", "--cwd", "packages/evm-contracts", "build:foundry"],
+    {
+      stdoutFile: path.join(artifactRoot, "foundry-build.out.log"),
+      stderrFile: path.join(artifactRoot, "foundry-build.err.log"),
+    },
+  );
+  console.log("Base add-chain smoke: foundry artifacts built");
+
   const anvil = await startAnvil();
   stopAnvil = anvil.stop;
   console.log(`Base add-chain smoke: started anvil pid ${anvil.pid}`);

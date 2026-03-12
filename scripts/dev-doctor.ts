@@ -64,15 +64,12 @@ function nodeModulesPresent(): boolean {
   return existsSync(path.join(rootDir, "node_modules"));
 }
 
-function nestedPackageDirs(): string[] {
+function standaloneInstallDirs(): string[] {
   return [
     "packages/hyperbet-solana/anchor",
     "packages/hyperbet-solana/app",
-    "packages/hyperbet-solana/keeper",
     "packages/hyperbet-bsc/app",
-    "packages/hyperbet-bsc/keeper",
     "packages/hyperbet-avax/app",
-    "packages/hyperbet-avax/keeper",
   ].filter((dir) => existsSync(path.join(rootDir, dir, "package.json")));
 }
 
@@ -156,7 +153,7 @@ export function runDoctor(): DoctorResult {
     messages.push("root node_modules missing");
   }
 
-  for (const dir of nestedPackageDirs()) {
+  for (const dir of standaloneInstallDirs()) {
     if (!existsSync(path.join(rootDir, dir, "node_modules"))) {
       messages.push(`missing install for ${dir}`);
     }
@@ -189,12 +186,12 @@ if (import.meta.main) {
       : "root install: missing (run `bun run dev:bootstrap`)",
   ];
 
-  const missingNestedInstalls = nestedPackageDirs().filter(
+  const missingNestedInstalls = standaloneInstallDirs().filter(
     (dir) => !existsSync(path.join(rootDir, dir, "node_modules")),
   );
   lines.push(
     missingNestedInstalls.length === 0
-      ? "nested installs: present"
+      ? "standalone installs: present"
       : `nested installs: missing ${missingNestedInstalls.join(", ")}`,
   );
 

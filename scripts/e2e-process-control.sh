@@ -85,7 +85,7 @@ stop_service() {
 
 wait_for_keeper() {
   for _ in {1..90}; do
-    if curl -s -o /dev/null -w "%{http_code}" "$health_url" | rg -q "200"; then
+    if [[ "$(curl -s -o /dev/null -w "%{http_code}" "$health_url" || true)" == "200" ]]; then
       return 0
     fi
     sleep 1
@@ -95,9 +95,11 @@ wait_for_keeper() {
 
 wait_for_solana_proxy() {
   for _ in {1..90}; do
-    if curl -s -X POST "$rpc_url" \
+    local response
+    response="$(curl -s -X POST "$rpc_url" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"getVersion"}' | rg -q '"solana-core"'; then
+      -d '{"jsonrpc":"2.0","id":1,"method":"getVersion"}' || true)"
+    if [[ "$response" == *'"solana-core"'* ]]; then
       return 0
     fi
     sleep 1
@@ -107,9 +109,11 @@ wait_for_solana_proxy() {
 
 wait_for_anvil() {
   for _ in {1..90}; do
-    if curl -s -X POST "$rpc_url" \
+    local response
+    response="$(curl -s -X POST "$rpc_url" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' | rg -q '"result"'; then
+      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' || true)"
+    if [[ "$response" == *'"result"'* ]]; then
       return 0
     fi
     sleep 1

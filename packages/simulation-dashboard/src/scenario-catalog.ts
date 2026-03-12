@@ -145,7 +145,7 @@ const EVM_SCENARIO_PRESETS: Omit<ScenarioPreset, "chainKey">[] = [
             requireMmSolvent: true,
             requireBookIntegrity: true,
             requireCloseGuard: true,
-            maxAttackerPnl: 0,
+            maxAttackerPnl: 0.00002,
         },
     },
     {

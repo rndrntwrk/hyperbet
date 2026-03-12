@@ -18,9 +18,11 @@ trap cleanup EXIT
 
 wait_for_anvil_rpc() {
   for _ in {1..90}; do
-    if curl -s -X POST "$ANVIL_RPC_URL" \
+    local response
+    response="$(curl -s -X POST "$ANVIL_RPC_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' | rg -q '"result"'; then
+      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' || true)"
+    if [[ "$response" == *'"result"'* ]]; then
       return 0
     fi
     sleep 1

@@ -68,6 +68,9 @@ const solanaMatrix = [
 
 async function runCli(args: string[], name: string): Promise<void> {
   await runCommand("bun", ["run", "--cwd", "packages/simulation-dashboard", "scenario", ...args], {
+    env: {
+      SIM_API_URL: `http://127.0.0.1:${httpPort}`,
+    },
     stdoutFile: path.join(artifactRoot, `${name}.out.log`),
     stderrFile: path.join(artifactRoot, `${name}.err.log`),
   });
@@ -76,6 +79,15 @@ async function runCli(args: string[], name: string): Promise<void> {
 let stopServer: (() => void) | null = null;
 
 try {
+  await runCommand(
+    "bun",
+    ["run", "--cwd", "packages/evm-contracts", "build:foundry"],
+    {
+      stdoutFile: path.join(artifactRoot, "foundry-build.out.log"),
+      stderrFile: path.join(artifactRoot, "foundry-build.err.log"),
+    },
+  );
+
   const server = await spawnBackground(
     "bun",
     ["run", "--cwd", "packages/simulation-dashboard", "dev"],

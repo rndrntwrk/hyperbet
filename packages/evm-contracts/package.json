@@ -4,6 +4,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "build:foundry": "forge build",
     "compile": "hardhat compile",
     "test": "bun run test:hardhat",
     "test:hardhat": "hardhat test",

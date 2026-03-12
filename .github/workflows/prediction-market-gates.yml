@@ -77,6 +77,8 @@ jobs:
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
+        with:
+          install-foundry: "true"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -139,6 +141,7 @@ jobs:
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
         with:
+          install-foundry: "true"
           install-rust: "true"
           install-solana: "true"
           install-anchor: "true"

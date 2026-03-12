@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_INSTALLED=0
 
 if [[ "$#" -eq 0 ]]; then
   echo "usage: $0 <target> [<target> ...]" >&2
@@ -13,17 +14,26 @@ resolve_cwd() {
     root)
       echo "."
       ;;
+    hyperbet-solana)
+      echo "packages/hyperbet-solana"
+      ;;
     hyperbet-solana-app)
       echo "packages/hyperbet-solana/app"
       ;;
     hyperbet-solana-keeper)
       echo "packages/hyperbet-solana/keeper"
       ;;
+    hyperbet-bsc)
+      echo "packages/hyperbet-bsc"
+      ;;
     hyperbet-bsc-app)
       echo "packages/hyperbet-bsc/app"
       ;;
     hyperbet-bsc-keeper)
       echo "packages/hyperbet-bsc/keeper"
+      ;;
+    hyperbet-avax)
+      echo "packages/hyperbet-avax"
       ;;
     hyperbet-avax-app)
       echo "packages/hyperbet-avax/app"
@@ -37,9 +47,34 @@ resolve_cwd() {
     evm-contracts)
       echo "packages/evm-contracts"
       ;;
+    hyperbet-solana-anchor)
+      echo "packages/hyperbet-solana/anchor"
+      ;;
     *)
       echo "unsupported install target: $1" >&2
       exit 1
+      ;;
+  esac
+}
+
+target_requires_root_install() {
+  case "$1" in
+    root|hyperbet-solana|hyperbet-solana-app|hyperbet-solana-keeper|hyperbet-bsc|hyperbet-bsc-app|hyperbet-bsc-keeper|hyperbet-avax|hyperbet-avax-app|hyperbet-avax-keeper|market-maker-bot|evm-contracts)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+target_requires_nested_install() {
+  case "$1" in
+    hyperbet-solana-app|hyperbet-bsc-app|hyperbet-avax-app|hyperbet-solana-anchor)
+      return 0
+      ;;
+    *)
+      return 1
       ;;
   esac
 }
@@ -66,6 +101,16 @@ verify_lockfile_clean() {
   fi
 }
 
+install_root_workspace() {
+  if [[ "$ROOT_INSTALLED" -eq 1 ]]; then
+    return 0
+  fi
+
+  bun install
+  verify_lockfile_clean "bun.lock"
+  ROOT_INSTALLED=1
+}
+
 install_target() {
   local target="$1"
   local cwd
@@ -74,13 +119,17 @@ install_target() {
   cwd="$(resolve_cwd "$target")"
   lockfile="$(resolve_lockfile "$cwd")"
 
-  if [[ "$cwd" == "." ]]; then
-    bun install
-  else
+  if target_requires_root_install "$target"; then
+    install_root_workspace
+  fi
+
+  if target_requires_nested_install "$target"; then
     bun install --cwd "$ROOT_DIR/$cwd"
   fi
 
-  verify_lockfile_clean "$lockfile"
+  if [[ "$lockfile" != "bun.lock" ]] || target_requires_root_install "$target"; then
+    verify_lockfile_clean "$lockfile"
+  fi
 }
 
 for target in "$@"; do
