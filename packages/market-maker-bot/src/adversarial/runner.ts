@@ -17,6 +17,10 @@ import { evaluateSybilBreaches } from "./sybil.js";
 import { evaluateChaosBreaches } from "./chaos.js";
 import { evaluateMatrixBreaches } from "./matrix.js";
 import {
+  DEFAULT_REPLAY_CORPUS_PATH,
+  evaluateHistoricalReplayCorpus,
+} from "./replay.js";
+import {
   DEFAULT_REGRESSION_SEEDS_PATH,
   evaluateRegressionSeeds,
   readRegressionSeeds,
@@ -185,6 +189,20 @@ export function runGate(
     };
   }
 
+  const replayCorpusPath =
+    process.env.MM_ADVERSARIAL_REPLAY_CORPUS || DEFAULT_REPLAY_CORPUS_PATH;
+  const replayBreaches = evaluateHistoricalReplayCorpus(
+    replayCorpusPath,
+    chainFilter,
+  );
+  if (replayBreaches.length > 0) {
+    const first = replayBreaches[0]!;
+    return {
+      ok: false,
+      message: `replay breach ${first.chain}/${first.traceId} ${first.control}: expected ${first.expected}, actual=${first.actual}`,
+    };
+  }
+
   return {
     ok: true,
     message: `all gates satisfied (${report.summary.mitigationPasses}/${report.summary.totalScenarios})`,
@@ -229,6 +247,25 @@ export function runCli() {
     }
     console.log(
       `[simulate-adversarial-mm:seed-corpus] seeds=${seeds.length} chain=${chainFilter ?? "all"} passed`,
+    );
+    return;
+  }
+
+  if (process.argv.includes("--replay-corpus")) {
+    const replayCorpusPath =
+      process.env.MM_ADVERSARIAL_REPLAY_CORPUS || DEFAULT_REPLAY_CORPUS_PATH;
+    const replayBreaches = evaluateHistoricalReplayCorpus(
+      replayCorpusPath,
+      chainFilter,
+    );
+    if (replayBreaches.length > 0) {
+      const first = replayBreaches[0]!;
+      throw new Error(
+        `[simulate-adversarial-mm:replay-corpus] chain=${first.chain} trace=${first.traceId} ${first.control} expected ${first.expected} actual ${first.actual}`,
+      );
+    }
+    console.log(
+      `[simulate-adversarial-mm:replay-corpus] chain=${chainFilter ?? "all"} passed`,
     );
     return;
   }

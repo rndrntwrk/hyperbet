@@ -23,6 +23,7 @@ The market maker must remain solvent and operational under adversarial order flo
   - chaos-resilience controls
   - deterministic abuse matrix budgets
   - regression seed corpus
+  - historical replay corpus
 
 ## Formal Budgets
 
@@ -31,6 +32,7 @@ Source of truth:
 - `src/adversarial/spec.ts`
 - `src/adversarial/matrix.ts`
 - `src/adversarial/regression-seeds.json`
+- `src/adversarial/replay-corpus.json`
 
 The deterministic abuse matrix enforces:
 
@@ -53,8 +55,9 @@ A PR is merge-ready only if all of these pass:
 1. `bun run --cwd packages/market-maker-bot test`
 2. `bun run --cwd packages/market-maker-bot simulate:adversarial:ci`
 3. `bun run --cwd packages/market-maker-bot simulate:adversarial:seed-corpus`
-4. per-chain adversarial gates (`solana`, `bsc`, `avax`)
-5. repository pre-PR checks (`node scripts/check-pr-ready.mjs`)
+4. `bun run --cwd packages/market-maker-bot simulate:adversarial:replay-corpus`
+5. per-chain adversarial gates (`solana`, `bsc`, `avax`)
+6. repository pre-PR checks (`node scripts/check-pr-ready.mjs`)
 
 ## Fork Harness
 

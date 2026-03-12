@@ -29,6 +29,12 @@ export {
   readRegressionSeeds,
 } from "./regression-seeds.js";
 export {
+  DEFAULT_REPLAY_CORPUS_PATH,
+  evaluateHistoricalReplayCorpus,
+  readReplayCorpus,
+  runHistoricalReplay,
+} from "./replay.js";
+export {
   CHAIN_RISK_BUDGETS,
   SAFETY_SPEC_VERSION,
   SCENARIO_RISK_BUDGETS,
@@ -59,3 +65,4 @@ export type { ChaosBreach } from "./chaos.js";
 export type { MatrixBreach } from "./matrix.js";
 export type { ChainRiskBudget, ScenarioRiskBudget } from "./spec.js";
 export type { RegressionSeedBreach } from "./regression-seeds.js";
+export type { ReplayBreach, ReplayRun } from "./replay.js";

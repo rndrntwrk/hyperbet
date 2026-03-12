@@ -96,6 +96,7 @@ Gate env controls:
 - `MM_ADVERSARIAL_OUTPUT_DIR` (default `simulations`)
 - `MM_ADVERSARIAL_ENFORCE_BASELINE` (`1` by default, set `0` to skip baseline regression checks)
 - `MM_ADVERSARIAL_SEED_CORPUS` (optional path override for regression-seed corpus used by `--seed-corpus`)
+- `MM_ADVERSARIAL_REPLAY_CORPUS` (optional path override for historical replay corpus used by `--replay-corpus` and gate checks)
 
 Gate behavior now enforces ten layers:
 
@@ -109,11 +110,18 @@ Gate behavior now enforces ten layers:
 - chaos-resilience controls (oracle outage damage cap, finality jitter damage cap, liquidity-cliff inventory stress cap)
 - deterministic abuse-matrix budgets (chain aggregate and scenario-specific attacker-pnl/exploit/toxicity/slippage envelopes)
 - regression seed corpus replay checks (known-bad seeds must remain mitigated across all enabled gates)
+- historical replay corpus checks (captured trace replays from prior duel/orderflow windows must stay within replay safety budgets)
 
 Run the seed corpus gate:
 
 ```bash
 bun run simulate:adversarial:seed-corpus
+```
+
+Run the historical replay corpus gate:
+
+```bash
+bun run simulate:adversarial:replay-corpus
 ```
 
 Run chain-specific seed corpus replay:
