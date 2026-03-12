@@ -12,7 +12,8 @@ Update this document every time the sprint base branch is pushed. Each update sh
 ## Sprint Base
 
 - Base branch: `enoomian/prediction-market-sprint-base`
-- Latest recorded gate merged into base: `2e16661`
+- Latest recorded sprint-era gate merged into base: `Gate 15 / 2e16661`
+- Original sprint gate sequence status: `01-13 and 15 complete; 14 execution outstanding`
 - Last updated: `2026-03-12`
 - Active gate branch: `none`
 
@@ -35,6 +36,76 @@ Update this document every time the sprint base branch is pushed. Each update sh
 | 13 | `enoomian/pm-13-contract-ci-hardening` | Complete | Yes | EVM contract validation, proof, and security checks are promoted into stable CI workflow lanes |
 | 14 | `n/a` | In Progress | No | Manual staged live-proof rail is implemented for Solana and BSC, but the staged execution and artifact review are still outstanding |
 | 15 | `enoomian/pm-15-docs-hygiene-and-release-prep` | Complete | Yes | Release-facing docs are cleaned, reviewer handoff material is assembled, and sprint history reflects the merged post-sprint gates |
+
+## Current Branch State
+
+- Latest integrated implementation batch: `5d722dc`
+- Latest known fully green branch-check baseline: `f1824a0`
+- Current CI state on the latest fully green branch-check baseline:
+  - `Hyperbet CI` green
+  - `Prediction Market Gates` green
+- The original sprint gate sequence is complete except for Gate `14`
+  execution.
+- Gate `14` should now be treated as deployed-environment proof execution:
+  - proof rail implemented
+  - execution still outstanding
+- Cross-chain E2E remains local-only by design until it is re-promoted as a
+  stable required lane.
+- AVAX is still fail-closed and is not yet production-canonical.
+
+### Post-Sprint Hardening Already Merged
+
+- external-bet auth and idempotency hardening
+- canonicalized external-bet economics
+- EVM loser-cleanup claim path exposure in the UI
+- Solana runtime deploy artifact tracking for the exploit gate
+- staging-rail mode awareness for deploy and proof flows
+- Solana simulation dashboard fee-unit and agent-state fixes
+- fallback winner preservation for BSC/AVAX degraded lifecycle records
+- duplicate-bet startup quarantine instead of keeper boot failure
+- Solana MM environment normalization for `MM_ENV=e2e|stream-ui`
+
+### What The Sprint Base Contains Today
+
+The sprint base now contains:
+
+- the completed original sprint gate set (`01-13`, `15`)
+- a partial but implemented Gate `14` proof rail
+- post-sprint security, reliability, and deploy hardening beyond the original
+  gate sequence
+
+The branch is therefore best understood as:
+
+- a complete multichain prediction-market hardening baseline for
+  `develop`-level integration
+- not yet a launch-complete branch under the trust-minimized, tri-chain
+  mandatory launch bar
+
+## Next Phase
+
+The sprint base is not launch-complete under the chosen bar:
+
+- trust-minimized prelaunch
+- tri-chain mandatory launch
+
+The remaining work is tracked in:
+
+- [Next-Phase Gates](enoomian-next-phase-gates.md)
+
+Execution model for the next phase:
+
+- branch each gate independently from `enoomian/prediction-market-sprint-base`
+- ship each gate as its own coherent mergeable unit
+- use [Next-Phase Gates](enoomian-next-phase-gates.md) as the source of truth
+  for branch names, dependencies, merge criteria, and required checks
+
+The dominant open risks are:
+
+- privileged resolution truth
+- incomplete protocol order semantics and self-trade prevention
+- non-canonical AVAX production state
+- non-durable keeper/MM production storage
+- unexecuted deployed-environment proof
 
 ## Gate Results
 
