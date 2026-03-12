@@ -52,6 +52,7 @@
     "ci:contracts:security": "node --import tsx scripts/ci-contracts.ts --target=security",
     "ci:gate:evm": "node --import tsx scripts/ci-gate-scenarios.ts --target=evm",
     "ci:gate:solana": "node --import tsx scripts/ci-gate-scenarios.ts --target=solana",
+    "ci:gate:solana:build": "node --import tsx scripts/ci-gate-solana-build.ts",
     "ci:gate:e2e:solana": "node --import tsx scripts/ci-gate-e2e.ts --chain=solana",
     "ci:gate:e2e:bsc": "node --import tsx scripts/ci-gate-e2e.ts --chain=bsc",
     "ci:gate:e2e:avax": "node --import tsx scripts/ci-gate-e2e.ts --chain=avax",
