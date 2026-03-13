@@ -10,10 +10,13 @@ contract GoldClobFuzzTest is Test {
     uint8 private constant MARKET_KIND_DUEL_WINNER = 0;
     uint8 private constant BUY_SIDE = 1;
     uint8 private constant SELL_SIDE = 2;
+    uint8 private constant ORDER_FLAG_GTC = 0x01;
 
     address private admin = address(0xA11CE);
     address private operator = address(0x0F03);
     address private reporter = address(0xB0B);
+    address private finalizer = address(0xF1A1);
+    address private challenger = address(0xC0B1);
     address private treasury = address(0x7001);
     address private marketMaker = address(0xAA01);
     address private traderA = address(0xAAA1);
@@ -26,16 +29,16 @@ contract GoldClobFuzzTest is Test {
         vm.txGasPrice(0);
         vm.warp(1_000);
 
-        oracle = new DuelOutcomeOracle(admin, reporter, reporter, reporter, 0);
+        oracle = new DuelOutcomeOracle(admin, reporter, finalizer, challenger, admin, 3_600);
 
         vm.prank(admin);
-        clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker);
+        clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker, admin);
 
         vm.deal(traderA, 1_000 ether);
         vm.deal(traderB, 1_000 ether);
     }
 
-    function testFuzz_RevertsWhenOrderValueIsUnderfunded(
+    function testFuzz_RevertsWhenRestingOrderValueIsUnderfunded(
         uint8 sideSeed,
         uint16 rawPrice,
         uint96 rawAmountUnits,
@@ -45,7 +48,7 @@ contract GoldClobFuzzTest is Test {
         uint8 side = sideSeed % 2 == 0 ? BUY_SIDE : SELL_SIDE;
         uint16 price = _boundPrice(rawPrice);
         uint128 amount = _boundAmount(rawAmountUnits, 1, 200);
-        uint256 requiredValue = _totalOrderValue(side, price, amount);
+        uint256 requiredValue = _quoteCost(side, price, amount);
         uint256 shortfall = bound(rawShortfall, 1, requiredValue);
 
         vm.expectRevert(GoldClob.InsufficientNativeValue.selector);
@@ -55,7 +58,8 @@ contract GoldClobFuzzTest is Test {
             MARKET_KIND_DUEL_WINNER,
             side,
             price,
-            amount
+            amount,
+            ORDER_FLAG_GTC
         );
     }
 
@@ -76,7 +80,8 @@ contract GoldClobFuzzTest is Test {
             MARKET_KIND_DUEL_WINNER,
             BUY_SIDE,
             price,
-            makerAmount
+            makerAmount,
+            ORDER_FLAG_GTC
         );
 
         vm.prank(traderB);
@@ -85,7 +90,8 @@ contract GoldClobFuzzTest is Test {
             MARKET_KIND_DUEL_WINNER,
             SELL_SIDE,
             price,
-            fillAmount
+            fillAmount,
+            ORDER_FLAG_GTC
         );
 
         uint128 remainingAmount = makerAmount - fillAmount;
@@ -219,7 +225,8 @@ contract GoldClobFuzzTest is Test {
             MARKET_KIND_DUEL_WINNER,
             SELL_SIDE,
             price,
-            amount
+            amount,
+            ORDER_FLAG_GTC
         );
 
         vm.prank(traderB);
@@ -228,11 +235,14 @@ contract GoldClobFuzzTest is Test {
             MARKET_KIND_DUEL_WINNER,
             BUY_SIDE,
             price,
-            amount
+            amount,
+            ORDER_FLAG_GTC
         );
     }
 
     function _resolveDuel(bytes32 duel, DuelOutcomeOracle.Side winner) private {
+        _lockDuel(duel);
+
         vm.prank(reporter);
         oracle.proposeResult(
             duel,
@@ -243,8 +253,24 @@ contract GoldClobFuzzTest is Test {
             uint64(block.timestamp + 180),
             "resolved"
         );
-        vm.prank(reporter);
+        vm.warp(block.timestamp + 3_600);
+        vm.prank(finalizer);
         oracle.finalizeResult(duel, "finalized");
+    }
+
+    function _lockDuel(bytes32 duel) private {
+        vm.warp(block.timestamp + 61);
+        vm.prank(reporter);
+        oracle.upsertDuel(
+            duel,
+            _hashLabel("fuzz-lock-a"),
+            _hashLabel("fuzz-lock-b"),
+            uint64(block.timestamp - 61),
+            uint64(block.timestamp - 1),
+            uint64(block.timestamp + 59),
+            "locked",
+            DuelOutcomeOracle.DuelStatus.LOCKED
+        );
     }
 
     function _assertClearedPosition(bytes32 key, address trader) private view {

@@ -50,13 +50,19 @@ describe("prediction market lifecycle helpers", () => {
           duelId: "duel-42",
           marketId: "market-b",
           marketRef: "market-b",
-          lifecycleStatus: "LOCKED",
+          lifecycleStatus: "PROPOSED",
           winner: "A",
           betCloseTime: null,
           contractAddress: "0xabc",
           programId: null,
           txRef: "0xdef",
           syncedAt: 1000,
+          metadata: {
+            proposalId: "proposal-1",
+            challengeWindowEndsAt: 1111,
+            finalizedAt: null,
+            cancellationReason: null,
+          },
         },
       ],
       updatedAt: 555,
@@ -67,7 +73,8 @@ describe("prediction market lifecycle helpers", () => {
     expect(parsed?.markets).toHaveLength(2);
     expect(parsed?.markets[0]?.duelKey).toBe(duelKey);
     expect(parsed?.markets[1]?.duelKey).toBeNull();
-    expect(parsed?.markets[1]?.lifecycleStatus).toBe("LOCKED");
+    expect(parsed?.markets[1]?.lifecycleStatus).toBe("PROPOSED");
+    expect(parsed?.markets[1]?.metadata?.proposalId).toBe("proposal-1");
   });
 
   it("selects the lifecycle record for a target chain", () => {
@@ -200,6 +207,68 @@ describe("prediction market ui state", () => {
     expect(uiState.canTrade).toBe(false);
     expect(uiState.canClaim).toBe(false);
     expect(uiState.claimableAmount).toBe(0n);
+  });
+
+  it("keeps proposed markets non-tradable and non-claimable", () => {
+    const uiState = derivePredictionMarketUiState(
+      {
+        chainKey: "bsc",
+        duelKey: "11".repeat(32),
+        duelId: "duel-proposed",
+        marketId: "market-proposed",
+        marketRef: "market-proposed",
+        lifecycleStatus: "PROPOSED",
+        winner: "NONE",
+        betCloseTime: 456,
+        contractAddress: "0x123",
+        programId: null,
+        txRef: null,
+        syncedAt: 2,
+        metadata: {
+          proposalId: "proposal-proposed",
+          challengeWindowEndsAt: 999,
+        },
+      },
+      {
+        aShares: 10n,
+        bShares: 20n,
+        aStake: 0n,
+        bStake: 0n,
+        refundableAmount: 30n,
+      },
+    );
+
+    expect(uiState.canTrade).toBe(false);
+    expect(uiState.canClaim).toBe(false);
+    expect(uiState.claimableAmount).toBe(0n);
+  });
+
+  it("keeps challenged markets fail-closed", () => {
+    const uiState = derivePredictionMarketUiState(
+      {
+        chainKey: "solana",
+        duelKey: "22".repeat(32),
+        duelId: "duel-challenged",
+        marketId: "market-challenged",
+        marketRef: "market-challenged",
+        lifecycleStatus: "CHALLENGED",
+        winner: "NONE",
+        betCloseTime: 789,
+        contractAddress: null,
+        programId: "program-a",
+        txRef: null,
+        syncedAt: 3,
+        metadata: {
+          proposalId: "proposal-challenged",
+          challengeWindowEndsAt: 1000,
+        },
+      },
+      EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
+    );
+
+    expect(uiState.canTrade).toBe(false);
+    expect(uiState.canClaim).toBe(false);
+    expect(uiState.claimKind).toBe("NONE");
   });
 
   it("enables claims for resolved winner A balances", () => {

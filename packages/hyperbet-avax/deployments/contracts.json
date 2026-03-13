@@ -47,6 +47,12 @@
       "marketOperatorAddress": "",
       "treasuryAddress": "",
       "marketMakerAddress": "",
+      "reporterAddress": "",
+      "finalizerAddress": "",
+      "challengerAddress": "",
+      "timelockAddress": "",
+      "multisigAddress": "",
+      "emergencyCouncilAddress": "",
       "deploymentVersion": "v2",
       "goldTokenAddress": ""
     },
@@ -63,6 +69,12 @@
       "marketOperatorAddress": "",
       "treasuryAddress": "",
       "marketMakerAddress": "",
+      "reporterAddress": "",
+      "finalizerAddress": "",
+      "challengerAddress": "",
+      "timelockAddress": "",
+      "multisigAddress": "",
+      "emergencyCouncilAddress": "",
       "deploymentVersion": "v2",
       "goldTokenAddress": ""
     }

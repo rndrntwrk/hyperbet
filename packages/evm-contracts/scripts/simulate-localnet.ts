@@ -4,9 +4,11 @@ import { deployDuelOutcomeOracle, deployGoldClob } from "../typed-contracts";
 
 const MARKET_KIND_DUEL_WINNER = 0;
 const DUEL_STATUS_BETTING_OPEN = 2;
+const DUEL_STATUS_LOCKED = 3;
 const SIDE_A = 1;
 const BUY_SIDE = 1;
 const SELL_SIDE = 2;
+const ORDER_FLAG_GTC = 0x01;
 
 function duelKey(label: string): string {
   return ethers.keccak256(ethers.toUtf8Bytes(label));
@@ -22,7 +24,7 @@ function quoteCost(side: number, price: number, amount: bigint): bigint {
 }
 
 async function main() {
-  const [admin, operator, reporter, finalizer, challenger, treasury, marketMaker, traderA, traderB] =
+  const [admin, operator, reporter, finalizer, challenger, pauser, treasury, marketMaker, traderA, traderB] =
     await ethers.getSigners();
 
   console.log("[simulate-localnet] deploying duel oracle and CLOB...");
@@ -31,6 +33,7 @@ async function main() {
     reporter.address,
     finalizer.address,
     challenger.address,
+    pauser.address,
     3600,
     admin,
   );
@@ -42,6 +45,7 @@ async function main() {
     await oracle.getAddress(),
     treasury.address,
     marketMaker.address,
+    pauser.address,
     admin,
   );
   await clob.waitForDeployment();
@@ -73,6 +77,7 @@ async function main() {
     SELL_SIDE,
     600,
     makerAmount,
+    ORDER_FLAG_GTC,
     {
       value: quoteCost(SELL_SIDE, 600, makerAmount) + 20n,
     },
@@ -84,6 +89,7 @@ async function main() {
     BUY_SIDE,
     600,
     makerAmount,
+    ORDER_FLAG_GTC,
     {
       value: quoteCost(BUY_SIDE, 600, makerAmount) + 20n,
     },
@@ -98,6 +104,18 @@ async function main() {
   });
 
   console.log("[simulate-localnet] resolving duel...");
+  await ethers.provider.send("evm_setNextBlockTimestamp", [Number(now + 61n)]);
+  await ethers.provider.send("evm_mine", []);
+  await oracle.connect(reporter).upsertDuel(
+    duel,
+    participantHash("agent-alpha"),
+    participantHash("agent-beta"),
+    now,
+    now + 60n,
+    now + 120n,
+    "localnet-simulation-locked",
+    DUEL_STATUS_LOCKED,
+  );
   await oracle.connect(reporter).proposeResult(
     duel,
     SIDE_A,

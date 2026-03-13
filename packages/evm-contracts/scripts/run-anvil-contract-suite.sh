@@ -56,6 +56,7 @@ kill_stale_listener "$ANVIL_PORT"
 echo "[anvil-suite] starting anvil on $ANVIL_RPC_URL"
 anvil \
   --silent \
+  --accounts 20 \
   --host 127.0.0.1 \
   --port "$ANVIL_PORT" \
   --chain-id "$ANVIL_CHAIN_ID" \

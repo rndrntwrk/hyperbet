@@ -1,4 +1,5 @@
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 import {
   copyIntoArtifacts,
@@ -35,6 +36,16 @@ const artifactNameByTarget: Record<ContractCiTarget, string> = {
 const artifactRoot = resolveArtifactRoot(artifactNameByTarget[target]);
 const contractRoot = path.join(rootDir, "packages/evm-contracts");
 const anvilLog = path.join(artifactRoot, "anvil.log");
+const dockerWorkspaceRoot = "/workspace";
+const dockerContractRoot = `${dockerWorkspaceRoot}/packages/evm-contracts`;
+
+function commandExists(command: string): boolean {
+  const result = spawnSync("sh", ["-lc", `command -v ${command} >/dev/null 2>&1`], {
+    cwd: rootDir,
+    stdio: "ignore",
+  });
+  return result.status === 0;
+}
 
 async function runStep(
   name: string,
@@ -48,6 +59,45 @@ async function runStep(
     stdoutFile: path.join(artifactRoot, `${name}.out.log`),
     stderrFile: path.join(artifactRoot, `${name}.err.log`),
   });
+}
+
+async function runSecurityStep(): Promise<void> {
+  if (commandExists("slither")) {
+    await runStep("slither", "bun", ["run", "analyze:slither"]);
+    return;
+  }
+
+  if (!commandExists("docker")) {
+    throw new Error(
+      "slither is not installed and docker is unavailable for the security fallback",
+    );
+  }
+
+  await runStep("foundry-build-info", "forge", [
+    "build",
+    "--build-info",
+    "--skip",
+    "./test/**",
+    "./script/**",
+    "--force",
+  ]);
+  await runStep("slither-docker", "docker", [
+    "run",
+    "--rm",
+    "-w",
+    dockerContractRoot,
+    "-v",
+    `${rootDir}:${dockerWorkspaceRoot}`,
+    "trailofbits/eth-security-toolbox",
+    "slither",
+    ".",
+    "--foundry-ignore-compile",
+    "--exclude-dependencies",
+    "--filter-paths",
+    "node_modules|out|cache|lib",
+    "--exclude",
+    "timestamp,pragma,solc-version,cyclomatic-complexity",
+  ]);
 }
 
 writeJsonArtifact(artifactRoot, "summary.json", {
@@ -71,7 +121,7 @@ try {
       ANVIL_LOG: anvilLog,
     });
   } else {
-    await runStep("slither", "bun", ["run", "analyze:slither"]);
+    await runSecurityStep();
   }
 } finally {
   if (target === "proof") {

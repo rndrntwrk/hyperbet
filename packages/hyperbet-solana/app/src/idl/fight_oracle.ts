@@ -800,6 +800,11 @@ export type FightOracle = {
     },
     {
       "code": 6016,
+      "name": "challengeWindowExpired",
+      "msg": "Challenge window already expired"
+    },
+    {
+      "code": 6017,
       "name": "disputeWindowActive",
       "msg": "Dispute window still active"
     }

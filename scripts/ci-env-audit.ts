@@ -342,7 +342,10 @@ function auditPagesTarget(
   }
 }
 
-function auditAvaxAppTarget(findings: Finding[]): void {
+function auditAvaxAppTarget(
+  findings: Finding[],
+  deployment: DeploymentMode,
+): void {
   const status = canonicalMainnetStatus("avax");
   requireEnv(findings, "VITE_GAME_API_URL");
   requireEnv(findings, "VITE_GAME_WS_URL");
@@ -362,6 +365,33 @@ function auditAvaxAppTarget(findings: Finding[]): void {
 
   const avaxChainId = (process.env.VITE_AVAX_CHAIN_ID ?? "").trim();
   const avaxClob = (process.env.VITE_AVAX_GOLD_CLOB_ADDRESS ?? "").trim();
+
+  if (deployment === "staging") {
+    if (cluster && cluster !== "mainnet-beta") {
+      findings.push({
+        level: "error",
+        message: "app:avax staging must build with VITE_SOLANA_CLUSTER=mainnet-beta",
+      });
+    }
+    if (!avaxChainId || Number.isNaN(Number(avaxChainId)) || Number(avaxChainId) <= 0) {
+      findings.push({
+        level: "error",
+        message: "app:avax staging must provide a real VITE_AVAX_CHAIN_ID",
+      });
+    }
+    if (!avaxClob) {
+      findings.push({
+        level: "error",
+        message: "app:avax staging requires VITE_AVAX_GOLD_CLOB_ADDRESS",
+      });
+    } else if (!HEX_ADDRESS_RE.test(avaxClob) || PLACEHOLDER_ADDRESS_RE.test(avaxClob)) {
+      findings.push({
+        level: "error",
+        message: "app:avax staging must provide a real VITE_AVAX_GOLD_CLOB_ADDRESS",
+      });
+    }
+    return;
+  }
 
   if (!status.ready) {
     if (cluster === "mainnet-beta") {
@@ -544,7 +574,7 @@ function runAudit(
       auditPagesTarget(findings, target, deployment);
       break;
     case "app:avax":
-      auditAvaxAppTarget(findings);
+      auditAvaxAppTarget(findings, deployment);
       break;
     case "keeper:solana":
     case "keeper:bsc":

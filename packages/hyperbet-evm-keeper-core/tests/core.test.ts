@@ -69,6 +69,46 @@ describe("buildEvmPredictionMarketLifecycleRecord", () => {
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     );
   });
+
+  it("prefers oracle in-flight status and reserved metadata when present", () => {
+    const record = buildEvmPredictionMarketLifecycleRecord({
+      chainKey: "avax",
+      duelKey: "abcd",
+      duelId: "duel-2",
+      betCloseTime: 999,
+      snapshot: {
+        marketKey:
+          "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        currentDuel: {
+          status: 4,
+          activeProposalId:
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+          proposalProposedAt: 2_000,
+          proposalChallenged: false,
+          disputeWindowSeconds: 300,
+        },
+        currentMatch: {
+          status: 2,
+          winner: 0,
+          yesPool: "100",
+          noPool: "200",
+        },
+      },
+      fallbackHealth: null,
+      contractAddress: "0x456",
+      syncedAt: 777,
+    });
+
+    expect(record.lifecycleStatus).toBe("PROPOSED");
+    expect(record.metadata).toMatchObject({
+      proposalId:
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+      challengeWindowEndsAt: 2_300,
+      finalizedAt: null,
+      cancellationReason: null,
+      proposalChallenged: false,
+    });
+  });
 });
 
 describe("verifyEvmRecordedBet", () => {
@@ -82,7 +122,7 @@ describe("verifyEvmRecordedBet", () => {
     const txHash =
       "0x3333333333333333333333333333333333333333333333333333333333333333";
     const abi = parseAbi([
-      "function placeOrder(bytes32 duelKey, uint8 marketKind, uint8 side, uint16 price, uint128 amount)",
+      "function placeOrder(bytes32 duelKey, uint8 marketKind, uint8 side, uint16 price, uint128 amount, uint8 orderFlags)",
     ]);
     const eventAbi = parseAbiItem(
       "event OrderPlaced(bytes32 indexed marketKey, uint64 indexed orderId, address indexed maker, uint8 side, uint16 price, uint128 amount)",
@@ -90,7 +130,7 @@ describe("verifyEvmRecordedBet", () => {
     const txInput = encodeFunctionData({
       abi,
       functionName: "placeOrder",
-      args: [duelKey as `0x${string}`, 0n, 1n, 600, 1000n],
+      args: [duelKey as `0x${string}`, 0n, 1n, 600, 1000n, 1n],
     });
     const topics = encodeEventTopics({
       abi: [eventAbi],

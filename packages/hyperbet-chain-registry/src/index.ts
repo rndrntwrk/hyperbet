@@ -15,14 +15,43 @@ export type BettingEvmChain = "bsc" | "base" | "avax";
 export type BettingChainKey = "solana" | BettingEvmChain;
 export type RecordedBetChain = "SOLANA" | "BSC" | "BASE" | "AVAX";
 export type BettingTargetKind = "testnet" | "mainnet";
+export const PREDICTION_MARKET_LIFECYCLE_STATUSES = [
+  "PENDING",
+  "OPEN",
+  "LOCKED",
+  "PROPOSED",
+  "CHALLENGED",
+  "RESOLVED",
+  "CANCELLED",
+  "UNKNOWN",
+] as const;
 export type PredictionMarketLifecycleStatus =
-  | "PENDING"
-  | "OPEN"
-  | "LOCKED"
-  | "RESOLVED"
-  | "CANCELLED"
-  | "UNKNOWN";
+  (typeof PREDICTION_MARKET_LIFECYCLE_STATUSES)[number];
+export const PREDICTION_MARKET_TERMINAL_STATUSES = [
+  "RESOLVED",
+  "CANCELLED",
+] as const;
+export const PREDICTION_MARKET_IN_FLIGHT_RESOLUTION_STATUSES = [
+  "PROPOSED",
+  "CHALLENGED",
+] as const;
+export const PREDICTION_MARKET_RESERVED_METADATA_KEYS = [
+  "proposalId",
+  "challengeWindowEndsAt",
+  "finalizedAt",
+  "cancellationReason",
+] as const;
 export type PredictionMarketWinner = "NONE" | "A" | "B";
+export type PredictionMarketReservedMetadataKey =
+  (typeof PREDICTION_MARKET_RESERVED_METADATA_KEYS)[number];
+
+export interface PredictionMarketLifecycleMetadata
+  extends Record<string, unknown> {
+  proposalId?: string | null;
+  challengeWindowEndsAt?: number | null;
+  finalizedAt?: number | null;
+  cancellationReason?: string | null;
+}
 
 export interface NativeCurrencyConfig {
   name: string;
@@ -57,6 +86,12 @@ export interface BettingEvmDeployment {
   marketOperatorAddress: string;
   treasuryAddress: string;
   marketMakerAddress: string;
+  reporterAddress: string;
+  finalizerAddress: string;
+  challengerAddress: string;
+  timelockAddress: string;
+  multisigAddress: string;
+  emergencyCouncilAddress: string;
   deploymentVersion: string;
   goldTokenAddress: string;
   nativeCurrency: NativeCurrencyConfig;
@@ -80,6 +115,18 @@ export const BETTING_EVM_CANONICAL_ADDRESS_FIELDS = [
 
 export type BettingEvmCanonicalAddressField =
   (typeof BETTING_EVM_CANONICAL_ADDRESS_FIELDS)[number];
+
+export const BETTING_EVM_GOVERNANCE_ADDRESS_FIELDS = [
+  "reporterAddress",
+  "finalizerAddress",
+  "challengerAddress",
+  "timelockAddress",
+  "multisigAddress",
+  "emergencyCouncilAddress",
+] as const;
+
+export type BettingEvmGovernanceAddressField =
+  (typeof BETTING_EVM_GOVERNANCE_ADDRESS_FIELDS)[number];
 
 export interface EvmChainRuntimeConfig {
   chainKey: BettingEvmChain;
@@ -128,7 +175,7 @@ export interface PredictionMarketLifecycleRecord {
   programId: string | null;
   txRef: string | null;
   syncedAt: number | null;
-  metadata?: Record<string, unknown>;
+  metadata?: PredictionMarketLifecycleMetadata;
 }
 
 export const BETTING_SOLANA_CLUSTERS: BettingSolanaCluster[] = [
@@ -208,6 +255,12 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     marketOperatorAddress: "",
     treasuryAddress: "",
     marketMakerAddress: "",
+    reporterAddress: "",
+    finalizerAddress: "",
+    challengerAddress: "",
+    timelockAddress: "",
+    multisigAddress: "",
+    emergencyCouncilAddress: "",
     deploymentVersion: "v2",
     goldTokenAddress: "",
     nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
@@ -227,6 +280,12 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     marketOperatorAddress: "0x7908b93DF1A91A5e1B83a4538107Db3c9131eED8",
     treasuryAddress: "0x0262dC245f38d614d508D8BD680c69E3B6D26F4c",
     marketMakerAddress: "0x1B6C8799998f0a55CA69E6b2886C489861045cFd",
+    reporterAddress: "",
+    finalizerAddress: "",
+    challengerAddress: "",
+    timelockAddress: "",
+    multisigAddress: "",
+    emergencyCouncilAddress: "",
     deploymentVersion: "v2",
     goldTokenAddress: "",
     nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
@@ -246,6 +305,12 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     marketOperatorAddress: "",
     treasuryAddress: "",
     marketMakerAddress: "",
+    reporterAddress: "",
+    finalizerAddress: "",
+    challengerAddress: "",
+    timelockAddress: "",
+    multisigAddress: "",
+    emergencyCouncilAddress: "",
     deploymentVersion: "v2",
     goldTokenAddress: "",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
@@ -265,6 +330,12 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     marketOperatorAddress: "0x7908b93DF1A91A5e1B83a4538107Db3c9131eED8",
     treasuryAddress: "0x0262dC245f38d614d508D8BD680c69E3B6D26F4c",
     marketMakerAddress: "0x1B6C8799998f0a55CA69E6b2886C489861045cFd",
+    reporterAddress: "",
+    finalizerAddress: "",
+    challengerAddress: "",
+    timelockAddress: "",
+    multisigAddress: "",
+    emergencyCouncilAddress: "",
     deploymentVersion: "v2",
     goldTokenAddress: "",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
@@ -284,6 +355,12 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     marketOperatorAddress: "",
     treasuryAddress: "",
     marketMakerAddress: "",
+    reporterAddress: "",
+    finalizerAddress: "",
+    challengerAddress: "",
+    timelockAddress: "",
+    multisigAddress: "",
+    emergencyCouncilAddress: "",
     deploymentVersion: "v2",
     goldTokenAddress: "",
     nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
@@ -303,6 +380,12 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     marketOperatorAddress: "",
     treasuryAddress: "",
     marketMakerAddress: "",
+    reporterAddress: "",
+    finalizerAddress: "",
+    challengerAddress: "",
+    timelockAddress: "",
+    multisigAddress: "",
+    emergencyCouncilAddress: "",
     deploymentVersion: "v2",
     goldTokenAddress: "",
     nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
@@ -328,6 +411,20 @@ export function isBettingEvmDeploymentCanonicalReady(
   deployment: BettingEvmDeployment,
 ): boolean {
   return getMissingBettingEvmCanonicalFields(deployment).length === 0;
+}
+
+export function getMissingBettingEvmGovernanceFields(
+  deployment: BettingEvmDeployment,
+): BettingEvmGovernanceAddressField[] {
+  return BETTING_EVM_GOVERNANCE_ADDRESS_FIELDS.filter(
+    (field) => deployment[field].trim().length === 0,
+  );
+}
+
+export function isBettingEvmDeploymentGovernanceReady(
+  deployment: BettingEvmDeployment,
+): boolean {
+  return getMissingBettingEvmGovernanceFields(deployment).length === 0;
 }
 
 export function normalizeSolanaCluster(cluster: string): BettingSolanaCluster {
@@ -446,6 +543,12 @@ export function resolveBettingEvmRuntimeEnv(
 ): ResolvedBettingEvmRuntimeEnv {
   const deployment = resolveBettingEvmDeploymentForChain(chainKey, environment);
   const chainUpper = chainKey.toUpperCase();
+  if (environment === "mainnet-beta" && !isBettingEvmDeploymentCanonicalReady(deployment)) {
+    const missing = getMissingBettingEvmCanonicalFields(deployment).join(", ");
+    throw new Error(
+      `Canonical ${deployment.label} deployment is incomplete for production runtime resolution: ${missing}`,
+    );
+  }
   return {
     chainKey,
     deployment,
@@ -456,15 +559,19 @@ export function resolveBettingEvmRuntimeEnv(
         deployment.rpcEnvVar,
       ]) ?? defaultRpcUrlForEvmNetwork(deployment.networkKey),
     duelOracleAddress:
-      firstNonEmptyEnvValue(env, [
-        `ORACLE_CONTRACT_ADDRESS_${chainUpper}`,
-        `${chainUpper}_DUEL_ORACLE_ADDRESS`,
-      ]) ?? deployment.duelOracleAddress,
+      environment === "mainnet-beta"
+        ? deployment.duelOracleAddress
+        : firstNonEmptyEnvValue(env, [
+            `ORACLE_CONTRACT_ADDRESS_${chainUpper}`,
+            `${chainUpper}_DUEL_ORACLE_ADDRESS`,
+          ]) ?? deployment.duelOracleAddress,
     goldClobAddress:
-      firstNonEmptyEnvValue(env, [
-        `CLOB_CONTRACT_ADDRESS_${chainUpper}`,
-        `${chainUpper}_GOLD_CLOB_ADDRESS`,
-      ]) ?? deployment.goldClobAddress,
+      environment === "mainnet-beta"
+        ? deployment.goldClobAddress
+        : firstNonEmptyEnvValue(env, [
+            `CLOB_CONTRACT_ADDRESS_${chainUpper}`,
+            `${chainUpper}_GOLD_CLOB_ADDRESS`,
+          ]) ?? deployment.goldClobAddress,
   };
 }
 
@@ -518,6 +625,36 @@ export function isEvmChainKey(
   return chainKey !== "solana";
 }
 
+function asPredictionMarketRecord(
+  value: unknown,
+): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+export function normalizePredictionMarketChainKey(
+  value: unknown,
+): BettingChainKey | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case "sol":
+    case "solana":
+      return "solana";
+    case "bsc":
+    case "bnb":
+      return "bsc";
+    case "base":
+      return "base";
+    case "avax":
+    case "avalanche":
+      return "avax";
+    default:
+      return null;
+  }
+}
+
 export function toRecordedBetChain(chainKey: BettingChainKey): RecordedBetChain {
   switch (chainKey) {
     case "bsc":
@@ -530,6 +667,135 @@ export function toRecordedBetChain(chainKey: BettingChainKey): RecordedBetChain 
     default:
       return "SOLANA";
   }
+}
+
+export function isPredictionMarketLifecycleStatus(
+  value: unknown,
+): value is PredictionMarketLifecycleStatus {
+  return (
+    typeof value === "string" &&
+    (PREDICTION_MARKET_LIFECYCLE_STATUSES as readonly string[]).includes(value)
+  );
+}
+
+export function normalizePredictionMarketLifecycleStatus(
+  value: unknown,
+): PredictionMarketLifecycleStatus {
+  return isPredictionMarketLifecycleStatus(value) ? value : "UNKNOWN";
+}
+
+export function normalizePredictionMarketWinner(
+  value: unknown,
+): PredictionMarketWinner {
+  switch (value) {
+    case "A":
+    case "B":
+    case "NONE":
+      return value;
+    default:
+      return "NONE";
+  }
+}
+
+export function normalizePredictionMarketTimestamp(
+  value: unknown,
+): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function normalizePredictionMarketDuelKeyHex(
+  value: string | null | undefined,
+  options: { prefix?: boolean } = {},
+): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().toLowerCase();
+  const normalized = /^0x[0-9a-f]{64}$/.test(trimmed)
+    ? trimmed.slice(2)
+    : /^[0-9a-f]{64}$/.test(trimmed)
+      ? trimmed
+      : null;
+  if (!normalized) return null;
+  return options.prefix ? `0x${normalized}` : normalized;
+}
+
+export function normalizePredictionMarketLifecycleMetadata(
+  value: unknown,
+): PredictionMarketLifecycleMetadata | undefined {
+  const candidate = asPredictionMarketRecord(value);
+  if (!candidate) return undefined;
+  return {
+    ...candidate,
+    proposalId:
+      typeof candidate.proposalId === "string" ? candidate.proposalId : null,
+    challengeWindowEndsAt: normalizePredictionMarketTimestamp(
+      candidate.challengeWindowEndsAt,
+    ),
+    finalizedAt: normalizePredictionMarketTimestamp(candidate.finalizedAt),
+    cancellationReason:
+      typeof candidate.cancellationReason === "string"
+        ? candidate.cancellationReason
+        : null,
+  };
+}
+
+export function normalizePredictionMarketLifecycleRecord(
+  value: unknown,
+  options: { duelKeyPrefix?: boolean } = {},
+): PredictionMarketLifecycleRecord | null {
+  const candidate = asPredictionMarketRecord(value);
+  const chainKey = normalizePredictionMarketChainKey(candidate?.chainKey);
+  if (!candidate || !chainKey) {
+    return null;
+  }
+
+  return {
+    chainKey,
+    duelKey: normalizePredictionMarketDuelKeyHex(
+      typeof candidate.duelKey === "string" ? candidate.duelKey : null,
+      { prefix: options.duelKeyPrefix },
+    ),
+    duelId: typeof candidate.duelId === "string" ? candidate.duelId : null,
+    marketId:
+      typeof candidate.marketId === "string" ? candidate.marketId : null,
+    marketRef:
+      typeof candidate.marketRef === "string" ? candidate.marketRef : null,
+    lifecycleStatus: normalizePredictionMarketLifecycleStatus(
+      candidate.lifecycleStatus,
+    ),
+    winner: normalizePredictionMarketWinner(candidate.winner),
+    betCloseTime: normalizePredictionMarketTimestamp(candidate.betCloseTime),
+    contractAddress:
+      typeof candidate.contractAddress === "string"
+        ? candidate.contractAddress
+        : null,
+    programId:
+      typeof candidate.programId === "string" ? candidate.programId : null,
+    txRef: typeof candidate.txRef === "string" ? candidate.txRef : null,
+    syncedAt: normalizePredictionMarketTimestamp(candidate.syncedAt),
+    metadata: normalizePredictionMarketLifecycleMetadata(candidate.metadata),
+  };
+}
+
+export function isPredictionMarketQuotableStatus(
+  status: PredictionMarketLifecycleStatus,
+): boolean {
+  return status === "OPEN";
+}
+
+export function isPredictionMarketTerminalStatus(
+  status: PredictionMarketLifecycleStatus,
+): status is (typeof PREDICTION_MARKET_TERMINAL_STATUSES)[number] {
+  return (PREDICTION_MARKET_TERMINAL_STATUSES as readonly string[]).includes(
+    status,
+  );
+}
+
+export function isPredictionMarketInFlightResolutionStatus(
+  status: PredictionMarketLifecycleStatus,
+): status is (typeof PREDICTION_MARKET_IN_FLIGHT_RESOLUTION_STATUSES)[number] {
+  return (
+    PREDICTION_MARKET_IN_FLIGHT_RESOLUTION_STATUSES as readonly string[]
+  ).includes(status);
 }
 
 export function resolveLifecycleFromEvmStatus(
@@ -557,6 +823,35 @@ export function resolveLifecycleFromEvmStatus(
   }
 }
 
+export function resolveLifecycleFromEvmDuelStatus(
+  status: number | string | null | undefined,
+): PredictionMarketLifecycleStatus {
+  const numeric =
+    typeof status === "number"
+      ? status
+      : typeof status === "string"
+        ? Number.parseInt(status, 10)
+        : Number.NaN;
+  switch (numeric) {
+    case 2:
+      return "OPEN";
+    case 3:
+      return "LOCKED";
+    case 4:
+      return "PROPOSED";
+    case 5:
+      return "CHALLENGED";
+    case 6:
+      return "RESOLVED";
+    case 7:
+      return "CANCELLED";
+    case 1:
+      return "PENDING";
+    default:
+      return "UNKNOWN";
+  }
+}
+
 export function resolveLifecycleFromStreamPhase(
   phase: string | null | undefined,
 ): PredictionMarketLifecycleStatus {
@@ -570,6 +865,47 @@ export function resolveLifecycleFromStreamPhase(
       return "RESOLVED";
     case "IDLE":
       return "PENDING";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+export function resolveLifecycleFromSolanaDuelStatus(
+  status: string | null | undefined,
+): PredictionMarketLifecycleStatus {
+  switch (status?.trim().toLowerCase()) {
+    case "scheduled":
+      return "PENDING";
+    case "bettingopen":
+    case "betting_open":
+      return "OPEN";
+    case "locked":
+      return "LOCKED";
+    case "proposed":
+      return "PROPOSED";
+    case "challenged":
+      return "CHALLENGED";
+    case "resolved":
+      return "RESOLVED";
+    case "cancelled":
+      return "CANCELLED";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+export function resolveLifecycleFromSolanaMarketStatus(
+  status: string | null | undefined,
+): PredictionMarketLifecycleStatus {
+  switch (status?.trim().toLowerCase()) {
+    case "open":
+      return "OPEN";
+    case "locked":
+      return "LOCKED";
+    case "resolved":
+      return "RESOLVED";
+    case "cancelled":
+      return "CANCELLED";
     default:
       return "UNKNOWN";
   }

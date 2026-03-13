@@ -281,8 +281,32 @@ test.describe("app tabs and api coverage", () => {
     );
     expect(solanaMarket).toBeTruthy();
     expect(solanaMarket?.marketRef).toBe(state.clobMarketState || null);
-    expect(["OPEN", "LOCKED", "RESOLVED", "CANCELLED", "PENDING", "UNKNOWN"])
-      .toContain(solanaMarket?.lifecycleStatus);
+    expect([
+      "OPEN",
+      "LOCKED",
+      "PROPOSED",
+      "CHALLENGED",
+      "RESOLVED",
+      "CANCELLED",
+      "PENDING",
+      "UNKNOWN",
+    ]).toContain(solanaMarket?.lifecycleStatus);
+    expect(
+      solanaMarket?.metadata?.proposalId == null ||
+        typeof solanaMarket.metadata.proposalId === "string",
+    ).toBe(true);
+    expect(
+      solanaMarket?.metadata?.challengeWindowEndsAt == null ||
+        typeof solanaMarket.metadata.challengeWindowEndsAt === "number",
+    ).toBe(true);
+    expect(
+      solanaMarket?.metadata?.finalizedAt == null ||
+        typeof solanaMarket.metadata.finalizedAt === "number",
+    ).toBe(true);
+    expect(
+      solanaMarket?.metadata?.cancellationReason == null ||
+        typeof solanaMarket.metadata.cancellationReason === "string",
+    ).toBe(true);
 
     await expect
       .poll(async () => {

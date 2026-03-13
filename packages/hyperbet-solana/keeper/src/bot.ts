@@ -34,6 +34,7 @@ import {
   findOrderPda,
   findPriceLevelPda,
   findUserBalancePda,
+  ORDER_BEHAVIOR_GTC,
   SIDE_ASK,
   SIDE_BID,
   readKeypair,
@@ -333,7 +334,9 @@ const fightProgram = fightOracle as unknown as Program<FightOracle>;
 const marketProgram = goldClobMarket as unknown as Program<GoldClobMarket>;
 const perpsProgram = goldPerpsMarket as unknown as Program<GoldPerpsMarket>;
 type DuelStatusArg = Parameters<typeof fightProgram.methods.upsertDuel>[7];
-type ReportWinnerArg = Parameters<typeof fightProgram.methods.reportResult>[1];
+type OracleWinnerArg =
+  | { a: Record<string, never> }
+  | { b: Record<string, never> };
 
 function hasProgramMethod(
   program: { methods?: Record<string, unknown> },
@@ -1152,7 +1155,9 @@ for (const method of [
   "updateOracleConfig",
   "upsertDuel",
   "cancelDuel",
-  "reportResult",
+  "proposeResult",
+  "challengeResult",
+  "finalizeResult",
 ]) {
   if (!hasProgramMethod(fightProgram, method)) {
     missingKeeperMethods.push(`fightOracle.${method}`);
@@ -1164,6 +1169,7 @@ for (const method of [
   "initializeMarket",
   "syncMarketFromDuel",
   "placeOrder",
+  "continueOrder",
   "cancelOrder",
   "claim",
 ]) {
@@ -1529,11 +1535,22 @@ const ensureOracleReady = async (): Promise<void> => {
       `Bot wallet ${botKeypair.publicKey.toBase58()} is not oracle authority`,
     );
   }
-  if (!(config.reporter as PublicKey).equals(botKeypair.publicKey)) {
+  const configNeedsUpdate =
+    !(config.reporter as PublicKey).equals(botKeypair.publicKey) ||
+    !(config.finalizer as PublicKey).equals(botKeypair.publicKey) ||
+    !(config.challenger as PublicKey).equals(botKeypair.publicKey);
+  if (configNeedsUpdate) {
+    const disputeWindowSecs = asNum(config.disputeWindowSecs);
     await runWithRecovery(
       () =>
         fightProgram.methods
-          .updateOracleConfig(botKeypair.publicKey, botKeypair.publicKey)
+          .updateOracleConfig(
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            new BN(disputeWindowSecs),
+          )
           .accountsPartial({
             authority: botKeypair.publicKey,
             oracleConfig: oracleConfigPda,
@@ -1639,6 +1656,13 @@ async function getDuelState(
   const duelState = await fightProgram.account.duelState.fetchNullable(duelStatePda);
   markRpcSuccess();
   return duelState;
+}
+
+async function getOracleConfigState(): Promise<Record<string, unknown> | null> {
+  const oracleConfig =
+    await fightProgram.account.oracleConfig.fetchNullable(oracleConfigPda);
+  markRpcSuccess();
+  return oracleConfig;
 }
 
 async function getClobMarketState(
@@ -1761,8 +1785,23 @@ function duelStatusEnum(
   return { bettingOpen: {} } as DuelStatusArg;
 }
 
-function winnerSideEnum(side: "A" | "B"): ReportWinnerArg {
-  return (side === "A" ? { a: {} } : { b: {} }) as ReportWinnerArg;
+function winnerSideEnum(side: "A" | "B"): OracleWinnerArg {
+  return side === "A" ? { a: {} } : { b: {} };
+}
+
+function resolvedWinnerFromDuelState(
+  duelState: Record<string, unknown> | null,
+): "A" | "B" | null {
+  if (!duelState) {
+    return null;
+  }
+  if (enumIs(duelState.winner, "a")) {
+    return "A";
+  }
+  if (enumIs(duelState.winner, "b")) {
+    return "B";
+  }
+  return null;
 }
 
 async function upsertDuelLifecycle(
@@ -2081,6 +2120,7 @@ async function placeManagedClobOrder(
           side,
           price,
           new BN(amountLamports),
+          ORDER_BEHAVIOR_GTC,
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,
@@ -2486,6 +2526,64 @@ function writeBotHealthSnapshot(): void {
   }
 }
 
+async function settleTrackedMatchFromResolvedState(
+  trackedMatch: ActiveClobMatch,
+  duelId: string,
+  winnerSide: "A" | "B" | null,
+): Promise<void> {
+  await syncTrackedMarketFromOracle(trackedMatch);
+  if (winnerSide) {
+    trackedMatch.winner = winnerSide;
+  }
+  trackedMatch.lastResolvedAtMs = Date.now();
+  await captureSettledClobHealth(trackedMatch, "RESOLVED");
+  activeClobMatches.delete(duelId);
+  unresolvedOracleWarningMatches.delete(duelId);
+  writeBotHealthSnapshot();
+}
+
+async function maybeFinalizeTrackedProposal(
+  trackedMatch: ActiveClobMatch,
+  duelState: Record<string, unknown>,
+  metadataUri: string,
+): Promise<boolean> {
+  if (
+    !enumIs(duelState.status, "proposed") ||
+    Boolean(duelState.pendingChallenged)
+  ) {
+    return false;
+  }
+
+  const oracleConfig = await getOracleConfigState();
+  if (!oracleConfig) {
+    throw new Error(`Missing oracle config ${oracleConfigPda.toBase58()}`);
+  }
+
+  const finalizableAt =
+    asNum(duelState.pendingProposedAt) + asNum(oracleConfig.disputeWindowSecs);
+  if (Math.floor(Date.now() / 1000) < finalizableAt) {
+    return false;
+  }
+
+  await runWithRecovery(
+    () =>
+      fightProgram.methods
+        .finalizeResult(
+          Array.from(duelKeyHexToBytes(trackedMatch.duelKeyHex)),
+          metadataUri,
+        )
+        .accountsPartial({
+          finalizer: botKeypair.publicKey,
+          oracleConfig: oracleConfigPda,
+          duelState: trackedMatch.duelState,
+        })
+        .rpc(),
+    connection,
+  );
+  markRpcSuccess(trackedMatch);
+  return true;
+}
+
 async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   const trackedMatch = activeClobMatches.get(data.duelId);
   if (!trackedMatch) {
@@ -2523,15 +2621,21 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
 
   const resolvedSeed = data.seed;
 
-  const duelState = await getDuelState(trackedMatch.duelState);
+  let duelState = await getDuelState(trackedMatch.duelState);
   if (duelState && enumIs(duelState.status, "resolved")) {
+    await settleTrackedMatchFromResolvedState(
+      trackedMatch,
+      data.duelId,
+      winnerSide,
+    );
+    return;
+  }
+  if (duelState && enumIs(duelState.status, "challenged")) {
     await syncTrackedMarketFromOracle(trackedMatch);
-    trackedMatch.winner = winnerSide;
-    trackedMatch.lastResolvedAtMs = Date.now();
-    await captureSettledClobHealth(trackedMatch, "RESOLVED");
-    activeClobMatches.delete(data.duelId);
     unresolvedOracleWarningMatches.delete(data.duelId);
-    writeBotHealthSnapshot();
+    console.warn(
+      `[Keeper] Duel ${data.duelId} result proposal is challenged; leaving the market fail-closed until manual resolution.`,
+    );
     return;
   }
 
@@ -2542,53 +2646,96 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   );
 
   console.log(
-    `[Keeper] Waiting 15s before posting result for duel ${data.duelId} to sync with stream...`,
+    `[Keeper] Waiting 15s before proposing result for duel ${data.duelId} to sync with stream...`,
   );
   await sleep(15_000);
 
-  await runWithRecovery(
-    () =>
-      fightProgram.methods
-        .reportResult(
-          Array.from(duelKey),
-          winnerSideEnum(winnerSide),
-          new BN(resolvedSeed),
-          Array.from(Buffer.from(replayHashHex, "hex")),
-          buildResultHash(
-            data.duelKeyHex,
-            winnerSide,
-            resolvedSeed,
-            replayHashHex,
-          ),
-          new BN(duelEndTs),
-          buildDuelMetadata(data),
-        )
-        .accountsPartial({
-          reporter: botKeypair.publicKey,
-          oracleConfig: oracleConfigPda,
-          duelState: trackedMatch.duelState,
-        })
-        .rpc(),
-    connection,
-  );
-  const resolutionRecordedAt = markRpcSuccess(trackedMatch);
-  trackedMatch.lastOracleAtMs = resolutionRecordedAt;
-  trackedMatch.lastResolvedAtMs = resolutionRecordedAt;
-  trackedMatch.winner = winnerSide;
+  duelState = await getDuelState(trackedMatch.duelState);
+  if (duelState && enumIs(duelState.status, "locked")) {
+    await runWithRecovery(
+      () =>
+        fightProgram.methods
+          .proposeResult(
+            Array.from(duelKey),
+            winnerSideEnum(winnerSide),
+            new BN(resolvedSeed),
+            Array.from(Buffer.from(replayHashHex, "hex")),
+            buildResultHash(
+              data.duelKeyHex,
+              winnerSide,
+              resolvedSeed,
+              replayHashHex,
+            ),
+            new BN(duelEndTs),
+            buildDuelMetadata(data),
+          )
+          .accountsPartial({
+            reporter: botKeypair.publicKey,
+            oracleConfig: oracleConfigPda,
+            duelState: trackedMatch.duelState,
+          })
+          .rpc(),
+      connection,
+    );
+    trackedMatch.lastOracleAtMs = markRpcSuccess(trackedMatch);
+    duelState = await getDuelState(trackedMatch.duelState);
+  }
+
+  if (duelState && enumIs(duelState.status, "challenged")) {
+    await syncTrackedMarketFromOracle(trackedMatch);
+    unresolvedOracleWarningMatches.delete(data.duelId);
+    console.warn(
+      `[Keeper] Duel ${data.duelId} result proposal is challenged; leaving the market fail-closed until manual resolution.`,
+    );
+    return;
+  }
+
+  if (
+    duelState &&
+    enumIs(duelState.status, "proposed") &&
+    (await maybeFinalizeTrackedProposal(
+      trackedMatch,
+      duelState,
+      buildDuelMetadata(data),
+    ))
+  ) {
+    duelState = await getDuelState(trackedMatch.duelState);
+  }
+
+  if (duelState && enumIs(duelState.status, "resolved")) {
+    await settleTrackedMatchFromResolvedState(
+      trackedMatch,
+      data.duelId,
+      winnerSide,
+    );
+    console.log(
+      JSON.stringify(
+        {
+          action: "clob_resolved",
+          duelId: data.duelId,
+          duelState: trackedMatch.duelState.toBase58(),
+          marketState: trackedMatch.marketState.toBase58(),
+          winner: winnerSide,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
 
   unresolvedOracleWarningMatches.delete(data.duelId);
   await syncTrackedMarketFromOracle(trackedMatch);
-  await captureSettledClobHealth(trackedMatch, "RESOLVED");
-  activeClobMatches.delete(data.duelId);
 
   console.log(
     JSON.stringify(
       {
-        action: "clob_resolved",
+        action: "clob_result_proposed",
         duelId: data.duelId,
         duelState: trackedMatch.duelState.toBase58(),
         marketState: trackedMatch.marketState.toBase58(),
         winner: winnerSide,
+        finalizationPending: true,
       },
       null,
       2,
@@ -2781,6 +2928,38 @@ async function runMaintenance(): Promise<void> {
     if (enumIs(duelState.status, "locked")) {
       await cancelManagedClobQuotes(trackedMatch, "market-locked");
       await maybeWarnUnresolvedDuel(trackedMatch);
+      continue;
+    }
+
+    if (enumIs(duelState.status, "proposed")) {
+      await cancelManagedClobQuotes(trackedMatch, "result-proposed");
+      if (
+        await maybeFinalizeTrackedProposal(
+          trackedMatch,
+          duelState,
+          JSON.stringify({
+            duelId,
+            duelKeyHex: trackedMatch.duelKeyHex,
+            action: "keeper_auto_finalize",
+          }),
+        )
+      ) {
+        const refreshedDuelState = await getDuelState(trackedMatch.duelState);
+        if (refreshedDuelState && enumIs(refreshedDuelState.status, "resolved")) {
+          await settleTrackedMatchFromResolvedState(
+            trackedMatch,
+            duelId,
+            resolvedWinnerFromDuelState(refreshedDuelState),
+          );
+        }
+      }
+      unresolvedOracleWarningMatches.delete(duelId);
+      continue;
+    }
+
+    if (enumIs(duelState.status, "challenged")) {
+      await cancelManagedClobQuotes(trackedMatch, "result-challenged");
+      unresolvedOracleWarningMatches.delete(duelId);
       continue;
     }
 

@@ -8,8 +8,24 @@ const TEST_SOLANA_PROGRAM_ID =
   "MockProgram111111111111111111111111111111111";
 const TEST_FIGHT_ORACLE_ID =
   "FightOracle11111111111111111111111111111111";
+const TEST_EVM_WALLET = "0x1234567890123456789012345678901234567890";
 
 const contractInstances: Array<Record<string, any>> = [];
+const evmOrdersByTarget = new Map<
+  string,
+  Map<
+    number,
+    {
+      id: bigint;
+      side: number;
+      price: number;
+      maker: string;
+      amount: bigint;
+      filled: bigint;
+      active: boolean;
+    }
+  >
+>();
 
 type SolanaOrderRecord = {
   id: bigint;
@@ -42,6 +58,7 @@ const solanaState = {
 let duelPhase = "FIGHTING";
 let agent1Hp = 90;
 let agent2Hp = 30;
+let evmLifecycleStatus = "OPEN";
 let solanaLifecycleStatus = "OPEN";
 let activePredictionChains = ["bsc", "base", "avax", "solana"];
 
@@ -92,7 +109,7 @@ vi.mock("ethers", () => {
   }
 
   class MockWallet {
-    address = "0x1234567890123456789012345678901234567890";
+    address = TEST_EVM_WALLET;
 
     constructor(readonly privateKey: string, readonly provider?: unknown) {
       void privateKey;
@@ -103,6 +120,18 @@ vi.mock("ethers", () => {
   class MockContract {
     target: string;
     nextOrderId = 1n;
+    ordersState: Map<
+      number,
+      {
+        id: bigint;
+        side: number;
+        price: number;
+        maker: string;
+        amount: bigint;
+        filled: bigint;
+        active: boolean;
+      }
+    >;
     feeBps = vi.fn().mockResolvedValue(200n);
     tradeTreasuryFeeBps = vi.fn().mockResolvedValue(100n);
     tradeMarketMakerFeeBps = vi.fn().mockResolvedValue(100n);
@@ -124,13 +153,50 @@ vi.mock("ethers", () => {
       bStake: 0n,
     });
     cancelOrder = vi.fn().mockResolvedValue({
-      wait: vi.fn().mockResolvedValue({}),
+      wait: vi.fn().mockResolvedValue({ hash: "0xcancel" }),
     });
-    placeOrder = vi.fn().mockImplementation(() => {
+    orders = vi.fn().mockImplementation(async (_marketKey: string, orderId: number) => {
+      const current = this.ordersState.get(Number(orderId));
+      if (!current) {
+        return {
+          id: BigInt(orderId),
+          side: 0,
+          price: 0,
+          maker: TEST_EVM_WALLET,
+          amount: 0n,
+          filled: 0n,
+          prevOrderId: 0n,
+          nextOrderId: 0n,
+          active: false,
+        };
+      }
+      return {
+        id: current.id,
+        side: current.side,
+        price: current.price,
+        maker: current.maker,
+        amount: current.amount,
+        filled: current.filled,
+        prevOrderId: 0n,
+        nextOrderId: 0n,
+        active: current.active,
+      };
+    });
+    placeOrder = vi.fn().mockImplementation((_duelKey, _marketKind, side, price, amount) => {
       const orderId = this.nextOrderId;
       this.nextOrderId += 1n;
+      this.ordersState.set(Number(orderId), {
+        id: orderId,
+        side,
+        price,
+        maker: TEST_EVM_WALLET,
+        amount: BigInt(amount),
+        filled: 0n,
+        active: true,
+      });
       return {
         hash: `0xtx-${orderId.toString()}`,
+        nonce: Number(orderId - 1n),
         wait: vi.fn().mockResolvedValue({
           hash: `0xtx-${orderId.toString()}`,
           logs: [{ kind: "orderPlaced", orderId }],
@@ -140,7 +206,19 @@ vi.mock("ethers", () => {
 
     constructor(target: string) {
       this.target = target;
+      this.ordersState = evmOrdersByTarget.get(target) ?? new Map();
+      evmOrdersByTarget.set(target, this.ordersState);
       contractInstances.push(this as unknown as Record<string, any>);
+      this.cancelOrder.mockImplementation(async (_duelKey: string, _marketKind: number, orderId: number) => {
+        const current = this.ordersState.get(Number(orderId));
+        if (current) {
+          current.active = false;
+        }
+        return {
+          hash: `0xcancel-${orderId}`,
+          wait: vi.fn().mockResolvedValue({ hash: `0xcancel-${orderId}` }),
+        };
+      });
     }
   }
 
@@ -312,6 +390,7 @@ vi.mock("@coral-xyz/anchor", async () => {
             id: order.id,
             side: order.side,
             price: order.price,
+            maker: new web3.PublicKey(TEST_SOLANA_PUBLIC_KEY),
             amount: order.amount,
             filled: order.filled,
             active: order.active,
@@ -403,10 +482,13 @@ vi.mock("@coral-xyz/anchor", async () => {
   };
 });
 
-async function loadMarketMaker() {
+async function loadMarketMaker(stateStore?: any) {
   vi.resetModules();
   const { CrossChainMarketMaker } = await import("./index.ts");
-  return new CrossChainMarketMaker();
+  const { createTestMarketMakerStateStore } = await import("./storage/index.ts");
+  return new CrossChainMarketMaker({
+    stateStore: stateStore ?? createTestMarketMakerStateStore(),
+  });
 }
 
 function invalidateBotCaches(mm: any) {
@@ -420,10 +502,12 @@ describe("CrossChainMarketMaker", () => {
   beforeEach(() => {
     vi.useRealTimers();
     contractInstances.length = 0;
+    evmOrdersByTarget.clear();
     resetSolanaState();
     duelPhase = "FIGHTING";
     agent1Hp = 90;
     agent2Hp = 30;
+    evmLifecycleStatus = "OPEN";
     solanaLifecycleStatus = "OPEN";
     activePredictionChains = ["bsc", "base", "avax", "solana"];
 
@@ -465,7 +549,7 @@ describe("CrossChainMarketMaker", () => {
             chainKey: "bsc",
             duelKey: TEST_DUEL_KEY,
             marketRef: "0xmarket",
-            lifecycleStatus: "OPEN",
+            lifecycleStatus: evmLifecycleStatus,
           });
         }
         if (activePredictionChains.includes("base")) {
@@ -473,7 +557,7 @@ describe("CrossChainMarketMaker", () => {
             chainKey: "base",
             duelKey: TEST_DUEL_KEY,
             marketRef: "0xmarket",
-            lifecycleStatus: "OPEN",
+            lifecycleStatus: evmLifecycleStatus,
           });
         }
         if (activePredictionChains.includes("avax")) {
@@ -481,7 +565,7 @@ describe("CrossChainMarketMaker", () => {
             chainKey: "avax",
             duelKey: TEST_DUEL_KEY,
             marketRef: "0xmarket",
-            lifecycleStatus: "OPEN",
+            lifecycleStatus: evmLifecycleStatus,
           });
         }
         if (activePredictionChains.includes("solana")) {
@@ -548,6 +632,105 @@ describe("CrossChainMarketMaker", () => {
     expect(mm.getActiveOrders()).toHaveLength(initialOrderCount);
     expect(contractInstances.every((instance) => instance.cancelOrder.mock.calls.length === 0)).toBe(true);
     expect(contractInstances.every((instance) => instance.placeOrder.mock.calls.length === 2)).toBe(true);
+  });
+
+  it("treats proposed and challenged EVM markets as non-quotable", async () => {
+    process.env.MM_ENABLE_SOLANA = "false";
+    activePredictionChains = ["bsc", "base", "avax"];
+    const mm = await loadMarketMaker();
+
+    await mm.marketMakeCycle();
+    expect(mm.getActiveOrders()).toHaveLength(6);
+
+    evmLifecycleStatus = "PROPOSED";
+    invalidateBotCaches(mm);
+    await mm.marketMakeCycle();
+
+    expect(mm.getActiveOrders()).toHaveLength(0);
+    expect(contractInstances.every((instance) => instance.cancelOrder.mock.calls.length > 0)).toBe(true);
+
+    evmLifecycleStatus = "CHALLENGED";
+    invalidateBotCaches(mm);
+    await mm.marketMakeCycle();
+
+    expect(mm.getActiveOrders()).toHaveLength(0);
+    expect(contractInstances.every((instance) => instance.placeOrder.mock.calls.length === 2)).toBe(true);
+  });
+
+  it("recovers persisted EVM orders without duplicating quotes on restart", async () => {
+    process.env.MM_ENABLE_SOLANA = "false";
+    process.env.MM_ENABLE_BASE = "false";
+    process.env.MM_ENABLE_AVAX = "false";
+    activePredictionChains = ["bsc"];
+    const { createTestMarketMakerStateStore } = await import("./storage/index.ts");
+    const stateStore = createTestMarketMakerStateStore();
+
+    const first = await loadMarketMaker(stateStore);
+    await first.marketMakeCycle();
+    expect(first.getActiveOrders().filter((order) => order.chainKey === "bsc")).toHaveLength(2);
+
+    const beforeRestartPlacements = contractInstances.reduce(
+      (sum, instance) => sum + instance.placeOrder.mock.calls.length,
+      0,
+    );
+
+    const second = await loadMarketMaker(stateStore);
+    await second.marketMakeCycle();
+
+    expect(second.getActiveOrders().filter((order) => order.chainKey === "bsc")).toHaveLength(2);
+    const afterRestartPlacements = contractInstances.reduce(
+      (sum, instance) => sum + instance.placeOrder.mock.calls.length,
+      0,
+    );
+    expect(afterRestartPlacements).toBe(beforeRestartPlacements);
+  });
+
+  it("keeps EVM claim backlog pending until the market is terminal", async () => {
+    process.env.MM_ENABLE_SOLANA = "false";
+    process.env.MM_ENABLE_BASE = "false";
+    process.env.MM_ENABLE_AVAX = "false";
+    activePredictionChains = ["bsc"];
+    evmLifecycleStatus = "LOCKED";
+    const { createTestMarketMakerStateStore } = await import("./storage/index.ts");
+    const stateStore = createTestMarketMakerStateStore();
+    await stateStore.upsertClaimBacklog({
+      backlogKey: "claim-bsc-1",
+      chainKey: "bsc",
+      duelKey: TEST_DUEL_KEY,
+      marketKey: "0xmarket",
+      status: "PENDING",
+      nextAttemptAt: 0,
+      payload: {},
+    });
+
+    const mm = await loadMarketMaker(stateStore);
+    await mm.marketMakeCycle();
+
+    const backlog = await stateStore.listDueClaimBacklog(Date.now() + 60_000);
+    expect(backlog).toHaveLength(1);
+    expect(backlog[0]?.status).toBe("PENDING");
+    expect(backlog[0]?.resolvedAt).toBeNull();
+    expect(backlog[0]?.lastError).toContain("claim-not-ready");
+  });
+
+  it("re-reads the runtime nonce after a pre-broadcast EVM send failure", async () => {
+    process.env.MM_ENABLE_SOLANA = "false";
+    process.env.MM_ENABLE_BASE = "false";
+    process.env.MM_ENABLE_AVAX = "false";
+    activePredictionChains = ["bsc"];
+
+    const mm = await loadMarketMaker();
+    const bscContract = contractInstances[0];
+    expect(bscContract).toBeTruthy();
+
+    bscContract.placeOrder.mockImplementationOnce(() => {
+      throw new Error("pre-broadcast failure");
+    });
+
+    await expect(mm.marketMakeCycle()).rejects.toThrow("pre-broadcast failure");
+    await mm.marketMakeCycle();
+
+    expect(bscContract.placeOrder.mock.calls[1]?.[6]?.nonce).toBe(0);
   });
 
   it("places bid and ask orders on an open Solana market", async () => {

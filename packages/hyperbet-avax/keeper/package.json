@@ -6,7 +6,8 @@
   "scripts": {
     "service": "bun --bun src/service.ts",
     "bot": "bun --bun src/bot.ts",
-    "resolve": "bun --bun src/resolve.ts"
+    "resolve": "bun --bun src/resolve.ts",
+    "proof:canary": "bun --bun src/staged-proof-avax.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",

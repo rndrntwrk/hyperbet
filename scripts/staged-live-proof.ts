@@ -9,7 +9,7 @@ import {
 } from "./ci-lib";
 
 type ProofMode = "read-only" | "canary-write";
-type ProofTarget = "all" | "solana" | "bsc";
+type ProofTarget = "all" | "solana" | "bsc" | "avax";
 type SupportedChain = Exclude<ProofTarget, "all">;
 
 type BuildInfo = {
@@ -73,12 +73,10 @@ type CheckResult = {
   details: string;
 };
 
-type AvaxFailClosedResult = {
-  appAuditPassed: boolean;
-  keeperAuditPassed: boolean;
-  appAuditOutput: string;
-  keeperAuditOutput: string;
-  verification: CheckResult;
+type AuditResult = {
+  target: string;
+  ok: boolean;
+  output: string;
 };
 
 type SolanaCanaryResult = {
@@ -104,6 +102,18 @@ type BscCanaryResult = {
   claimTx: string;
 };
 
+type AvaxCanaryResult = {
+  duelId: string;
+  duelKeyHex: string;
+  marketRef: string;
+  openTx: string;
+  createMarketTx: string;
+  placeOrderTx: string;
+  cancelTx: string;
+  syncTx: string;
+  claimTx: string;
+};
+
 type ProofSummary = {
   mode: ProofMode;
   target: ProofTarget;
@@ -113,13 +123,18 @@ type ProofSummary = {
   readOnly?: {
     solana?: ReadOnlyChainResult;
     bsc?: ReadOnlyChainResult;
+    avax?: ReadOnlyChainResult;
   };
   canary?: {
     solana?: SolanaCanaryResult;
     bsc?: BscCanaryResult;
+    avax?: AvaxCanaryResult;
   };
   verifyChains?: CheckResult[];
-  avaxFailClosed?: AvaxFailClosedResult;
+  avaxEnvAudit?: {
+    app: AuditResult;
+    keeper: AuditResult;
+  };
 };
 
 const artifactRoot = resolveArtifactRoot("staged-live-proof");
@@ -137,7 +152,12 @@ function parseArgs(): { mode: ProofMode; target: ProofTarget } {
   if (modeArg !== "read-only" && modeArg !== "canary-write") {
     throw new Error(`unsupported proof mode ${modeArg}`);
   }
-  if (targetArg !== "all" && targetArg !== "solana" && targetArg !== "bsc") {
+  if (
+    targetArg !== "all" &&
+    targetArg !== "solana" &&
+    targetArg !== "bsc" &&
+    targetArg !== "avax"
+  ) {
     throw new Error(`unsupported proof target ${targetArg}`);
   }
   return { mode: modeArg, target: targetArg };
@@ -161,6 +181,14 @@ function chainUrls(chain: SupportedChain): ChainUrls {
       pagesUrl: normalizeUrl(requireEnv("HYPERBET_SOLANA_PAGES_STAGING_URL")),
       keeperUrl: normalizeUrl(requireEnv("HYPERBET_SOLANA_KEEPER_STAGING_URL")),
       wsUrl: normalizeUrl(requireEnv("HYPERBET_SOLANA_KEEPER_STAGING_WS_URL")),
+    };
+  }
+
+  if (chain === "avax") {
+    return {
+      pagesUrl: normalizeUrl(requireEnv("HYPERBET_AVAX_PAGES_STAGING_URL")),
+      keeperUrl: normalizeUrl(requireEnv("HYPERBET_AVAX_KEEPER_STAGING_URL")),
+      wsUrl: normalizeUrl(requireEnv("HYPERBET_AVAX_KEEPER_STAGING_WS_URL")),
     };
   }
 
@@ -276,7 +304,7 @@ async function runReadOnly(chain: SupportedChain): Promise<ReadOnlyChainResult> 
           `${chain}/proxy.json`,
         )
       : await postJson<unknown>(
-          `${urls.keeperUrl}/api/proxy/evm/rpc?chain=bsc`,
+          `${urls.keeperUrl}/api/proxy/evm/rpc?chain=${chain}`,
           { jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] },
           `${chain}/proxy.json`,
         );
@@ -337,11 +365,12 @@ function runJsonCommand<T>(
   return parseJsonStdout<T>(label, result.stdout ?? "");
 }
 
-function runExpectedAuditFailure(
+function runAudit(
+  label: string,
   target: "app:avax" | "keeper:avax",
   env: Record<string, string>,
-  deployment: "production" | "staging" = "production",
-): { passed: boolean; output: string } {
+  deployment: "production" | "staging" = "staging",
+): AuditResult {
   const result = spawnSync(
     "node",
     [
@@ -357,19 +386,37 @@ function runExpectedAuditFailure(
       encoding: "utf8",
     },
   );
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
+  writeJsonArtifact(artifactRoot, `${label}.command.json`, {
+    command: "node",
+    args: [
+      "--import",
+      "tsx",
+      "scripts/ci-env-audit.ts",
+      `--target=${target}`,
+      `--deployment=${deployment}`,
+    ],
+    exitCode: result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  });
   return {
-    passed: result.status !== 0,
-    output: `${result.stdout ?? ""}${result.stderr ?? ""}`.trim(),
+    target,
+    ok: result.status === 0,
+    output,
   };
 }
 
 function runVerifyChains(readOnly: {
   solana?: ReadOnlyChainResult;
   bsc?: ReadOnlyChainResult;
+  avax?: ReadOnlyChainResult;
 }): CheckResult[] {
   const env: Record<string, string> = {};
+  const chains: string[] = [];
 
   if (readOnly.solana) {
+    chains.push("solana");
     env.SOLANA_VERIFY_RPC_URL = requireEnv("HYPERBET_SOLANA_STAGING_RPC_URL");
     if (readOnly.solana.canonicalMarket?.programId) {
       env.SOLANA_VERIFY_PROGRAM_ID = readOnly.solana.canonicalMarket.programId;
@@ -377,9 +424,18 @@ function runVerifyChains(readOnly: {
   }
 
   if (readOnly.bsc) {
+    chains.push("bsc");
     env.BSC_STAGING_RPC_URL = requireEnv("HYPERBET_BSC_STAGING_RPC_URL");
     if (readOnly.bsc.canonicalMarket?.contractAddress) {
       env.BSC_STAGING_GOLD_CLOB_ADDRESS = readOnly.bsc.canonicalMarket.contractAddress;
+    }
+  }
+
+  if (readOnly.avax) {
+    chains.push("avax");
+    env.AVAX_STAGING_RPC_URL = requireEnv("HYPERBET_AVAX_STAGING_RPC_URL");
+    if (readOnly.avax.canonicalMarket?.contractAddress) {
+      env.AVAX_STAGING_GOLD_CLOB_ADDRESS = readOnly.avax.canonicalMarket.contractAddress;
     }
   }
 
@@ -391,7 +447,7 @@ function runVerifyChains(readOnly: {
       "packages/market-maker-bot/src/verify-chains.ts",
       "--json",
       "--deployment=staging",
-      "--chains=solana,bsc",
+      `--chains=${chains.join(",")}`,
     ],
     env,
   );
@@ -399,60 +455,30 @@ function runVerifyChains(readOnly: {
   return results;
 }
 
-function runProductionAvaxVerify(): CheckResult {
-  const results = runJsonCommand<CheckResult[]>(
-    "verify-chains-avax-production",
-    "bun",
-    [
-      "--bun",
-      "packages/market-maker-bot/src/verify-chains.ts",
-      "--json",
-      "--deployment=production",
-      "--chains=avax",
-    ],
-  );
-  writeJsonArtifact(artifactRoot, "verify-chains-avax-production.json", results);
-  const avax = results.find((result) => result.chain === "avax");
-  if (!avax) {
-    throw new Error("missing AVAX verification result");
-  }
-  return avax;
-}
-
-function proveAvaxFailClosed(
-  readOnly: { solana?: ReadOnlyChainResult },
-): AvaxFailClosedResult {
-  const appAudit = runExpectedAuditFailure("app:avax", {
-    VITE_GAME_API_URL: readOnly.solana
-      ? chainUrls("solana").keeperUrl
-      : "https://staging.invalid",
-    VITE_GAME_WS_URL: readOnly.solana
-      ? chainUrls("solana").wsUrl
-      : "wss://staging.invalid/ws",
+function runAvaxEnvAudits(): ProofSummary["avaxEnvAudit"] {
+  const app = runAudit("avax-app-env-audit", "app:avax", {
+    VITE_GAME_API_URL: chainUrls("avax").keeperUrl,
+    VITE_GAME_WS_URL: chainUrls("avax").wsUrl,
     VITE_SOLANA_CLUSTER: "mainnet-beta",
     VITE_USE_GAME_RPC_PROXY: "true",
     VITE_USE_GAME_EVM_RPC_PROXY: "true",
-    VITE_AVAX_CHAIN_ID: "43114",
-  }, "production");
-  const keeperAudit = runExpectedAuditFailure("keeper:avax", {
+    VITE_AVAX_CHAIN_ID: requireEnv("HYPERBET_AVAX_STAGING_CHAIN_ID"),
+    VITE_AVAX_GOLD_CLOB_ADDRESS: requireEnv("HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS"),
+  });
+  const keeper = runAudit("avax-keeper-env-audit", "keeper:avax", {
     CI_AUDIT_REQUIRE_RUNTIME: "true",
-    HYPERBET_KEEPER_URL: "https://avax-stage.invalid",
-    RAILWAY_PROJECT_ID: "staging",
-    RAILWAY_ENVIRONMENT_ID: "production",
-    RAILWAY_KEEPER_SERVICE_ID: "staging",
-    AVAX_RPC_URL: "https://api.avax.network/ext/bc/C/rpc",
-  }, "production");
-  const verification = runProductionAvaxVerify();
-
-  const summary: AvaxFailClosedResult = {
-    appAuditPassed: appAudit.passed,
-    keeperAuditPassed: keeperAudit.passed,
-    appAuditOutput: appAudit.output,
-    keeperAuditOutput: keeperAudit.output,
-    verification,
-  };
-  writeJsonArtifact(artifactRoot, "avax-fail-closed.json", summary);
-  return summary;
+    HYPERBET_KEEPER_URL: chainUrls("avax").keeperUrl,
+    RAILWAY_PROJECT_ID: requireEnv("HYPERBET_AVAX_RAILWAY_STAGING_PROJECT_ID"),
+    RAILWAY_ENVIRONMENT_ID: requireEnv("HYPERBET_AVAX_RAILWAY_STAGING_ENVIRONMENT_ID"),
+    RAILWAY_KEEPER_SERVICE_ID: requireEnv("HYPERBET_AVAX_RAILWAY_STAGING_KEEPER_SERVICE_ID"),
+    AVAX_RPC_URL: requireEnv("HYPERBET_AVAX_STAGING_RPC_URL"),
+    AVAX_GOLD_CLOB_ADDRESS: requireEnv("HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS"),
+  });
+  writeJsonArtifact(artifactRoot, "avax/env-audit.json", {
+    app,
+    keeper,
+  });
+  return { app, keeper };
 }
 
 function runSolanaCanary(): SolanaCanaryResult {
@@ -475,6 +501,16 @@ function runBscCanary(): BscCanaryResult {
   return result;
 }
 
+function runAvaxCanary(): AvaxCanaryResult {
+  const result = runJsonCommand<AvaxCanaryResult>(
+    "avax-canary",
+    "bun",
+    ["--bun", "packages/hyperbet-avax/keeper/src/staged-proof-avax.ts"],
+  );
+  writeJsonArtifact(artifactRoot, "avax/canary.json", result);
+  return result;
+}
+
 function humanSummary(summary: ProofSummary): string {
   const lines = [
     `staged live proof: mode=${summary.mode} target=${summary.target}`,
@@ -492,15 +528,25 @@ function humanSummary(summary: ProofSummary): string {
       `bsc read-only ok: market=${summary.readOnly.bsc.canonicalMarket?.marketRef ?? "missing"}`,
     );
   }
+  if (summary.readOnly?.avax) {
+    lines.push(
+      `avax read-only ok: market=${summary.readOnly.avax.canonicalMarket?.marketRef ?? "missing"}`,
+    );
+  }
   if (summary.canary?.solana) {
     lines.push(`solana canary ok: claim=${summary.canary.solana.claimTx}`);
   }
   if (summary.canary?.bsc) {
     lines.push(`bsc canary ok: claim=${summary.canary.bsc.claimTx}`);
   }
-  if (summary.avaxFailClosed) {
+  if (summary.canary?.avax) {
     lines.push(
-      `avax fail-closed: app=${summary.avaxFailClosed.appAuditPassed} keeper=${summary.avaxFailClosed.keeperAuditPassed} verify=${summary.avaxFailClosed.verification.ok}`,
+      `avax canary ok: claim=${summary.canary.avax.claimTx}`,
+    );
+  }
+  if (summary.avaxEnvAudit) {
+    lines.push(
+      `avax env audit: app=${summary.avaxEnvAudit.app.ok} keeper=${summary.avaxEnvAudit.keeper.ok}`,
     );
   }
   return lines.join("\n");
@@ -512,6 +558,7 @@ async function main(): Promise<void> {
 
   const includeSolana = target === "all" || target === "solana";
   const includeBsc = target === "all" || target === "bsc";
+  const includeAvax = target === "all" || target === "avax";
 
   const summary: ProofSummary = {
     mode,
@@ -520,7 +567,7 @@ async function main(): Promise<void> {
     gitSha: expectedCommit,
   };
 
-  if (includeSolana || includeBsc) {
+  if (includeSolana || includeBsc || includeAvax) {
     summary.readOnly = {};
     if (includeSolana) {
       summary.readOnly.solana = await runReadOnly("solana");
@@ -528,26 +575,24 @@ async function main(): Promise<void> {
     if (includeBsc) {
       summary.readOnly.bsc = await runReadOnly("bsc");
     }
+    if (includeAvax) {
+      summary.readOnly.avax = await runReadOnly("avax");
+      summary.avaxEnvAudit = runAvaxEnvAudits();
+      if (!summary.avaxEnvAudit.app.ok || !summary.avaxEnvAudit.keeper.ok) {
+        throw new Error(
+          `avax env audit failed: app=${summary.avaxEnvAudit.app.ok} keeper=${summary.avaxEnvAudit.keeper.ok}`,
+        );
+      }
+    }
   }
 
   const verifyResults = runVerifyChains(summary.readOnly ?? {});
   summary.verifyChains = verifyResults;
-  const unexpectedVerifyFailures = verifyResults.filter(
-    (result) => !result.ok && result.chain !== "avax",
-  );
+  const unexpectedVerifyFailures = verifyResults.filter((result) => !result.ok);
   if (unexpectedVerifyFailures.length > 0) {
     throw new Error(
       `staged verify:chains failures: ${unexpectedVerifyFailures.map((result) => `${result.chain}:${result.details}`).join(", ")}`,
     );
-  }
-
-  summary.avaxFailClosed = proveAvaxFailClosed(summary.readOnly ?? {});
-  if (
-    !summary.avaxFailClosed.appAuditPassed ||
-    !summary.avaxFailClosed.keeperAuditPassed ||
-    summary.avaxFailClosed.verification.ok
-  ) {
-    throw new Error("AVAX fail-closed proof did not hold");
   }
 
   if (mode === "canary-write") {
@@ -557,6 +602,9 @@ async function main(): Promise<void> {
     }
     if (includeBsc) {
       summary.canary.bsc = runBscCanary();
+    }
+    if (includeAvax) {
+      summary.canary.avax = runAvaxCanary();
     }
   }
 

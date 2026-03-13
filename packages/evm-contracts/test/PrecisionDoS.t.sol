@@ -10,6 +10,7 @@ contract GoldClobPrecisionDoSTest is Test {
     uint8 private constant MARKET_KIND_DUEL_WINNER = 0;
     uint8 private constant BUY_SIDE = 1;
     uint8 private constant SELL_SIDE = 2;
+    uint8 private constant ORDER_FLAG_GTC = 0x01;
 
     address private admin = address(0xA11CE);
     address private maker = address(0xB0B1);
@@ -28,10 +29,10 @@ contract GoldClobPrecisionDoSTest is Test {
 
     function setUp() public {
         vm.txGasPrice(0);
-        oracle = new DuelOutcomeOracle(admin, admin, admin, admin, 0);
+        oracle = new DuelOutcomeOracle(admin, admin, admin, admin, admin, 3_600);
 
         vm.prank(admin);
-        clob = new GoldClob(admin, admin, address(oracle), admin, admin);
+        clob = new GoldClob(admin, admin, address(oracle), admin, admin, admin);
 
         vm.prank(admin);
         clob.setFeeConfig(0, 0, 0);
@@ -59,7 +60,7 @@ contract GoldClobPrecisionDoSTest is Test {
         clob.createMarketForDuel(duelKey, MARKET_KIND_DUEL_WINNER);
 
         vm.prank(maker);
-        clob.placeOrder{value: 3000}(duelKey, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 250, 4000);
+        clob.placeOrder{value: 3000}(duelKey, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 250, 4000, ORDER_FLAG_GTC);
 
         bytes32 expectedMarketKey = clob.marketKey(duelKey, MARKET_KIND_DUEL_WINNER);
 
@@ -67,6 +68,6 @@ contract GoldClobPrecisionDoSTest is Test {
         emit OrderMatched(expectedMarketKey, 1, 2, 2000, 250);
 
         vm.prank(taker);
-        clob.placeOrder{value: 1000}(duelKey, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 500, 2000);
+        clob.placeOrder{value: 1000}(duelKey, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 500, 2000, ORDER_FLAG_GTC);
     }
 }

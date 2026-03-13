@@ -63,6 +63,20 @@ export function assertMitigationThreshold(
   report: SuiteReport,
   threshold: number,
 ): GateVerdict {
+  const firstFailure = report.chains
+    .flatMap((chain) =>
+      chain.scenarios.map((scenario) => ({
+        chain: chain.chain,
+        scenario,
+      })),
+    )
+    .find((entry) => !entry.scenario.budgetPass);
+  if (firstFailure) {
+    return {
+      ok: false,
+      message: `scenario budget failed ${firstFailure.chain}/${firstFailure.scenario.scenario}: ${firstFailure.scenario.budgetBreaches.map((breach) => breach.control).join(",")}`,
+    };
+  }
   if (report.summary.mitigationPasses >= threshold) {
     return {
       ok: true,
@@ -106,7 +120,10 @@ export function runGate(
   const reportPath = join(outputDir, `market-maker-adversarial-report${suffix}.json`);
   const report = JSON.parse(readFileSync(reportPath, "utf8")) as SuiteReport;
 
-  const thresholdVerdict = assertMitigationThreshold(report, threshold);
+  const thresholdVerdict = assertMitigationThreshold(
+    report,
+    report.summary.totalScenarios,
+  );
   if (!thresholdVerdict.ok) {
     return thresholdVerdict;
   }

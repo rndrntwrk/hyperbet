@@ -8,13 +8,18 @@ import { ethers } from "ethers";
 
 import type { BettingEvmChain } from "@hyperbet/chain-registry";
 
+import { createTestMarketMakerStateStore } from "./storage/index.ts";
+
 const MARKET_KIND_DUEL_WINNER = 0;
 const DUEL_STATUS_BETTING_OPEN = 2;
+const DUEL_STATUS_LOCKED = 3;
 const BUY_SIDE = 1;
 const SELL_SIDE = 2;
 const WINNER_SIDE_A = 1;
 const MAX_PRICE = 1000;
 const SHARE_UNIT_SIZE = 1_000n;
+const ORDER_FLAG_GTC = 0x01;
+const DISPUTE_WINDOW_SECONDS = 3_600;
 const DEFAULT_ANVIL_RPC_URL = "http://127.0.0.1:18545";
 const DEFAULT_PRIVATE_KEYS = [
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
@@ -201,19 +206,23 @@ async function main() {
     trader,
     botSigner,
   ] = DEFAULT_PRIVATE_KEYS.map((privateKey) => new ethers.Wallet(privateKey, provider));
+  const finalizer = await provider.getSigner(7);
+  const challenger = await provider.getSigner(8);
   const nextNonce = createNonceTracker(provider);
 
-  const runtimeActors = [
-    operator,
-    reporter,
-    treasury,
-    marketMakerFeeSink,
-    trader,
-    botSigner,
+  const runtimeActorAddresses = [
+    operator.address,
+    reporter.address,
+    await finalizer.getAddress(),
+    await challenger.getAddress(),
+    treasury.address,
+    marketMakerFeeSink.address,
+    trader.address,
+    botSigner.address,
   ];
-  for (const actor of runtimeActors) {
+  for (const actorAddress of runtimeActorAddresses) {
     await admin.sendTransaction({
-      to: actor.address,
+      to: actorAddress,
       value: ethers.parseEther("25"),
       nonce: await nextNonce(admin.address),
     });
@@ -227,14 +236,15 @@ async function main() {
   const oracle = (await oracleFactory.deploy(
     admin.address,
     reporter.address,
-    operator.address,
-    treasury.address,
-    0,
+    await finalizer.getAddress(),
+    await challenger.getAddress(),
+    admin.address,
+    DISPUTE_WINDOW_SECONDS,
     { nonce: await nextNonce(admin.address) },
   )) as RuntimeContract;
   await oracle.waitForDeployment();
   const oracleReporter = oracle.connect(reporter) as RuntimeContract;
-  const oracleFinalizer = oracle.connect(operator) as RuntimeContract;
+  const oracleFinalizer = oracle.connect(finalizer) as RuntimeContract;
 
   const clobFactory = new ethers.ContractFactory(
     clobArtifact.abi,
@@ -247,6 +257,7 @@ async function main() {
     await oracle.getAddress(),
     treasury.address,
     marketMakerFeeSink.address,
+    admin.address,
     { nonce: await nextNonce(admin.address) },
   )) as RuntimeContract;
   await clob.waitForDeployment();
@@ -255,16 +266,19 @@ async function main() {
 
   const duel = duelKey(`runtime-smoke-${chain}`);
   const duelId = `${chain}-runtime-smoke`;
+  const participantA = participantHash("agent-alpha");
+  const participantB = participantHash("agent-beta");
+  const duelMetadata = `${chain}-runtime-smoke`;
   const latestBlock = await provider.getBlock("latest");
   const now = BigInt(latestBlock?.timestamp ?? Math.floor(Date.now() / 1000));
   await oracleReporter.upsertDuel(
     duel,
-    participantHash("agent-alpha"),
-    participantHash("agent-beta"),
+    participantA,
+    participantB,
     now,
     now + 60n,
     now + 120n,
-    `${chain}-runtime-smoke`,
+    duelMetadata,
     DUEL_STATUS_BETTING_OPEN,
     { nonce: await nextNonce(reporter.address) },
   );
@@ -304,7 +318,9 @@ async function main() {
   process.env[`${chainUpper}_DUEL_ORACLE_ADDRESS`] = await oracle.getAddress();
 
   const { CrossChainMarketMaker } = await import("./index.ts");
-  const mm = new CrossChainMarketMaker();
+  const mm = new CrossChainMarketMaker({
+    stateStore: createTestMarketMakerStateStore(),
+  });
 
   try {
     await mm.marketMakeCycle();
@@ -326,6 +342,7 @@ async function main() {
       BUY_SIDE,
       askOrder.price,
       rawAmount,
+      ORDER_FLAG_GTC,
       { value: cost + fees, nonce: await nextNonce(trader.address) },
     );
 
@@ -339,22 +356,47 @@ async function main() {
       `${chain} quotes should cancel on lock`,
     );
 
-  await oracleReporter.proposeResult(
-    duel,
-    WINNER_SIDE_A,
-    42,
-    resultHash("replay"),
-    resultHash("result"),
-    now + 180n,
-    `${chain}-resolved`,
-    { nonce: await nextNonce(reporter.address) },
-  );
-  await oracleFinalizer.finalizeResult(duel, `${chain}-finalized`, {
-    nonce: await nextNonce(operator.address),
-  });
-  await clobOperator.syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER, {
-    nonce: await nextNonce(operator.address),
-  });
+    await provider.send("evm_increaseTime", [61]);
+    await provider.send("evm_mine", []);
+    await oracleReporter.upsertDuel(
+      duel,
+      participantA,
+      participantB,
+      now,
+      now + 60n,
+      now + 120n,
+      duelMetadata,
+      DUEL_STATUS_LOCKED,
+      { nonce: await nextNonce(reporter.address) },
+    );
+    const lockedDuel = await oracle.getDuel(duel);
+    const resolvedBlock = await provider.getBlock("latest");
+    const latestResolvedTs = BigInt(
+      resolvedBlock?.timestamp ?? Math.floor(Date.now() / 1000),
+    );
+    const duelBetCloseTs = BigInt(lockedDuel.betCloseTs);
+    const duelEndTs =
+      latestResolvedTs > duelBetCloseTs
+        ? latestResolvedTs
+        : duelBetCloseTs + 1n;
+    await oracleReporter.proposeResult(
+      duel,
+      WINNER_SIDE_A,
+      42,
+      resultHash("replay"),
+      resultHash("result"),
+      duelEndTs,
+      `${chain}-resolved`,
+      { nonce: await nextNonce(reporter.address) },
+    );
+    await provider.send("evm_increaseTime", [DISPUTE_WINDOW_SECONDS]);
+    await provider.send("evm_mine", []);
+    await oracleFinalizer.finalizeResult(duel, `${chain}-resolved`, {
+      nonce: await nextNonce(await finalizer.getAddress()),
+    });
+    await clobOperator.syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER, {
+      nonce: await nextNonce(operator.address),
+    });
 
     const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
     const positionBefore = await clob.positions(marketKey, trader.address);

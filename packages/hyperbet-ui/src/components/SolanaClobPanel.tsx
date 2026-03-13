@@ -133,6 +133,7 @@ type BalanceAccount = {
 
 const SIDE_BID = 1;
 const SIDE_ASK = 2;
+const ORDER_BEHAVIOR_GTC = 0;
 const MAX_MATCH_ACCOUNTS = 100;
 
 function walletReady(wallet: SigningWalletLike): boolean {
@@ -392,6 +393,8 @@ export function SolanaClobPanel({
         resolved: "已结算",
         marketCancelled: "市场已取消",
         bettingLocked: "下注已锁定",
+        resolutionProposed: "结果已提交，等待挑战期结束",
+        resolutionChallenged: "结果已被挑战，结算已暂停",
         marketOpen: "市场开放中",
         refreshFailed: (message: string) => `刷新失败：${message}`,
         connectWalletToTrade: "连接钱包后即可交易",
@@ -431,6 +434,8 @@ export function SolanaClobPanel({
         resolved: "Resolved",
         marketCancelled: "Market cancelled",
         bettingLocked: "Betting locked",
+        resolutionProposed: "Result proposed; challenge window active",
+        resolutionChallenged: "Result challenged; settlement paused",
         marketOpen: "Market open",
         refreshFailed: (message: string) => `Refresh failed: ${message}`,
         connectWalletToTrade: "Connect wallet to trade",
@@ -494,6 +499,10 @@ export function SolanaClobPanel({
         return copy.marketCancelled;
       case "LOCKED":
         return copy.bettingLocked;
+      case "PROPOSED":
+        return copy.resolutionProposed;
+      case "CHALLENGED":
+        return copy.resolutionChallenged;
       case "OPEN":
         return copy.marketOpen;
       case "PENDING":
@@ -864,6 +873,10 @@ export function SolanaClobPanel({
           return copy.marketCancelled;
         case "LOCKED":
           return copy.bettingLocked;
+        case "PROPOSED":
+          return copy.resolutionProposed;
+        case "CHALLENGED":
+          return copy.resolutionChallenged;
         case "OPEN":
           return copy.marketOpen;
         case "PENDING":
@@ -1137,6 +1150,7 @@ export function SolanaClobPanel({
           sideValue,
           price,
           new BN(amount.toString()),
+          ORDER_BEHAVIOR_GTC,
         )
         .accountsPartial({
           marketState: activeMarket.marketState,

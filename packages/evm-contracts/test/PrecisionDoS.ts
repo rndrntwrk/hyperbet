@@ -5,16 +5,27 @@ import { ethers } from "hardhat";
 import { deployDuelOutcomeOracle, deployGoldClob } from "../typed-contracts";
 
 describe("GoldClob Precision DoS", () => {
+  const ORDER_FLAG_GTC = 0x01;
+
   it("should process perfectly valid mixed-quantity matching without precision revert", async () => {
     const [admin, maker, taker] = await ethers.getSigners();
 
-    const oracle = await deployDuelOutcomeOracle(admin.address, admin.address, admin.address, admin.address, 3600, admin);
+    const oracle = await deployDuelOutcomeOracle(
+      admin.address,
+      admin.address,
+      admin.address,
+      admin.address,
+      admin.address,
+      3600,
+      admin,
+    );
     await oracle.waitForDeployment();
 
     const clob = await deployGoldClob(
       admin.address,
       admin.address,
       await oracle.getAddress(),
+      admin.address,
       admin.address,
       admin.address,
       admin,
@@ -36,13 +47,13 @@ describe("GoldClob Precision DoS", () => {
 
     await clob.createMarketForDuel(duelKey, 0);
 
-    await clob.connect(maker).placeOrder(duelKey, 0, 2, 250, 4000, { value: 3000 });
+    await clob.connect(maker).placeOrder(duelKey, 0, 2, 250, 4000, ORDER_FLAG_GTC, { value: 3000 });
 
     const expectedMarketKey = await clob.marketKey(duelKey, 0);
 
     const tx = await clob
       .connect(taker)
-      .placeOrder(duelKey, 0, 1, 500, 2000, { value: 1000 });
+      .placeOrder(duelKey, 0, 1, 500, 2000, ORDER_FLAG_GTC, { value: 1000 });
     const receipt = await tx.wait();
 
     expect(receipt).to.not.equal(null);

@@ -51,3 +51,33 @@
 | SVM | `gold_clob_market::initialize_config` | upgrade-authority + bootstrap authority check |
 | SVM | `gold_clob_market::update_config` | market config `authority` signer |
 | SVM | `gold_clob_market::initialize_market` | config `authority` or `market_operator` signer |
+
+## Trace Coverage
+
+The integration branch treats the commands below as the concrete parity evidence
+set for lifecycle traces. EVM protocol traces are shared by BSC and AVAX
+because both chains consume the same `DuelOutcomeOracle` and `GoldClob`
+contracts.
+
+| Trace | Solana evidence | BSC evidence | AVAX evidence |
+|---|---|---|---|
+| Place order | `node --import tsx scripts/ci-gate-e2e.ts --chain=solana` | `node --import tsx scripts/ci-gate-e2e.ts --chain=bsc` | `node --import tsx scripts/ci-gate-e2e.ts --chain=avax` |
+| Partial fill | `bun run --cwd packages/hyperbet-solana anchor:test` | `bun run ci:contracts:proof` | `bun run ci:contracts:proof` |
+| Cancel active order | `node --import tsx scripts/ci-gate-e2e.ts --chain=solana` | `node --import tsx scripts/ci-gate-e2e.ts --chain=bsc` | `node --import tsx scripts/ci-gate-e2e.ts --chain=avax` |
+| Lock / non-quotable transition | `bun run ci:gate:solana` | `bun run ci:gate:evm` | `bun run ci:gate:evm` |
+| Propose result | `bun run --cwd packages/hyperbet-solana anchor:test` | `bun run ci:contracts:proof` | `bun run ci:contracts:proof` |
+| Challenge result | `bun run --cwd packages/hyperbet-solana anchor:test` | `bun run ci:contracts:proof` | `bun run ci:contracts:proof` |
+| Finalize result | `bun run --cwd packages/hyperbet-solana anchor:test` | `bun run ci:contracts:proof` | `bun run ci:contracts:proof` |
+| Cancel duel / market cancellation | `bun run --cwd packages/hyperbet-solana anchor:test` | `bun run ci:contracts:proof` | `bun run ci:contracts:proof` |
+| Claim resolved winner | `node --import tsx scripts/ci-gate-e2e.ts --chain=solana` | `node --import tsx scripts/ci-gate-e2e.ts --chain=bsc` | `node --import tsx scripts/ci-gate-e2e.ts --chain=avax` |
+| Refund cancelled market | `node --import tsx scripts/ci-gate-e2e.ts --chain=solana` | `node --import tsx scripts/ci-gate-e2e.ts --chain=bsc` | `node --import tsx scripts/ci-gate-e2e.ts --chain=avax` |
+
+## API Contract Checks
+
+These checks prove that the normalized lifecycle API remains stable across UI,
+MM, and keeper consumers:
+
+- `bun test` in `packages/hyperbet-chain-registry`
+- `bun test --preload ./tests/setup.ts` in `packages/hyperbet-ui`
+- `bunx vitest run` in `packages/market-maker-bot`
+- `packages/*/app/tests/e2e/app-tabs-and-apis.spec.ts` via `scripts/ci-gate-e2e.ts`

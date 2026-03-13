@@ -21,6 +21,7 @@ import {
 } from "@solana/web3.js";
 
 import {
+  ORDER_BEHAVIOR_GTC,
   SIDE_ASK,
   deriveOrderPda,
   derivePriceLevelPda,
@@ -142,6 +143,7 @@ async function seedAskLiquidity(
       SIDE_ASK,
       500,
       new BN("1000000000"),
+      ORDER_BEHAVIOR_GTC,
     )
     .accountsPartial({
       marketState,

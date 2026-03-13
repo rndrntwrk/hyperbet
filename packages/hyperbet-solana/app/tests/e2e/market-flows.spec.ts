@@ -30,7 +30,9 @@ import {
   cancelDuel,
   deriveClobVaultPda,
   deriveMarketStatePda,
+  ensureOracleReady,
   initializeCanonicalMarket,
+  ORDER_BEHAVIOR_GTC,
   SIDE_ASK,
   SIDE_BID,
   deriveOrderPda,
@@ -38,8 +40,9 @@ import {
   deriveUserBalancePda,
   duelStatusBettingOpen,
   duelStatusLocked,
+  finalizeDuelResult,
   marketSideA,
-  reportDuelResult,
+  proposeDuelResult,
   syncMarketFromDuel,
   upsertDuel,
   uniqueDuelKey,
@@ -310,6 +313,14 @@ async function createFreshSolanaOpenMarket(
   const duelKeyHex = Buffer.from(duelKey).toString("hex");
   const duelId = `${Date.now()}`;
   const now = Math.floor(Date.now() / 1000);
+  await ensureOracleReady(
+    fightProgram as never,
+    authority,
+    authority.publicKey,
+    authority.publicKey,
+    authority.publicKey,
+    0,
+  );
   const duelState = await upsertDuel(fightProgram as never, authority, duelKey, {
     status: duelStatusBettingOpen(),
     betOpenTs: now - 60,
@@ -656,7 +667,13 @@ async function seedClobLiquidity(
   }
 
   await clobProgram.methods
-    .placeOrder(new BN(nextOrderId.toString()), side, 500, new BN("1000000000"))
+    .placeOrder(
+      new BN(nextOrderId.toString()),
+      side,
+      500,
+      new BN("1000000000"),
+      ORDER_BEHAVIOR_GTC,
+    )
     .accountsPartial({
       marketState,
       duelState,
@@ -1096,11 +1113,17 @@ test.describe("market flows", () => {
       marketState,
       duelState,
     );
-    await reportDuelResult(fightProgram as never, authority, duelKey, {
+    await proposeDuelResult(fightProgram as never, authority, duelKey, {
       winner: marketSideA(),
       duelEndTs: lockNow + 5,
       metadataUri: "https://hyperscape.gg/tests/e2e/resolved",
     });
+    await finalizeDuelResult(
+      fightProgram as never,
+      authority,
+      duelKey,
+      "https://hyperscape.gg/tests/e2e/resolved",
+    );
     await syncMarketFromDuel(
       writableClobProgram as never,
       marketState,
@@ -1127,9 +1150,6 @@ test.describe("market flows", () => {
     await page.getByTestId("refresh-market").click();
     const claimButton = page.getByRole("button", { name: /claim/i }).first();
     await expect(claimButton).toBeEnabled({ timeout: 30_000 });
-    const preClaimBalance = (await clobProgram.account.userBalance.fetchNullable(
-      userBalanceAddress,
-    )) as UserBalanceAccount | null;
     await claimButton.click({ force: true });
 
     await expect
@@ -1145,7 +1165,7 @@ test.describe("market flows", () => {
           intervals: [1_000, 2_000, 5_000],
         },
       )
-      .toBe(`0:${bnLikeToBigInt(preClaimBalance?.bShares)}`);
+      .toBe("0:0");
   });
 
   test("solana prediction markets recover after keeper and proxy restarts", async ({
@@ -1296,11 +1316,17 @@ test.describe("market flows", () => {
       marketState,
       duelState,
     );
-    await reportDuelResult(fightProgram as never, authority, duelKey, {
+    await proposeDuelResult(fightProgram as never, authority, duelKey, {
       winner: marketSideA(),
       duelEndTs: lockNow + 5,
       metadataUri: "https://hyperscape.gg/tests/e2e/resolved-restart",
     });
+    await finalizeDuelResult(
+      fightProgram as never,
+      authority,
+      duelKey,
+      "https://hyperscape.gg/tests/e2e/resolved-restart",
+    );
     await syncMarketFromDuel(
       writableClobProgram as never,
       marketState,

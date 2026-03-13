@@ -1,19 +1,19 @@
 {
   "release_candidate_tag": "rc-2026-03-audit-handoff",
-  "freeze_generated_at_utc": "2026-03-13T07:51:04Z",
-  "source_commit": "06df64039fdd3593b25a63389a43a5463605b385",
+  "freeze_generated_at_utc": "2026-03-13T12:50:54Z",
+  "source_commit": "a0f36b6a7506885a545a7aa9d3e0cd36e2f2fc56",
   "abi_freeze": {
     "evm": [
       {
         "artifact": "gold_clob.abi.json",
         "path": "docs/release/abi/gold_clob.abi.json",
-        "sha256": "eb239ad80ebb9c05145e4848df8fe842ec234fd0f2f98b586d4f91139165b219",
+        "sha256": "113d8cb993d1c4a56509260cbc49bff713521244a84a182d41f1af943f085e86",
         "implementation_surface": "GoldClob.sol"
       },
       {
         "artifact": "duel_outcome_oracle.abi.json",
         "path": "docs/release/abi/duel_outcome_oracle.abi.json",
-        "sha256": "42cb046d85ae8855bee5b99b3124f43fe7b66b5c74083312862aa7a202544f50",
+        "sha256": "54facb16c174d4bc7612e2c8f7758f51e978c7883d504c67de0c8f808926fd9f",
         "implementation_surface": "DuelOutcomeOracle.sol"
       }
     ],
@@ -42,7 +42,12 @@
     "solana": {
       "deployment_registry_path": "packages/hyperbet-solana/deployments/contracts.json",
       "deployment_registry_sha256": "adfd84642ff7b2dbda4cf443c121c94e038364f548beeb073fcc0d7ffbb0a089",
-      "clusters": ["localnet", "devnet", "testnet", "mainnet-beta"]
+      "clusters": [
+        "localnet",
+        "devnet",
+        "testnet",
+        "mainnet-beta"
+      ]
     },
     "evm": {
       "status": "addresses are env/registry driven for release operations",
@@ -50,7 +55,7 @@
         "BSC_GOLD_CLOB_ADDRESS",
         "BASE_GOLD_CLOB_ADDRESS"
       ],
-      "avax_release_state": "fail-closed until canonical registry values are committed"
+      "avax_release_state": "launch blocked pending canonical registry values and staged-proof artifacts"
     }
   }
 }

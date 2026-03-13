@@ -163,7 +163,7 @@ export async function spawnBackground(
     env?: NodeJS.ProcessEnv;
     logFile: string;
   },
-): Promise<{ pid: number; stop: () => void }> {
+): Promise<{ pid: number; stop: (options?: { timeoutMs?: number }) => Promise<void> }> {
   mkdirSync(path.dirname(options.logFile), { recursive: true });
   writeFileSync(options.logFile, "");
   const logFd = openSync(options.logFile, "a");
@@ -176,17 +176,72 @@ export async function spawnBackground(
     closeSync(logFd);
     throw new Error(`failed to start background command: ${command}`);
   }
+  let logClosed = false;
+  const closeLog = () => {
+    if (logClosed) {
+      return;
+    }
+    logClosed = true;
+    closeSync(logFd);
+  };
+  const exitPromise = new Promise<void>((resolve) => {
+    child.once("exit", () => {
+      closeLog();
+      resolve();
+    });
+    child.once("error", () => {
+      closeLog();
+      resolve();
+    });
+  });
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  let stopPromise: Promise<void> | null = null;
   const pid = child.pid;
   child.unref();
   return {
     pid,
-    stop: () => {
-      try {
-        process.kill(pid, "SIGTERM");
-      } catch {
-        // Process already exited.
+    stop: async (stopOptions = {}) => {
+      if (stopPromise) {
+        return stopPromise;
       }
-      closeSync(logFd);
+
+      stopPromise = (async () => {
+        const timeoutMs = Math.max(1_000, stopOptions.timeoutMs ?? 10_000);
+
+        if (child.exitCode != null || child.signalCode != null) {
+          await exitPromise;
+          return;
+        }
+
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch {
+          await exitPromise;
+          return;
+        }
+
+        const exitedAfterTerm = await Promise.race([
+          exitPromise.then(() => true),
+          sleep(timeoutMs).then(() => false),
+        ]);
+        if (exitedAfterTerm) {
+          return;
+        }
+
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // Process already exited between timeout and escalation.
+        }
+
+        await Promise.race([exitPromise, sleep(2_000)]);
+        closeLog();
+      })();
+
+      return stopPromise;
     },
   };
 }

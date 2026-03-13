@@ -13,9 +13,11 @@ import {
   derivePriceLevelPda,
   deriveUserBalancePda,
   duelStatusLocked,
+  ensureOracleReady,
+  finalizeDuelResult,
   marketSideA,
   placeClobOrder,
-  reportDuelResult,
+  proposeDuelResult,
   SIDE_ASK,
   SIDE_BID,
   upsertDuel,
@@ -54,6 +56,7 @@ async function main() {
     goldClobMarketIdl as anchor.Idl,
     provider,
   ) as Program<any>;
+  await ensureOracleReady(fightProgram as never, authority);
 
   const treasury = Keypair.generate();
   const marketMaker = Keypair.generate();
@@ -129,7 +132,10 @@ async function main() {
   }) as typeof fetch;
 
   const { CrossChainMarketMaker } = await import("./index.ts");
-  const mm = new CrossChainMarketMaker();
+  const { createTestMarketMakerStateStore } = await import("./storage/index.ts");
+  const mm = new CrossChainMarketMaker({
+    stateStore: createTestMarketMakerStateStore(),
+  });
 
   await mm.marketMakeCycle();
   const solanaOrders = mm.getActiveOrders().filter((order) => order.chainKey === "solana");
@@ -192,11 +198,12 @@ async function main() {
     betCloseTs: nowSeconds - 300,
     duelStartTs: nowSeconds - 240,
   });
-  await reportDuelResult(fightProgram, authority, fixture.duelKey, {
+  await proposeDuelResult(fightProgram, authority, fixture.duelKey, {
     winner: marketSideA(),
     duelEndTs: nowSeconds + 300,
     seed: 77,
   });
+  await finalizeDuelResult(fightProgram, authority, fixture.duelKey);
 
   lifecycleStatus = "RESOLVED";
   duelPhase = "RESOLUTION";

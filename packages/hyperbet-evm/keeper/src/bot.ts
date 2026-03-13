@@ -42,6 +42,7 @@ import {
   findOrderPda,
   findPriceLevelPda,
   findUserBalancePda,
+  ORDER_BEHAVIOR_GTC,
   SIDE_ASK,
   SIDE_BID,
   readKeypair,
@@ -1320,6 +1321,7 @@ for (const method of [
   "upsertDuel",
   "cancelDuel",
   "proposeResult",
+  "challengeResult",
   "finalizeResult",
 ]) {
   if (!hasProgramMethod(fightProgram, method)) {
@@ -1744,7 +1746,12 @@ const ensureOracleReady = async (): Promise<void> => {
       `Bot wallet ${botKeypair.publicKey.toBase58()} is not oracle authority`,
     );
   }
-  if (!(config.reporter as PublicKey).equals(botKeypair.publicKey)) {
+  const configNeedsUpdate =
+    !(config.reporter as PublicKey).equals(botKeypair.publicKey) ||
+    !(config.finalizer as PublicKey).equals(botKeypair.publicKey) ||
+    !(config.challenger as PublicKey).equals(botKeypair.publicKey);
+  if (configNeedsUpdate) {
+    const disputeWindowSecs = asNum(config.disputeWindowSecs);
     await runWithRecovery(
       () =>
         fightProgram.methods
@@ -1753,7 +1760,7 @@ const ensureOracleReady = async (): Promise<void> => {
             botKeypair.publicKey,
             botKeypair.publicKey,
             botKeypair.publicKey,
-            new BN(0),
+            new BN(disputeWindowSecs),
           )
           .accountsPartial({
             authority: botKeypair.publicKey,
@@ -2296,6 +2303,7 @@ async function placeManagedClobOrder(
           side,
           price,
           new BN(amountLamports),
+          ORDER_BEHAVIOR_GTC,
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,

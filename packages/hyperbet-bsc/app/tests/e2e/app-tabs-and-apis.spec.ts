@@ -323,8 +323,32 @@ test.describe("app tabs and api coverage", () => {
       bscMarket?.marketRef == null ||
         /^[0-9a-f]{64}$/i.test(normalizeHexValue(bscMarket?.marketRef) || ""),
     ).toBe(true);
-    expect(["OPEN", "LOCKED", "RESOLVED", "CANCELLED", "PENDING", "UNKNOWN"])
-      .toContain(bscMarket?.lifecycleStatus);
+    expect([
+      "OPEN",
+      "LOCKED",
+      "PROPOSED",
+      "CHALLENGED",
+      "RESOLVED",
+      "CANCELLED",
+      "PENDING",
+      "UNKNOWN",
+    ]).toContain(bscMarket?.lifecycleStatus);
+    expect(
+      bscMarket?.metadata?.proposalId == null ||
+        typeof bscMarket.metadata.proposalId === "string",
+    ).toBe(true);
+    expect(
+      bscMarket?.metadata?.challengeWindowEndsAt == null ||
+        typeof bscMarket.metadata.challengeWindowEndsAt === "number",
+    ).toBe(true);
+    expect(
+      bscMarket?.metadata?.finalizedAt == null ||
+        typeof bscMarket.metadata.finalizedAt === "number",
+    ).toBe(true);
+    expect(
+      bscMarket?.metadata?.cancellationReason == null ||
+        typeof bscMarket.metadata.cancellationReason === "string",
+    ).toBe(true);
 
     await expect
       .poll(async () => {

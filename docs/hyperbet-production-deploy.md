@@ -5,24 +5,24 @@ This is the recommended production topology for the Hyperbet stack in this repo.
 Operator runbooks are in [docs/runbooks/README.md](runbooks/README.md).
 
 - Primary frontend (`packages/hyperbet-solana/app`): Cloudflare Pages (`hyperbet.win`)
-- Secondary frontend (`packages/hyperbet-bsc/app`): optional additional Pages project or subdomain
+- Secondary frontends (`packages/hyperbet-bsc/app`, `packages/hyperbet-avax/app`): dedicated Pages project or subdomain per chain
 - Primary betting API (`packages/hyperbet-solana/keeper`): Railway
-- Secondary betting API (`packages/hyperbet-bsc/keeper`): optional second Railway service if you split by chain
+- Secondary betting APIs (`packages/hyperbet-bsc/keeper`, `packages/hyperbet-avax/keeper`): dedicated Railway services if you split by chain
 - Live duel/stream source (`packages/server` or Vast duel stack): separate upstream that the keeper polls
 - DDoS/WAF/edge cache: Cloudflare proxy in front of the betting API
 - Contracts/state: Solana + EVM (configured by env vars below, proxied server-side)
 
-AVAX does not have a production frontend deployment path in this repo today. Until canonical AVAX deployment addresses are committed to the shared chain registry, AVAX production builds and keeper deploys should be treated as intentionally disabled.
+AVAX now has repo-backed Pages and keeper deployment workflows, but production rollout is still blocked until canonical AVAX deployment addresses are committed to the shared chain registry, staged proof artifacts are captured for the target environment, and the real AVAX governance/operator wallets are provisioned.
 
 ## Staging Rail
 
-The repo also supports a manual staging rail for Solana and BSC without
+The repo also supports a manual staging rail for Solana, BSC, and AVAX without
 changing the production topology:
 
 - staged Solana Pages + staged Solana keeper
 - staged BSC Pages + staged BSC keeper
+- staged AVAX Pages + staged AVAX keeper
 - external staged duel/stream source
-- no staged AVAX frontend path
 
 Manual staging deploys use the same workflows as production through
 `workflow_dispatch`:
@@ -31,6 +31,8 @@ Manual staging deploys use the same workflows as production through
 - `Deploy Hyperbet Solana Keeper`
 - `Deploy Hyperbet BSC Pages`
 - `Deploy Hyperbet BSC Keeper`
+- `Deploy Hyperbet AVAX Pages`
+- `Deploy Hyperbet AVAX Keeper`
 
 Select `environment=staging` when dispatching the relevant workflow.
 
@@ -50,9 +52,17 @@ Required staging vars are:
 - `HYPERBET_BSC_RAILWAY_STAGING_PROJECT_ID`
 - `HYPERBET_BSC_RAILWAY_STAGING_ENVIRONMENT_ID`
 - `HYPERBET_BSC_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+- `HYPERBET_AVAX_PAGES_STAGING_PROJECT_NAME`
+- `HYPERBET_AVAX_PAGES_STAGING_URL`
+- `HYPERBET_AVAX_KEEPER_STAGING_URL`
+- `HYPERBET_AVAX_KEEPER_STAGING_WS_URL`
+- `HYPERBET_AVAX_RAILWAY_STAGING_PROJECT_ID`
+- `HYPERBET_AVAX_RAILWAY_STAGING_ENVIRONMENT_ID`
+- `HYPERBET_AVAX_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+- `HYPERBET_AVAX_STAGING_CHAIN_ID`
+- `HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS`
 
-AVAX remains fail-closed for staging and production until canonical deployment
-truth exists in the shared chain registry.
+AVAX rollout remains blocked until canonical deployment truth exists in the shared chain registry and the effective AVAX wallet/signer set is in place. The staging/prod rail is present so proof and release packaging can use one consistent contract once those addresses are committed.
 
 ## 1) Deploy the keeper to Railway
 
@@ -78,7 +88,7 @@ Set these Railway variables at minimum:
 - `BSC_GOLD_CLOB_ADDRESS=...`
 - `BASE_RPC_URL=...`
 - `BASE_GOLD_CLOB_ADDRESS=...`
-- `AVAX_RPC_URL=...` only for local/testnet use or for future AVAX production enablement after canonical registry values exist
+- `AVAX_RPC_URL=...` for AVAX keeper/runtime support after canonical registry values exist
 - `BIRDEYE_API_KEY=...` if token-price proxying is enabled
 
 Persistence:
@@ -144,7 +154,7 @@ Frontend env vars (Cloudflare Pages):
 
 Do not set provider-keyed values in any `VITE_*RPC_URL` variable for production builds. The betting app build fails intentionally if a public RPC URL looks like a Helius / Alchemy / Infura / QuickNode / dRPC secret endpoint.
 
-Do not treat `packages/hyperbet-avax/deployments/contracts.json` as production deployment truth. The shared chain registry is the canonical production source, and AVAX remains fail-closed until that registry is populated with real addresses.
+Do not treat `packages/hyperbet-avax/deployments/contracts.json` as production deployment truth. The shared chain registry is the canonical production source, and AVAX rollout must stay blocked until that registry is populated with real addresses.
 
 Cloudflare Pages headers/SPA rules are already added in:
 
@@ -181,6 +191,7 @@ Use the manual `Staged Live Proof` workflow or the repo wrapper:
 bun run staged:proof -- --mode=read-only --target=all
 bun run staged:proof -- --mode=canary-write --target=solana
 bun run staged:proof -- --mode=canary-write --target=bsc
+bun run staged:proof -- --mode=canary-write --target=avax
 ```
 
 The proof wrapper captures:
@@ -191,9 +202,9 @@ The proof wrapper captures:
 - `/api/keeper/bot-health`
 - stream-state and duel-context payloads
 - Solana and BSC proxy proof
-- Solana and BSC canary tx hashes/signatures when `mode=canary-write`
+- Solana, BSC, and AVAX canary tx hashes/signatures when `mode=canary-write`
 - `verify:chains` output
-- AVAX fail-closed proof
+- AVAX staging env-audit output
 
 This is a manual operator proof rail. It should not be treated as complete
 until a real staged run passes end to end and the artifacts are reviewed.

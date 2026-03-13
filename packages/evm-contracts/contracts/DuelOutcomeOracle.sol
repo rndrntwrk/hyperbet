@@ -7,11 +7,13 @@ contract DuelOutcomeOracle is AccessControl {
     bytes32 public constant REPORTER_ROLE = keccak256("REPORTER_ROLE");
     bytes32 public constant FINALIZER_ROLE = keccak256("FINALIZER_ROLE");
     bytes32 public constant CHALLENGER_ROLE = keccak256("CHALLENGER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     error InvalidAdmin();
     error InvalidReporter();
     error InvalidFinalizer();
     error InvalidChallenger();
+    error InvalidPauser();
     error InvalidDuelKey();
     error InvalidParticipant();
     error DuplicateParticipants();
@@ -29,6 +31,11 @@ contract DuelOutcomeOracle is AccessControl {
     error NotProposed();
     error AlreadyChallenged();
     error DisputeWindowActive();
+    error InvalidDisputeWindow();
+    error DuelNotLocked();
+    error BettingWindowActive();
+    error ChallengeWindowExpired();
+    error OraclePaused();
 
     enum DuelStatus {
         NULL,
@@ -77,6 +84,7 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
     uint64 public immutable disputeWindowSeconds;
+    bool public oracleActionsPaused;
 
     mapping(bytes32 => DuelState) private duels;
     mapping(bytes32 => ResultProposal) public proposals;
@@ -111,22 +119,28 @@ contract DuelOutcomeOracle is AccessControl {
         bytes32 replayHash,
         string metadataUri
     );
+    event PauserUpdated(address indexed pauser, bool enabled);
+    event OraclePauseUpdated(bool paused, address indexed actor);
 
     constructor(
         address admin,
         address reporter,
         address finalizer,
         address challenger,
+        address pauser,
         uint64 disputeWindowSeconds_
     ) {
         if (admin == address(0)) revert InvalidAdmin();
         if (reporter == address(0)) revert InvalidReporter();
         if (finalizer == address(0)) revert InvalidFinalizer();
         if (challenger == address(0)) revert InvalidChallenger();
+        if (pauser == address(0)) revert InvalidPauser();
+        if (disputeWindowSeconds_ == 0) revert InvalidDisputeWindow();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REPORTER_ROLE, reporter);
         _grantRole(FINALIZER_ROLE, finalizer);
         _grantRole(CHALLENGER_ROLE, challenger);
+        _grantRole(PAUSER_ROLE, pauser);
         disputeWindowSeconds = disputeWindowSeconds_;
     }
 
@@ -157,6 +171,21 @@ contract DuelOutcomeOracle is AccessControl {
         }
     }
 
+    function setPauser(address pauser, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (pauser == address(0)) revert InvalidPauser();
+        if (enabled) {
+            _grantRole(PAUSER_ROLE, pauser);
+        } else {
+            _revokeRole(PAUSER_ROLE, pauser);
+        }
+        emit PauserUpdated(pauser, enabled);
+    }
+
+    function setOraclePaused(bool paused) external onlyRole(PAUSER_ROLE) {
+        oracleActionsPaused = paused;
+        emit OraclePauseUpdated(paused, msg.sender);
+    }
+
     function getDuel(bytes32 duelKey) external view returns (DuelState memory) {
         return duels[duelKey];
     }
@@ -175,6 +204,7 @@ contract DuelOutcomeOracle is AccessControl {
         string calldata metadataUri,
         DuelStatus status
     ) external onlyRole(REPORTER_ROLE) {
+        if (oracleActionsPaused) revert OraclePaused();
         if (duelKey == bytes32(0)) revert InvalidDuelKey();
         if (participantAHash == bytes32(0)) revert InvalidParticipant();
         if (participantBHash == bytes32(0)) revert InvalidParticipant();
@@ -204,6 +234,7 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
     function cancelDuel(bytes32 duelKey, string calldata metadataUri) external onlyRole(REPORTER_ROLE) {
+        if (oracleActionsPaused) revert OraclePaused();
         DuelState storage duel = duels[duelKey];
         if (duel.status == DuelStatus.NULL) revert DuelMissing();
         _requireSettleable(duel);
@@ -222,9 +253,12 @@ contract DuelOutcomeOracle is AccessControl {
         uint64 duelEndTs,
         string calldata metadataUri
     ) external onlyRole(REPORTER_ROLE) returns (bytes32 id) {
+        if (oracleActionsPaused) revert OraclePaused();
         DuelState storage duel = duels[duelKey];
         if (duel.status == DuelStatus.NULL) revert DuelMissing();
         _requireSettleable(duel);
+        if (duel.status != DuelStatus.LOCKED) revert DuelNotLocked();
+        if (block.timestamp < duel.betCloseTs) revert BettingWindowActive();
         if (winner != Side.A && winner != Side.B) revert InvalidWinner();
         if (duelEndTs < duel.betCloseTs) revert InvalidDuelEnd();
 
@@ -251,12 +285,14 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
     function challengeResult(bytes32 duelKey, string calldata metadataUri) external onlyRole(CHALLENGER_ROLE) {
+        if (oracleActionsPaused) revert OraclePaused();
         DuelState storage duel = duels[duelKey];
         if (duel.status != DuelStatus.PROPOSED) revert NotProposed();
         bytes32 id = duel.activeProposalId;
         ResultProposal storage proposal = proposals[id];
         if (!proposal.exists) revert ProposalMissing();
         if (proposal.challenged) revert AlreadyChallenged();
+        if (block.timestamp >= proposal.proposedAt + disputeWindowSeconds) revert ChallengeWindowExpired();
 
         proposal.challenged = true;
         duel.status = DuelStatus.CHALLENGED;
@@ -265,6 +301,7 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
     function finalizeResult(bytes32 duelKey, string calldata metadataUri) external onlyRole(FINALIZER_ROLE) {
+        if (oracleActionsPaused) revert OraclePaused();
         DuelState storage duel = duels[duelKey];
         if (duel.status != DuelStatus.PROPOSED) revert NotProposed();
 

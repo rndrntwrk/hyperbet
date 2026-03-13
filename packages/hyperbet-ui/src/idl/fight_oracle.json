@@ -1,5 +1,5 @@
 {
-  "address": "6Tx7s2UG4maFWakRFVi4GeecXJYyBXQF8f2vJdQShSpV",
+  "address": "6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD",
   "metadata": {
     "name": "fight_oracle",
     "version": "0.1.0",
@@ -8,7 +8,16 @@
   "instructions": [
     {
       "name": "cancel_duel",
-      "discriminator": [83, 124, 224, 237, 235, 44, 38, 57],
+      "discriminator": [
+        83,
+        124,
+        224,
+        237,
+        235,
+        44,
+        38,
+        57
+      ],
       "accounts": [
         {
           "name": "reporter",
@@ -22,7 +31,19 @@
               {
                 "kind": "const",
                 "value": [
-                  111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
                 ]
               }
             ]
@@ -35,7 +56,12 @@
             "seeds": [
               {
                 "kind": "const",
-                "value": [100, 117, 101, 108]
+                "value": [
+                  100,
+                  117,
+                  101,
+                  108
+                ]
               },
               {
                 "kind": "arg",
@@ -49,7 +75,170 @@
         {
           "name": "_duel_key",
           "type": {
-            "array": ["u8", 32]
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "metadata_uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "challenge_result",
+      "discriminator": [
+        62,
+        59,
+        36,
+        3,
+        171,
+        25,
+        241,
+        163
+      ],
+      "accounts": [
+        {
+          "name": "challenger",
+          "signer": true
+        },
+        {
+          "name": "oracle_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "duel_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  117,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "duel_key"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_duel_key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "metadata_uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "finalize_result",
+      "discriminator": [
+        217,
+        193,
+        113,
+        98,
+        13,
+        191,
+        186,
+        78
+      ],
+      "accounts": [
+        {
+          "name": "finalizer",
+          "signer": true
+        },
+        {
+          "name": "oracle_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "duel_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  117,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "duel_key"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_duel_key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
@@ -60,7 +249,16 @@
     },
     {
       "name": "initialize_oracle",
-      "discriminator": [144, 223, 131, 120, 196, 253, 181, 99],
+      "discriminator": [
+        144,
+        223,
+        131,
+        120,
+        196,
+        253,
+        181,
+        99
+      ],
       "accounts": [
         {
           "name": "authority",
@@ -75,7 +273,19 @@
               {
                 "kind": "const",
                 "value": [
-                  111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
                 ]
               }
             ]
@@ -83,7 +293,7 @@
         },
         {
           "name": "program",
-          "address": "6Tx7s2UG4maFWakRFVi4GeecXJYyBXQF8f2vJdQShSpV"
+          "address": "6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD"
         },
         {
           "name": "program_data"
@@ -101,8 +311,17 @@
       ]
     },
     {
-      "name": "report_result",
-      "discriminator": [195, 187, 161, 107, 75, 154, 102, 183],
+      "name": "propose_result",
+      "discriminator": [
+        7,
+        96,
+        132,
+        38,
+        128,
+        145,
+        133,
+        242
+      ],
       "accounts": [
         {
           "name": "reporter",
@@ -116,7 +335,19 @@
               {
                 "kind": "const",
                 "value": [
-                  111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
                 ]
               }
             ]
@@ -129,7 +360,12 @@
             "seeds": [
               {
                 "kind": "const",
-                "value": [100, 117, 101, 108]
+                "value": [
+                  100,
+                  117,
+                  101,
+                  108
+                ]
               },
               {
                 "kind": "arg",
@@ -143,7 +379,10 @@
         {
           "name": "_duel_key",
           "type": {
-            "array": ["u8", 32]
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
@@ -161,13 +400,19 @@
         {
           "name": "replay_hash",
           "type": {
-            "array": ["u8", 32]
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
           "name": "result_hash",
           "type": {
-            "array": ["u8", 32]
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
@@ -182,7 +427,16 @@
     },
     {
       "name": "update_oracle_config",
-      "discriminator": [83, 16, 11, 254, 57, 99, 156, 58],
+      "discriminator": [
+        83,
+        16,
+        11,
+        254,
+        57,
+        99,
+        156,
+        58
+      ],
       "accounts": [
         {
           "name": "authority",
@@ -196,7 +450,19 @@
               {
                 "kind": "const",
                 "value": [
-                  111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
                 ]
               }
             ]
@@ -211,12 +477,33 @@
         {
           "name": "reporter",
           "type": "pubkey"
+        },
+        {
+          "name": "finalizer",
+          "type": "pubkey"
+        },
+        {
+          "name": "challenger",
+          "type": "pubkey"
+        },
+        {
+          "name": "dispute_window_secs",
+          "type": "i64"
         }
       ]
     },
     {
       "name": "upsert_duel",
-      "discriminator": [174, 7, 139, 223, 70, 128, 251, 128],
+      "discriminator": [
+        174,
+        7,
+        139,
+        223,
+        70,
+        128,
+        251,
+        128
+      ],
       "accounts": [
         {
           "name": "reporter",
@@ -230,7 +517,19 @@
               {
                 "kind": "const",
                 "value": [
-                  111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
                 ]
               }
             ]
@@ -243,7 +542,12 @@
             "seeds": [
               {
                 "kind": "const",
-                "value": [100, 117, 101, 108]
+                "value": [
+                  100,
+                  117,
+                  101,
+                  108
+                ]
               },
               {
                 "kind": "arg",
@@ -261,19 +565,28 @@
         {
           "name": "duel_key",
           "type": {
-            "array": ["u8", 32]
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
           "name": "participant_a_hash",
           "type": {
-            "array": ["u8", 32]
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
           "name": "participant_b_hash",
           "type": {
-            "array": ["u8", 32]
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
@@ -306,25 +619,96 @@
   "accounts": [
     {
       "name": "DuelState",
-      "discriminator": [149, 213, 59, 165, 124, 116, 145, 120]
+      "discriminator": [
+        149,
+        213,
+        59,
+        165,
+        124,
+        116,
+        145,
+        120
+      ]
     },
     {
       "name": "OracleConfig",
-      "discriminator": [133, 196, 152, 50, 27, 21, 145, 254]
+      "discriminator": [
+        133,
+        196,
+        152,
+        50,
+        27,
+        21,
+        145,
+        254
+      ]
     }
   ],
   "events": [
     {
       "name": "DuelCancelled",
-      "discriminator": [138, 79, 20, 163, 207, 11, 111, 213]
+      "discriminator": [
+        138,
+        79,
+        20,
+        163,
+        207,
+        11,
+        111,
+        213
+      ]
     },
     {
       "name": "DuelResolved",
-      "discriminator": [224, 245, 214, 212, 111, 151, 50, 5]
+      "discriminator": [
+        224,
+        245,
+        214,
+        212,
+        111,
+        151,
+        50,
+        5
+      ]
     },
     {
       "name": "DuelUpserted",
-      "discriminator": [37, 241, 232, 195, 196, 76, 240, 120]
+      "discriminator": [
+        37,
+        241,
+        232,
+        195,
+        196,
+        76,
+        240,
+        120
+      ]
+    },
+    {
+      "name": "ResultChallenged",
+      "discriminator": [
+        221,
+        74,
+        171,
+        75,
+        157,
+        103,
+        164,
+        252
+      ]
+    },
+    {
+      "name": "ResultProposed",
+      "discriminator": [
+        216,
+        229,
+        56,
+        182,
+        48,
+        192,
+        53,
+        251
+      ]
     }
   ],
   "errors": [
@@ -350,38 +734,73 @@
     },
     {
       "code": 6004,
+      "name": "InvalidFinalizer",
+      "msg": "Finalizer pubkey cannot be the default address"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidChallenger",
+      "msg": "Challenger pubkey cannot be the default address"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidDisputeWindow",
+      "msg": "Dispute window must be non-negative"
+    },
+    {
+      "code": 6007,
       "name": "InvalidBetWindow",
       "msg": "Betting window is invalid"
     },
     {
-      "code": 6005,
+      "code": 6008,
       "name": "InvalidParticipants",
       "msg": "Participants must be present and distinct"
     },
     {
-      "code": 6006,
+      "code": 6009,
       "name": "InvalidLifecycleTransition",
       "msg": "Duel lifecycle transition is invalid"
     },
     {
-      "code": 6007,
+      "code": 6010,
       "name": "DuelKeyMismatch",
       "msg": "The provided duel key does not match the stored duel"
     },
     {
-      "code": 6008,
+      "code": 6011,
       "name": "DuelAlreadyFinalized",
       "msg": "The duel is already finalized"
     },
     {
-      "code": 6009,
+      "code": 6012,
       "name": "DuelAlreadyCancelled",
       "msg": "The duel was cancelled and cannot be resolved"
     },
     {
-      "code": 6010,
+      "code": 6013,
       "name": "InvalidWinner",
       "msg": "Winner must be side A or side B"
+    },
+    {
+      "code": 6014,
+      "name": "NotProposed",
+      "msg": "No active proposal exists"
+    },
+    {
+      "code": 6015,
+      "name": "AlreadyChallenged",
+      "msg": "Proposal already challenged"
+    },
+    {
+      "code": 6016,
+      "name": "ChallengeWindowExpired",
+      "msg": "Challenge window already expired"
+    },
+    {
+      "code": 6017,
+      "name": "DisputeWindowActive",
+      "msg": "Dispute window still active"
     }
   ],
   "types": [
@@ -393,7 +812,10 @@
           {
             "name": "duel_key",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
@@ -411,7 +833,19 @@
           {
             "name": "duel_key",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proposal_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
@@ -433,13 +867,19 @@
           {
             "name": "result_hash",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
             "name": "replay_hash",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
@@ -457,19 +897,28 @@
           {
             "name": "duel_key",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
             "name": "participant_a_hash",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
             "name": "participant_b_hash",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
@@ -511,14 +960,71 @@
           {
             "name": "result_hash",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
             "name": "replay_hash",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
+          },
+          {
+            "name": "active_proposal",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_winner",
+            "type": {
+              "defined": {
+                "name": "MarketSide"
+              }
+            }
+          },
+          {
+            "name": "pending_seed",
+            "type": "u64"
+          },
+          {
+            "name": "pending_result_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_replay_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_duel_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "pending_proposed_at",
+            "type": "i64"
+          },
+          {
+            "name": "pending_challenged",
+            "type": "bool"
           },
           {
             "name": "metadata_uri",
@@ -546,6 +1052,12 @@
             "name": "Locked"
           },
           {
+            "name": "Proposed"
+          },
+          {
+            "name": "Challenged"
+          },
+          {
             "name": "Resolved"
           },
           {
@@ -562,7 +1074,10 @@
           {
             "name": "duel_key",
             "type": {
-              "array": ["u8", 32]
+              "array": [
+                "u8",
+                32
+              ]
             }
           },
           {
@@ -623,8 +1138,114 @@
             "type": "pubkey"
           },
           {
+            "name": "finalizer",
+            "type": "pubkey"
+          },
+          {
+            "name": "challenger",
+            "type": "pubkey"
+          },
+          {
+            "name": "dispute_window_secs",
+            "type": "i64"
+          },
+          {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ResultChallenged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_key",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proposal_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "metadata_uri",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ResultProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_key",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proposal_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "winner",
+            "type": {
+              "defined": {
+                "name": "MarketSide"
+              }
+            }
+          },
+          {
+            "name": "seed",
+            "type": "u64"
+          },
+          {
+            "name": "duel_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "result_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "replay_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "metadata_uri",
+            "type": "string"
           }
         ]
       }

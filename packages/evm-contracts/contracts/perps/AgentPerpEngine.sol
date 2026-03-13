@@ -516,6 +516,7 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
             return;
         }
 
+        if (block.timestamp <= lastTimestamp) return;
         uint256 timeDelta = block.timestamp - lastTimestamp;
         if (timeDelta < 1) return;
 

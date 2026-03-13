@@ -208,6 +208,10 @@ function runReplayForGuard(
       state.toxicFills > 0
         ? Number((state.adverseSlippageBpsTotal / state.toxicFills).toFixed(2))
         : 0,
+    staleQuoteUptimeRatio: 0,
+    orphanOrderCount: 0,
+    reconciliationLagMs: 0,
+    unresolvedClaimBacklog: 0,
   };
 }
 

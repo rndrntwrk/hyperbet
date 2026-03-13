@@ -12,6 +12,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     using Address for address payable;
 
     bytes32 public constant MARKET_OPERATOR_ROLE = keccak256("MARKET_OPERATOR_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     uint8 public constant MARKET_KIND_DUEL_WINNER = 0;
     uint8 private constant BUY_SIDE = 1;
@@ -19,6 +20,11 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint16 private constant MAX_PRICE = 1000;
     uint256 private constant PRICE_BITMAP_WORDS = 4;
     uint256 public constant MAX_FEE_BPS = 10_000;
+    uint8 public constant ORDER_FLAG_GTC = 0x01;
+    uint8 public constant ORDER_FLAG_IOC = 0x02;
+    uint8 public constant ORDER_FLAG_POST_ONLY = 0x04;
+    uint8 public constant MAX_MATCH_ITERATIONS = 100;
+    uint8 private constant ORDER_FLAGS_GTC_POST_ONLY = ORDER_FLAG_GTC | ORDER_FLAG_POST_ONLY;
 
     DuelOutcomeOracle public duelOracle;
     address public treasury;
@@ -26,12 +32,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint256 public tradeTreasuryFeeBps;
     uint256 public tradeMarketMakerFeeBps;
     uint256 public winningsMarketMakerFeeBps;
+    bool public marketCreationPaused;
+    bool public orderPlacementPaused;
 
     error InvalidAdmin();
     error InvalidOperator();
     error InvalidOracle();
     error InvalidTreasury();
     error InvalidMarketMaker();
+    error InvalidPauser();
     error TreasuryFeeTooHigh();
     error MarketMakerFeeTooHigh();
     error TotalTradeFeeTooHigh();
@@ -43,8 +52,10 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error InvalidSide();
     error InvalidPrice();
     error InvalidAmountShape();
+    error InvalidOrderFlags();
     error MarketNotOpen();
     error BettingClosed();
+    error PostOnlyWouldCross();
     error NotMaker();
     error OrderInactive();
     error AlreadyFilled();
@@ -52,8 +63,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error MarketNotSettled();
     error InsufficientNativeValue();
     error CostTooLow();
-
-    uint8 public constant SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY = 2;
+    error MarketCreationIsPaused();
+    error OrderPlacementIsPaused();
 
     enum MarketStatus {
         NULL,
@@ -113,7 +124,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint128 remainingAmount;
         uint16 boundaryPrice;
         uint8 matchesCount;
+        uint256 executedCost;
         uint256 totalImprovement;
+        bool selfTradePrevented;
     }
 
     mapping(bytes32 => Market) private markets;
@@ -140,14 +153,13 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint16 price
     );
     event SelfTradePolicyTriggered(
-        bytes32 indexed marketKey,
-        uint64 indexed makerOrderId,
-        uint64 indexed takerOrderId,
-        address maker,
-        address taker,
-        uint8 policy,
-        uint16 price,
-        uint128 amount
+        bytes32 indexed marketRef,
+        address indexed makerAuthority,
+        address indexed takerAuthority,
+        uint64 makerOrderId,
+        uint64 takerOrderId,
+        string policy,
+        bool prevented
     );
     event OrderCancelled(bytes32 indexed marketKey, uint64 indexed orderId);
     event FeeConfigUpdated(
@@ -158,22 +170,28 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     event TreasuryUpdated(address indexed treasury);
     event MarketMakerUpdated(address indexed marketMaker);
     event OracleUpdated(address indexed oracle);
+    event PauserUpdated(address indexed pauser, bool enabled);
+    event MarketCreationPauseUpdated(bool paused, address indexed actor);
+    event OrderPlacementPauseUpdated(bool paused, address indexed actor);
 
     constructor(
         address admin,
         address marketOperator,
         address oracle,
         address treasury_,
-        address marketMaker_
+        address marketMaker_,
+        address pauser
     ) {
         if (admin == address(0)) revert InvalidAdmin();
         if (marketOperator == address(0)) revert InvalidOperator();
         if (oracle == address(0)) revert InvalidOracle();
         if (treasury_ == address(0)) revert InvalidTreasury();
         if (marketMaker_ == address(0)) revert InvalidMarketMaker();
+        if (pauser == address(0)) revert InvalidPauser();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MARKET_OPERATOR_ROLE, marketOperator);
+        _grantRole(PAUSER_ROLE, pauser);
 
         duelOracle = DuelOutcomeOracle(oracle);
         treasury = treasury_;
@@ -217,6 +235,26 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         emit MarketMakerUpdated(marketMaker_);
     }
 
+    function setPauser(address pauser, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (pauser == address(0)) revert InvalidPauser();
+        if (enabled) {
+            _grantRole(PAUSER_ROLE, pauser);
+        } else {
+            _revokeRole(PAUSER_ROLE, pauser);
+        }
+        emit PauserUpdated(pauser, enabled);
+    }
+
+    function setMarketCreationPaused(bool paused) external onlyRole(PAUSER_ROLE) {
+        marketCreationPaused = paused;
+        emit MarketCreationPauseUpdated(paused, msg.sender);
+    }
+
+    function setOrderPlacementPaused(bool paused) external onlyRole(PAUSER_ROLE) {
+        orderPlacementPaused = paused;
+        emit OrderPlacementPauseUpdated(paused, msg.sender);
+    }
+
     function setFeeConfig(
         uint256 tradeTreasuryFeeBps_,
         uint256 tradeMarketMakerFeeBps_,
@@ -247,6 +285,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         onlyRole(MARKET_OPERATOR_ROLE)
         returns (bytes32 key)
     {
+        if (marketCreationPaused) revert MarketCreationIsPaused();
         if (marketKind != MARKET_KIND_DUEL_WINNER) revert InvalidMarketKind();
         key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
@@ -284,11 +323,14 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint8 marketKind,
         uint8 side,
         uint16 price,
-        uint128 amount
+        uint128 amount,
+        uint8 orderFlags
     ) external payable nonReentrant {
+        if (orderPlacementPaused) revert OrderPlacementIsPaused();
         if (side != BUY_SIDE && side != SELL_SIDE) revert InvalidSide();
         if (price == 0 || price >= MAX_PRICE) revert InvalidPrice();
         if (amount == 0 || amount % MAX_PRICE != 0) revert InvalidAmountShape();
+        if (!_isValidOrderFlags(orderFlags)) revert InvalidOrderFlags();
 
         bytes32 key = marketKey(duelKey, marketKind);
         Market storage market = markets[key];
@@ -296,36 +338,33 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
         if (_syncMarketFromOracle(duelKey, key, market, duel) != MarketStatus.OPEN) revert MarketNotOpen();
         if (block.timestamp >= duel.betCloseTs) revert BettingClosed();
+        if (_isPostOnly(orderFlags) && _wouldCrossRestingBook(market, side, price)) revert PostOnlyWouldCross();
 
         uint64 takerOrderId = market.nextOrderId;
         market.nextOrderId += 1;
-
-        (uint256 tradeTreasuryFee, uint256 tradeMarketMakerFee, uint256 excess) =
-            _quoteOrder(side, price, amount, msg.value);
+        emit OrderPlaced(key, takerOrderId, msg.sender, side, price, amount);
 
         MatchProgress memory progress = side == BUY_SIDE
             ? _matchBuyOrder(key, market, price, amount, takerOrderId)
             : _matchSellOrder(key, market, price, amount, takerOrderId);
 
-        if (progress.remainingAmount > 0) {
+        uint256 restingCost = 0;
+        if (progress.remainingAmount > 0 && _isGoodTilCancelled(orderFlags) && !progress.selfTradePrevented) {
             _restOrder(key, market, side, price, uint128(progress.remainingAmount), takerOrderId);
+            restingCost = _quoteCost(side, price, uint128(progress.remainingAmount));
         } else {
-            orders[key][takerOrderId] = Order({
-                id: takerOrderId,
-                side: side,
-                price: price,
-                maker: msg.sender,
-                amount: amount,
-                filled: amount,
-                prevOrderId: 0,
-                nextOrderId: 0,
-                active: false
-            });
+            _persistInactiveTakerOrder(key, side, price, amount, amount - progress.remainingAmount, takerOrderId);
         }
 
+        uint256 tradeTreasuryFee =
+            (progress.executedCost * market.tradeTreasuryFeeBpsSnapshot) / MAX_FEE_BPS;
+        uint256 tradeMarketMakerFee =
+            (progress.executedCost * market.tradeMarketMakerFeeBpsSnapshot) / MAX_FEE_BPS;
+        uint256 requiredValue = restingCost + progress.executedCost + tradeTreasuryFee + tradeMarketMakerFee;
+        if (msg.value < requiredValue) revert InsufficientNativeValue();
         if (tradeTreasuryFee > 0) payable(treasury).sendValue(tradeTreasuryFee);
         if (tradeMarketMakerFee > 0) payable(marketMaker).sendValue(tradeMarketMakerFee);
-        uint256 traderRefund = progress.totalImprovement + excess;
+        uint256 traderRefund = msg.value - requiredValue;
         if (traderRefund > 0) payable(msg.sender).sendValue(traderRefund);
     }
 
@@ -415,19 +454,6 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         );
     }
 
-    function _quoteOrder(uint8 side, uint16 price, uint128 amount, uint256 value)
-        internal
-        view
-        returns (uint256 tradeTreasuryFee, uint256 tradeMarketMakerFee, uint256 excess)
-    {
-        uint256 cost = _quoteCost(side, price, amount);
-        tradeTreasuryFee = (cost * tradeTreasuryFeeBps) / MAX_FEE_BPS;
-        tradeMarketMakerFee = (cost * tradeMarketMakerFeeBps) / MAX_FEE_BPS;
-        uint256 totalRequired = cost + tradeTreasuryFee + tradeMarketMakerFee;
-        if (value < totalRequired) revert InsufficientNativeValue();
-        excess = value - totalRequired;
-    }
-
     function _quoteCost(uint8 side, uint16 price, uint128 amount) internal pure returns (uint256) {
         uint256 priceComponent = side == BUY_SIDE ? price : MAX_PRICE - price;
         uint256 quoteValue = uint256(amount) * priceComponent;
@@ -455,7 +481,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             progress.remainingAmount > 0
                 && progress.boundaryPrice <= limitPrice
                 && progress.boundaryPrice < MAX_PRICE
-                && progress.matchesCount < 100
+                && progress.matchesCount < MAX_MATCH_ITERATIONS
         ) {
             PriceLevel storage level = priceLevels[key][SELL_SIDE][progress.boundaryPrice];
             if (level.headOrderId == 0 || level.totalOpen == 0) {
@@ -481,14 +507,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             if (makerOrder.maker == msg.sender) {
                 emit SelfTradePolicyTriggered(
                     key,
-                    makerOrder.id,
-                    takerOrderId,
                     makerOrder.maker,
                     msg.sender,
-                    SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY,
-                    progress.boundaryPrice,
-                    fillAmount
+                    makerOrder.id,
+                    takerOrderId,
+                    "cancel-taker",
+                    true
                 );
+                progress.selfTradePrevented = true;
+                break;
             }
 
             makerOrder.filled += fillAmount;
@@ -502,6 +529,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             makerPosition.bStake += askStake;
             takerPosition.aShares += fillAmount;
             takerPosition.aStake += bidStake;
+            progress.executedCost += bidStake;
             market.totalAShares += fillAmount;
             market.totalBShares += fillAmount;
 
@@ -535,7 +563,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             progress.remainingAmount > 0
                 && progress.boundaryPrice >= limitPrice
                 && progress.boundaryPrice > 0
-                && progress.matchesCount < 100
+                && progress.matchesCount < MAX_MATCH_ITERATIONS
         ) {
             PriceLevel storage level = priceLevels[key][BUY_SIDE][progress.boundaryPrice];
             if (level.headOrderId == 0 || level.totalOpen == 0) {
@@ -561,14 +589,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             if (makerOrder.maker == msg.sender) {
                 emit SelfTradePolicyTriggered(
                     key,
-                    makerOrder.id,
-                    takerOrderId,
                     makerOrder.maker,
                     msg.sender,
-                    SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY,
-                    progress.boundaryPrice,
-                    fillAmount
+                    makerOrder.id,
+                    takerOrderId,
+                    "cancel-taker",
+                    true
                 );
+                progress.selfTradePrevented = true;
+                break;
             }
 
             makerOrder.filled += fillAmount;
@@ -582,6 +611,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             makerPosition.aStake += bidStake;
             takerPosition.bShares += fillAmount;
             takerPosition.bStake += askStake;
+            progress.executedCost += askStake;
             market.totalAShares += fillAmount;
             market.totalBShares += fillAmount;
 
@@ -629,7 +659,27 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         level.totalOpen += amount;
 
         _activatePrice(key, market, side, price);
-        emit OrderPlaced(key, orderId, msg.sender, side, price, amount);
+    }
+
+    function _persistInactiveTakerOrder(
+        bytes32 key,
+        uint8 side,
+        uint16 price,
+        uint128 amount,
+        uint128 filled,
+        uint64 orderId
+    ) internal {
+        orders[key][orderId] = Order({
+            id: orderId,
+            side: side,
+            price: price,
+            maker: msg.sender,
+            amount: amount,
+            filled: filled,
+            prevOrderId: 0,
+            nextOrderId: 0,
+            active: false
+        });
     }
 
     function _popHead(bytes32 key, Market storage market, uint8 side, uint16 price) internal {
@@ -774,6 +824,26 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         if (winner == DuelOutcomeOracle.Side.A) return Side.A;
         if (winner == DuelOutcomeOracle.Side.B) return Side.B;
         return Side.NONE;
+    }
+
+    function _isValidOrderFlags(uint8 orderFlags) internal pure returns (bool) {
+        return orderFlags == ORDER_FLAG_GTC || orderFlags == ORDER_FLAG_IOC || orderFlags == ORDER_FLAGS_GTC_POST_ONLY;
+    }
+
+    function _isGoodTilCancelled(uint8 orderFlags) internal pure returns (bool) {
+        return orderFlags == ORDER_FLAG_GTC || orderFlags == ORDER_FLAGS_GTC_POST_ONLY;
+    }
+
+    function _isPostOnly(uint8 orderFlags) internal pure returns (bool) {
+        return orderFlags == ORDER_FLAGS_GTC_POST_ONLY;
+    }
+
+    function _wouldCrossRestingBook(Market storage market, uint8 side, uint16 price) internal view returns (bool) {
+        if (side == BUY_SIDE) {
+            return market.bestAsk < MAX_PRICE && market.bestAsk <= price;
+        }
+
+        return market.bestBid > 0 && market.bestBid >= price;
     }
 
     receive() external payable {}

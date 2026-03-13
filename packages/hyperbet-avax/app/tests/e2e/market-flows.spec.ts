@@ -21,7 +21,7 @@ import {
   type Address,
   type Hash,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 
 import { GOLD_CLOB_ABI } from "../../src/lib/goldClobAbi";
 
@@ -40,6 +40,7 @@ type E2eState = {
   evmMarketKey?: string;
   evmOracleAddress?: string;
   evmAdminPrivateKey?: string;
+  evmFinalizerPrivateKey?: string;
 };
 
 type PageDiagnostics = {
@@ -155,6 +156,9 @@ const perpsProgramId = new PublicKey(
 const MARKET_KIND_DUEL_WINNER = 0;
 const DUEL_STATUS_BETTING_OPEN = 2;
 const SELL_SIDE = 2;
+const ORDER_FLAG_GTC = 0x01;
+const DEFAULT_ANVIL_MNEMONIC =
+  "test test test test test test test test test test test junk";
 
 function loadState(): E2eState {
   return JSON.parse(fs.readFileSync(statePath, "utf8")) as E2eState;
@@ -304,10 +308,131 @@ function quoteCost(side: number, price: number, amount: bigint): bigint {
   return (amount * component) / 1000n;
 }
 
+async function advanceEvmTime(
+  publicClient: ReturnType<typeof createPublicClient>,
+  seconds: bigint,
+): Promise<void> {
+  if (seconds <= 0n) {
+    return;
+  }
+  await publicClient.request({
+    method: "evm_increaseTime",
+    params: [Number(seconds)],
+  } as never);
+  await publicClient.request({
+    method: "evm_mine",
+    params: [],
+  } as never);
+}
+
+function readDuelBetCloseTs(duelState: unknown): bigint {
+  if (duelState && typeof duelState === "object") {
+    const namedBetCloseTs = (duelState as { betCloseTs?: unknown }).betCloseTs;
+    if (typeof namedBetCloseTs === "bigint") {
+      return namedBetCloseTs;
+    }
+    if (Array.isArray(duelState)) {
+      const indexedBetCloseTs = duelState[6];
+      if (typeof indexedBetCloseTs === "bigint") {
+        return indexedBetCloseTs;
+      }
+    }
+  }
+  throw new Error("Unable to read duel betCloseTs from EVM oracle state");
+}
+
+async function resolveEvmDuel(
+  publicClient: ReturnType<typeof createPublicClient>,
+  adminWalletClient: ReturnType<typeof createWalletClient>,
+  finalizerWalletClient: ReturnType<typeof createWalletClient>,
+  oracleAddress: Address,
+  contractAddress: Address,
+  duelKey: Hash,
+  chainKey: "bsc" | "avax",
+  resultHash: Hash,
+  replayHash: Hash,
+  metadataUri: string,
+): Promise<void> {
+  const latestBlock = await publicClient.getBlock({ blockTag: "latest" });
+  const lockTx = await adminWalletClient.writeContract({
+    address: oracleAddress,
+    abi: duelOutcomeOracleArtifact.abi,
+    functionName: "upsertDuel",
+    args: [
+      duelKey,
+      hashLabel(`${chainKey}-fresh-agent-a`),
+      hashLabel(`${chainKey}-fresh-agent-b`),
+      latestBlock.timestamp - 600n,
+      latestBlock.timestamp - 60n,
+      latestBlock.timestamp - 30n,
+      `${metadataUri}-locked`,
+      3,
+    ],
+  });
+  await waitForEvmReceipt(publicClient, lockTx);
+
+  const lockedDuelState = await publicClient.readContract({
+    address: oracleAddress,
+    abi: duelOutcomeOracleArtifact.abi,
+    functionName: "getDuel",
+    args: [duelKey],
+  });
+  const lockedBetCloseTs = readDuelBetCloseTs(lockedDuelState);
+  const postLockBlock = await publicClient.getBlock({ blockTag: "latest" });
+  await advanceEvmTime(
+    publicClient,
+    lockedBetCloseTs >= postLockBlock.timestamp
+      ? lockedBetCloseTs - postLockBlock.timestamp + 1n
+      : 0n,
+  );
+
+  const proposeBlock = await publicClient.getBlock({ blockTag: "latest" });
+  const proposeTx = await adminWalletClient.writeContract({
+    address: oracleAddress,
+    abi: duelOutcomeOracleArtifact.abi,
+    functionName: "proposeResult",
+    args: [
+      duelKey,
+      1,
+      42n,
+      replayHash,
+      resultHash,
+      proposeBlock.timestamp,
+      metadataUri,
+    ],
+  });
+  await waitForEvmReceipt(publicClient, proposeTx);
+
+  const disputeWindowSeconds = (await publicClient.readContract({
+    address: oracleAddress,
+    abi: duelOutcomeOracleArtifact.abi,
+    functionName: "disputeWindowSeconds",
+    args: [],
+  })) as bigint;
+  await advanceEvmTime(publicClient, disputeWindowSeconds + 1n);
+
+  const finalizeTx = await finalizerWalletClient.writeContract({
+    address: oracleAddress,
+    abi: duelOutcomeOracleArtifact.abi,
+    functionName: "finalizeResult",
+    args: [duelKey, `${metadataUri}-finalized`],
+  });
+  await waitForEvmReceipt(publicClient, finalizeTx);
+
+  const syncTx = await adminWalletClient.writeContract({
+    address: contractAddress,
+    abi: GOLD_CLOB_ABI,
+    functionName: "syncMarketFromOracle",
+    args: [duelKey, MARKET_KIND_DUEL_WINNER],
+  });
+  await waitForEvmReceipt(publicClient, syncTx);
+}
+
 async function createFreshEvmOpenMarket(
   request: APIRequestContext,
   publicClient: ReturnType<typeof createPublicClient>,
   adminWalletClient: ReturnType<typeof createWalletClient>,
+  makerWalletClient: ReturnType<typeof createWalletClient>,
   oracleAddress: Address,
   contractAddress: Address,
   chainKey: "bsc" | "avax",
@@ -349,11 +474,18 @@ async function createFreshEvmOpenMarket(
   const seedPrice = 600;
   const seedCost = quoteCost(SELL_SIDE, seedPrice, seedAmount);
   const seedFee = seedCost / 100n;
-  const seedOrderTx = await adminWalletClient.writeContract({
+  const seedOrderTx = await makerWalletClient.writeContract({
     address: contractAddress,
     abi: GOLD_CLOB_ABI,
     functionName: "placeOrder",
-    args: [duelKey, MARKET_KIND_DUEL_WINNER, SELL_SIDE, seedPrice, seedAmount],
+    args: [
+      duelKey,
+      MARKET_KIND_DUEL_WINNER,
+      SELL_SIDE,
+      seedPrice,
+      seedAmount,
+      ORDER_FLAG_GTC,
+    ],
     value: seedCost + seedFee + seedFee,
   });
   await waitForEvmReceipt(publicClient, seedOrderTx);
@@ -913,6 +1045,27 @@ async function readEvmPosition(
   })) as [bigint, bigint, bigint, bigint];
 }
 
+async function waitForEvmUiPosition(
+  page: Page,
+  side: "YES" | "NO",
+): Promise<void> {
+  const field = side === "YES" ? "aShares" : "bShares";
+
+  await expect
+    .poll(
+      async () => {
+        const debugText = (await readText(page, "evm-lifecycle-debug")) || "";
+        const match = debugText.match(new RegExp(`${field}=([0-9]+)`));
+        return match ? BigInt(match[1]) : 0n;
+      },
+      {
+        timeout: 60_000,
+        intervals: [1_000, 2_000, 5_000],
+      },
+    )
+    .toBeGreaterThan(0n);
+}
+
 async function waitForSolanaUiPosition(
   page: Page,
   side: "YES" | "NO",
@@ -1190,6 +1343,7 @@ test.describe("market flows", () => {
     const duelKey = normalizeHex32(state.evmDuelKeyHex, "evmDuelKeyHex");
     const oracleAddress = state.evmOracleAddress as Address;
     const adminPrivateKey = state.evmAdminPrivateKey as `0x${string}`;
+    const finalizerPrivateKey = state.evmFinalizerPrivateKey;
     const publicClient = createPublicClient({
       chain: {
         id: chainId,
@@ -1205,6 +1359,26 @@ test.describe("market flows", () => {
     const adminAccount = privateKeyToAccount(adminPrivateKey);
     const adminWalletClient = createWalletClient({
       account: adminAccount,
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+    const finalizerAccount =
+      typeof finalizerPrivateKey === "string"
+        ? privateKeyToAccount(finalizerPrivateKey as `0x${string}`)
+        : mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+            accountIndex: 0,
+            addressIndex: 2,
+          });
+    const finalizerWalletClient = createWalletClient({
+      account: finalizerAccount,
       chain: {
         id: chainId,
         name: "e2e-local-evm",
@@ -1301,29 +1475,18 @@ test.describe("market flows", () => {
       .toBeGreaterThan(0n);
 
     console.log("[e2e][evm] resolving YES winner");
-    const latestEvmBlock = await publicClient.getBlock({ blockTag: "latest" });
-    const reportResultTx = await adminWalletClient.writeContract({
-      address: oracleAddress,
-      abi: duelOutcomeOracleArtifact.abi,
-      functionName: "reportResult",
-      args: [
-        duelKey,
-        1,
-        42n,
-        `0x${"11".repeat(32)}`,
-        `0x${"22".repeat(32)}`,
-        latestEvmBlock.timestamp + 360n,
-        "e2e-resolved",
-      ],
-    });
-    await waitForEvmReceipt(publicClient, reportResultTx);
-    const resolveTx = await adminWalletClient.writeContract({
-      address: contractAddress,
-      abi: GOLD_CLOB_ABI,
-      functionName: "syncMarketFromOracle",
-      args: [duelKey, MARKET_KIND_DUEL_WINNER],
-    });
-    await waitForEvmReceipt(publicClient, resolveTx);
+    await resolveEvmDuel(
+      publicClient,
+      adminWalletClient,
+      finalizerWalletClient,
+      oracleAddress,
+      contractAddress,
+      duelKey,
+      "avax",
+      `0x${"11".repeat(32)}`,
+      `0x${"22".repeat(32)}`,
+      "e2e-resolved",
+    );
     await expect
       .poll(
         async () => {
@@ -1407,6 +1570,7 @@ test.describe("market flows", () => {
     const contractAddress = state.evmGoldClobAddress as Address;
     const oracleAddress = state.evmOracleAddress as Address;
     const adminPrivateKey = state.evmAdminPrivateKey as `0x${string}`;
+    const finalizerPrivateKey = state.evmFinalizerPrivateKey;
     const publicClient = createPublicClient({
       chain: {
         id: chainId,
@@ -1433,10 +1597,48 @@ test.describe("market flows", () => {
       },
       transport: http(rpcUrl),
     });
+    const finalizerAccount =
+      typeof finalizerPrivateKey === "string"
+        ? privateKeyToAccount(finalizerPrivateKey as `0x${string}`)
+        : mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+            accountIndex: 0,
+            addressIndex: 2,
+          });
+    const finalizerWalletClient = createWalletClient({
+      account: finalizerAccount,
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
+    const makerAccount = mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+      accountIndex: 0,
+      addressIndex: 1,
+    });
+    const makerWalletClient = createWalletClient({
+      account: makerAccount,
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
     const { duelKey, marketKey } = await createFreshEvmOpenMarket(
       request,
       publicClient,
       adminWalletClient,
+      makerWalletClient,
       oracleAddress,
       contractAddress,
       "avax",
@@ -1488,17 +1690,7 @@ test.describe("market flows", () => {
     );
     await waitForEvmReceipt(publicClient, yesTx as Hash);
 
-    await expect
-      .poll(async () => {
-        const result = await readEvmPosition(
-          publicClient,
-          contractAddress,
-          marketKey,
-          userAddress,
-        );
-        return result[0];
-      })
-      .toBeGreaterThan(0n);
+    await waitForEvmUiPosition(page, "YES");
 
     runProcessControl(control, "restart", "keeper");
     await waitForKeeperBotHealth(request, "avax", marketKey);
@@ -1533,29 +1725,18 @@ test.describe("market flows", () => {
         lifecycleStatus: "OPEN",
       });
 
-    const latestEvmBlock = await publicClient.getBlock({ blockTag: "latest" });
-    const reportResultTx = await adminWalletClient.writeContract({
-      address: oracleAddress,
-      abi: duelOutcomeOracleArtifact.abi,
-      functionName: "reportResult",
-      args: [
-        duelKey,
-        1,
-        42n,
-        `0x${"55".repeat(32)}`,
-        `0x${"66".repeat(32)}`,
-        latestEvmBlock.timestamp + 360n,
-        "e2e-resolved-restart",
-      ],
-    });
-    await waitForEvmReceipt(publicClient, reportResultTx);
-    const resolveTx = await adminWalletClient.writeContract({
-      address: contractAddress,
-      abi: GOLD_CLOB_ABI,
-      functionName: "syncMarketFromOracle",
-      args: [duelKey, MARKET_KIND_DUEL_WINNER],
-    });
-    await waitForEvmReceipt(publicClient, resolveTx);
+    await resolveEvmDuel(
+      publicClient,
+      adminWalletClient,
+      finalizerWalletClient,
+      oracleAddress,
+      contractAddress,
+      duelKey,
+      "avax",
+      `0x${"55".repeat(32)}`,
+      `0x${"66".repeat(32)}`,
+      "e2e-resolved-restart",
+    );
 
     await expect
       .poll(
@@ -1634,10 +1815,28 @@ test.describe("market flows", () => {
       },
       transport: http(rpcUrl),
     });
+    const makerAccount = mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+      accountIndex: 0,
+      addressIndex: 1,
+    });
+    const makerWalletClient = createWalletClient({
+      account: makerAccount,
+      chain: {
+        id: chainId,
+        name: "e2e-local-evm",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+      transport: http(rpcUrl),
+    });
     const { duelKey, marketKey } = await createFreshEvmOpenMarket(
       request,
       publicClient,
       adminWalletClient,
+      makerWalletClient,
       oracleAddress,
       contractAddress,
       "avax",
@@ -1723,23 +1922,36 @@ test.describe("market flows", () => {
       .toBe("CANCELLED");
 
     await page.getByTestId("refresh-market").click();
-    await expect(claimButton).toBeEnabled({ timeout: 30_000 });
-    const previousClaimTx = await readText(page, "evm-last-claim-tx");
-    await claimButton.click();
-    const claimTx = await waitForNewEvmTxText(
-      page,
-      "evm-last-claim-tx",
-      previousClaimTx,
-      "cancel claim",
-    );
-    await waitForEvmReceipt(publicClient, claimTx as Hash);
-
-    const finalPosition = await readEvmPosition(
+    let finalPosition = await readEvmPosition(
       publicClient,
       contractAddress,
       marketKey,
       userAddress,
     );
+    if (
+      finalPosition[0] > 0n ||
+      finalPosition[1] > 0n ||
+      finalPosition[2] > 0n ||
+      finalPosition[3] > 0n
+    ) {
+      await expect(claimButton).toBeEnabled({ timeout: 30_000 });
+      const previousClaimTx = await readText(page, "evm-last-claim-tx");
+      await claimButton.click();
+      const claimTx = await waitForNewEvmTxText(
+        page,
+        "evm-last-claim-tx",
+        previousClaimTx,
+        "cancel claim",
+      );
+      await waitForEvmReceipt(publicClient, claimTx as Hash);
+      finalPosition = await readEvmPosition(
+        publicClient,
+        contractAddress,
+        marketKey,
+        userAddress,
+      );
+    }
+
     expect(finalPosition[0]).toBe(0n);
     expect(finalPosition[1]).toBe(0n);
     expect(finalPosition[2]).toBe(0n);

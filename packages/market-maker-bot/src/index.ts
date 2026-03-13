@@ -7,6 +7,10 @@ import {
   type BettingEvmChain,
   type PredictionMarketLifecycleRecord,
   type PredictionMarketLifecycleStatus,
+  isPredictionMarketQuotableStatus,
+  normalizePredictionMarketDuelKeyHex as normalizePredictionMarketDuelKeyHexFromRegistry,
+  normalizePredictionMarketLifecycleRecord,
+  normalizePredictionMarketTimestamp,
   normalizeSolanaCluster,
   resolveBettingEvmRuntimeEnv,
   resolveBettingSolanaDeployment,
@@ -40,9 +44,17 @@ import {
   findMarketConfigPda,
   findMarketPda,
   findOrderPda,
+  ORDER_BEHAVIOR_GTC,
   findPriceLevelPda,
   findUserBalancePda,
 } from "./solana-helpers.ts";
+import {
+  createDefaultMarketMakerStateStore,
+  type ClaimBacklogInput,
+  type MarketMakerStateStore,
+  type ManagedOrderStatus,
+  type OrderRecord,
+} from "./storage/index.ts";
 
 dotenv.config();
 
@@ -51,16 +63,19 @@ const BUY_SIDE = 1;
 const SELL_SIDE = 2;
 const MAX_PRICE = 1000;
 const SHARE_UNIT_SIZE = 1_000n;
+const EVM_ORDER_FLAG_GTC = 0x01;
+const OUTBOX_LEASE_MS = 60_000;
+const CLAIM_BACKLOG_LEASE_MS = 60_000;
 
 const GOLD_CLOB_ABI = [
   "function marketKey(bytes32 duelKey, uint8 marketKind) view returns (bytes32)",
-  "function getMarket(bytes32 duelKey, uint8 marketKind) view returns (bool exists, bytes32 duelKeyRef, uint8 status, uint8 winner, uint64 nextOrderId, uint16 bestBid, uint16 bestAsk, uint128 totalAShares, uint128 totalBShares)",
+  "function getMarket(bytes32 duelKey, uint8 marketKind) view returns (bool exists, bytes32 duelKeyRef, uint8 status, uint8 winner, uint16 tradeTreasuryFeeBpsSnapshot, uint16 tradeMarketMakerFeeBpsSnapshot, uint16 winningsMarketMakerFeeBpsSnapshot, uint64 nextOrderId, uint16 bestBid, uint16 bestAsk, uint128 totalAShares, uint128 totalBShares)",
   "function positions(bytes32 marketKey, address user) view returns (uint128 aShares, uint128 bShares, uint128 aStake, uint128 bStake)",
   "function orders(bytes32 marketKey, uint64 orderId) view returns (uint64 id, uint8 side, uint16 price, address maker, uint128 amount, uint128 filled, uint64 prevOrderId, uint64 nextOrderId, bool active)",
   "function tradeTreasuryFeeBps() view returns (uint256)",
   "function tradeMarketMakerFeeBps() view returns (uint256)",
   "function feeBps() view returns (uint256)",
-  "function placeOrder(bytes32 duelKey, uint8 marketKind, uint8 side, uint16 price, uint128 amount) payable",
+  "function placeOrder(bytes32 duelKey, uint8 marketKind, uint8 side, uint16 price, uint128 amount, uint8 orderFlags) payable",
   "function cancelOrder(bytes32 duelKey, uint8 marketKind, uint64 orderId)",
   "function claim(bytes32 duelKey, uint8 marketKind)",
   "event OrderPlaced(bytes32 indexed marketKey, uint64 indexed orderId, address indexed maker, uint8 side, uint16 price, uint256 amount)",
@@ -138,6 +153,10 @@ type SolanaManagedOrder = {
   remainingRawAmount: bigint;
 };
 
+type CrossChainMarketMakerOptions = {
+  stateStore?: MarketMakerStateStore;
+};
+
 function readEnvBoolean(name: string, fallback: boolean): boolean {
   const raw = process.env[name]?.trim().toLowerCase();
   if (!raw) return fallback;
@@ -186,27 +205,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function normalizePredictionMarketDuelKeyHex(
   value: string | null | undefined,
 ): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim().toLowerCase();
-  if (/^[0-9a-f]{64}$/.test(trimmed)) return `0x${trimmed}`;
-  if (/^0x[0-9a-f]{64}$/.test(trimmed)) return trimmed;
-  return null;
-}
-
-function normalizeLifecycleStatus(
-  value: unknown,
-): PredictionMarketLifecycleStatus {
-  switch (value) {
-    case "PENDING":
-    case "OPEN":
-    case "LOCKED":
-    case "RESOLVED":
-    case "CANCELLED":
-    case "UNKNOWN":
-      return value;
-    default:
-      return "UNKNOWN";
-  }
+  return normalizePredictionMarketDuelKeyHexFromRegistry(value, { prefix: true });
 }
 
 function normalizePredictionMarketsResponse(
@@ -219,41 +218,9 @@ function normalizePredictionMarketsResponse(
   }
 
   const markets = candidate.markets
-    .map((entry): PredictionMarketLifecycleRecord | null => {
-      const record = asRecord(entry);
-      if (!record || typeof record.chainKey !== "string") {
-        return null;
-      }
-      const normalized: PredictionMarketLifecycleRecord = {
-        chainKey: record.chainKey as BettingChainKey,
-        duelKey: normalizePredictionMarketDuelKeyHex(
-          typeof record.duelKey === "string" ? record.duelKey : null,
-        ),
-        duelId: typeof record.duelId === "string" ? record.duelId : null,
-        marketId: typeof record.marketId === "string" ? record.marketId : null,
-        marketRef:
-          typeof record.marketRef === "string" ? record.marketRef : null,
-        lifecycleStatus: normalizeLifecycleStatus(record.lifecycleStatus),
-        winner:
-          record.winner === "A" || record.winner === "B" ? record.winner : "NONE",
-        betCloseTime:
-          typeof record.betCloseTime === "number" && Number.isFinite(record.betCloseTime)
-            ? record.betCloseTime
-            : null,
-        contractAddress:
-          typeof record.contractAddress === "string"
-            ? record.contractAddress
-            : null,
-        programId: typeof record.programId === "string" ? record.programId : null,
-        txRef: typeof record.txRef === "string" ? record.txRef : null,
-        syncedAt:
-          typeof record.syncedAt === "number" && Number.isFinite(record.syncedAt)
-            ? record.syncedAt
-            : null,
-        metadata: asRecord(record.metadata) ?? undefined,
-      };
-      return normalized;
-    })
+    .map((entry) =>
+      normalizePredictionMarketLifecycleRecord(entry, { duelKeyPrefix: true }),
+    )
     .filter((record): record is PredictionMarketLifecycleRecord => record != null);
 
   return {
@@ -263,16 +230,10 @@ function normalizePredictionMarketsResponse(
       ),
       duelId: typeof duel.duelId === "string" ? duel.duelId : null,
       phase: typeof duel.phase === "string" ? duel.phase : null,
-      betCloseTime:
-        typeof duel.betCloseTime === "number" && Number.isFinite(duel.betCloseTime)
-          ? duel.betCloseTime
-          : null,
+      betCloseTime: normalizePredictionMarketTimestamp(duel.betCloseTime),
     },
     markets,
-    updatedAt:
-      typeof candidate.updatedAt === "number" && Number.isFinite(candidate.updatedAt)
-        ? candidate.updatedAt
-        : null,
+    updatedAt: normalizePredictionMarketTimestamp(candidate.updatedAt),
   };
 }
 
@@ -642,11 +603,13 @@ export class CrossChainMarketMaker {
   private readonly config: MarketMakerConfig;
   private readonly evmRuntimes: EvmRuntime[];
   private readonly solanaRuntime: SolanaRuntime | null;
+  private readonly stateStore: MarketMakerStateStore;
   private readonly activeOrders: TrackedOrder[] = [];
   private readonly exposureByChain = new Map<BettingChainKey, { yes: number; no: number }>();
-  private readonly orderHashToSignature = new Map<string, string>();
   private readonly nextNonceByChain = new Map<BettingEvmChain, number>();
   private startupValidated = false;
+  private storageReady = false;
+  private stateRecovered = false;
   private cycleCount = 0;
   private solanaEnabled = MM_ENABLE_SOLANA;
   private solanaDisableReason: string | null = null;
@@ -663,13 +626,160 @@ export class CrossChainMarketMaker {
   private lastPredictionMarkets: PredictionMarketsResponse | null = null;
   private lastPredictionMarketsAt = 0;
 
-  constructor() {
+  constructor(options: CrossChainMarketMakerOptions = {}) {
     this.instanceId = (process.env.MM_INSTANCE_ID || "mm-1").trim() || "mm-1";
     this.config = buildMarketMakerConfig();
+    this.stateStore =
+      options.stateStore ?? createDefaultMarketMakerStateStore();
     this.evmRuntimes = BETTING_EVM_CHAIN_ORDER.map((chainKey) =>
       this.createEvmRuntime(chainKey),
     );
     this.solanaRuntime = this.createSolanaRuntime();
+  }
+
+  private async ensureStateStoreReady() {
+    if (this.storageReady) return;
+    await this.stateStore.ensureReady();
+    this.storageReady = true;
+    await this.refreshActiveOrdersFromStore();
+  }
+
+  private trackedOrderFromRecord(record: OrderRecord): TrackedOrder {
+    return {
+      orderId: record.orderId,
+      chainKey: record.chainKey as BettingChainKey,
+      duelKey: record.duelKey,
+      marketKey: record.marketKey,
+      side: record.side as typeof BUY_SIDE | typeof SELL_SIDE,
+      price: record.price,
+      amount: record.amount,
+      placedAt: record.placedAt,
+    };
+  }
+
+  private orderRecordFromTracked(
+    order: TrackedOrder,
+    input: {
+      status?: ManagedOrderStatus;
+      nonce?: number | null;
+      txSignature?: string | null;
+      lastSeenOnChainAt?: number | null;
+      lastReconciledAt?: number | null;
+      quarantineReason?: string | null;
+      metadata?: Record<string, unknown>;
+    } = {},
+  ): OrderRecord {
+    return {
+      orderKey: this.orderHash(order),
+      chainKey: order.chainKey,
+      duelKey: order.duelKey,
+      marketKey: order.marketKey,
+      side: order.side,
+      orderId: order.orderId,
+      price: order.price,
+      amount: order.amount,
+      placedAt: order.placedAt,
+      status: input.status ?? "OPEN",
+      nonce: input.nonce ?? null,
+      txSignature: input.txSignature ?? null,
+      lastSeenOnChainAt: input.lastSeenOnChainAt ?? null,
+      lastReconciledAt: input.lastReconciledAt ?? null,
+      quarantineReason: input.quarantineReason ?? null,
+      metadata: input.metadata ?? {},
+    };
+  }
+
+  private upsertActiveOrder(order: TrackedOrder) {
+    const index = this.activeOrders.findIndex(
+      (candidate) =>
+        candidate.chainKey === order.chainKey &&
+        candidate.duelKey === order.duelKey &&
+        candidate.side === order.side &&
+        candidate.orderId === order.orderId,
+    );
+    if (index >= 0) {
+      this.activeOrders[index] = order;
+      return;
+    }
+    this.activeOrders.push(order);
+  }
+
+  private async refreshActiveOrdersFromStore() {
+    const records = await this.stateStore.listActiveOrders();
+    this.activeOrders.length = 0;
+    for (const record of records) {
+      this.activeOrders.push(this.trackedOrderFromRecord(record));
+    }
+  }
+
+  private async persistTrackedOrder(
+    order: TrackedOrder,
+    input: {
+      eventType: string;
+      status?: ManagedOrderStatus;
+      nonce?: number | null;
+      txSignature?: string | null;
+      lastSeenOnChainAt?: number | null;
+      lastReconciledAt?: number | null;
+      quarantineReason?: string | null;
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    const record = this.orderRecordFromTracked(order, {
+      status: input.status,
+      nonce: input.nonce,
+      txSignature: input.txSignature,
+      lastSeenOnChainAt: input.lastSeenOnChainAt,
+      lastReconciledAt: input.lastReconciledAt,
+      quarantineReason: input.quarantineReason,
+      metadata: input.metadata,
+    });
+    await this.stateStore.upsertOrder(record);
+    await this.stateStore.appendOrderEvent(record.orderKey, input.eventType, {
+      status: record.status,
+      txSignature: record.txSignature,
+      nonce: record.nonce,
+      ...record.metadata,
+    });
+    if (record.status === "OPEN" || record.status === "ORPHANED") {
+      this.upsertActiveOrder(order);
+    } else {
+      this.removeTrackedOrder(order);
+    }
+  }
+
+  private async markTrackedOrderStatus(
+    order: TrackedOrder,
+    status: ManagedOrderStatus,
+    eventType: string,
+    updates: {
+      lastSeenOnChainAt?: number | null;
+      lastReconciledAt?: number | null;
+      txSignature?: string | null;
+      quarantineReason?: string | null;
+      metadata?: Record<string, unknown>;
+      amount?: number;
+      price?: number;
+    } = {},
+  ) {
+    await this.stateStore.markOrderStatus(this.orderHash(order), status, updates);
+    await this.stateStore.appendOrderEvent(this.orderHash(order), eventType, {
+      status,
+      ...updates.metadata,
+    });
+    if (status === "OPEN" || status === "ORPHANED") {
+      this.upsertActiveOrder({
+        ...order,
+        amount: updates.amount ?? order.amount,
+        price: updates.price ?? order.price,
+      });
+      return;
+    }
+    this.removeTrackedOrder(order);
+  }
+
+  private async markClaimBacklog(item: ClaimBacklogInput) {
+    await this.stateStore.upsertClaimBacklog(item);
   }
 
   private createSolanaRuntime(): SolanaRuntime | null {
@@ -969,6 +1079,7 @@ export class CrossChainMarketMaker {
   private async validateChainReadiness() {
     if (this.startupValidated) return;
     this.startupValidated = true;
+    await this.ensureStateStoreReady();
 
     await Promise.all(
       this.evmRuntimes.map(async (runtime) => {
@@ -1016,6 +1127,456 @@ export class CrossChainMarketMaker {
     await this.validateSolanaReadiness(true);
   }
 
+  private backlogKey(chainKey: BettingChainKey, duelKey: string, marketKey: string) {
+    return `${chainKey}:${duelKey}:${marketKey}`;
+  }
+
+  private async enqueueClaimBacklogForMarket(
+    chainKey: BettingChainKey,
+    duelKey: string,
+    marketKey: string,
+    payload: Record<string, unknown> = {},
+  ) {
+    await this.markClaimBacklog({
+      backlogKey: this.backlogKey(chainKey, duelKey, marketKey),
+      chainKey,
+      duelKey,
+      marketKey,
+      status: "PENDING",
+      nextAttemptAt: Date.now(),
+      payload,
+    });
+  }
+
+  private async inspectEvmTrackedOrder(
+    runtime: EvmRuntime,
+    order: TrackedOrder,
+  ): Promise<{ active: boolean; amount: number; price: number } | null> {
+    const onChain = await runtime.clob.orders(order.marketKey, order.orderId);
+    if (!Boolean(onChain.active)) {
+      return null;
+    }
+    const remaining = BigInt(onChain.amount) - BigInt(onChain.filled);
+    if (remaining <= 0n) {
+      return null;
+    }
+    return {
+      active: true,
+      amount: rawAmountToUnits(remaining),
+      price: Number(onChain.price),
+    };
+  }
+
+  private async reconcilePersistedOrder(
+    order: TrackedOrder,
+    predictionMarkets: PredictionMarketsResponse | null,
+  ) {
+    const lifecycleRecord =
+      predictionMarkets?.markets.find((market) => market.chainKey === order.chainKey) ??
+      null;
+    const now = Date.now();
+    if (!lifecycleRecord?.duelKey || lifecycleRecord.duelKey !== order.duelKey) {
+      await this.markTrackedOrderStatus(order, "QUARANTINED", "recovered_missing_market", {
+        quarantineReason: "missing-market",
+        lastReconciledAt: now,
+      });
+      return;
+    }
+
+    if (order.chainKey === "solana") {
+      const activeOrder = await this.getManagedSolanaOrder(order).catch(() => null);
+      if (!activeOrder) {
+        await this.markTrackedOrderStatus(order, "FILLED", "recovered_missing_order", {
+          lastReconciledAt: now,
+        });
+        return;
+      }
+      if (!isPredictionMarketQuotableStatus(lifecycleRecord.lifecycleStatus)) {
+        await this.cancelTrackedSolanaOrder(order, "recovered-lifecycle");
+        if (
+          lifecycleRecord.lifecycleStatus === "RESOLVED" ||
+          lifecycleRecord.lifecycleStatus === "CANCELLED"
+        ) {
+          await this.enqueueClaimBacklogForMarket(
+            "solana",
+            order.duelKey,
+            order.marketKey,
+            { source: "startup-recovery" },
+          );
+        }
+        return;
+      }
+      await this.markTrackedOrderStatus(order, "OPEN", "recovered_open_order", {
+        amount: activeOrder.remainingUnits,
+        price: activeOrder.trackedOrder.price,
+        lastSeenOnChainAt: now,
+        lastReconciledAt: now,
+      });
+      return;
+    }
+
+    const runtime = this.evmRuntimes.find(
+      (candidate) => candidate.chainKey === order.chainKey,
+    );
+    if (!runtime || !runtime.enabled) {
+      await this.markTrackedOrderStatus(order, "QUARANTINED", "recovered_runtime_disabled", {
+        quarantineReason: "runtime-disabled",
+        lastReconciledAt: now,
+      });
+      return;
+    }
+
+    const onChain = await this.inspectEvmTrackedOrder(runtime, order).catch(() => null);
+    if (!onChain?.active) {
+      await this.markTrackedOrderStatus(order, "FILLED", "recovered_missing_order", {
+        lastReconciledAt: now,
+      });
+      return;
+    }
+
+    if (!isPredictionMarketQuotableStatus(lifecycleRecord.lifecycleStatus)) {
+      await this.cancelTrackedOrder(runtime, order);
+      if (
+        lifecycleRecord.lifecycleStatus === "RESOLVED" ||
+        lifecycleRecord.lifecycleStatus === "CANCELLED"
+      ) {
+        await this.enqueueClaimBacklogForMarket(
+          runtime.chainKey,
+          order.duelKey,
+          order.marketKey,
+          { source: "startup-recovery" },
+        );
+      }
+      return;
+    }
+
+    await this.markTrackedOrderStatus(order, "OPEN", "recovered_open_order", {
+      amount: onChain.amount,
+      price: onChain.price,
+      lastSeenOnChainAt: now,
+      lastReconciledAt: now,
+    });
+  }
+
+  private async recoverDurableState(
+    predictionMarkets: PredictionMarketsResponse | null,
+  ) {
+    if (this.stateRecovered) return;
+    await this.refreshActiveOrdersFromStore();
+    for (const order of [...this.activeOrders]) {
+      await this.reconcilePersistedOrder(order, predictionMarkets);
+    }
+    this.stateRecovered = true;
+  }
+
+  private async sweepEvmOrphans(
+    runtime: EvmRuntime,
+    duelKey: string,
+    marketKey: string,
+    nextOrderId: bigint,
+  ) {
+    const cursorKey = `orphan:${runtime.chainKey}:${marketKey}`;
+    const cursor = await this.stateStore.getCursor(cursorKey);
+    const start = Math.max(1, Number(cursor?.cursorValue ?? "1"));
+    const end = Number(nextOrderId);
+    const now = Date.now();
+
+    for (let orderId = start; orderId < end; orderId += 1) {
+      const onChain = await runtime.clob.orders(marketKey, orderId);
+      if (!Boolean(onChain.active)) continue;
+      if (String(onChain.maker).toLowerCase() !== runtime.walletAddress.toLowerCase()) {
+        continue;
+      }
+      const tracked = this.activeOrders.find(
+        (candidate) =>
+          candidate.chainKey === runtime.chainKey &&
+          candidate.orderId === orderId &&
+          candidate.duelKey === duelKey,
+      );
+      if (tracked) continue;
+
+      const orphan: TrackedOrder = {
+        orderId,
+        chainKey: runtime.chainKey,
+        duelKey,
+        marketKey,
+        side: Number(onChain.side) as typeof BUY_SIDE | typeof SELL_SIDE,
+        price: Number(onChain.price),
+        amount: rawAmountToUnits(BigInt(onChain.amount) - BigInt(onChain.filled)),
+        placedAt: now,
+      };
+      const outboxId = await this.stateStore.enqueueOutbox({
+        topic: "cancel_orphan_evm_order",
+        status: "PENDING",
+        availableAt: now,
+        chainKey: runtime.chainKey,
+        duelKey,
+        marketKey,
+        orderKey: this.orderHash(orphan),
+        payload: {
+          orderId,
+          side: orphan.side,
+          reason: "orphan-sweep",
+        },
+      });
+      await this.persistTrackedOrder(orphan, {
+        eventType: "orphan_detected",
+        status: "ORPHANED",
+        lastSeenOnChainAt: now,
+        lastReconciledAt: now,
+        metadata: { outboxId },
+      });
+    }
+
+    await this.stateStore.setCursor(cursorKey, String(Math.max(end, start)), now);
+  }
+
+  private async sweepSolanaOrphans(
+    duelKey: string,
+    marketStatePda: PublicKey,
+    nextOrderId: bigint,
+  ) {
+    const runtime = this.solanaRuntime;
+    if (!this.solanaEnabled || !runtime) return;
+    const cursorKey = `orphan:solana:${marketStatePda.toBase58()}`;
+    const cursor = await this.stateStore.getCursor(cursorKey);
+    const start = BigInt(cursor?.cursorValue ?? "1");
+    const now = Date.now();
+
+    for (let orderId = start; orderId < nextOrderId; orderId += 1n) {
+      const orderPda = findOrderPda(runtime.marketProgramId, marketStatePda, orderId);
+      const orderAccount = await fetchAnchorAccount(runtime.marketProgram, "order", orderPda);
+      if (!orderAccount || !Boolean(orderAccount.active)) continue;
+      const maker = asPublicKey(orderAccount.maker).toBase58();
+      if (maker !== runtime.walletAddress) continue;
+      const tracked = this.activeOrders.find(
+        (candidate) =>
+          candidate.chainKey === "solana" &&
+          candidate.orderId === Number(orderId) &&
+          candidate.duelKey === duelKey,
+      );
+      if (tracked) continue;
+
+      const orphan: TrackedOrder = {
+        orderId: Number(orderId),
+        chainKey: "solana",
+        duelKey,
+        marketKey: marketStatePda.toBase58(),
+        side: asNumber(orderAccount.side) as typeof BUY_SIDE | typeof SELL_SIDE,
+        price: asNumber(orderAccount.price),
+        amount: rawAmountToUnits(asBigInt(orderAccount.amount) - asBigInt(orderAccount.filled)),
+        placedAt: now,
+      };
+      const outboxId = await this.stateStore.enqueueOutbox({
+        topic: "cancel_orphan_solana_order",
+        status: "PENDING",
+        availableAt: now,
+        chainKey: "solana",
+        duelKey,
+        marketKey: orphan.marketKey,
+        orderKey: this.orderHash(orphan),
+        payload: {
+          orderId: orphan.orderId,
+          side: orphan.side,
+          price: orphan.price,
+          reason: "orphan-sweep",
+        },
+      });
+      await this.persistTrackedOrder(orphan, {
+        eventType: "orphan_detected",
+        status: "ORPHANED",
+        lastSeenOnChainAt: now,
+        lastReconciledAt: now,
+        metadata: { outboxId },
+      });
+    }
+
+    await this.stateStore.setCursor(cursorKey, String(nextOrderId), now);
+  }
+
+  private async processOutbox() {
+    const items = await this.stateStore.leaseOutbox(
+      Date.now(),
+      20,
+      this.instanceId,
+      OUTBOX_LEASE_MS,
+    );
+    for (const item of items) {
+      try {
+        if (item.topic === "cancel_orphan_evm_order" && item.chainKey && item.orderKey) {
+          const runtime = this.evmRuntimes.find(
+            (candidate) => candidate.chainKey === item.chainKey,
+          );
+          const order = this.activeOrders.find(
+            (candidate) => this.orderHash(candidate) === item.orderKey,
+          );
+          if (runtime && order) {
+            await this.cancelTrackedOrder(runtime, order);
+          }
+        }
+        if (item.topic === "cancel_orphan_solana_order" && item.orderKey) {
+          const order = this.activeOrders.find(
+            (candidate) => this.orderHash(candidate) === item.orderKey,
+          );
+          if (order) {
+            await this.cancelTrackedSolanaOrder(order, "orphan-sweep");
+          }
+        }
+        await this.stateStore.completeOutbox(item.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await this.stateStore.failOutbox(item.id, message, Date.now() + 15_000);
+      }
+    }
+  }
+
+  private async sweepClaimBacklog(predictionMarkets: PredictionMarketsResponse | null) {
+    const items = await this.stateStore.leaseClaimBacklog(
+      Date.now(),
+      20,
+      this.instanceId,
+      CLAIM_BACKLOG_LEASE_MS,
+    );
+    for (const item of items) {
+      const attemptAt = Date.now();
+      try {
+        if (item.chainKey === "solana") {
+          const runtime = this.solanaRuntime;
+          if (!this.solanaEnabled || !runtime) {
+            throw new Error("solana-runtime-unavailable");
+          }
+          const duelState = findDuelStatePda(
+            runtime.fightOracleProgramId,
+            duelKeyHexToBytes(item.duelKey),
+          );
+          const marketStatePda = new PublicKey(item.marketKey);
+          const userBalancePda = findUserBalancePda(
+            runtime.marketProgramId,
+            marketStatePda,
+            runtime.wallet.publicKey,
+          );
+          const vaultPda = findClobVaultPda(runtime.marketProgramId, marketStatePda);
+          const claimed = await this.claimSolanaMarket(
+            item.duelKey,
+            duelState,
+            marketStatePda,
+            userBalancePda,
+            vaultPda,
+          );
+          if (!claimed) {
+            throw new Error("solana-claim-deferred");
+          }
+        } else {
+          const runtime = this.evmRuntimes.find(
+            (candidate) => candidate.chainKey === item.chainKey,
+          );
+          if (!runtime || !runtime.enabled) {
+            throw new Error("evm-runtime-unavailable");
+          }
+          const lifecycleRecord =
+            predictionMarkets?.markets.find((market) => market.chainKey === item.chainKey) ??
+            null;
+          if (
+            lifecycleRecord?.lifecycleStatus !== "RESOLVED" &&
+            lifecycleRecord?.lifecycleStatus !== "CANCELLED"
+          ) {
+            throw new Error("claim-not-ready");
+          }
+          const { tx } = await this.sendEvmTransaction(runtime, (nonce) =>
+            runtime.clob.claim(
+              item.duelKey,
+              EVM_MARKET_KIND_DUEL_WINNER,
+              { nonce },
+            ),
+          );
+          await tx.wait();
+        }
+        await this.stateStore.markClaimBacklogAttempt(item.backlogKey, {
+          status: "RESOLVED",
+          attempts: item.attempts + 1,
+          nextAttemptAt: attemptAt,
+          lastAttemptAt: attemptAt,
+          resolvedAt: attemptAt,
+          lastError: null,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const noopClaim =
+          message.toLowerCase().includes("nothing to claim") ||
+          message.toLowerCase().includes("already claimed");
+        if (noopClaim) {
+          await this.stateStore.markClaimBacklogAttempt(item.backlogKey, {
+            status: "RESOLVED",
+            attempts: item.attempts + 1,
+            nextAttemptAt: attemptAt,
+            lastAttemptAt: attemptAt,
+            resolvedAt: attemptAt,
+            lastError: null,
+          });
+          continue;
+        }
+        const nextAttemptAt =
+          message.includes("claim-not-ready") ||
+          message.includes("runtime-unavailable")
+            ? attemptAt + 15_000
+            : attemptAt + 30_000;
+        await this.stateStore.markClaimBacklogAttempt(item.backlogKey, {
+          status: "PENDING",
+          attempts: item.attempts + 1,
+          nextAttemptAt,
+          lastAttemptAt: attemptAt,
+          lastError: message,
+        });
+      }
+    }
+  }
+
+  private async sweepOrphans(predictionMarkets: PredictionMarketsResponse | null) {
+    for (const runtime of this.evmRuntimes) {
+      if (!runtime.enabled) continue;
+      const lifecycleRecord =
+        predictionMarkets?.markets.find((market) => market.chainKey === runtime.chainKey) ??
+        null;
+      if (!lifecycleRecord?.duelKey || !isPredictionMarketQuotableStatus(lifecycleRecord.lifecycleStatus)) {
+        continue;
+      }
+      const duelKey = lifecycleRecord.duelKey;
+      const marketKey = String(
+        lifecycleRecord.marketRef ||
+          (await runtime.clob.marketKey(duelKey, EVM_MARKET_KIND_DUEL_WINNER)),
+      );
+      const market = await runtime.clob.getMarket(
+        duelKey,
+        EVM_MARKET_KIND_DUEL_WINNER,
+      );
+      await this.sweepEvmOrphans(runtime, duelKey, marketKey, BigInt(market.nextOrderId));
+    }
+
+    const runtime = this.solanaRuntime;
+    const lifecycleRecord =
+      predictionMarkets?.markets.find((market) => market.chainKey === "solana") ?? null;
+    if (
+      !this.solanaEnabled ||
+      !runtime ||
+      !lifecycleRecord?.duelKey ||
+      !isPredictionMarketQuotableStatus(lifecycleRecord.lifecycleStatus)
+    ) {
+      return;
+    }
+    const duelState = findDuelStatePda(
+      runtime.fightOracleProgramId,
+      duelKeyHexToBytes(lifecycleRecord.duelKey),
+    );
+    const marketStatePda = findMarketPda(runtime.marketProgramId, duelState);
+    const marketState = await fetchAnchorAccount(runtime.marketProgram, "marketState", marketStatePda);
+    if (!marketState) return;
+    await this.sweepSolanaOrphans(
+      lifecycleRecord.duelKey,
+      marketStatePda,
+      asBigInt(marketState.nextOrderId, 0n),
+    );
+  }
+
   async marketMakeCycle() {
     if (!this.startupValidated) {
       await this.validateChainReadiness();
@@ -1027,6 +1588,10 @@ export class CrossChainMarketMaker {
       this.getDuelSignal(),
     ]);
 
+    await this.recoverDurableState(predictionMarkets);
+    await this.sweepOrphans(predictionMarkets);
+    await this.processOutbox();
+    await this.sweepClaimBacklog(predictionMarkets);
     await this.cancelStaleOrders();
 
     for (const runtime of this.evmRuntimes) {
@@ -1051,15 +1616,22 @@ export class CrossChainMarketMaker {
     }
 
     const duelKey = lifecycleRecord.duelKey;
-    if (lifecycleRecord.lifecycleStatus !== "OPEN") {
-      await this.cancelOrdersForMarket(runtime.chainKey, duelKey, "lifecycle");
-      return;
-    }
-
     const marketKey = String(
       lifecycleRecord.marketRef ||
         (await runtime.clob.marketKey(duelKey, EVM_MARKET_KIND_DUEL_WINNER)),
     );
+    if (!isPredictionMarketQuotableStatus(lifecycleRecord.lifecycleStatus)) {
+      await this.cancelOrdersForMarket(runtime.chainKey, duelKey, "lifecycle");
+      if (
+        lifecycleRecord.lifecycleStatus === "RESOLVED" ||
+        lifecycleRecord.lifecycleStatus === "CANCELLED"
+      ) {
+        await this.enqueueClaimBacklogForMarket(runtime.chainKey, duelKey, marketKey, {
+          source: "lifecycle-transition",
+        });
+      }
+      return;
+    }
     const market = await runtime.clob.getMarket(
       duelKey,
       EVM_MARKET_KIND_DUEL_WINNER,
@@ -1126,8 +1698,24 @@ export class CrossChainMarketMaker {
       return;
     }
 
-    await this.reconcileOrder(runtime, duelKey, marketKey, BUY_SIDE, plan);
-    await this.reconcileOrder(runtime, duelKey, marketKey, SELL_SIDE, plan);
+    await this.reconcileOrder(
+      runtime,
+      duelKey,
+      marketKey,
+      BUY_SIDE,
+      plan,
+      BigInt(market.tradeTreasuryFeeBpsSnapshot ?? 0n),
+      BigInt(market.tradeMarketMakerFeeBpsSnapshot ?? 0n),
+    );
+    await this.reconcileOrder(
+      runtime,
+      duelKey,
+      marketKey,
+      SELL_SIDE,
+      plan,
+      BigInt(market.tradeTreasuryFeeBpsSnapshot ?? 0n),
+      BigInt(market.tradeMarketMakerFeeBpsSnapshot ?? 0n),
+    );
   }
 
   private async reconcileOrder(
@@ -1136,6 +1724,8 @@ export class CrossChainMarketMaker {
     marketKey: string,
     side: typeof BUY_SIDE | typeof SELL_SIDE,
     plan: ReturnType<typeof buildQuotePlan>,
+    tradeTreasuryFeeBps: bigint,
+    tradeMarketMakerFeeBps: bigint,
   ) {
     const existing = this.activeOrders.filter(
       (order) =>
@@ -1177,27 +1767,29 @@ export class CrossChainMarketMaker {
     }
 
     const rawAmount = unitsToRawAmount(decision.targetUnits);
-    const [tradeTreasuryFeeBps, tradeMarketMakerFeeBps] = await Promise.all([
-      runtime.clob.tradeTreasuryFeeBps() as Promise<bigint>,
-      runtime.clob.tradeMarketMakerFeeBps() as Promise<bigint>,
-    ]);
     const cost = computeCost(side, decision.targetPrice, rawAmount);
     const nativeValue =
       cost +
       (cost * tradeTreasuryFeeBps) / 10_000n +
       (cost * tradeMarketMakerFeeBps) / 10_000n;
 
-    const tx = await runtime.clob.placeOrder(
-      duelKey,
-      EVM_MARKET_KIND_DUEL_WINNER,
-      side,
-      decision.targetPrice,
-      rawAmount,
-      {
-        value: nativeValue,
-        nonce: await this.nextRuntimeNonce(runtime),
-      },
+    const { tx, nonce } = await this.sendEvmTransaction(
+      runtime,
+      (runtimeNonce) =>
+        runtime.clob.placeOrder(
+          duelKey,
+          EVM_MARKET_KIND_DUEL_WINNER,
+          side,
+          decision.targetPrice,
+          rawAmount,
+          EVM_ORDER_FLAG_GTC,
+          {
+            value: nativeValue,
+            nonce: runtimeNonce,
+          },
+        ),
     );
+    const reservedNonce = Number(tx.nonce ?? nonce);
     const receipt = await tx.wait();
     const orderId = this.extractOrderId(receipt?.logs ?? [], marketKey);
     if (orderId == null) {
@@ -1215,8 +1807,14 @@ export class CrossChainMarketMaker {
       amount: decision.targetUnits,
       placedAt: Date.now(),
     };
-    this.activeOrders.push(trackedOrder);
-    this.orderHashToSignature.set(this.orderHash(trackedOrder), receipt?.hash ?? tx.hash);
+    await this.persistTrackedOrder(trackedOrder, {
+      eventType: "order_placed",
+      status: "OPEN",
+      nonce: reservedNonce,
+      txSignature: receipt?.hash ?? tx.hash,
+      lastSeenOnChainAt: Date.now(),
+      lastReconciledAt: Date.now(),
+    });
     console.log(
       `[${runtime.chainKey.toUpperCase()}] quote ${side === BUY_SIDE ? "BID" : "ASK"} @${decision.targetPrice} x${decision.targetUnits} order=${orderId}`,
     );
@@ -1255,28 +1853,65 @@ export class CrossChainMarketMaker {
   private async nextRuntimeNonce(runtime: EvmRuntime): Promise<number> {
     const cached = this.nextNonceByChain.get(runtime.chainKey);
     if (cached != null) {
-      this.nextNonceByChain.set(runtime.chainKey, cached + 1);
       return cached;
     }
     const fresh = await runtime.provider.getTransactionCount(
       runtime.walletAddress,
       "pending",
     );
-    this.nextNonceByChain.set(runtime.chainKey, fresh + 1);
+    this.nextNonceByChain.set(runtime.chainKey, fresh);
     return fresh;
   }
 
-  private async cancelTrackedOrder(runtime: EvmRuntime, order: TrackedOrder) {
+  private noteRuntimeNonceCommitted(runtime: EvmRuntime, nonce: number) {
+    const cached = this.nextNonceByChain.get(runtime.chainKey);
+    if (cached == null || nonce >= cached) {
+      this.nextNonceByChain.set(runtime.chainKey, nonce + 1);
+    }
+  }
+
+  private async refreshRuntimeNonce(runtime: EvmRuntime): Promise<number> {
+    const fresh = await runtime.provider.getTransactionCount(
+      runtime.walletAddress,
+      "pending",
+    );
+    this.nextNonceByChain.set(runtime.chainKey, fresh);
+    return fresh;
+  }
+
+  private async sendEvmTransaction<T>(
+    runtime: EvmRuntime,
+    buildTransaction: (nonce: number) => Promise<T>,
+  ): Promise<{ tx: T; nonce: number }> {
+    const nonce = await this.nextRuntimeNonce(runtime);
     try {
-      const tx = await runtime.clob.cancelOrder(
-        duelKeyHex(order.duelKey),
-        EVM_MARKET_KIND_DUEL_WINNER,
-        order.orderId,
-        { nonce: await this.nextRuntimeNonce(runtime) },
+      const tx = await buildTransaction(nonce);
+      this.noteRuntimeNonceCommitted(runtime, nonce);
+      return { tx, nonce };
+    } catch (error) {
+      await this.refreshRuntimeNonce(runtime);
+      throw error;
+    }
+  }
+
+  private async cancelTrackedOrder(runtime: EvmRuntime, order: TrackedOrder) {
+    let terminalStatus: ManagedOrderStatus = "CANCELLED";
+    let lastError: string | null = null;
+    let txSignature: string | null = null;
+    try {
+      const { tx } = await this.sendEvmTransaction(runtime, (nonce) =>
+        runtime.clob.cancelOrder(
+          duelKeyHex(order.duelKey),
+          EVM_MARKET_KIND_DUEL_WINNER,
+          order.orderId,
+          { nonce },
+        ),
       );
-      await tx.wait();
+      const receipt = await tx.wait();
+      txSignature = receipt?.hash ?? tx.hash ?? null;
     } catch (error) {
       const message = String((error as Error).message || "");
+      lastError = message;
       if (
         !message.includes("order inactive") &&
         !message.includes("already filled") &&
@@ -1286,8 +1921,15 @@ export class CrossChainMarketMaker {
           `[${runtime.chainKey.toUpperCase()}] cancel failed for order ${order.orderId}: ${message}`,
         );
       }
+      if (message.includes("order inactive") || message.includes("already filled")) {
+        terminalStatus = "FILLED";
+      }
     }
-    this.removeTrackedOrder(order);
+    await this.markTrackedOrderStatus(order, terminalStatus, "order_cancelled", {
+      txSignature,
+      lastReconciledAt: Date.now(),
+      metadata: lastError ? { cancelError: lastError } : undefined,
+    });
   }
 
   private removeTrackedOrder(order: TrackedOrder) {
@@ -1479,13 +2121,18 @@ export class CrossChainMarketMaker {
       if (typeof signature === "string") {
         this.lastSolanaTxSignature = signature;
       }
-      this.removeTrackedOrder(order);
+      await this.markTrackedOrderStatus(order, "CANCELLED", "order_cancelled", {
+        txSignature: typeof signature === "string" ? signature : null,
+        lastReconciledAt: Date.now(),
+      });
       console.log(
         `[SOLANA] cancelled ${order.side === BUY_SIDE ? "BID" : "ASK"} order ${order.orderId} (${reason})`,
       );
     } catch (error) {
       if (isSolanaIgnorableRaceError(error)) {
-        this.removeTrackedOrder(order);
+        await this.markTrackedOrderStatus(order, "FILLED", "order_disappeared", {
+          lastReconciledAt: Date.now(),
+        });
         return;
       }
       if (this.handleSolanaOperationalError(error, "cancel order")) {
@@ -1525,9 +2172,9 @@ export class CrossChainMarketMaker {
     marketStatePda: PublicKey,
     userBalancePda: PublicKey,
     vaultPda: PublicKey,
-  ) {
+  ): Promise<boolean> {
     const runtime = this.solanaRuntime;
-    if (!this.solanaEnabled || !runtime || !runtime.marketConfig) return;
+    if (!this.solanaEnabled || !runtime || !runtime.marketConfig) return false;
 
     const userBalance = await fetchAnchorAccount(
       runtime.marketProgram,
@@ -1538,7 +2185,7 @@ export class CrossChainMarketMaker {
     const yesShares = asBigInt(userBalance?.aShares);
     const noShares = asBigInt(userBalance?.bShares);
     if (yesShares <= 0n && noShares <= 0n) {
-      return;
+      return true;
     }
 
     try {
@@ -1565,9 +2212,10 @@ export class CrossChainMarketMaker {
       }
       this.exposureByChain.set("solana", { yes: 0, no: 0 });
       console.log(`[SOLANA] claimed resolved market ${duelKey}`);
+      return true;
     } catch (error) {
       if (this.handleSolanaOperationalError(error, "claim")) {
-        return;
+        return false;
       }
       throw error;
     }
@@ -1613,6 +2261,7 @@ export class CrossChainMarketMaker {
               side,
               price,
               new BN(rawAmount.toString()),
+              ORDER_BEHAVIOR_GTC,
             )
             .accountsPartial({
               marketState: marketStatePda,
@@ -1645,10 +2294,13 @@ export class CrossChainMarketMaker {
         amount: units,
         placedAt: Date.now(),
       };
-      this.activeOrders.push(trackedOrder);
-      if (typeof signature === "string") {
-        this.orderHashToSignature.set(this.orderHash(trackedOrder), signature);
-      }
+      await this.persistTrackedOrder(trackedOrder, {
+        eventType: "order_placed",
+        status: "OPEN",
+        txSignature: typeof signature === "string" ? signature : null,
+        lastSeenOnChainAt: Date.now(),
+        lastReconciledAt: Date.now(),
+      });
       console.log(
         `[SOLANA] quote ${side === BUY_SIDE ? "BID" : "ASK"} @${price} x${units} order=${orderId.toString()}`,
       );
@@ -1685,7 +2337,9 @@ export class CrossChainMarketMaker {
         ? await this.getManagedSolanaOrder(primaryOrder)
         : null;
     if (primaryOrder && !activeOrder) {
-      this.removeTrackedOrder(primaryOrder);
+      await this.markTrackedOrderStatus(primaryOrder, "FILLED", "order_disappeared", {
+        lastReconciledAt: Date.now(),
+      });
     }
 
     const now = Date.now();
@@ -1790,9 +2444,18 @@ export class CrossChainMarketMaker {
       return;
     }
 
-    if (lifecycleRecord.lifecycleStatus !== "OPEN") {
+    if (!isPredictionMarketQuotableStatus(lifecycleRecord.lifecycleStatus)) {
       await this.cancelSolanaOrdersForMarket(duelKey, "lifecycle");
-      if (lifecycleRecord.lifecycleStatus === "RESOLVED") {
+      if (
+        lifecycleRecord.lifecycleStatus === "RESOLVED" ||
+        lifecycleRecord.lifecycleStatus === "CANCELLED"
+      ) {
+        await this.enqueueClaimBacklogForMarket(
+          "solana",
+          duelKey,
+          marketStatePda.toBase58(),
+          { source: "lifecycle-transition" },
+        );
         await this.claimSolanaMarket(
           duelKey,
           duelState,

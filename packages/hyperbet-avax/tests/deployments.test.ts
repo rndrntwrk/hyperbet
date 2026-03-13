@@ -6,6 +6,7 @@ import {
   resolveBettingEvmDefaults,
   resolveBettingSolanaDeployment,
 } from "../deployments";
+import rawManifest from "../deployments/contracts.json";
 
 describe("betting deployment manifest", () => {
   test("normalizes build/runtime cluster aliases", () => {
@@ -34,5 +35,16 @@ describe("betting deployment manifest", () => {
 
     const mainnetDefaults = resolveBettingEvmDefaults("mainnet-beta");
     expect(mainnetDefaults.avax.networkKey).toBe("avax");
+  });
+
+  test("tracks governance metadata keys in the package-local manifest", () => {
+    expect((rawManifest as any).evm.avax).toHaveProperty("reporterAddress");
+    expect((rawManifest as any).evm.avax).toHaveProperty("finalizerAddress");
+    expect((rawManifest as any).evm.avax).toHaveProperty("challengerAddress");
+    expect((rawManifest as any).evm.avax).toHaveProperty("timelockAddress");
+    expect((rawManifest as any).evm.avax).toHaveProperty("multisigAddress");
+    expect((rawManifest as any).evm.avax).toHaveProperty(
+      "emergencyCouncilAddress",
+    );
   });
 });
