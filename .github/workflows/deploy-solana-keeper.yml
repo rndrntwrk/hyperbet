@@ -5,8 +5,9 @@ on:
     branches: [main]
     paths:
       - "packages/hyperbet-solana/keeper/**"
-      - "packages/market-maker-bot/src/**"
-      - "packages/market-maker-bot/package.json"
+      - "packages/hyperbet-chain-registry/**"
+      - "packages/hyperbet-mm-core/**"
+      - "packages/market-maker-bot/**"
       - "scripts/**"
       - ".github/actions/setup-hyperbet/**"
       - ".github/workflows/deploy-solana-keeper.yml"
@@ -79,7 +80,7 @@ jobs:
           printf '%s\n' "$changed_files"
 
           keeper_source_changed=false
-          if printf '%s\n' "$changed_files" | grep -Eq '^packages/hyperbet-solana/keeper/|^packages/market-maker-bot/'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^packages/hyperbet-solana/keeper/|^packages/hyperbet-chain-registry/|^packages/hyperbet-mm-core/|^packages/market-maker-bot/'; then
             keeper_source_changed=true
           fi
 
@@ -153,12 +154,9 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-      - name: Stage market-maker-bot into build context
+      - name: Stage keeper workspace context
         if: steps.keeper_changes.outputs.keeper_source_changed == 'true'
-        run: |
-          mkdir -p packages/hyperbet-solana/market-maker-bot/src
-          cp packages/market-maker-bot/package.json packages/hyperbet-solana/market-maker-bot/
-          cp -r packages/market-maker-bot/src/ packages/hyperbet-solana/market-maker-bot/src/
+        run: node --import tsx scripts/stage-deploy-workspace.ts --target=keeper:solana
 
       - name: Deploy keeper
         if: steps.keeper_changes.outputs.keeper_source_changed == 'true'

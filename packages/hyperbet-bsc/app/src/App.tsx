@@ -713,7 +713,11 @@ export function App() {
     activeChain === "bsc" || activeChain === "base" || activeChain === "avax"
       ? activeChain
       : "solana";
-  const { duel: lifecycleDuel, market: lifecycleMarket } = usePredictionMarketLifecycle(
+  const {
+    duel: lifecycleDuel,
+    market: lifecycleMarket,
+    refresh: refreshLifecycle,
+  } = usePredictionMarketLifecycle(
     lifecycleChainKey,
   );
   const streamSources = STREAM_URLS;
@@ -2009,6 +2013,7 @@ export function App() {
                       locale={locale}
                       lifecycleDuelOverride={lifecycleDuel}
                       lifecycleMarketOverride={lifecycleMarket}
+                      onLifecycleRefreshRequested={() => void refreshLifecycle()}
                     />
                   </Suspense>
                 </div>

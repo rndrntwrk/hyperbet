@@ -84,6 +84,7 @@ interface EvmBettingPanelProps {
   locale?: UiLocale;
   lifecycleDuelOverride?: PredictionMarketsDuelSnapshot | null;
   lifecycleMarketOverride?: PredictionMarketLifecycleRecord | null;
+  onLifecycleRefreshRequested?: (() => void | Promise<void>) | null;
 }
 
 function getEvmPanelCopy(locale: UiLocale) {
@@ -290,6 +291,7 @@ export function EvmBettingPanel({
   locale,
   lifecycleDuelOverride = null,
   lifecycleMarketOverride = null,
+  onLifecycleRefreshRequested = null,
 }: EvmBettingPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getEvmPanelCopy(resolvedLocale);
@@ -742,14 +744,16 @@ export function EvmBettingPanel({
 
   useEffect(() => {
     const handleMarketRefresh = () => {
-      void refreshLifecycle();
+      const refreshLifecycleSource =
+        onLifecycleRefreshRequested ?? refreshLifecycle;
+      void refreshLifecycleSource();
       void refreshData();
     };
     window.addEventListener("hyperbet:market-refresh", handleMarketRefresh);
     return () => {
       window.removeEventListener("hyperbet:market-refresh", handleMarketRefresh);
     };
-  }, [refreshData, refreshLifecycle]);
+  }, [onLifecycleRefreshRequested, refreshData, refreshLifecycle]);
 
   useEffect(() => {
     setOptimisticPosition(null);

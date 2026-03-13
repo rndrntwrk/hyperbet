@@ -6,6 +6,7 @@ on:
     paths:
       - "packages/hyperbet-solana/app/**"
       - "packages/hyperbet-ui/**"
+      - "packages/hyperbet-chain-registry/**"
       - "scripts/**"
       - ".github/actions/setup-hyperbet/**"
       - ".github/workflows/deploy-solana-pages.yml"
