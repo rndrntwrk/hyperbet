@@ -937,6 +937,57 @@
             }
           },
           {
+            "name": "active_proposal",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_winner",
+            "type": {
+              "defined": {
+                "name": "MarketSide"
+              }
+            }
+          },
+          {
+            "name": "pending_seed",
+            "type": "u64"
+          },
+          {
+            "name": "pending_result_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_replay_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_duel_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "pending_proposed_at",
+            "type": "i64"
+          },
+          {
+            "name": "pending_challenged",
+            "type": "bool"
+          },
+          {
             "name": "metadata_uri",
             "type": "string"
           },
@@ -960,6 +1011,12 @@
           },
           {
             "name": "Locked"
+          },
+          {
+            "name": "Proposed"
+          },
+          {
+            "name": "Challenged"
           },
           {
             "name": "Resolved"

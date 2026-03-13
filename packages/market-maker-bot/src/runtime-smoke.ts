@@ -227,10 +227,14 @@ async function main() {
   const oracle = (await oracleFactory.deploy(
     admin.address,
     reporter.address,
+    operator.address,
+    treasury.address,
+    0,
     { nonce: await nextNonce(admin.address) },
   )) as RuntimeContract;
   await oracle.waitForDeployment();
   const oracleReporter = oracle.connect(reporter) as RuntimeContract;
+  const oracleFinalizer = oracle.connect(operator) as RuntimeContract;
 
   const clobFactory = new ethers.ContractFactory(
     clobArtifact.abi,
@@ -335,19 +339,22 @@ async function main() {
       `${chain} quotes should cancel on lock`,
     );
 
-    await oracleReporter.reportResult(
-      duel,
-      WINNER_SIDE_A,
-      42,
-      resultHash("replay"),
-      resultHash("result"),
-      now + 180n,
-      `${chain}-resolved`,
-      { nonce: await nextNonce(reporter.address) },
-    );
-    await clobOperator.syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER, {
-      nonce: await nextNonce(operator.address),
-    });
+  await oracleReporter.proposeResult(
+    duel,
+    WINNER_SIDE_A,
+    42,
+    resultHash("replay"),
+    resultHash("result"),
+    now + 180n,
+    `${chain}-resolved`,
+    { nonce: await nextNonce(reporter.address) },
+  );
+  await oracleFinalizer.finalizeResult(duel, `${chain}-finalized`, {
+    nonce: await nextNonce(operator.address),
+  });
+  await clobOperator.syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER, {
+    nonce: await nextNonce(operator.address),
+  });
 
     const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
     const positionBefore = await clob.positions(marketKey, trader.address);

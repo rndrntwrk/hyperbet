@@ -943,6 +943,57 @@ export type GoldClobMarket = {
             }
           },
           {
+            "name": "activeProposal",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingWinner",
+            "type": {
+              "defined": {
+                "name": "marketSide"
+              }
+            }
+          },
+          {
+            "name": "pendingSeed",
+            "type": "u64"
+          },
+          {
+            "name": "pendingResultHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingReplayHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingDuelEndTs",
+            "type": "i64"
+          },
+          {
+            "name": "pendingProposedAt",
+            "type": "i64"
+          },
+          {
+            "name": "pendingChallenged",
+            "type": "bool"
+          },
+          {
             "name": "metadataUri",
             "type": "string"
           },
@@ -966,6 +1017,12 @@ export type GoldClobMarket = {
           },
           {
             "name": "locked"
+          },
+          {
+            "name": "proposed"
+          },
+          {
+            "name": "challenged"
           },
           {
             "name": "resolved"

@@ -301,7 +301,7 @@ fn duel_status_rank(status: DuelStatus) -> u8 {
 }
 
 fn proposal_id_for(duel_key: [u8; 32], result_hash: [u8; 32], replay_hash: [u8; 32]) -> [u8; 32] {
-    anchor_lang::solana_program::keccak::hashv(&[&duel_key, &result_hash, &replay_hash]).to_bytes()
+    solana_keccak_hasher::hashv(&[&duel_key, &result_hash, &replay_hash]).to_bytes()
 }
 
 #[derive(Accounts)]
