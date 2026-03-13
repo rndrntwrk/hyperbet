@@ -328,6 +328,56 @@ describe("GoldClob", function () {
     expect(claimReceipt?.status).to.equal(1);
   });
 
+  it("uses fee snapshots from market creation for claims even after fee updates", async function () {
+    const { clob, oracle, operator, reporter, admin, marketMaker, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-claim-fee-snapshot");
+
+    const openedAt = await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob.connect(operator).syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
+    const marketBeforeFeeChange = await clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
+    expect(marketBeforeFeeChange.winningsMarketMakerFeeBpsSnapshot).to.equal(200n);
+
+    await clob.connect(admin).setFeeConfig(0, 0, 5000);
+
+    const amount = 1000n;
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, amount, {
+        value: quoteCost(SELL_SIDE, 600, amount) + 20n,
+      });
+    await clob
+      .connect(traderB)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, amount, {
+        value: quoteCost(BUY_SIDE, 600, amount) + 20n,
+      });
+
+    await oracle
+      .connect(reporter)
+      .reportResult(
+        duel,
+        SIDE_A,
+        99,
+        ethers.keccak256(ethers.toUtf8Bytes("replay-snapshot")),
+        ethers.keccak256(ethers.toUtf8Bytes("result-snapshot")),
+        openedAt + 180n,
+        "resolved-snapshot",
+      );
+    await clob
+      .connect(operator)
+      .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
+
+    const mmBefore = await ethers.provider.getBalance(marketMaker.address);
+    await expectTxSuccess(clob.connect(traderB).claim(duel, MARKET_KIND_DUEL_WINNER));
+    const mmAfter = await ethers.provider.getBalance(marketMaker.address);
+    const expectedClaimFee = (amount * 200n) / 10_000n;
+    expect(mmAfter - mmBefore).to.equal(expectedClaimFee);
+  });
+
   it("clears losing trader state on first post-resolution claim and rejects repeated claims", async function () {
     const { clob, oracle, operator, reporter, traderA, traderB } =
       await deployFixture();
