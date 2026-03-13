@@ -92,6 +92,9 @@ describe("DuelOutcomeOracle", () => {
     const { oracle, governance, admin, other, outsider } = await deployFixture();
 
     await expect(oracle.connect(admin).setReporter(other.address, true)).to.be.reverted;
+    await expect(
+      oracle.connect(admin).grantRole(await oracle.REPORTER_ROLE(), other.address),
+    ).to.be.reverted;
 
     const payload = oracle.interface.encodeFunctionData("setReporter", [other.address, true]);
     const salt = ethers.keccak256(ethers.toUtf8Bytes("rotate-reporter"));

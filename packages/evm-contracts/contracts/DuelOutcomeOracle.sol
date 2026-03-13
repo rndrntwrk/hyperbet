@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract DuelOutcomeOracle is AccessControl {
     bytes32 public constant REPORTER_ROLE = keccak256("REPORTER_ROLE");
+    bytes32 public constant REPORTER_ROLE_ADMIN = keccak256("REPORTER_ROLE_ADMIN");
     address public governanceController;
 
     error InvalidAdmin();
@@ -81,6 +82,7 @@ contract DuelOutcomeOracle is AccessControl {
         if (reporter == address(0)) revert InvalidReporter();
         if (governanceController_ == address(0)) revert InvalidGovernanceController();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _setRoleAdmin(REPORTER_ROLE, REPORTER_ROLE_ADMIN);
         _grantRole(REPORTER_ROLE, reporter);
         governanceController = governanceController_;
     }
