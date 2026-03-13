@@ -4,6 +4,7 @@ import type {
   PredictionMarketLifecycleStatus,
   PredictionMarketWinner,
 } from "@hyperbet/chain-registry";
+import { isPredictionMarketQuotableStatus } from "@hyperbet/chain-registry";
 
 export interface MarketMakerConfig {
   targetSpreadBps: number;
@@ -404,7 +405,7 @@ export function buildRiskState(
     netExposure < 0 && sideImbalanceBps >= config.maxSideImbalanceBps;
 
   let reason: string | null = null;
-  if (snapshot.lifecycleStatus !== "OPEN") {
+  if (!isPredictionMarketQuotableStatus(snapshot.lifecycleStatus)) {
     reason = `market:${snapshot.lifecycleStatus.toLowerCase()}`;
   } else if (closingSoon) {
     reason = "bet-close-guard";
