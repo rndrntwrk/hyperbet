@@ -516,12 +516,12 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
             return;
         }
 
+        if (block.timestamp <= lastTimestamp) return;
         uint256 timeDelta = block.timestamp - lastTimestamp;
-        if (timeDelta == 0) return;
-
         int256 skew = int256(market.totalLongOI) - int256(market.totalShortOI);
-        int256 skewRatio = (skew * int256(ONE)) / int256(config.skewScale);
-        int256 fundingRateDelta = (skewRatio * int256(fundingVelocity) * int256(timeDelta)) / int256(ONE);
+        int256 fundingRateDelta =
+            (skew * int256(fundingVelocity) * int256(timeDelta)) /
+            int256(config.skewScale);
 
         market.currentFundingRate += fundingRateDelta;
         market.cumulativeFundingRate += fundingRateDelta;
@@ -543,8 +543,9 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
 
         uint256 timeDelta = block.timestamp - lastTimestamp;
         int256 skew = int256(market.totalLongOI) - int256(market.totalShortOI);
-        int256 skewRatio = (skew * int256(ONE)) / int256(config.skewScale);
-        int256 fundingRateDelta = (skewRatio * int256(fundingVelocity) * int256(timeDelta)) / int256(ONE);
+        int256 fundingRateDelta =
+            (skew * int256(fundingVelocity) * int256(timeDelta)) /
+            int256(config.skewScale);
 
         previewCurrentFundingRate += fundingRateDelta;
         previewCumulativeFundingRate += fundingRateDelta;
@@ -626,12 +627,6 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
         } else if (marginDelta > 0) {
             position.margin += uint256(marginDelta);
         }
-    }
-
-    function _debitMargin(Position storage position, uint256 amount) internal {
-        if (amount == 0) return;
-        if (amount > position.margin) revert Underwater();
-        position.margin -= amount;
     }
 
     function _creditMarginFromPool(MarketState storage market, Position storage position, uint256 profit) internal {
