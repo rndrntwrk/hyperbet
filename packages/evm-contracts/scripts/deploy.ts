@@ -140,6 +140,10 @@ async function main() {
     process.env.MARKET_OPERATOR_ADDRESS?.trim() || deployer.address;
   const reporterAddress =
     process.env.REPORTER_ADDRESS?.trim() || deployer.address;
+  const finalizerAddress =
+    process.env.FINALIZER_ADDRESS?.trim() || deployer.address;
+  const challengerAddress =
+    process.env.CHALLENGER_ADDRESS?.trim() || deployer.address;
   const goldTokenAddress = process.env.GOLD_TOKEN_ADDRESS?.trim() || "";
 
   if (!isValidAddress(adminAddress)) {
@@ -150,6 +154,12 @@ async function main() {
   }
   if (!isValidAddress(reporterAddress)) {
     throw new Error(`Invalid REPORTER_ADDRESS: ${reporterAddress}`);
+  }
+  if (!isValidAddress(finalizerAddress)) {
+    throw new Error(`Invalid FINALIZER_ADDRESS: ${finalizerAddress}`);
+  }
+  if (!isValidAddress(challengerAddress)) {
+    throw new Error(`Invalid CHALLENGER_ADDRESS: ${challengerAddress}`);
   }
   if (!isValidAddress(treasury)) {
     throw new Error(`Invalid TREASURY_ADDRESS: ${treasury}`);
@@ -166,11 +176,13 @@ async function main() {
       !process.env.ADMIN_ADDRESS ||
       !process.env.MARKET_OPERATOR_ADDRESS ||
       !process.env.REPORTER_ADDRESS ||
+      !process.env.FINALIZER_ADDRESS ||
+      !process.env.CHALLENGER_ADDRESS ||
       !process.env.TREASURY_ADDRESS ||
       !process.env.MARKET_MAKER_ADDRESS
     ) {
       throw new Error(
-        "Mainnet deployment requires ADMIN_ADDRESS, MARKET_OPERATOR_ADDRESS, REPORTER_ADDRESS, TREASURY_ADDRESS, and MARKET_MAKER_ADDRESS to be explicitly set",
+        "Mainnet deployment requires ADMIN_ADDRESS, MARKET_OPERATOR_ADDRESS, REPORTER_ADDRESS, FINALIZER_ADDRESS, CHALLENGER_ADDRESS, TREASURY_ADDRESS, and MARKET_MAKER_ADDRESS to be explicitly set",
       );
     }
   }

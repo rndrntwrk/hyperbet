@@ -346,6 +346,39 @@ describe("hyperbet-solana", () => {
     assert.deepStrictEqual(marketState.status, { locked: {} });
   });
 
+  it("rejects reproposal of an existing proposal id after challenge", async () => {
+    const duelKey = uniqueDuelKey("duplicate-proposal");
+    const now = Math.floor(Date.now() / 1000);
+    const replayHash = hashLabel("replay-hash");
+    const resultHash = hashLabel("result-hash");
+
+    await upsertDuel(fightProgram, authority, duelKey, {
+      status: duelStatusLocked(),
+      betOpenTs: now - 120,
+      betCloseTs: now - 10,
+      duelStartTs: now - 5,
+    });
+    await proposeDuelResult(fightProgram, authority, duelKey, {
+      winner: marketSideA(),
+      duelEndTs: now + 5,
+      replayHash,
+      resultHash,
+    });
+    await challengeDuelResult(fightProgram, authority, duelKey);
+
+    try {
+      await proposeDuelResult(fightProgram, authority, duelKey, {
+        winner: marketSideA(),
+        duelEndTs: now + 5,
+        replayHash,
+        resultHash,
+      });
+      assert.fail("reproposing a challenged proposal id should fail");
+    } catch (error: unknown) {
+      assert.ok(hasProgramError(error, "AlreadyChallenged"));
+    }
+  });
+
   it("rejects unauthorized finalization", async () => {
     const outsider = Keypair.generate();
     await airdrop(provider.connection, outsider.publicKey, 2);
