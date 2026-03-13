@@ -44,6 +44,7 @@ import {
   findMarketConfigPda,
   findMarketPda,
   findOrderPda,
+  ORDER_BEHAVIOR_GTC,
   findPriceLevelPda,
   findUserBalancePda,
 } from "./solana-helpers.ts";
@@ -2201,6 +2202,7 @@ export class CrossChainMarketMaker {
               side,
               price,
               new BN(rawAmount.toString()),
+              ORDER_BEHAVIOR_GTC,
             )
             .accountsPartial({
               marketState: marketStatePda,

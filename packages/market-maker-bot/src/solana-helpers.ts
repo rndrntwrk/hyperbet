@@ -3,6 +3,9 @@ import { PublicKey } from "@solana/web3.js";
 export const DUEL_WINNER_MARKET_KIND = 1;
 export const SIDE_BID = 1;
 export const SIDE_ASK = 2;
+export const ORDER_BEHAVIOR_GTC = 0;
+export const ORDER_BEHAVIOR_IOC = 1;
+export const ORDER_BEHAVIOR_POST_ONLY = 2;
 
 export function duelKeyHexToBytes(duelKeyHex: string): Uint8Array {
   const normalized = duelKeyHex.trim().toLowerCase().replace(/^0x/, "");

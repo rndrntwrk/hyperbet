@@ -31,6 +31,7 @@ import {
   deriveClobVaultPda,
   deriveMarketStatePda,
   initializeCanonicalMarket,
+  ORDER_BEHAVIOR_GTC,
   SIDE_ASK,
   SIDE_BID,
   deriveOrderPda,
@@ -38,8 +39,9 @@ import {
   deriveUserBalancePda,
   duelStatusBettingOpen,
   duelStatusLocked,
+  finalizeDuelResult,
   marketSideA,
-  reportDuelResult,
+  proposeDuelResult,
   syncMarketFromDuel,
   upsertDuel,
   uniqueDuelKey,
@@ -656,7 +658,13 @@ async function seedClobLiquidity(
   }
 
   await clobProgram.methods
-    .placeOrder(new BN(nextOrderId.toString()), side, 500, new BN("1000000000"))
+    .placeOrder(
+      new BN(nextOrderId.toString()),
+      side,
+      500,
+      new BN("1000000000"),
+      ORDER_BEHAVIOR_GTC,
+    )
     .accountsPartial({
       marketState,
       duelState,
@@ -1096,11 +1104,17 @@ test.describe("market flows", () => {
       marketState,
       duelState,
     );
-    await reportDuelResult(fightProgram as never, authority, duelKey, {
+    await proposeDuelResult(fightProgram as never, authority, duelKey, {
       winner: marketSideA(),
       duelEndTs: lockNow + 5,
       metadataUri: "https://hyperscape.gg/tests/e2e/resolved",
     });
+    await finalizeDuelResult(
+      fightProgram as never,
+      authority,
+      duelKey,
+      "https://hyperscape.gg/tests/e2e/resolved",
+    );
     await syncMarketFromDuel(
       writableClobProgram as never,
       marketState,
@@ -1296,11 +1310,17 @@ test.describe("market flows", () => {
       marketState,
       duelState,
     );
-    await reportDuelResult(fightProgram as never, authority, duelKey, {
+    await proposeDuelResult(fightProgram as never, authority, duelKey, {
       winner: marketSideA(),
       duelEndTs: lockNow + 5,
       metadataUri: "https://hyperscape.gg/tests/e2e/resolved-restart",
     });
+    await finalizeDuelResult(
+      fightProgram as never,
+      authority,
+      duelKey,
+      "https://hyperscape.gg/tests/e2e/resolved-restart",
+    );
     await syncMarketFromDuel(
       writableClobProgram as never,
       marketState,

@@ -15,6 +15,7 @@ import {
   findOracleConfigPda,
   findPriceLevelPda,
   findUserBalancePda,
+  ORDER_BEHAVIOR_GTC,
   readKeypair,
   SIDE_ASK,
 } from "./common";
@@ -252,6 +253,7 @@ async function main(): Promise<void> {
         new BN(
           (process.env.HYPERBET_SOLANA_STAGING_CANARY_ORDER_LAMPORTS ?? "1000000").trim(),
         ),
+        ORDER_BEHAVIOR_GTC,
       )
       .accountsPartial({
         marketState,

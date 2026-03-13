@@ -189,8 +189,8 @@ pub mod fight_oracle {
             ErrorCode::DuelAlreadyCancelled
         );
         require!(
-            duel_state.status != DuelStatus::Resolved,
-            ErrorCode::DuelAlreadyFinalized
+            duel_state.status == DuelStatus::Locked,
+            ErrorCode::InvalidLifecycleTransition
         );
         require!(
             duel_end_ts >= duel_state.bet_close_ts,

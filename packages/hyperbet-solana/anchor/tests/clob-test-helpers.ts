@@ -13,7 +13,10 @@ import {
 
 import { FightOracle } from "../target/types/fight_oracle";
 import { GoldClobMarket } from "../target/types/gold_clob_market";
-import { confirmSignatureByPolling } from "./test-anchor";
+import {
+  confirmSignatureByPolling,
+  sendVersionedTransactionWithLookupTable,
+} from "./test-anchor";
 
 const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
   "BPFLoaderUpgradeab1e11111111111111111111111",
@@ -22,6 +25,9 @@ const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
 export const DUEL_WINNER_MARKET_KIND = 1;
 export const SIDE_BID = 1;
 export const SIDE_ASK = 2;
+export const ORDER_BEHAVIOR_GTC = 0;
+export const ORDER_BEHAVIOR_IOC = 1;
+export const ORDER_BEHAVIOR_POST_ONLY = 2;
 const duelKeyCounters = new Map<string, number>();
 
 function u16Le(value: number): Buffer {
@@ -553,6 +559,7 @@ export async function placeClobOrder(
     side: number;
     price: number;
     amount: bigint | number;
+    orderBehavior?: number;
     remainingAccounts?: AccountMeta[];
   },
 ): Promise<{
@@ -579,7 +586,13 @@ export async function placeClobOrder(
   );
 
   let builder = program.methods
-    .placeOrder(toBn(args.orderId), args.side, args.price, toBn(args.amount))
+    .placeOrder(
+      toBn(args.orderId),
+      args.side,
+      args.price,
+      toBn(args.amount),
+      args.orderBehavior ?? ORDER_BEHAVIOR_GTC,
+    )
     .accountsPartial({
       marketState: args.marketState,
       duelState: args.duelState,
@@ -598,9 +611,75 @@ export async function placeClobOrder(
     builder = builder.remainingAccounts(args.remainingAccounts);
   }
 
-  const signature = await builder.signers([args.user]).rpc();
+  const instruction = await builder.instruction();
+  const uniqueAccountCount = new Set(
+    instruction.keys.map((accountMeta) => accountMeta.pubkey.toBase58()),
+  ).size;
+  const signature =
+    uniqueAccountCount > 32 || instruction.keys.length > 64
+      ? await sendVersionedTransactionWithLookupTable(
+          program.provider as anchor.AnchorProvider,
+          [instruction],
+          [args.user],
+        )
+      : await (
+          program.provider as anchor.AnchorProvider
+        ).sendAndConfirm(new anchor.web3.Transaction().add(instruction), [
+          args.user,
+        ]);
 
   return { userBalance, order, restingLevel, signature };
+}
+
+export async function continueClobOrder(
+  program: Program<GoldClobMarket>,
+  args: {
+    marketState: PublicKey;
+    duelState: PublicKey;
+    vault: PublicKey;
+    user: Keypair;
+    orderId: bigint | number;
+    side: number;
+    price: number;
+    remainingAccounts?: AccountMeta[];
+  },
+): Promise<{ order: PublicKey; restingLevel: PublicKey; signature: string }> {
+  const userBalance = deriveUserBalancePda(
+    program.programId,
+    args.marketState,
+    args.user.publicKey,
+  );
+  const order = deriveOrderPda(
+    program.programId,
+    args.marketState,
+    args.orderId,
+  );
+  const restingLevel = derivePriceLevelPda(
+    program.programId,
+    args.marketState,
+    args.side,
+    args.price,
+  );
+
+  let builder = program.methods
+    .continueOrder(toBn(args.orderId))
+    .accountsPartial({
+      marketState: args.marketState,
+      duelState: args.duelState,
+      userBalance,
+      order,
+      restingLevel,
+      vault: args.vault,
+      user: args.user.publicKey,
+      systemProgram: SystemProgram.programId,
+    });
+
+  if (args.remainingAccounts && args.remainingAccounts.length > 0) {
+    builder = builder.remainingAccounts(args.remainingAccounts);
+  }
+
+  const signature = await builder.signers([args.user]).rpc();
+  return { order, restingLevel, signature };
 }
 
 export async function cancelClobOrder(

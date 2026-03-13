@@ -7,7 +7,9 @@
  */
 
 export * from './cancelDuel.js';
+export * from './challengeResult.js';
+export * from './finalizeResult.js';
 export * from './initializeOracle.js';
-export * from './reportResult.js';
+export * from './proposeResult.js';
 export * from './updateOracleConfig.js';
 export * from './upsertDuel.js';
