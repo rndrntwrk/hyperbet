@@ -391,7 +391,7 @@ async function main(): Promise<void> {
 
   const initializeOracle = async () => {
     await fightProgram.methods
-      .initializeOracle()
+      .initializeOracle(authority.publicKey)
       .accountsPartial({
         authority: authority.publicKey,
         oracleConfig: oracleConfigPda,
@@ -426,6 +426,20 @@ async function main(): Promise<void> {
       `Oracle config authority mismatch. Expected ${authority.publicKey.toBase58()}, found ${oracleAuthority.toBase58()}. Use the oracle authority keypair for public e2e.`,
     );
   }
+
+  await fightProgram.methods
+    .updateOracleConfig(
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      new BN(0),
+    )
+    .accountsPartial({
+      authority: authority.publicKey,
+      oracleConfig: oracleConfigPda,
+    })
+    .rpc();
 
   const goldDecimals = numFromEnv(mergedEnv, "VITE_GOLD_DECIMALS", 6);
   const testnetMintOverride = mergedEnv.E2E_TESTNET_GOLD_MINT;

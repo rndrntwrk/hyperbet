@@ -8,6 +8,8 @@ import { ethers } from "ethers";
 
 import type { BettingEvmChain } from "@hyperbet/chain-registry";
 
+import { createTestMarketMakerStateStore } from "./storage/index.ts";
+
 const MARKET_KIND_DUEL_WINNER = 0;
 const DUEL_STATUS_BETTING_OPEN = 2;
 const DUEL_STATUS_LOCKED = 3;
@@ -316,7 +318,9 @@ async function main() {
   process.env[`${chainUpper}_DUEL_ORACLE_ADDRESS`] = await oracle.getAddress();
 
   const { CrossChainMarketMaker } = await import("./index.ts");
-  const mm = new CrossChainMarketMaker();
+  const mm = new CrossChainMarketMaker({
+    stateStore: createTestMarketMakerStateStore(),
+  });
 
   try {
     await mm.marketMakeCycle();
@@ -365,10 +369,16 @@ async function main() {
       DUEL_STATUS_LOCKED,
       { nonce: await nextNonce(reporter.address) },
     );
+    const lockedDuel = await oracle.getDuel(duel);
     const resolvedBlock = await provider.getBlock("latest");
-    const duelEndTs = BigInt(
+    const latestResolvedTs = BigInt(
       resolvedBlock?.timestamp ?? Math.floor(Date.now() / 1000),
     );
+    const duelBetCloseTs = BigInt(lockedDuel.betCloseTs);
+    const duelEndTs =
+      latestResolvedTs > duelBetCloseTs
+        ? latestResolvedTs
+        : duelBetCloseTs + 1n;
     await oracleReporter.proposeResult(
       duel,
       WINNER_SIDE_A,

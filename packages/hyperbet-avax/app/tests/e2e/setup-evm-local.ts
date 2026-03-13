@@ -29,6 +29,7 @@ type E2eState = Record<string, unknown> & {
   evmMarketKey?: string;
   evmOracleAddress?: string;
   evmAdminPrivateKey?: string;
+  evmFinalizerPrivateKey?: string;
   evmSeedNoPrice?: number;
   evmSeedYesPrice?: number;
   evmSeedOrderAmount?: string;
@@ -404,6 +405,7 @@ async function main(): Promise<void> {
     evmMarketKey: marketKey,
     evmOracleAddress: oracleAddress,
     evmAdminPrivateKey: adminPrivateKey,
+    evmFinalizerPrivateKey: finalizerAccount.getHdKey().privateKey,
     evmSeedNoPrice: seedNoOrderPrice,
     evmSeedYesPrice: seedYesOrderPrice,
     evmSeedOrderAmount: seedOrderAmountUi,

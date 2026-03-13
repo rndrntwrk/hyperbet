@@ -19,6 +19,9 @@ const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
 const DUEL_WINNER_MARKET_KIND = 1;
 export const SIDE_BID = 1;
 export const SIDE_ASK = 2;
+export const ORDER_BEHAVIOR_GTC = 0;
+export const ORDER_BEHAVIOR_IOC = 1;
+export const ORDER_BEHAVIOR_POST_ONLY = 2;
 
 export type SolanaRuntimeActor = {
     keypair: Keypair;
@@ -613,6 +616,7 @@ export class SolanaProgramRuntime {
         side: number;
         price: number;
         amount: bigint | number;
+        orderBehavior?: number;
         remainingAccounts?: anchor.web3.AccountMeta[];
     }): Promise<{
         signature: string;
@@ -643,6 +647,7 @@ export class SolanaProgramRuntime {
                 args.side,
                 args.price,
                 toBn(args.amount),
+                args.orderBehavior ?? ORDER_BEHAVIOR_GTC,
             )
             .accountsPartial({
                 marketState: args.market.marketState,

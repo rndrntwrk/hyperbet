@@ -42,6 +42,7 @@ import {
   findOrderPda,
   findPriceLevelPda,
   findUserBalancePda,
+  ORDER_BEHAVIOR_GTC,
   SIDE_ASK,
   SIDE_BID,
   readKeypair,
@@ -1312,7 +1313,9 @@ for (const method of [
   "updateOracleConfig",
   "upsertDuel",
   "cancelDuel",
-  "reportResult",
+  "proposeResult",
+  "challengeResult",
+  "finalizeResult",
 ]) {
   if (!hasProgramMethod(fightProgram, method)) {
     missingKeeperMethods.push(`fightOracle.${method}`);
@@ -1736,11 +1739,22 @@ const ensureOracleReady = async (): Promise<void> => {
       `Bot wallet ${botKeypair.publicKey.toBase58()} is not oracle authority`,
     );
   }
-  if (!(config.reporter as PublicKey).equals(botKeypair.publicKey)) {
+  const configNeedsUpdate =
+    !(config.reporter as PublicKey).equals(botKeypair.publicKey) ||
+    !(config.finalizer as PublicKey).equals(botKeypair.publicKey) ||
+    !(config.challenger as PublicKey).equals(botKeypair.publicKey);
+  if (configNeedsUpdate) {
+    const disputeWindowSecs = asNum(config.disputeWindowSecs);
     await runWithRecovery(
       () =>
         fightProgram.methods
-          .updateOracleConfig(botKeypair.publicKey, botKeypair.publicKey)
+          .updateOracleConfig(
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            new BN(disputeWindowSecs),
+          )
           .accountsPartial({
             authority: botKeypair.publicKey,
             oracleConfig: oracleConfigPda,
@@ -2282,6 +2296,7 @@ async function placeManagedClobOrder(
           side,
           price,
           new BN(amountLamports),
+          ORDER_BEHAVIOR_GTC,
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,
@@ -2870,7 +2885,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   await runWithRecovery(
     () =>
       fightProgram.methods
-        .reportResult(
+        .proposeResult(
           Array.from(duelKey),
           winnerSide === "A" ? ({ a: {} } as any) : ({ b: {} } as any),
           new BN(resolvedSeed),

@@ -462,18 +462,31 @@ export async function finalizeDuelResult(
 ): Promise<PublicKey> {
   const oracleConfig = deriveOracleConfigPda(program.programId);
   const duelState = deriveDuelStatePda(program.programId, duelKey);
+  let lastError: unknown = null;
 
-  await program.methods
-    .finalizeResult([...duelKey], metadataUri)
-    .accountsPartial({
-      finalizer: finalizer.publicKey,
-      oracleConfig,
-      duelState,
-    })
-    .signers([finalizer])
-    .rpc();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await program.methods
+        .finalizeResult([...duelKey], metadataUri)
+        .accountsPartial({
+          finalizer: finalizer.publicKey,
+          oracleConfig,
+          duelState,
+        })
+        .signers([finalizer])
+        .rpc();
+      return duelState;
+    } catch (error) {
+      lastError = error;
+      if (!hasProgramError(error, "DisputeWindowActive")) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
 
-  return duelState;
+  throw lastError;
+
 }
 
 export async function initializeCanonicalMarket(

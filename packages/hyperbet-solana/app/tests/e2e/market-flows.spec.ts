@@ -30,6 +30,7 @@ import {
   cancelDuel,
   deriveClobVaultPda,
   deriveMarketStatePda,
+  ensureOracleReady,
   initializeCanonicalMarket,
   ORDER_BEHAVIOR_GTC,
   SIDE_ASK,
@@ -312,6 +313,14 @@ async function createFreshSolanaOpenMarket(
   const duelKeyHex = Buffer.from(duelKey).toString("hex");
   const duelId = `${Date.now()}`;
   const now = Math.floor(Date.now() / 1000);
+  await ensureOracleReady(
+    fightProgram as never,
+    authority,
+    authority.publicKey,
+    authority.publicKey,
+    authority.publicKey,
+    0,
+  );
   const duelState = await upsertDuel(fightProgram as never, authority, duelKey, {
     status: duelStatusBettingOpen(),
     betOpenTs: now - 60,
@@ -1141,9 +1150,6 @@ test.describe("market flows", () => {
     await page.getByTestId("refresh-market").click();
     const claimButton = page.getByRole("button", { name: /claim/i }).first();
     await expect(claimButton).toBeEnabled({ timeout: 30_000 });
-    const preClaimBalance = (await clobProgram.account.userBalance.fetchNullable(
-      userBalanceAddress,
-    )) as UserBalanceAccount | null;
     await claimButton.click({ force: true });
 
     await expect
@@ -1159,7 +1165,7 @@ test.describe("market flows", () => {
           intervals: [1_000, 2_000, 5_000],
         },
       )
-      .toBe(`0:${bnLikeToBigInt(preClaimBalance?.bShares)}`);
+      .toBe("0:0");
   });
 
   test("solana prediction markets recover after keeper and proxy restarts", async ({

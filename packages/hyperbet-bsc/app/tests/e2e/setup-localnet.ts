@@ -45,6 +45,7 @@ const E2E_PERPS_MAX_ORACLE_STALENESS_SECONDS = 3_600;
 const DUEL_WINNER_MARKET_KIND = 1;
 const SIDE_BID = 1;
 const SIDE_ASK = 2;
+const ORDER_BEHAVIOR_GTC = 0;
 const E2E_TRADER_SEED = Uint8Array.from([
   88, 41, 190, 12, 77, 164, 231, 5, 199, 118, 43, 91, 16, 220, 58, 147, 9, 175,
   63, 204, 132, 54, 241, 28, 115, 67, 154, 210, 36, 143, 80, 11,
@@ -580,6 +581,20 @@ async function main(): Promise<void> {
     })
     .signers([authority])
     .rpc();
+  await fight.methods
+    .updateOracleConfig(
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      new BN(0),
+    )
+    .accountsPartial({
+      authority: authority.publicKey,
+      oracleConfig: oracleConfigPda,
+    })
+    .signers([authority])
+    .rpc();
 
   const existingResolvedDuel =
     await fight.account.duelState.fetchNullable(resolvedDuelPda);
@@ -606,9 +621,9 @@ async function main(): Promise<void> {
       .signers([authority])
       .rpc();
 
-    markStage("report resolved duel result");
+    markStage("propose resolved duel result");
     await fight.methods
-      .reportResult(
+      .proposeResult(
         [...resolvedDuelKey],
         { a: {} },
         new BN(42),
@@ -619,6 +634,19 @@ async function main(): Promise<void> {
       )
       .accountsPartial({
         reporter: authority.publicKey,
+        oracleConfig: oracleConfigPda,
+        duelState: resolvedDuelPda,
+      })
+      .signers([authority])
+      .rpc();
+    markStage("finalize resolved duel result");
+    await fight.methods
+      .finalizeResult(
+        [...resolvedDuelKey],
+        "https://hyperbet.local/e2e/resolved/final",
+      )
+      .accountsPartial({
+        finalizer: authority.publicKey,
         oracleConfig: oracleConfigPda,
         duelState: resolvedDuelPda,
       })
@@ -843,7 +871,13 @@ async function main(): Promise<void> {
   if (!existingFirstOrder) {
     markStage("seed first clob order");
     await clob.methods
-      .placeOrder(new BN(1), SIDE_ASK, 600, seededClobOrderAmount)
+      .placeOrder(
+        new BN(1),
+        SIDE_ASK,
+        600,
+        seededClobOrderAmount,
+        ORDER_BEHAVIOR_GTC,
+      )
       .accountsPartial({
         marketState: clobMarketState,
         duelState: currentDuelPda,
@@ -864,7 +898,13 @@ async function main(): Promise<void> {
   if (!existingSecondOrder) {
     markStage("seed second clob order");
     await clob.methods
-      .placeOrder(new BN(2), SIDE_BID, 400, seededClobOrderAmount)
+      .placeOrder(
+        new BN(2),
+        SIDE_BID,
+        400,
+        seededClobOrderAmount,
+        ORDER_BEHAVIOR_GTC,
+      )
       .accountsPartial({
         marketState: clobMarketState,
         duelState: currentDuelPda,

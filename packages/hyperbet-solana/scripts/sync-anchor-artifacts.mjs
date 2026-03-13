@@ -8,6 +8,7 @@ const anchorIdlDir = path.join(rootDir, "anchor", "target", "idl");
 const anchorTypesDir = path.join(rootDir, "anchor", "target", "types");
 const appIdlDir = path.join(rootDir, "app", "src", "idl");
 const keeperIdlDir = path.join(rootDir, "keeper", "src", "idl");
+const sharedUiIdlDir = path.join(rootDir, "..", "hyperbet-ui", "src", "idl");
 
 const programNames = [
   "fight_oracle",
@@ -23,6 +24,9 @@ for (const programName of programNames) {
 
   cpSync(sourceFile, path.join(appIdlDir, `${programName}.json`));
   cpSync(sourceFile, path.join(keeperIdlDir, `${programName}.json`));
+  if (existsSync(sharedUiIdlDir)) {
+    cpSync(sourceFile, path.join(sharedUiIdlDir, `${programName}.json`));
+  }
 
   const sourceTypeFile = path.join(anchorTypesDir, `${programName}.ts`);
   if (existsSync(sourceTypeFile)) {
@@ -32,5 +36,5 @@ for (const programName of programNames) {
 }
 
 console.log(
-  "[sync-anchor-artifacts] copied Anchor IDLs and generated types into app and keeper",
+  "[sync-anchor-artifacts] copied Anchor IDLs and generated types into app, keeper, and shared UI",
 );

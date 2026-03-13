@@ -705,6 +705,26 @@ async function finalizeOutcome(
         );
     } else {
         options.onStage?.("resolve");
+        const duelState = await runtime.fetchDuelState(market.duelState);
+        const duelStatus =
+            ((duelState?.status as Record<string, unknown> | null) ?? {}) as Record<
+                string,
+                unknown
+            >;
+        if ("bettingOpen" in duelStatus) {
+            const lockSignature = await runtime.lockDuel(
+                market,
+                `https://hyperbet.local/${preset.id}/locked`,
+            );
+            traces.push(
+                buildTrace("lock_duel", market, {
+                    actor: "Authority Reporter",
+                    ok: true,
+                    txRef: lockSignature,
+                    message: "duel locked before authoritative resolution",
+                }),
+            );
+        }
         settlementSignature = await runtime.reportResult({
             reporter: runtime.authority,
             duelKey: market.duelKey,
