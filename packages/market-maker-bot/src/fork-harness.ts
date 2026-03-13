@@ -33,6 +33,7 @@ export const FORK_ATTACK_SCENARIOS: ScenarioId[] = [
   "quote_stuffing_burst",
   "cancel_storm_griefing",
   "sybil_wash_trading",
+  "sybil_identity_churn",
 ];
 
 function parseBoolean(raw: string | undefined): boolean {

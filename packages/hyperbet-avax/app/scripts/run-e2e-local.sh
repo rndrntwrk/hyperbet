@@ -38,7 +38,7 @@ SOLANA_WS_PORT="${E2E_SOLANA_WS_PORT:-18900}"
 SOLANA_FAUCET_PORT="${E2E_SOLANA_FAUCET_PORT:-18901}"
 SOLANA_DYNAMIC_PORT_START="${E2E_SOLANA_DYNAMIC_PORT_START:-$((SOLANA_RPC_PORT + 100))}"
 SOLANA_DYNAMIC_PORT_END="${E2E_SOLANA_DYNAMIC_PORT_END:-$((SOLANA_DYNAMIC_PORT_START + 99))}"
-LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-/tmp/hyperbet-avax-e2e-ledger-${SOLANA_RPC_PORT}}"
+LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-$APP_DIR/.e2e-ledger-${SOLANA_RPC_PORT}}"
 SOLANA_RPC_URL="http://127.0.0.1:${SOLANA_RPC_PORT}"
 SOLANA_WS_URL="ws://127.0.0.1:${SOLANA_WS_PORT}"
 SOLANA_PROXY_PORT="${E2E_SOLANA_PROXY_PORT:-19898}"
@@ -54,6 +54,20 @@ ANVIL_STATE_INTERVAL="${E2E_EVM_STATE_INTERVAL:-1}"
 RUN_LOCK_DIR="$APP_DIR/.e2e-run.lock"
 RUN_LOCK_PID_FILE="$RUN_LOCK_DIR/pid"
 KEEPER_BOT_FLAG="${E2E_ENABLE_KEEPER_BOT:-true}"
+E2E_ARENA_WRITE_KEY="${E2E_ARENA_WRITE_KEY:-hyperbet-e2e-local-write-key}"
+
+has_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+grep_q() {
+  local pattern="$1"
+  if has_cmd rg; then
+    rg -q "$pattern"
+  else
+    grep -q "$pattern"
+  fi
+}
 
 VALIDATOR_PID=""
 ANVIL_PID=""
@@ -240,7 +254,7 @@ wait_for_solana_rpc() {
   for _ in {1..90}; do
     if curl -s -X POST "$SOLANA_RPC_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}' | rg -q '"blockhash"'; then
+      -d '{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}' | grep_q '"blockhash"'; then
       return 0
     fi
     sleep 1
@@ -294,7 +308,7 @@ wait_for_solana_proxy() {
   for _ in {1..90}; do
     if curl -s -X POST "$SOLANA_PROXY_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"getVersion"}' | rg -q '"solana-core"'; then
+      -d '{"jsonrpc":"2.0","id":1,"method":"getVersion"}' | grep_q '"solana-core"'; then
       return 0
     fi
     sleep 1
@@ -306,7 +320,7 @@ wait_for_anvil_rpc() {
   for _ in {1..90}; do
     if curl -s -X POST "$ANVIL_RPC_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' | rg -q '"result"'; then
+      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' | grep_q '"result"'; then
       return 0
     fi
     sleep 1
@@ -336,7 +350,7 @@ wait_for_app() {
     if [[ -n "$pid" ]] && ! kill -0 "$pid" >/dev/null 2>&1; then
       return 1
     fi
-    if curl -s -o /dev/null -w "%{http_code}" "$url" | rg -q "200"; then
+    if curl -s -o /dev/null -w "%{http_code}" "$url" | grep_q "200"; then
       return 0
     fi
     sleep 1
@@ -370,8 +384,12 @@ kill_listeners() {
   local port="$1"
   local attempt
   for attempt in {1..10}; do
-    local pids
-    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
+    local pids=""
+    if has_cmd lsof; then
+      pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
+    elif has_cmd netstat; then
+      pids="$(netstat -ano 2>/dev/null | awk -v p=":${port}" '$1=="TCP" && $2 ~ (p"$") && $4=="LISTENING" { print $5 }' | sort -u)"
+    fi
     if [[ -z "$pids" ]]; then
       return 0
     fi
@@ -379,7 +397,9 @@ kill_listeners() {
       echo "[e2e] clearing existing listeners on :$port"
     fi
     for pid in $pids; do
-      if [[ "$attempt" -lt 4 ]]; then
+      if has_cmd taskkill; then
+        taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+      elif [[ "$attempt" -lt 4 ]]; then
         kill "$pid" >/dev/null 2>&1 || true
       else
         kill -9 "$pid" >/dev/null 2>&1 || true
@@ -388,7 +408,7 @@ kill_listeners() {
     sleep 1
   done
 
-  if lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+  if has_cmd lsof && lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "[e2e] failed to clear listener on :$port" >&2
     exit 1
   fi
@@ -590,6 +610,8 @@ write_env_file \
   GOLD_PERPS_MARKET_PROGRAM_ID "$PROGRAM_MARKET_ID" \
   AVAX_RPC_URL "$ANVIL_RPC_URL" \
   AVAX_GOLD_CLOB_ADDRESS "$EVM_GOLD_CLOB_ADDRESS" \
+  ARENA_EXTERNAL_BET_WRITE_KEY "$E2E_ARENA_WRITE_KEY" \
+  STREAM_PUBLISH_KEY "$E2E_ARENA_WRITE_KEY" \
   ENABLE_KEEPER_BOT "$KEEPER_BOT_FLAG"
 env \
   PORT="$GAME_API_PORT" \
@@ -602,6 +624,8 @@ env \
   GOLD_PERPS_MARKET_PROGRAM_ID="$PROGRAM_MARKET_ID" \
   AVAX_RPC_URL="$ANVIL_RPC_URL" \
   AVAX_GOLD_CLOB_ADDRESS="$EVM_GOLD_CLOB_ADDRESS" \
+  ARENA_EXTERNAL_BET_WRITE_KEY="$E2E_ARENA_WRITE_KEY" \
+  STREAM_PUBLISH_KEY="$E2E_ARENA_WRITE_KEY" \
   ENABLE_KEEPER_BOT="$KEEPER_BOT_FLAG" \
   bun run --cwd "$KEEPER_DIR" service >"$KEEPER_LOG" 2>&1 < /dev/null &
 KEEPER_PID="$!"
@@ -616,6 +640,7 @@ fi
 echo "[e2e] seeding keeper live api state"
 env \
   E2E_GAME_API_URL="$GAME_API_URL" \
+  E2E_ARENA_WRITE_KEY="$E2E_ARENA_WRITE_KEY" \
   bun run "$APP_DIR/tests/e2e/seed-api-local.ts"
 
 echo "[e2e] starting app on :$APP_PORT"
@@ -652,6 +677,7 @@ echo "[e2e] running playwright tests"
   env \
     E2E_BASE_URL="http://127.0.0.1:$APP_PORT" \
     E2E_GAME_API_URL="$GAME_API_URL" \
+    E2E_ARENA_WRITE_KEY="$E2E_ARENA_WRITE_KEY" \
     ./node_modules/.bin/playwright test \
       --config "$APP_DIR/tests/e2e/playwright.config.ts" \
       "$@"

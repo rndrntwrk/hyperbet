@@ -8,7 +8,7 @@ KEEPER_DIR="$DEMO_DIR/keeper"
 ANCHOR_BUILD_LOG="/tmp/hyperbet-solana-e2e-build.log"
 STATE_PATH="$APP_DIR/tests/e2e/state.json"
 CONTROL_PATH="$APP_DIR/tests/e2e/control.json"
-LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-/tmp/hyperscape-gold-e2e-ledger}"
+LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-$APP_DIR/.e2e-ledger}"
 VALIDATOR_LOG="$APP_DIR/.e2e-validator.log"
 APP_LOG="$APP_DIR/.e2e-app.log"
 SOLANA_PROXY_LOG="$APP_DIR/.e2e-solana-proxy.log"
@@ -38,6 +38,20 @@ SOLANA_PROXY_PORT="${E2E_SOLANA_PROXY_PORT:-$((20000 + RANDOM % 10000))}"
 SOLANA_PROXY_URL="http://127.0.0.1:${SOLANA_PROXY_PORT}"
 SOLANA_PROXY_WS_URL="ws://127.0.0.1:${SOLANA_PROXY_PORT}"
 KEEPER_BOT_FLAG="${E2E_ENABLE_KEEPER_BOT:-true}"
+E2E_ARENA_WRITE_KEY="${E2E_ARENA_WRITE_KEY:-hyperbet-e2e-local-write-key}"
+
+has_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+grep_q() {
+  local pattern="$1"
+  if has_cmd rg; then
+    rg -q "$pattern"
+  else
+    grep -q "$pattern"
+  fi
+}
 resolve_localnet_wallet_path() {
   local candidates=()
 
@@ -191,7 +205,7 @@ wait_for_solana_rpc() {
   for _ in {1..90}; do
     if curl -s -X POST "$SOLANA_RPC_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}' | rg -q '"blockhash"'; then
+      -d '{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}' | grep_q '"blockhash"'; then
       return 0
     fi
     sleep 1
@@ -215,7 +229,7 @@ wait_for_solana_proxy() {
   for _ in {1..90}; do
     if curl -s -X POST "$SOLANA_PROXY_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"getVersion"}' | rg -q '"solana-core"'; then
+      -d '{"jsonrpc":"2.0","id":1,"method":"getVersion"}' | grep_q '"solana-core"'; then
       return 0
     fi
     sleep 1
@@ -226,7 +240,7 @@ wait_for_solana_proxy() {
 wait_for_app() {
   local url="$1"
   for _ in {1..90}; do
-    if curl -s -o /dev/null -w "%{http_code}" "$url" | rg -q "200"; then
+    if curl -s -o /dev/null -w "%{http_code}" "$url" | grep_q "200"; then
       return 0
     fi
     sleep 1
@@ -258,12 +272,22 @@ run_with_retries() {
 
 kill_listeners() {
   local port="$1"
-  local pids
-  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
+  local pids=""
+
+  if has_cmd lsof; then
+    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
+  elif has_cmd netstat; then
+    pids="$(netstat -ano 2>/dev/null | awk -v p=":${port}" '$1=="TCP" && $2 ~ (p"$") && $4=="LISTENING" { print $5 }' | sort -u)"
+  fi
+
   if [[ -n "$pids" ]]; then
     echo "[e2e] clearing existing listeners on :$port"
     for pid in $pids; do
-      kill "$pid" >/dev/null 2>&1 || true
+      if has_cmd taskkill; then
+        taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+      else
+        kill "$pid" >/dev/null 2>&1 || true
+      fi
     done
     sleep 1
   fi
@@ -386,6 +410,8 @@ write_env_file \
   FIGHT_ORACLE_PROGRAM_ID "$PROGRAM_ORACLE_ID" \
   GOLD_CLOB_MARKET_PROGRAM_ID "$PROGRAM_CLOB_ID" \
   GOLD_PERPS_MARKET_PROGRAM_ID "$PROGRAM_MARKET_ID" \
+  ARENA_EXTERNAL_BET_WRITE_KEY "$E2E_ARENA_WRITE_KEY" \
+  STREAM_PUBLISH_KEY "$E2E_ARENA_WRITE_KEY" \
   ENABLE_KEEPER_BOT "$KEEPER_BOT_FLAG"
 env \
   PORT="$GAME_API_PORT" \
@@ -396,6 +422,8 @@ env \
   FIGHT_ORACLE_PROGRAM_ID="$PROGRAM_ORACLE_ID" \
   GOLD_CLOB_MARKET_PROGRAM_ID="$PROGRAM_CLOB_ID" \
   GOLD_PERPS_MARKET_PROGRAM_ID="$PROGRAM_MARKET_ID" \
+  ARENA_EXTERNAL_BET_WRITE_KEY="$E2E_ARENA_WRITE_KEY" \
+  STREAM_PUBLISH_KEY="$E2E_ARENA_WRITE_KEY" \
   ENABLE_KEEPER_BOT="$KEEPER_BOT_FLAG" \
   bun run --cwd "$KEEPER_DIR" service >"$KEEPER_LOG" 2>&1 &
 KEEPER_PID="$!"
@@ -410,9 +438,22 @@ fi
 echo "[e2e] seeding keeper live api state"
 env \
   E2E_GAME_API_URL="$GAME_API_URL" \
+  E2E_ARENA_WRITE_KEY="$E2E_ARENA_WRITE_KEY" \
   bun run "$APP_DIR/tests/e2e/seed-api-local.ts"
 
 echo "[e2e] starting app on :$APP_PORT"
+kill_listeners "$APP_PORT"
+rm -rf "$APP_DIR/node_modules/.vite"
+echo "[e2e] pre-bundling vite dependencies"
+if ! (
+  cd "$APP_DIR"
+  env \
+    VITE_GAME_API_URL="$GAME_API_URL" \
+    ./node_modules/.bin/vite optimize --force --mode e2e
+) >/tmp/hyperbet-solana-e2e-vite-optimize.log 2>&1; then
+  echo "[e2e] warning: vite optimize failed; continuing with dev server startup"
+  tail -n 80 /tmp/hyperbet-solana-e2e-vite-optimize.log || true
+fi
 (
   cd "$APP_DIR"
   env \
@@ -427,10 +468,12 @@ if ! wait_for_app "http://127.0.0.1:$APP_PORT/"; then
   tail -n 80 "$APP_LOG" || true
   exit 1
 fi
+sleep 2
 
 write_control_file
 
 echo "[e2e] running playwright tests"
 E2E_BASE_URL="http://127.0.0.1:$APP_PORT" \
 E2E_GAME_API_URL="$GAME_API_URL" \
+E2E_ARENA_WRITE_KEY="$E2E_ARENA_WRITE_KEY" \
   bunx playwright test --config "$APP_DIR/tests/e2e/playwright.config.ts" "$@"

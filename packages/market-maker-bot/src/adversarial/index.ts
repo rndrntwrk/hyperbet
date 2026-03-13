@@ -22,12 +22,19 @@ export { evaluateBoundedLossBreaches } from "./bounded-loss.js";
 export { evaluateSettlementBreaches, validateSettlementTrace } from "./settlement.js";
 export { evaluateSybilBreaches } from "./sybil.js";
 export { evaluateChaosBreaches } from "./chaos.js";
+export { DEFAULT_ADAPTIVE_POLICIES, evaluateAdaptiveBreaches } from "./adaptive.js";
 export { evaluateMatrixBreaches } from "./matrix.js";
 export {
   DEFAULT_REGRESSION_SEEDS_PATH,
   evaluateRegressionSeeds,
   readRegressionSeeds,
 } from "./regression-seeds.js";
+export {
+  DEFAULT_REPLAY_CORPUS_PATH,
+  evaluateHistoricalReplayCorpus,
+  readReplayCorpus,
+  runHistoricalReplay,
+} from "./replay.js";
 export {
   CHAIN_RISK_BUDGETS,
   SAFETY_SPEC_VERSION,
@@ -56,6 +63,8 @@ export type {
 } from "./settlement.js";
 export type { SybilBreach } from "./sybil.js";
 export type { ChaosBreach } from "./chaos.js";
+export type { AdaptiveBreach, AdaptivePolicy } from "./adaptive.js";
 export type { MatrixBreach } from "./matrix.js";
 export type { ChainRiskBudget, ScenarioRiskBudget } from "./spec.js";
 export type { RegressionSeedBreach } from "./regression-seeds.js";
+export type { ReplayBreach, ReplayRun } from "./replay.js";

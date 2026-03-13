@@ -59,9 +59,29 @@ function evaluateScenario(
   };
 }
 
+const LEGACY_SCENARIO_SEED_OFFSETS: Record<ScenarioId, number> = {
+  latency_sniping: 0,
+  spoof_pressure: 1,
+  toxic_flow_poisoning: 2,
+  stale_signal_arbitrage: 3,
+  liquidation_cascade: 4,
+  gas_auction_backrun: 5,
+  sybil_wash_trading: 6,
+  rebate_farming_ring: 7,
+  coordinated_resolution_push: 8,
+  layering_spoof_ladder: 9,
+  quote_stuffing_burst: 10,
+  cancel_storm_griefing: 11,
+  sybil_identity_churn: 12,
+};
+
+function scenarioSeedOffset(scenario: ScenarioId): number {
+  return LEGACY_SCENARIO_SEED_OFFSETS[scenario];
+}
+
 function buildChainReport(chain: ChainProfile, seed: number): ChainReport {
-  const scenarios = SCENARIOS.map((scenario, index) =>
-    evaluateScenario(scenario, chain, seed + index),
+  const scenarios = SCENARIOS.map((scenario) =>
+    evaluateScenario(scenario, chain, seed + scenarioSeedOffset(scenario)),
   );
 
   return {
