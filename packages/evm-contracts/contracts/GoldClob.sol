@@ -72,14 +72,14 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         bytes32 duelKey;
         MarketStatus status;
         Side winner;
-        uint16 tradeTreasuryFeeBpsSnapshot;
-        uint16 tradeMarketMakerFeeBpsSnapshot;
-        uint16 winningsMarketMakerFeeBpsSnapshot;
         uint64 nextOrderId;
         uint16 bestBid;
         uint16 bestAsk;
         uint128 totalAShares;
         uint128 totalBShares;
+        uint16 tradeTreasuryFeeBpsSnapshot;
+        uint16 tradeMarketMakerFeeBpsSnapshot;
+        uint16 winningsMarketMakerFeeBpsSnapshot;
     }
 
     struct Order {
