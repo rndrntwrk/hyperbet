@@ -23,6 +23,7 @@ import {
     sleep,
     withTimeout,
 } from "./helpers.js";
+import { isScenarioCloseGuardWindow } from "./runtime-profile.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,11 @@ export abstract class BaseAgent {
     }
 
     abstract decide(ctx: SimContext): AgentAction[];
+
+    resetForScenario(): void {
+        this.activeOrderIds = [];
+        this.tradeCount = 0;
+    }
 
     protected onOrderPlaced(
         action: AgentAction,
@@ -426,6 +432,16 @@ export class MarketMakerAgent extends BaseAgent {
         super.onOrderCancelled(action);
     }
 
+    override resetForScenario(): void {
+        super.resetForScenario();
+        this.lastPlan = null;
+        this.lastSnapshot = null;
+        this.managedQuotes = {
+            BID: null,
+            ASK: null,
+        };
+    }
+
     private syncManagedOrderIds(): void {
         this.activeOrderIds = (["BID", "ASK"] as const)
             .map((side) => this.managedQuotes[side]?.orderId)
@@ -490,6 +506,15 @@ export class MevFrontrunnerAgent extends BaseAgent {
     }
 
     decide(ctx: SimContext): AgentAction[] {
+        // The close-window scenario is meant to test attack activity only inside
+        // the guarded betting-close interval, not random earlier speculation.
+        if (
+            ctx.scenarioProfile?.betCloseTick != null &&
+            !isScenarioCloseGuardWindow(ctx.scenarioProfile, ctx.tick)
+        ) {
+            return [];
+        }
+
         if (random() < 0.6) return [];
 
         // Simulate front-running by placing aggressive orders at better prices
