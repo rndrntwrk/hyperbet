@@ -8,14 +8,19 @@ import {
 
 describe("DuelOutcomeOracle", () => {
   async function deployFixture() {
-    const [admin, reporter, other] = await ethers.getSigners();
+    const [admin, reporter, other, outsider] = await ethers.getSigners();
+    const governanceFactory = await ethers.getContractFactory("GovernanceController", admin);
+    const governance = await governanceFactory.deploy(admin.address, 300);
+    await governance.waitForDeployment();
+
     const oracle: DuelOutcomeOracleContract = await deployDuelOutcomeOracle(
       admin.address,
       reporter.address,
+      await governance.getAddress(),
       admin,
     );
     await oracle.waitForDeployment();
-    return { oracle, admin, reporter, other };
+    return { oracle, governance, admin, reporter, other, outsider };
   }
 
   it("allows the reporter to upsert, resolve, and read duel state", async () => {
@@ -65,11 +70,11 @@ describe("DuelOutcomeOracle", () => {
   });
 
   it("prevents non-reporters from publishing duel state", async () => {
-    const { oracle, other } = await deployFixture();
+    const { oracle, outsider } = await deployFixture();
 
     await expect(
       oracle
-        .connect(other)
+        .connect(outsider)
         .upsertDuel(
           "0x2222222222222222222222222222222222222222222222222222222222222222",
           "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -83,11 +88,30 @@ describe("DuelOutcomeOracle", () => {
     ).to.be.reverted;
   });
 
-  it("allows the admin to rotate the reporter", async () => {
-    const { oracle, admin, other } = await deployFixture();
+  it("requires governance flow for non-emergency reporter rotation", async () => {
+    const { oracle, governance, admin, other, outsider } = await deployFixture();
 
-    await expect(oracle.connect(admin).setReporter(other.address, true)).to.not
-      .be.reverted;
+    await expect(oracle.connect(admin).setReporter(other.address, true)).to.be.reverted;
+
+    const payload = oracle.interface.encodeFunctionData("setReporter", [other.address, true]);
+    const salt = ethers.keccak256(ethers.toUtf8Bytes("rotate-reporter"));
+    const latest = await ethers.provider.getBlock("latest");
+    const executeAfter = BigInt((latest?.timestamp ?? 0) + 301);
+
+    await governance
+      .connect(admin)
+      .schedule(await oracle.getAddress(), payload, salt, executeAfter);
+
+    await expect(
+      governance.connect(outsider).execute(await oracle.getAddress(), payload, salt),
+    ).to.be.reverted;
+
+    await ethers.provider.send("evm_setNextBlockTimestamp", [Number(executeAfter)]);
+    await ethers.provider.send("evm_mine", []);
+
+    await expect(
+      governance.connect(outsider).execute(await oracle.getAddress(), payload, salt),
+    ).to.not.be.reverted;
 
     await expect(
       oracle
@@ -103,5 +127,11 @@ describe("DuelOutcomeOracle", () => {
           2,
         ),
     ).to.emit(oracle, "DuelUpserted");
+  });
+
+  it("allows emergency reporter rotation by admin", async () => {
+    const { oracle, admin, other } = await deployFixture();
+    await expect(oracle.connect(admin).emergencySetReporter(other.address, true)).to.not.be
+      .reverted;
   });
 });

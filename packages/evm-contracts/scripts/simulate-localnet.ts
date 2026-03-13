@@ -26,7 +26,7 @@ async function main() {
     await ethers.getSigners();
 
   console.log("[simulate-localnet] deploying duel oracle and CLOB...");
-  const oracle = await deployDuelOutcomeOracle(admin.address, reporter.address, admin);
+  const oracle = await deployDuelOutcomeOracle(admin.address, reporter.address, admin.address, admin);
   await oracle.waitForDeployment();
 
   const clob = await deployGoldClob(
@@ -35,6 +35,7 @@ async function main() {
     await oracle.getAddress(),
     treasury.address,
     marketMaker.address,
+    admin.address,
     admin,
   );
   await clob.waitForDeployment();

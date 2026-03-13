@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract DuelOutcomeOracle is AccessControl {
     bytes32 public constant REPORTER_ROLE = keccak256("REPORTER_ROLE");
+    address public governanceController;
 
     error InvalidAdmin();
     error InvalidReporter();
@@ -20,6 +21,8 @@ contract DuelOutcomeOracle is AccessControl {
     error InvalidDuelEnd();
     error DuelAlreadyResolved();
     error DuelAlreadyCancelled();
+    error InvalidGovernanceController();
+    error UnauthorizedGovernanceController();
 
     enum DuelStatus {
         NULL,
@@ -73,14 +76,35 @@ contract DuelOutcomeOracle is AccessControl {
         string metadataUri
     );
 
-    constructor(address admin, address reporter) {
+    constructor(address admin, address reporter, address governanceController_) {
         if (admin == address(0)) revert InvalidAdmin();
         if (reporter == address(0)) revert InvalidReporter();
+        if (governanceController_ == address(0)) revert InvalidGovernanceController();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REPORTER_ROLE, reporter);
+        governanceController = governanceController_;
     }
 
-    function setReporter(address reporter, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    modifier onlyGovernanceController() {
+        if (msg.sender != governanceController) revert UnauthorizedGovernanceController();
+        _;
+    }
+
+    function setGovernanceController(address governanceController_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (governanceController_ == address(0)) revert InvalidGovernanceController();
+        governanceController = governanceController_;
+    }
+
+    function setReporter(address reporter, bool enabled) external onlyGovernanceController {
+        if (reporter == address(0)) revert InvalidReporter();
+        if (enabled) {
+            _grantRole(REPORTER_ROLE, reporter);
+        } else {
+            _revokeRole(REPORTER_ROLE, reporter);
+        }
+    }
+
+    function emergencySetReporter(address reporter, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (reporter == address(0)) revert InvalidReporter();
         if (enabled) {
             _grantRole(REPORTER_ROLE, reporter);
@@ -187,4 +211,3 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
 }
-

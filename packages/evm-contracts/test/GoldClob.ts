@@ -40,12 +40,17 @@ async function expectTxSuccess(
 }
 
 async function deployFixture() {
-  const [admin, operator, reporter, treasury, marketMaker, traderA, traderB] =
+  const [admin, operator, reporter, treasury, marketMaker, traderA, traderB, outsider] =
     await ethers.getSigners();
+
+  const governanceFactory = await ethers.getContractFactory("GovernanceController", admin);
+  const governance = await governanceFactory.deploy(admin.address, 300);
+  await governance.waitForDeployment();
 
   const oracle = await deployDuelOutcomeOracle(
     admin.address,
     reporter.address,
+    await governance.getAddress(),
     admin,
   );
   await oracle.waitForDeployment();
@@ -56,6 +61,7 @@ async function deployFixture() {
     await oracle.getAddress(),
     treasury.address,
     marketMaker.address,
+    await governance.getAddress(),
     admin,
   );
   await clob.waitForDeployment();
@@ -68,6 +74,8 @@ async function deployFixture() {
     marketMaker,
     traderA,
     traderB,
+    outsider,
+    governance,
     oracle,
     clob,
   };
@@ -509,7 +517,7 @@ describe("GoldClob", function () {
     await clob.connect(operator).createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
 
     // Test zero fees
-    await clob.connect(admin).setFeeConfig(0, 0, 0);
+    await clob.connect(admin).emergencySetFeeConfig(0, 0, 0);
 
     let treasuryBefore = await ethers.provider.getBalance(treasury.address);
     let mmBefore = await ethers.provider.getBalance(marketMaker.address);
@@ -526,7 +534,7 @@ describe("GoldClob", function () {
     expect(mmAfter - mmBefore).to.equal(0n);
 
     // Test max fees: 9000 BPS treasury, 1000 BPS MM (Total 10000 = 100%)
-    await clob.connect(admin).setFeeConfig(9000, 1000, 0);
+    await clob.connect(admin).emergencySetFeeConfig(9000, 1000, 0);
 
     treasuryBefore = await ethers.provider.getBalance(treasury.address);
     mmBefore = await ethers.provider.getBalance(marketMaker.address);
@@ -546,6 +554,29 @@ describe("GoldClob", function () {
     expect(mmAfter - mmBefore).to.equal(expectedMmFee);
 
     // Test fee config reversion
-    await expect(clob.connect(admin).setFeeConfig(5000, 5001, 0)).to.be.revertedWithCustomError(clob, "TotalTradeFeeTooHigh");
+    await expect(clob.connect(admin).emergencySetFeeConfig(5000, 5001, 0)).to.be.revertedWithCustomError(clob, "TotalTradeFeeTooHigh");
   });
+  it("enforces governance timelock for non-emergency config updates", async function () {
+    const { clob, governance, admin, outsider } = await deployFixture();
+
+    await expect(clob.connect(admin).setTreasury(outsider.address)).to.be.reverted;
+
+    const payload = clob.interface.encodeFunctionData("setTreasury", [outsider.address]);
+    const salt = ethers.keccak256(ethers.toUtf8Bytes("set-treasury"));
+    const latest = await ethers.provider.getBlock("latest");
+    const executeAfter = BigInt((latest?.timestamp ?? 0) + 301);
+
+    await governance
+      .connect(admin)
+      .schedule(await clob.getAddress(), payload, salt, executeAfter);
+
+    await ethers.provider.send("evm_setNextBlockTimestamp", [Number(executeAfter)]);
+    await ethers.provider.send("evm_mine", []);
+
+    await expect(
+      governance.connect(outsider).execute(await clob.getAddress(), payload, salt),
+    ).to.not.be.reverted;
+    expect(await clob.treasury()).to.equal(outsider.address);
+  });
+
 });

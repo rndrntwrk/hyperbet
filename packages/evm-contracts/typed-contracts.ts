@@ -99,6 +99,12 @@ export interface GoldClobContract extends TypedContract<GoldClobContract> {
     tradeMarketMakerFeeBps: BigNumberish,
     winningsMarketMakerFeeBps: BigNumberish,
   ): Promise<ContractTransactionResponse>;
+  setGovernanceController(governanceController: string): Promise<ContractTransactionResponse>;
+  emergencySetFeeConfig(
+    tradeTreasuryFeeBps: BigNumberish,
+    tradeMarketMakerFeeBps: BigNumberish,
+    winningsMarketMakerFeeBps: BigNumberish,
+  ): Promise<ContractTransactionResponse>;
 }
 
 export interface DuelOutcomeOracleContract
@@ -130,6 +136,8 @@ export interface DuelOutcomeOracleContract
     reporter: string,
     enabled: boolean,
   ): Promise<ContractTransactionResponse>;
+  emergencySetReporter(reporter: string, enabled: boolean): Promise<ContractTransactionResponse>;
+  setGovernanceController(governanceController: string): Promise<ContractTransactionResponse>;
   getDuel(duelKey: BytesLike): Promise<{
     duelKey: string;
     participantAHash: string;
@@ -198,6 +206,7 @@ export async function deployGoldClob(
   oracle: string,
   treasury: string,
   marketMaker: string,
+  governanceController: string,
   runner?: Signer,
 ): Promise<GoldClobContract> {
   const factory = runner
@@ -209,12 +218,14 @@ export async function deployGoldClob(
     oracle,
     treasury,
     marketMaker,
+    governanceController,
   )) as unknown as GoldClobContract;
 }
 
 export async function deployDuelOutcomeOracle(
   admin: string,
   reporter: string,
+  governanceController: string,
   runner?: Signer,
 ): Promise<DuelOutcomeOracleContract> {
   const factory = runner
@@ -223,6 +234,7 @@ export async function deployDuelOutcomeOracle(
   return (await factory.deploy(
     admin,
     reporter,
+    governanceController,
   )) as unknown as DuelOutcomeOracleContract;
 }
 

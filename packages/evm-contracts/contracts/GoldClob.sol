@@ -12,6 +12,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     using Address for address payable;
 
     bytes32 public constant MARKET_OPERATOR_ROLE = keccak256("MARKET_OPERATOR_ROLE");
+    address public governanceController;
 
     uint8 public constant MARKET_KIND_DUEL_WINNER = 0;
     uint8 private constant BUY_SIDE = 1;
@@ -52,6 +53,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error MarketNotSettled();
     error InsufficientNativeValue();
     error CostTooLow();
+    error InvalidGovernanceController();
+    error UnauthorizedGovernanceController();
 
     enum MarketStatus {
         NULL,
@@ -149,13 +152,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         address marketOperator,
         address oracle,
         address treasury_,
-        address marketMaker_
+        address marketMaker_,
+        address governanceController_
     ) {
         if (admin == address(0)) revert InvalidAdmin();
         if (marketOperator == address(0)) revert InvalidOperator();
         if (oracle == address(0)) revert InvalidOracle();
         if (treasury_ == address(0)) revert InvalidTreasury();
         if (marketMaker_ == address(0)) revert InvalidMarketMaker();
+        if (governanceController_ == address(0)) revert InvalidGovernanceController();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MARKET_OPERATOR_ROLE, marketOperator);
@@ -163,6 +168,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         duelOracle = DuelOutcomeOracle(oracle);
         treasury = treasury_;
         marketMaker = marketMaker_;
+        governanceController = governanceController_;
         _setFeeConfig(100, 100, 200);
     }
 
@@ -172,6 +178,16 @@ contract GoldClob is AccessControl, ReentrancyGuard {
 
     function getMarket(bytes32 duelKey, uint8 marketKind) external view returns (Market memory) {
         return markets[marketKey(duelKey, marketKind)];
+    }
+
+    modifier onlyGovernanceController() {
+        if (msg.sender != governanceController) revert UnauthorizedGovernanceController();
+        _;
+    }
+
+    function setGovernanceController(address governanceController_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (governanceController_ == address(0)) revert InvalidGovernanceController();
+        governanceController = governanceController_;
     }
 
     function getPriceLevel(
@@ -184,19 +200,19 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         return (level.headOrderId, level.tailOrderId, level.totalOpen);
     }
 
-    function setOracle(address oracle) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setOracle(address oracle) external onlyGovernanceController {
         if (oracle == address(0)) revert InvalidOracle();
         duelOracle = DuelOutcomeOracle(oracle);
         emit OracleUpdated(oracle);
     }
 
-    function setTreasury(address treasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setTreasury(address treasury_) external onlyGovernanceController {
         if (treasury_ == address(0)) revert InvalidTreasury();
         treasury = treasury_;
         emit TreasuryUpdated(treasury_);
     }
 
-    function setMarketMaker(address marketMaker_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setMarketMaker(address marketMaker_) external onlyGovernanceController {
         if (marketMaker_ == address(0)) revert InvalidMarketMaker();
         marketMaker = marketMaker_;
         emit MarketMakerUpdated(marketMaker_);
@@ -206,7 +222,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 tradeTreasuryFeeBps_,
         uint256 tradeMarketMakerFeeBps_,
         uint256 winningsMarketMakerFeeBps_
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external onlyGovernanceController {
         if (tradeTreasuryFeeBps_ > MAX_FEE_BPS) revert TreasuryFeeTooHigh();
         if (tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert MarketMakerFeeTooHigh();
         if (tradeTreasuryFeeBps_ + tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert TotalTradeFeeTooHigh();
@@ -221,6 +237,32 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             tradeMarketMakerFeeBps_,
             winningsMarketMakerFeeBps_
         );
+    }
+
+    function emergencySetOracle(address oracle) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (oracle == address(0)) revert InvalidOracle();
+        duelOracle = DuelOutcomeOracle(oracle);
+        emit OracleUpdated(oracle);
+    }
+
+    function emergencySetTreasury(address treasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (treasury_ == address(0)) revert InvalidTreasury();
+        treasury = treasury_;
+        emit TreasuryUpdated(treasury_);
+    }
+
+    function emergencySetMarketMaker(address marketMaker_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (marketMaker_ == address(0)) revert InvalidMarketMaker();
+        marketMaker = marketMaker_;
+        emit MarketMakerUpdated(marketMaker_);
+    }
+
+    function emergencySetFeeConfig(
+        uint256 tradeTreasuryFeeBps_,
+        uint256 tradeMarketMakerFeeBps_,
+        uint256 winningsMarketMakerFeeBps_
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setFeeConfig(tradeTreasuryFeeBps_, tradeMarketMakerFeeBps_, winningsMarketMakerFeeBps_);
     }
 
     function feeBps() external view returns (uint256) {

@@ -26,10 +26,10 @@ contract GoldClobSettlementTest is Test {
         vm.txGasPrice(0);
         vm.warp(1_000);
 
-        oracle = new DuelOutcomeOracle(admin, reporter);
+        oracle = new DuelOutcomeOracle(admin, reporter, admin);
 
         vm.prank(admin);
-        clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker);
+        clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker, admin);
 
         vm.deal(traderA, 100 ether);
         vm.deal(traderB, 100 ether);

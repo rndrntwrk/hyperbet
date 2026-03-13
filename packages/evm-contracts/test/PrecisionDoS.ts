@@ -8,7 +8,7 @@ describe("GoldClob Precision DoS", () => {
   it("should process perfectly valid mixed-quantity matching without precision revert", async () => {
     const [admin, maker, taker] = await ethers.getSigners();
 
-    const oracle = await deployDuelOutcomeOracle(admin.address, admin.address, admin);
+    const oracle = await deployDuelOutcomeOracle(admin.address, admin.address, admin.address, admin);
     await oracle.waitForDeployment();
 
     const clob = await deployGoldClob(
@@ -17,10 +17,11 @@ describe("GoldClob Precision DoS", () => {
       await oracle.getAddress(),
       admin.address,
       admin.address,
+      admin.address,
       admin,
     );
     await clob.waitForDeployment();
-    await clob.setFeeConfig(0, 0, 0);
+    await clob.emergencySetFeeConfig(0, 0, 0);
 
     const duelKey = ethers.id("duel-123");
     await oracle.upsertDuel(

@@ -15,3 +15,8 @@ Runbooks:
 - [Chain Outage Or RPC Degradation](chain-outage-or-rpc-degradation.md)
 - [Stuck Market Recovery](stuck-market-recovery.md)
 - [Claim Backlog Drainage](claim-backlog-drainage.md)
+
+- [Key Rotation](key-rotation.md)
+- [Emergency Cancellation](emergency-cancellation.md)
+- [Upgrade](upgrade.md)
+- [Rollback](rollback.md)
