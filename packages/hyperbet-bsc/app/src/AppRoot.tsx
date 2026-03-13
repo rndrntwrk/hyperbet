@@ -12,4 +12,6 @@ export default createEvmAppRoot({
   wagmiConfig: wagmiConfig as any,
   App,
   StreamUIApp,
+  themeId: "bsc",
+  themeStorageKey: "bsc-theme",
 });
