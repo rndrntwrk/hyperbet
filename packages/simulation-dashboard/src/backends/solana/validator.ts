@@ -214,6 +214,42 @@ async function waitForProgram(
     throw new Error(`Program ${programId} did not become executable on ${rpcUrl}`);
 }
 
+async function getConfirmedSlot(rpcUrl: string): Promise<number> {
+    const result = await rpcRequest(rpcUrl, {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "getSlot",
+        params: [{ commitment: "confirmed" }],
+    });
+    const slot = result?.result;
+    if (typeof slot !== "number") {
+        throw new Error(`Unable to read confirmed slot from ${rpcUrl}`);
+    }
+    return slot;
+}
+
+async function waitForSlotAdvances(
+    rpcUrl: string,
+    minimumAdvances: number,
+    timeoutMs = 120_000,
+): Promise<void> {
+    const targetAdvances = Math.max(1, minimumAdvances);
+    const baselineSlot = await getConfirmedSlot(rpcUrl);
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        const currentSlot = await getConfirmedSlot(rpcUrl);
+        if (currentSlot >= baselineSlot + targetAdvances) {
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    throw new Error(
+        `Timed out waiting for ${targetAdvances} confirmed slot advances on ${rpcUrl}`,
+    );
+}
+
 export async function startSolanaValidator(): Promise<SolanaValidatorHandle> {
     if (!commandExists("solana-test-validator")) {
         throw new Error("Missing required command: solana-test-validator");
@@ -300,6 +336,9 @@ export async function startSolanaValidator(): Promise<SolanaValidatorHandle> {
         await waitForRpcReady(rpcUrl);
         await waitForProgram(rpcUrl, assets.fightOracle.programId);
         await waitForProgram(rpcUrl, assets.goldClobMarket.programId);
+        // The program accounts can report executable slightly before the validator
+        // is ready to execute and confirm the first program instructions.
+        await waitForSlotAdvances(rpcUrl, 1);
         return {
             rpcUrl,
             wsUrl,
