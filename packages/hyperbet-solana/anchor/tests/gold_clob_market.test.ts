@@ -205,6 +205,206 @@ describe("gold_clob_market (native SOL settlement)", () => {
     assert.strictEqual(marketMakerAfter - marketMakerBefore, 14);
   });
 
+  it("allows direct self-cross and logs detection policy signals", async () => {
+    const selfTrader = Keypair.generate();
+    await airdrop(provider.connection, selfTrader.publicKey, 8);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      { duelKey: uniqueDuelKey("self-cross-direct") },
+    );
+
+    const ask = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: selfTrader,
+      orderId: 1,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 1000,
+    });
+
+    const bid = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: selfTrader,
+      orderId: 2,
+      side: SIDE_BID,
+      price: 600,
+      amount: 1000,
+      remainingAccounts: [
+        writableAccount(ask.restingLevel),
+        writableAccount(ask.order),
+        writableAccount(ask.userBalance),
+      ],
+    });
+
+    const tx = await provider.connection.getTransaction(bid.signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
+    });
+    const logText = (tx?.meta?.logMessages ?? []).join("\n");
+    assert.ok(
+      logText.includes("self_trade_policy_triggered policy=allow_with_detection_only"),
+      `expected self-trade detection log, got logs: ${logText}`,
+    );
+
+    const balance = await clobProgram.account.userBalance.fetch(ask.userBalance);
+    assert.strictEqual(balance.aShares.toString(), "1000");
+    assert.strictEqual(balance.bShares.toString(), "1000");
+  });
+
+  it("flags only self-cross legs in partial fill sequences", async () => {
+    const selfTrader = Keypair.generate();
+    const externalMaker = Keypair.generate();
+    await Promise.all([
+      airdrop(provider.connection, selfTrader.publicKey, 8),
+      airdrop(provider.connection, externalMaker.publicKey, 8),
+    ]);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      { duelKey: uniqueDuelKey("self-cross-partial") },
+    );
+
+    const selfAsk = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: selfTrader,
+      orderId: 1,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 400,
+    });
+
+    const externalAsk = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: externalMaker,
+      orderId: 2,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 700,
+      remainingAccounts: [writableAccount(selfAsk.order)],
+    });
+
+    const bid = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: selfTrader,
+      orderId: 3,
+      side: SIDE_BID,
+      price: 600,
+      amount: 800,
+      remainingAccounts: [
+        writableAccount(selfAsk.restingLevel),
+        writableAccount(selfAsk.order),
+        writableAccount(selfAsk.userBalance),
+        writableAccount(selfAsk.restingLevel),
+        writableAccount(externalAsk.order),
+        writableAccount(externalAsk.userBalance),
+      ],
+    });
+
+    const tx = await provider.connection.getTransaction(bid.signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
+    });
+    const selfTradeLogCount = (tx?.meta?.logMessages ?? []).filter((line) =>
+      line.includes("self_trade_policy_triggered policy=allow_with_detection_only"),
+    ).length;
+    assert.strictEqual(selfTradeLogCount, 1);
+
+    const selfOrderState = await clobProgram.account.order.fetch(selfAsk.order);
+    const externalOrderState = await clobProgram.account.order.fetch(externalAsk.order);
+    assert.strictEqual(selfOrderState.filled.toString(), "400");
+    assert.strictEqual(selfOrderState.active, false);
+    assert.strictEqual(externalOrderState.filled.toString(), "400");
+    assert.strictEqual(externalOrderState.active, true);
+  });
+
+  it("keeps mixed-user fills free of self-trade policy logs", async () => {
+    const maker = Keypair.generate();
+    const taker = Keypair.generate();
+    await Promise.all([
+      airdrop(provider.connection, maker.publicKey, 8),
+      airdrop(provider.connection, taker.publicKey, 8),
+    ]);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      { duelKey: uniqueDuelKey("self-cross-mixed") },
+    );
+
+    const ask = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: maker,
+      orderId: 1,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 500,
+    });
+
+    const bid = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+      orderId: 2,
+      side: SIDE_BID,
+      price: 600,
+      amount: 500,
+      remainingAccounts: [
+        writableAccount(ask.restingLevel),
+        writableAccount(ask.order),
+        writableAccount(ask.userBalance),
+      ],
+    });
+
+    const tx = await provider.connection.getTransaction(bid.signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
+    });
+    const hasSelfTradeLog = (tx?.meta?.logMessages ?? []).some((line) =>
+      line.includes("self_trade_policy_triggered policy=allow_with_detection_only"),
+    );
+    assert.strictEqual(hasSelfTradeLog, false);
+  });
+
   it("rejects non-FIFO tail updates when the wrong order account is supplied", async () => {
     const makerOne = Keypair.generate();
     const makerTwo = Keypair.generate();
