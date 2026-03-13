@@ -54,6 +54,15 @@ resolve_cwd() {
     hyperbet-avax-keeper)
       echo "packages/hyperbet-avax/keeper"
       ;;
+    hyperbet-evm)
+      echo "packages/hyperbet-evm"
+      ;;
+    hyperbet-evm-app)
+      echo "packages/hyperbet-evm/app"
+      ;;
+    hyperbet-evm-keeper)
+      echo "packages/hyperbet-evm/keeper"
+      ;;
     market-maker-bot)
       echo "packages/market-maker-bot"
       ;;
@@ -72,7 +81,7 @@ resolve_cwd() {
 
 target_requires_root_install() {
   case "$1" in
-    root|hyperbet-solana|hyperbet-solana-app|hyperbet-solana-keeper|hyperbet-bsc|hyperbet-bsc-app|hyperbet-bsc-keeper|hyperbet-avax|hyperbet-avax-app|hyperbet-avax-keeper|market-maker-bot|evm-contracts)
+    root|hyperbet-solana|hyperbet-solana-app|hyperbet-solana-keeper|hyperbet-bsc|hyperbet-bsc-app|hyperbet-bsc-keeper|hyperbet-avax|hyperbet-avax-app|hyperbet-avax-keeper|hyperbet-evm|hyperbet-evm-app|hyperbet-evm-keeper|market-maker-bot|evm-contracts)
       return 0
       ;;
     *)
@@ -83,7 +92,7 @@ target_requires_root_install() {
 
 target_requires_nested_install() {
   case "$1" in
-    hyperbet-solana-app|hyperbet-solana-keeper|hyperbet-bsc-app|hyperbet-bsc-keeper|hyperbet-avax-app|hyperbet-avax-keeper|hyperbet-solana-anchor)
+    hyperbet-solana-app|hyperbet-solana-keeper|hyperbet-bsc-app|hyperbet-bsc-keeper|hyperbet-avax-app|hyperbet-avax-keeper|hyperbet-evm-app|hyperbet-evm-keeper|hyperbet-solana-anchor)
       return 0
       ;;
     *)

@@ -517,11 +517,11 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
         }
 
         uint256 timeDelta = block.timestamp - lastTimestamp;
-        if (timeDelta == 0) return;
+        if (timeDelta < 1) return;
 
         int256 skew = int256(market.totalLongOI) - int256(market.totalShortOI);
-        int256 skewRatio = (skew * int256(ONE)) / int256(config.skewScale);
-        int256 fundingRateDelta = (skewRatio * int256(fundingVelocity) * int256(timeDelta)) / int256(ONE);
+        int256 fundingRateDelta =
+            _mulDivSigned(skew, int256(fundingVelocity) * int256(timeDelta), int256(config.skewScale));
 
         market.currentFundingRate += fundingRateDelta;
         market.cumulativeFundingRate += fundingRateDelta;
@@ -543,8 +543,8 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
 
         uint256 timeDelta = block.timestamp - lastTimestamp;
         int256 skew = int256(market.totalLongOI) - int256(market.totalShortOI);
-        int256 skewRatio = (skew * int256(ONE)) / int256(config.skewScale);
-        int256 fundingRateDelta = (skewRatio * int256(fundingVelocity) * int256(timeDelta)) / int256(ONE);
+        int256 fundingRateDelta =
+            _mulDivSigned(skew, int256(fundingVelocity) * int256(timeDelta), int256(config.skewScale));
 
         previewCurrentFundingRate += fundingRateDelta;
         previewCumulativeFundingRate += fundingRateDelta;
@@ -628,12 +628,6 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
         }
     }
 
-    function _debitMargin(Position storage position, uint256 amount) internal {
-        if (amount == 0) return;
-        if (amount > position.margin) revert Underwater();
-        position.margin -= amount;
-    }
-
     function _creditMarginFromPool(MarketState storage market, Position storage position, uint256 profit) internal {
         if (profit == 0) return;
         uint256 fromVault = profit > market.vaultBalance ? market.vaultBalance : profit;
@@ -710,6 +704,17 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
 
     function _maintenanceMargin(uint256 absSize, uint256 price, uint256 maintenanceMarginBps) internal pure returns (uint256) {
         return Math.mulDiv(Math.mulDiv(absSize, price, ONE), maintenanceMarginBps, BPS);
+    }
+
+    function _mulDivSigned(int256 a, int256 b, int256 denominator) internal pure returns (int256) {
+        if (a == 0 || b == 0) return 0;
+
+        bool negative = (a < 0) != (b < 0);
+        uint256 absA = uint256(a < 0 ? -a : a);
+        uint256 absB = uint256(b < 0 ? -b : b);
+        uint256 absDenominator = uint256(denominator < 0 ? -denominator : denominator);
+        uint256 quotient = Math.mulDiv(absA, absB, absDenominator);
+        return negative ? -int256(quotient) : int256(quotient);
     }
 
     function _markPrice(MarketState memory market, MarketConfig memory config) internal pure returns (uint256) {

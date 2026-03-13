@@ -216,6 +216,7 @@ contract GoldClobSettlementTest is Test {
             uint64(block.timestamp + 180),
             "resolved"
         );
+        vm.prank(reporter);
         oracle.finalizeResult(duel, "finalized");
     }
 

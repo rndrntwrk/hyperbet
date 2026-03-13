@@ -174,7 +174,7 @@ const DUEL_OUTCOME_ORACLE_ABI = [
   },
   {
     type: "function",
-    name: "reportResult",
+    name: "proposeResult",
     stateMutability: "nonpayable",
     inputs: [
       { type: "bytes32" },
@@ -185,6 +185,13 @@ const DUEL_OUTCOME_ORACLE_ABI = [
       { type: "uint64" },
       { type: "string" },
     ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "finalizeResult",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32" }, { type: "string" }],
     outputs: [],
   },
   {
@@ -1312,7 +1319,8 @@ for (const method of [
   "updateOracleConfig",
   "upsertDuel",
   "cancelDuel",
-  "reportResult",
+  "proposeResult",
+  "finalizeResult",
 ]) {
   if (!hasProgramMethod(fightProgram, method)) {
     missingKeeperMethods.push(`fightOracle.${method}`);
@@ -1740,7 +1748,13 @@ const ensureOracleReady = async (): Promise<void> => {
     await runWithRecovery(
       () =>
         fightProgram.methods
-          .updateOracleConfig(botKeypair.publicKey, botKeypair.publicKey)
+          .updateOracleConfig(
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            new BN(0),
+          )
           .accountsPartial({
             authority: botKeypair.publicKey,
             oracleConfig: oracleConfigPda,
@@ -2777,7 +2791,7 @@ async function reportEvmResult(data: DuelLifecycleEvent): Promise<void> {
         chain: undefined,
         address: chain.duelOracleAddress,
         abi: DUEL_OUTCOME_ORACLE_ABI,
-        functionName: "reportResult",
+        functionName: "proposeResult",
         args: [
           duelKey,
           winner,
@@ -2792,6 +2806,15 @@ async function reportEvmResult(data: DuelLifecycleEvent): Promise<void> {
           duelEndTs,
           metadata,
         ],
+        account: chain.account,
+      });
+
+      await chain.walletClient.writeContract({
+        chain: undefined,
+        address: chain.duelOracleAddress,
+        abi: DUEL_OUTCOME_ORACLE_ABI,
+        functionName: "finalizeResult",
+        args: [duelKey, metadata],
         account: chain.account,
       });
 
@@ -2870,7 +2893,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   await runWithRecovery(
     () =>
       fightProgram.methods
-        .reportResult(
+        .proposeResult(
           Array.from(duelKey),
           winnerSide === "A" ? ({ a: {} } as any) : ({ b: {} } as any),
           new BN(resolvedSeed),
@@ -2889,7 +2912,17 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
           oracleConfig: oracleConfigPda,
           duelState: trackedMatch.duelState,
         })
-        .rpc(),
+        .rpc()
+        .then(() =>
+          fightProgram.methods
+            .finalizeResult(Array.from(duelKey), buildDuelMetadata(data))
+            .accountsPartial({
+              finalizer: botKeypair.publicKey,
+              oracleConfig: oracleConfigPda,
+              duelState: trackedMatch.duelState,
+            })
+            .rpc(),
+        ),
     connection,
   );
   const resolutionRecordedAt = markRpcSuccess(trackedMatch);
