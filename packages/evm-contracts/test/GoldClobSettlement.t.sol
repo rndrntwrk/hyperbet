@@ -26,7 +26,7 @@ contract GoldClobSettlementTest is Test {
         vm.txGasPrice(0);
         vm.warp(1_000);
 
-        oracle = new DuelOutcomeOracle(admin, reporter);
+        oracle = new DuelOutcomeOracle(admin, reporter, reporter, reporter, 0);
 
         vm.prank(admin);
         clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker);
@@ -66,6 +66,30 @@ contract GoldClobSettlementTest is Test {
         vm.expectRevert(bytes("nothing to claim"));
         vm.prank(traderB);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
+    }
+
+    function testClaimUsesWinningsFeeSnapshotAfterFeeConfigChanges() public {
+        bytes32 duel = _createOpenMarket("snapshot-fee-claim");
+        uint128 amount = 1_000;
+
+        GoldClob.Market memory marketBefore = clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
+        assertEq(marketBefore.winningsMarketMakerFeeBpsSnapshot, 200, "market should snapshot initial winnings fee");
+
+        vm.prank(admin);
+        clob.setFeeConfig(0, 0, 5_000);
+
+        _matchTrade(duel, 600, amount);
+        _resolveDuel(duel, DuelOutcomeOracle.Side.A);
+
+        uint256 traderBefore = traderB.balance;
+        uint256 mmBefore = marketMaker.balance;
+
+        vm.prank(traderB);
+        clob.claim(duel, MARKET_KIND_DUEL_WINNER);
+
+        uint256 expectedFee = (uint256(amount) * 200) / 10_000;
+        assertEq(marketMaker.balance - mmBefore, expectedFee, "claim fee should use snapshotted winnings fee");
+        assertEq(traderB.balance - traderBefore, uint256(amount) - expectedFee, "winner payout should ignore updated global fee");
     }
 
     function testResolvedLoserClaimClearsStateAndRejectsRepeat() public {
@@ -183,7 +207,7 @@ contract GoldClobSettlementTest is Test {
 
     function _resolveDuel(bytes32 duel, DuelOutcomeOracle.Side winner) private {
         vm.prank(reporter);
-        oracle.reportResult(
+        oracle.proposeResult(
             duel,
             winner,
             42,
@@ -192,6 +216,7 @@ contract GoldClobSettlementTest is Test {
             uint64(block.timestamp + 180),
             "resolved"
         );
+        oracle.finalizeResult(duel, "finalized");
     }
 
     function _duelKey(string memory label) private pure returns (bytes32) {

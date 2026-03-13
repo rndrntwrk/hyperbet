@@ -40,12 +40,15 @@ async function expectTxSuccess(
 }
 
 async function deployFixture() {
-  const [admin, operator, reporter, treasury, marketMaker, traderA, traderB] =
+  const [admin, operator, reporter, finalizer, challenger, treasury, marketMaker, traderA, traderB] =
     await ethers.getSigners();
 
   const oracle = await deployDuelOutcomeOracle(
     admin.address,
     reporter.address,
+    finalizer.address,
+    challenger.address,
+    3600,
     admin,
   );
   await oracle.waitForDeployment();
@@ -64,6 +67,8 @@ async function deployFixture() {
     admin,
     operator,
     reporter,
+    finalizer,
+    challenger,
     treasury,
     marketMaker,
     traderA,
@@ -115,7 +120,7 @@ describe("GoldClob", function () {
   });
 
   it("matches FIFO orders and unlinks cancellations immediately", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-2");
 
@@ -173,6 +178,123 @@ describe("GoldClob", function () {
     const takerPosition = await clob.positions(marketKey, traderB.address);
     expect(makerPosition.bShares).to.equal(makerAmount);
     expect(takerPosition.aShares).to.equal(makerAmount);
+  });
+
+  it("allows self-cross matches with explicit detection events", async function () {
+    const { clob, oracle, operator, reporter, traderA } = await deployFixture();
+    const duel = duelKey("duel-self-cross-direct");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 1000, {
+        value: quoteCost(SELL_SIDE, 600, 1000n) + 20n,
+      });
+
+    await expect(
+      clob
+        .connect(traderA)
+        .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 1000, {
+          value: quoteCost(BUY_SIDE, 600, 1000n) + 20n,
+        }),
+    )
+      .to.emit(clob, "SelfTradePolicyTriggered")
+      .withArgs(
+        await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER),
+        1n,
+        2n,
+        traderA.address,
+        traderA.address,
+        2n,
+        600n,
+        1000n,
+      );
+  });
+
+  it("emits detection only for self-cross candidates in partial fill paths", async function () {
+    const { clob, oracle, operator, reporter, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-self-cross-partial");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 700, {
+        value: quoteCost(SELL_SIDE, 600, 700n) + 20n,
+      });
+    await clob
+      .connect(traderB)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 700, {
+        value: quoteCost(SELL_SIDE, 600, 700n) + 20n,
+      });
+
+    const tx = await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 1000, {
+        value: quoteCost(BUY_SIDE, 600, 1000n) + 20n,
+      });
+    const receipt = await tx.wait();
+    const selfTradeEvents = (receipt?.logs ?? [])
+      .map((log) => {
+        try {
+          return clob.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .filter((log) => log?.name === "SelfTradePolicyTriggered");
+
+    expect(selfTradeEvents.length).to.equal(1);
+
+    const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
+    const traderAPosition = await clob.positions(marketKey, traderA.address);
+    const traderBPosition = await clob.positions(marketKey, traderB.address);
+    expect(traderAPosition.aShares).to.equal(1000n);
+    expect(traderAPosition.bShares).to.equal(700n);
+    expect(traderBPosition.bShares).to.equal(300n);
+  });
+
+  it("does not emit self-cross detection for mixed-user matches", async function () {
+    const { clob, oracle, operator, reporter, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-self-cross-mixed-users");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob
+      .connect(traderB)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 500, {
+        value: quoteCost(SELL_SIDE, 600, 500n) + 20n,
+      });
+
+    const tx = await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 500, {
+        value: quoteCost(BUY_SIDE, 600, 500n) + 20n,
+      });
+    const receipt = await tx.wait();
+    const selfTradeEvents = (receipt?.logs ?? [])
+      .map((log) => {
+        try {
+          return clob.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .filter((log) => log?.name === "SelfTradePolicyTriggered");
+
+    expect(selfTradeEvents.length).to.equal(0);
   });
 
   it("allows unmatched resting orders to be cancelled after betting locks", async function () {
@@ -271,6 +393,7 @@ describe("GoldClob", function () {
       oracle,
       operator,
       reporter,
+      finalizer,
       treasury,
       marketMaker,
       traderA,
@@ -300,7 +423,7 @@ describe("GoldClob", function () {
 
     await oracle
       .connect(reporter)
-      .reportResult(
+      .proposeResult(
         duel,
         SIDE_A,
         42,
@@ -309,6 +432,9 @@ describe("GoldClob", function () {
         openedAt + 180n,
         "resolved",
       );
+    await ethers.provider.send("evm_increaseTime", [3600]);
+    await ethers.provider.send("evm_mine", []);
+    await oracle.connect(finalizer).finalizeResult(duel, "finalized");
     await clob
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
@@ -328,8 +454,58 @@ describe("GoldClob", function () {
     expect(claimReceipt?.status).to.equal(1);
   });
 
+  it("uses fee snapshots from market creation for claims even after fee updates", async function () {
+    const { clob, oracle, operator, reporter, admin, marketMaker, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-claim-fee-snapshot");
+
+    const openedAt = await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob.connect(operator).syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
+    const marketBeforeFeeChange = await clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
+    expect(marketBeforeFeeChange.winningsMarketMakerFeeBpsSnapshot).to.equal(200n);
+
+    await clob.connect(admin).setFeeConfig(0, 0, 5000);
+
+    const amount = 1000n;
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, amount, {
+        value: quoteCost(SELL_SIDE, 600, amount) + 20n,
+      });
+    await clob
+      .connect(traderB)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, amount, {
+        value: quoteCost(BUY_SIDE, 600, amount) + 20n,
+      });
+
+    await oracle
+      .connect(reporter)
+      .reportResult(
+        duel,
+        SIDE_A,
+        99,
+        ethers.keccak256(ethers.toUtf8Bytes("replay-snapshot")),
+        ethers.keccak256(ethers.toUtf8Bytes("result-snapshot")),
+        openedAt + 180n,
+        "resolved-snapshot",
+      );
+    await clob
+      .connect(operator)
+      .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
+
+    const mmBefore = await ethers.provider.getBalance(marketMaker.address);
+    await expectTxSuccess(clob.connect(traderB).claim(duel, MARKET_KIND_DUEL_WINNER));
+    const mmAfter = await ethers.provider.getBalance(marketMaker.address);
+    const expectedClaimFee = (amount * 200n) / 10_000n;
+    expect(mmAfter - mmBefore).to.equal(expectedClaimFee);
+  });
+
   it("clears losing trader state on first post-resolution claim and rejects repeated claims", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-loser-clear");
 
@@ -357,7 +533,7 @@ describe("GoldClob", function () {
 
     await oracle
       .connect(reporter)
-      .reportResult(
+      .proposeResult(
         duel,
         SIDE_A,
         99,
@@ -366,6 +542,9 @@ describe("GoldClob", function () {
         openedAt + 180n,
         "resolved-loser",
       );
+    await ethers.provider.send("evm_increaseTime", [3600]);
+    await ethers.provider.send("evm_mine", []);
+    await oracle.connect(finalizer).finalizeResult(duel, "finalized");
     await clob
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
@@ -392,7 +571,7 @@ describe("GoldClob", function () {
   });
 
   it("rejects claims before the market is settled", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-unresolved-claim");
 
@@ -419,7 +598,7 @@ describe("GoldClob", function () {
   });
 
   it("refunds recorded stake on duel cancellation", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-4");
 

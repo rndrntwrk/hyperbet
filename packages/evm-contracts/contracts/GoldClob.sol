@@ -53,6 +53,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error InsufficientNativeValue();
     error CostTooLow();
 
+    uint8 public constant SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY = 2;
+
     enum MarketStatus {
         NULL,
         OPEN,
@@ -72,6 +74,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         bytes32 duelKey;
         MarketStatus status;
         Side winner;
+        uint16 tradeTreasuryFeeBpsSnapshot;
+        uint16 tradeMarketMakerFeeBpsSnapshot;
+        uint16 winningsMarketMakerFeeBpsSnapshot;
         uint64 nextOrderId;
         uint16 bestBid;
         uint16 bestAsk;
@@ -133,6 +138,16 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint64 takerOrderId,
         uint256 matchedAmount,
         uint16 price
+    );
+    event SelfTradePolicyTriggered(
+        bytes32 indexed marketKey,
+        uint64 indexed makerOrderId,
+        uint64 indexed takerOrderId,
+        address maker,
+        address taker,
+        uint8 policy,
+        uint16 price,
+        uint128 amount
     );
     event OrderCancelled(bytes32 indexed marketKey, uint64 indexed orderId);
     event FeeConfigUpdated(
@@ -246,6 +261,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         market.exists = true;
         market.duelKey = duelKey;
         market.status = _mapDuelStatus(duel.status);
+        market.tradeTreasuryFeeBpsSnapshot = uint16(tradeTreasuryFeeBps);
+        market.tradeMarketMakerFeeBpsSnapshot = uint16(tradeMarketMakerFeeBps);
+        market.winningsMarketMakerFeeBpsSnapshot = uint16(winningsMarketMakerFeeBps);
         market.nextOrderId = 1;
         market.bestAsk = MAX_PRICE;
 
@@ -355,7 +373,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             uint256 winningShares = market.winner == Side.A ? position.aShares : position.bShares;
             _clearPosition(position);
             if (winningShares > 0) {
-                uint256 fee = (winningShares * winningsMarketMakerFeeBps) / MAX_FEE_BPS;
+                uint256 fee = (winningShares * market.winningsMarketMakerFeeBpsSnapshot) / MAX_FEE_BPS;
                 payout = winningShares - fee;
                 if (fee > 0) payable(marketMaker).sendValue(fee);
             }
@@ -460,6 +478,19 @@ contract GoldClob is AccessControl, ReentrancyGuard {
                 ? makerRemaining
                 : progress.remainingAmount;
 
+            if (makerOrder.maker == msg.sender) {
+                emit SelfTradePolicyTriggered(
+                    key,
+                    makerOrder.id,
+                    takerOrderId,
+                    makerOrder.maker,
+                    msg.sender,
+                    SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY,
+                    progress.boundaryPrice,
+                    fillAmount
+                );
+            }
+
             makerOrder.filled += fillAmount;
             progress.remainingAmount -= fillAmount;
             level.totalOpen -= fillAmount;
@@ -526,6 +557,19 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             uint128 fillAmount = makerRemaining < progress.remainingAmount
                 ? makerRemaining
                 : progress.remainingAmount;
+
+            if (makerOrder.maker == msg.sender) {
+                emit SelfTradePolicyTriggered(
+                    key,
+                    makerOrder.id,
+                    takerOrderId,
+                    makerOrder.maker,
+                    msg.sender,
+                    SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY,
+                    progress.boundaryPrice,
+                    fillAmount
+                );
+            }
 
             makerOrder.filled += fillAmount;
             progress.remainingAmount -= fillAmount;
@@ -719,6 +763,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     function _mapDuelStatus(DuelOutcomeOracle.DuelStatus status) internal pure returns (MarketStatus) {
         if (status == DuelOutcomeOracle.DuelStatus.BETTING_OPEN) return MarketStatus.OPEN;
         if (status == DuelOutcomeOracle.DuelStatus.LOCKED) return MarketStatus.LOCKED;
+        if (status == DuelOutcomeOracle.DuelStatus.PROPOSED) return MarketStatus.LOCKED;
+        if (status == DuelOutcomeOracle.DuelStatus.CHALLENGED) return MarketStatus.LOCKED;
         if (status == DuelOutcomeOracle.DuelStatus.RESOLVED) return MarketStatus.RESOLVED;
         if (status == DuelOutcomeOracle.DuelStatus.CANCELLED) return MarketStatus.CANCELLED;
         return MarketStatus.NULL;

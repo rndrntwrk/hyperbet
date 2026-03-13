@@ -17,6 +17,9 @@ export type GoldClobMatch = {
   duelKey: string;
   status: bigint;
   winner: bigint;
+  tradeTreasuryFeeBpsSnapshot: bigint;
+  tradeMarketMakerFeeBpsSnapshot: bigint;
+  winningsMarketMakerFeeBpsSnapshot: bigint;
   nextOrderId: bigint;
   bestBid: bigint;
   bestAsk: bigint;
@@ -113,7 +116,7 @@ export interface DuelOutcomeOracleContract
     metadataUri: string,
     status: BigNumberish,
   ): Promise<ContractTransactionResponse>;
-  reportResult(
+  proposeResult(
     duelKey: BytesLike,
     winner: BigNumberish,
     seed: BigNumberish,
@@ -122,6 +125,19 @@ export interface DuelOutcomeOracleContract
     duelEndTs: BigNumberish,
     metadataUri: string,
   ): Promise<ContractTransactionResponse>;
+  challengeResult(
+    duelKey: BytesLike,
+    metadataUri: string,
+  ): Promise<ContractTransactionResponse>;
+  finalizeResult(
+    duelKey: BytesLike,
+    metadataUri: string,
+  ): Promise<ContractTransactionResponse>;
+  proposalId(
+    duelKey: BytesLike,
+    resultHash: BytesLike,
+    replayHash: BytesLike,
+  ): Promise<string>;
   cancelDuel(
     duelKey: BytesLike,
     metadataUri: string,
@@ -143,6 +159,7 @@ export interface DuelOutcomeOracleContract
     seed: bigint;
     resultHash: string;
     replayHash: string;
+    activeProposalId: string;
     metadataUri: string;
   }>;
 }
@@ -215,6 +232,9 @@ export async function deployGoldClob(
 export async function deployDuelOutcomeOracle(
   admin: string,
   reporter: string,
+  finalizer: string,
+  challenger: string,
+  disputeWindowSeconds: bigint | number = 3600,
   runner?: Signer,
 ): Promise<DuelOutcomeOracleContract> {
   const factory = runner
@@ -223,6 +243,9 @@ export async function deployDuelOutcomeOracle(
   return (await factory.deploy(
     admin,
     reporter,
+    finalizer,
+    challenger,
+    disputeWindowSeconds,
   )) as unknown as DuelOutcomeOracleContract;
 }
 

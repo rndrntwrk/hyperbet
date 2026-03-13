@@ -15,7 +15,9 @@ import {
   ensureOracleReady,
   initializeCanonicalMarket,
   placeClobOrder,
-  reportDuelResult,
+  challengeDuelResult,
+  finalizeDuelResult,
+  proposeDuelResult,
   syncMarketFromDuel,
   uniqueDuelKey,
   upsertDuel,
@@ -172,10 +174,11 @@ describe("fee_simulation (stress test)", () => {
     
     // Resolve duel and payout
     const now = Math.floor(Date.now() / 1000);
-    await reportDuelResult(fightProgram, authority, market.duelKey, {
+    await proposeDuelResult(fightProgram, authority, market.duelKey, {
       winner: marketSideA(),
       duelEndTs: now + 4000, // past betCloseTs
     });
+    await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
 
     // Claim winnings for all traders
