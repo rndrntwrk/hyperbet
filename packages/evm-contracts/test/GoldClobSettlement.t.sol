@@ -26,7 +26,7 @@ contract GoldClobSettlementTest is Test {
         vm.txGasPrice(0);
         vm.warp(1_000);
 
-        oracle = new DuelOutcomeOracle(admin, reporter);
+        oracle = new DuelOutcomeOracle(admin, reporter, reporter, reporter, 0);
 
         vm.prank(admin);
         clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker);
@@ -183,7 +183,7 @@ contract GoldClobSettlementTest is Test {
 
     function _resolveDuel(bytes32 duel, DuelOutcomeOracle.Side winner) private {
         vm.prank(reporter);
-        oracle.reportResult(
+        oracle.proposeResult(
             duel,
             winner,
             42,
@@ -192,6 +192,7 @@ contract GoldClobSettlementTest is Test {
             uint64(block.timestamp + 180),
             "resolved"
         );
+        oracle.finalizeResult(duel, "finalized");
     }
 
     function _duelKey(string memory label) private pure returns (bytes32) {

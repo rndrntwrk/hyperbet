@@ -1005,6 +1005,8 @@ fn map_duel_status(status: OracleDuelStatus) -> MarketStatus {
         OracleDuelStatus::Scheduled => MarketStatus::Locked,
         OracleDuelStatus::BettingOpen => MarketStatus::Open,
         OracleDuelStatus::Locked => MarketStatus::Locked,
+        OracleDuelStatus::Proposed => MarketStatus::Locked,
+        OracleDuelStatus::Challenged => MarketStatus::Locked,
         OracleDuelStatus::Resolved => MarketStatus::Resolved,
         OracleDuelStatus::Cancelled => MarketStatus::Cancelled,
     }

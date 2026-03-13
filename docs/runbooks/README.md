@@ -15,3 +15,5 @@ Runbooks:
 - [Chain Outage Or RPC Degradation](chain-outage-or-rpc-degradation.md)
 - [Stuck Market Recovery](stuck-market-recovery.md)
 - [Claim Backlog Drainage](claim-backlog-drainage.md)
+
+- [Oracle Finality Fail-Closed](oracle-finality-fail-closed.md)

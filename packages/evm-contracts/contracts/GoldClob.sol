@@ -719,6 +719,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     function _mapDuelStatus(DuelOutcomeOracle.DuelStatus status) internal pure returns (MarketStatus) {
         if (status == DuelOutcomeOracle.DuelStatus.BETTING_OPEN) return MarketStatus.OPEN;
         if (status == DuelOutcomeOracle.DuelStatus.LOCKED) return MarketStatus.LOCKED;
+        if (status == DuelOutcomeOracle.DuelStatus.PROPOSED) return MarketStatus.LOCKED;
+        if (status == DuelOutcomeOracle.DuelStatus.CHALLENGED) return MarketStatus.LOCKED;
         if (status == DuelOutcomeOracle.DuelStatus.RESOLVED) return MarketStatus.RESOLVED;
         if (status == DuelOutcomeOracle.DuelStatus.CANCELLED) return MarketStatus.CANCELLED;
         return MarketStatus.NULL;

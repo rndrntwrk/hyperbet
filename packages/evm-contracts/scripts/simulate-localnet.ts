@@ -22,11 +22,18 @@ function quoteCost(side: number, price: number, amount: bigint): bigint {
 }
 
 async function main() {
-  const [admin, operator, reporter, treasury, marketMaker, traderA, traderB] =
+  const [admin, operator, reporter, finalizer, challenger, treasury, marketMaker, traderA, traderB] =
     await ethers.getSigners();
 
   console.log("[simulate-localnet] deploying duel oracle and CLOB...");
-  const oracle = await deployDuelOutcomeOracle(admin.address, reporter.address, admin);
+  const oracle = await deployDuelOutcomeOracle(
+    admin.address,
+    reporter.address,
+    finalizer.address,
+    challenger.address,
+    3600,
+    admin,
+  );
   await oracle.waitForDeployment();
 
   const clob = await deployGoldClob(
@@ -91,7 +98,7 @@ async function main() {
   });
 
   console.log("[simulate-localnet] resolving duel...");
-  await oracle.connect(reporter).reportResult(
+  await oracle.connect(reporter).proposeResult(
     duel,
     SIDE_A,
     42,
@@ -100,6 +107,9 @@ async function main() {
     now + 180n,
     "resolved",
   );
+  await ethers.provider.send("evm_increaseTime", [3600]);
+  await ethers.provider.send("evm_mine", []);
+  await oracle.connect(finalizer).finalizeResult(duel, "finalized");
   await clob.connect(operator).syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
 
   console.log("[simulate-localnet] claiming winner...");

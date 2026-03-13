@@ -106,9 +106,13 @@ async function deployFixture(
     normalizeBytecode(oracleArtifact.bytecode),
     admin,
   );
+  const reporterAddress = await reporter.getAddress();
   const oracle = (await oracleFactory.deploy(
     await admin.getAddress(),
-    await reporter.getAddress(),
+    reporterAddress,
+    reporterAddress,
+    reporterAddress,
+    0,
   )) as DuelOutcomeOracleContract;
   await oracle.waitForDeployment();
 
@@ -368,7 +372,7 @@ async function runArbitrageScenario(
   const latestBlock = await fixture.provider.getBlock("latest");
   const now = BigInt(latestBlock?.timestamp ?? Math.floor(Date.now() / 1000));
   await (
-    await fixture.oracle.connect(fixture.reporter).reportResult(
+    await fixture.oracle.connect(fixture.reporter).proposeResult(
       duel,
       SIDE_A,
       77,
@@ -378,6 +382,7 @@ async function runArbitrageScenario(
       "arb-resolved",
     )
   ).wait();
+  await (await fixture.oracle.connect(fixture.reporter).finalizeResult(duel, "finalized")).wait();
   await (
     await fixture.clob
       .connect(fixture.operator)
@@ -413,7 +418,7 @@ async function runAttackScenario(fixture: Fixture): Promise<ScenarioResult> {
   let rejected = false;
   try {
     await (
-      await fixture.oracle.connect(fixture.attacker).reportResult(
+      await fixture.oracle.connect(fixture.attacker).proposeResult(
         duel,
         SIDE_A,
         13,

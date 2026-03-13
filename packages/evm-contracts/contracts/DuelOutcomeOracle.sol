@@ -5,9 +5,13 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract DuelOutcomeOracle is AccessControl {
     bytes32 public constant REPORTER_ROLE = keccak256("REPORTER_ROLE");
+    bytes32 public constant FINALIZER_ROLE = keccak256("FINALIZER_ROLE");
+    bytes32 public constant CHALLENGER_ROLE = keccak256("CHALLENGER_ROLE");
 
     error InvalidAdmin();
     error InvalidReporter();
+    error InvalidFinalizer();
+    error InvalidChallenger();
     error InvalidDuelKey();
     error InvalidParticipant();
     error DuplicateParticipants();
@@ -20,12 +24,19 @@ contract DuelOutcomeOracle is AccessControl {
     error InvalidDuelEnd();
     error DuelAlreadyResolved();
     error DuelAlreadyCancelled();
+    error ProposalMissing();
+    error ProposalExists();
+    error NotProposed();
+    error AlreadyChallenged();
+    error DisputeWindowActive();
 
     enum DuelStatus {
         NULL,
         SCHEDULED,
         BETTING_OPEN,
         LOCKED,
+        PROPOSED,
+        CHALLENGED,
         RESOLVED,
         CANCELLED
     }
@@ -34,6 +45,18 @@ contract DuelOutcomeOracle is AccessControl {
         NONE,
         A,
         B
+    }
+
+    struct ResultProposal {
+        bytes32 id;
+        bytes32 resultHash;
+        bytes32 replayHash;
+        Side winner;
+        uint64 seed;
+        uint64 duelEndTs;
+        uint64 proposedAt;
+        bool challenged;
+        bool exists;
     }
 
     struct DuelState {
@@ -49,10 +72,14 @@ contract DuelOutcomeOracle is AccessControl {
         uint64 seed;
         bytes32 resultHash;
         bytes32 replayHash;
+        bytes32 activeProposalId;
         string metadataUri;
     }
 
+    uint64 public immutable disputeWindowSeconds;
+
     mapping(bytes32 => DuelState) private duels;
+    mapping(bytes32 => ResultProposal) public proposals;
 
     event DuelUpserted(
         bytes32 indexed duelKey,
@@ -63,8 +90,20 @@ contract DuelOutcomeOracle is AccessControl {
         string metadataUri
     );
     event DuelCancelled(bytes32 indexed duelKey, string metadataUri);
+    event ResultProposed(
+        bytes32 indexed duelKey,
+        bytes32 indexed proposalId,
+        Side winner,
+        uint64 seed,
+        uint64 duelEndTs,
+        bytes32 resultHash,
+        bytes32 replayHash,
+        string metadataUri
+    );
+    event ResultChallenged(bytes32 indexed duelKey, bytes32 indexed proposalId, string metadataUri);
     event DuelResolved(
         bytes32 indexed duelKey,
+        bytes32 indexed proposalId,
         Side winner,
         uint64 seed,
         uint64 duelEndTs,
@@ -73,11 +112,22 @@ contract DuelOutcomeOracle is AccessControl {
         string metadataUri
     );
 
-    constructor(address admin, address reporter) {
+    constructor(
+        address admin,
+        address reporter,
+        address finalizer,
+        address challenger,
+        uint64 disputeWindowSeconds_
+    ) {
         if (admin == address(0)) revert InvalidAdmin();
         if (reporter == address(0)) revert InvalidReporter();
+        if (finalizer == address(0)) revert InvalidFinalizer();
+        if (challenger == address(0)) revert InvalidChallenger();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REPORTER_ROLE, reporter);
+        _grantRole(FINALIZER_ROLE, finalizer);
+        _grantRole(CHALLENGER_ROLE, challenger);
+        disputeWindowSeconds = disputeWindowSeconds_;
     }
 
     function setReporter(address reporter, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -89,8 +139,30 @@ contract DuelOutcomeOracle is AccessControl {
         }
     }
 
+    function setFinalizer(address finalizer, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (finalizer == address(0)) revert InvalidFinalizer();
+        if (enabled) {
+            _grantRole(FINALIZER_ROLE, finalizer);
+        } else {
+            _revokeRole(FINALIZER_ROLE, finalizer);
+        }
+    }
+
+    function setChallenger(address challenger, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (challenger == address(0)) revert InvalidChallenger();
+        if (enabled) {
+            _grantRole(CHALLENGER_ROLE, challenger);
+        } else {
+            _revokeRole(CHALLENGER_ROLE, challenger);
+        }
+    }
+
     function getDuel(bytes32 duelKey) external view returns (DuelState memory) {
         return duels[duelKey];
+    }
+
+    function proposalId(bytes32 duelKey, bytes32 resultHash, bytes32 replayHash) public pure returns (bytes32) {
+        return keccak256(abi.encode(duelKey, resultHash, replayHash));
     }
 
     function upsertDuel(
@@ -128,14 +200,7 @@ contract DuelOutcomeOracle is AccessControl {
         duel.duelStartTs = duelStartTs;
         duel.metadataUri = metadataUri;
 
-        emit DuelUpserted(
-            duelKey,
-            status,
-            betOpenTs,
-            betCloseTs,
-            duelStartTs,
-            metadataUri
-        );
+        emit DuelUpserted(duelKey, status, betOpenTs, betCloseTs, duelStartTs, metadataUri);
     }
 
     function cancelDuel(bytes32 duelKey, string calldata metadataUri) external onlyRole(REPORTER_ROLE) {
@@ -143,11 +208,12 @@ contract DuelOutcomeOracle is AccessControl {
         if (duel.status == DuelStatus.NULL) revert DuelMissing();
         _requireSettleable(duel);
         duel.status = DuelStatus.CANCELLED;
+        duel.activeProposalId = bytes32(0);
         duel.metadataUri = metadataUri;
         emit DuelCancelled(duelKey, metadataUri);
     }
 
-    function reportResult(
+    function proposeResult(
         bytes32 duelKey,
         Side winner,
         uint64 seed,
@@ -155,28 +221,74 @@ contract DuelOutcomeOracle is AccessControl {
         bytes32 resultHash,
         uint64 duelEndTs,
         string calldata metadataUri
-    ) external onlyRole(REPORTER_ROLE) {
+    ) external onlyRole(REPORTER_ROLE) returns (bytes32 id) {
         DuelState storage duel = duels[duelKey];
         if (duel.status == DuelStatus.NULL) revert DuelMissing();
         _requireSettleable(duel);
         if (winner != Side.A && winner != Side.B) revert InvalidWinner();
         if (duelEndTs < duel.betCloseTs) revert InvalidDuelEnd();
 
+        id = proposalId(duelKey, resultHash, replayHash);
+        if (proposals[id].exists) revert ProposalExists();
+
+        proposals[id] = ResultProposal({
+            id: id,
+            resultHash: resultHash,
+            replayHash: replayHash,
+            winner: winner,
+            seed: seed,
+            duelEndTs: duelEndTs,
+            proposedAt: uint64(block.timestamp),
+            challenged: false,
+            exists: true
+        });
+
+        duel.status = DuelStatus.PROPOSED;
+        duel.activeProposalId = id;
+        duel.metadataUri = metadataUri;
+
+        emit ResultProposed(duelKey, id, winner, seed, duelEndTs, resultHash, replayHash, metadataUri);
+    }
+
+    function challengeResult(bytes32 duelKey, string calldata metadataUri) external onlyRole(CHALLENGER_ROLE) {
+        DuelState storage duel = duels[duelKey];
+        if (duel.status != DuelStatus.PROPOSED) revert NotProposed();
+        bytes32 id = duel.activeProposalId;
+        ResultProposal storage proposal = proposals[id];
+        if (!proposal.exists) revert ProposalMissing();
+        if (proposal.challenged) revert AlreadyChallenged();
+
+        proposal.challenged = true;
+        duel.status = DuelStatus.CHALLENGED;
+        duel.metadataUri = metadataUri;
+        emit ResultChallenged(duelKey, id, metadataUri);
+    }
+
+    function finalizeResult(bytes32 duelKey, string calldata metadataUri) external onlyRole(FINALIZER_ROLE) {
+        DuelState storage duel = duels[duelKey];
+        if (duel.status != DuelStatus.PROPOSED) revert NotProposed();
+
+        ResultProposal storage proposal = proposals[duel.activeProposalId];
+        if (!proposal.exists) revert ProposalMissing();
+        if (proposal.challenged) revert AlreadyChallenged();
+        if (block.timestamp < proposal.proposedAt + disputeWindowSeconds) revert DisputeWindowActive();
+
         duel.status = DuelStatus.RESOLVED;
-        duel.winner = winner;
-        duel.seed = seed;
-        duel.replayHash = replayHash;
-        duel.resultHash = resultHash;
-        duel.duelEndTs = duelEndTs;
+        duel.winner = proposal.winner;
+        duel.seed = proposal.seed;
+        duel.replayHash = proposal.replayHash;
+        duel.resultHash = proposal.resultHash;
+        duel.duelEndTs = proposal.duelEndTs;
         duel.metadataUri = metadataUri;
 
         emit DuelResolved(
             duelKey,
-            winner,
-            seed,
-            duelEndTs,
-            resultHash,
-            replayHash,
+            proposal.id,
+            proposal.winner,
+            proposal.seed,
+            proposal.duelEndTs,
+            proposal.resultHash,
+            proposal.replayHash,
             metadataUri
         );
     }
@@ -185,6 +297,4 @@ contract DuelOutcomeOracle is AccessControl {
         if (duel.status == DuelStatus.RESOLVED) revert DuelAlreadyResolved();
         if (duel.status == DuelStatus.CANCELLED) revert DuelAlreadyCancelled();
     }
-
 }
-

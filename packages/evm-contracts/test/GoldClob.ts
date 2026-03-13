@@ -40,12 +40,15 @@ async function expectTxSuccess(
 }
 
 async function deployFixture() {
-  const [admin, operator, reporter, treasury, marketMaker, traderA, traderB] =
+  const [admin, operator, reporter, finalizer, challenger, treasury, marketMaker, traderA, traderB] =
     await ethers.getSigners();
 
   const oracle = await deployDuelOutcomeOracle(
     admin.address,
     reporter.address,
+    finalizer.address,
+    challenger.address,
+    3600,
     admin,
   );
   await oracle.waitForDeployment();
@@ -64,6 +67,8 @@ async function deployFixture() {
     admin,
     operator,
     reporter,
+    finalizer,
+    challenger,
     treasury,
     marketMaker,
     traderA,
@@ -115,7 +120,7 @@ describe("GoldClob", function () {
   });
 
   it("matches FIFO orders and unlinks cancellations immediately", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-2");
 
@@ -271,6 +276,7 @@ describe("GoldClob", function () {
       oracle,
       operator,
       reporter,
+      finalizer,
       treasury,
       marketMaker,
       traderA,
@@ -300,7 +306,7 @@ describe("GoldClob", function () {
 
     await oracle
       .connect(reporter)
-      .reportResult(
+      .proposeResult(
         duel,
         SIDE_A,
         42,
@@ -309,6 +315,9 @@ describe("GoldClob", function () {
         openedAt + 180n,
         "resolved",
       );
+    await ethers.provider.send("evm_increaseTime", [3600]);
+    await ethers.provider.send("evm_mine", []);
+    await oracle.connect(finalizer).finalizeResult(duel, "finalized");
     await clob
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
@@ -329,7 +338,7 @@ describe("GoldClob", function () {
   });
 
   it("clears losing trader state on first post-resolution claim and rejects repeated claims", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-loser-clear");
 
@@ -357,7 +366,7 @@ describe("GoldClob", function () {
 
     await oracle
       .connect(reporter)
-      .reportResult(
+      .proposeResult(
         duel,
         SIDE_A,
         99,
@@ -366,6 +375,9 @@ describe("GoldClob", function () {
         openedAt + 180n,
         "resolved-loser",
       );
+    await ethers.provider.send("evm_increaseTime", [3600]);
+    await ethers.provider.send("evm_mine", []);
+    await oracle.connect(finalizer).finalizeResult(duel, "finalized");
     await clob
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
@@ -392,7 +404,7 @@ describe("GoldClob", function () {
   });
 
   it("rejects claims before the market is settled", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-unresolved-claim");
 
@@ -419,7 +431,7 @@ describe("GoldClob", function () {
   });
 
   it("refunds recorded stake on duel cancellation", async function () {
-    const { clob, oracle, operator, reporter, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-4");
 

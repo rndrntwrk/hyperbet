@@ -194,6 +194,9 @@ export async function ensureOracleReady(
   program: Program<FightOracle>,
   authority: Keypair,
   reporter = authority.publicKey,
+  finalizer = authority.publicKey,
+  challenger = authority.publicKey,
+  disputeWindowSecs = 0,
 ): Promise<PublicKey> {
   const oracleConfig = deriveOracleConfigPda(program.programId);
   const existingConfig =
@@ -228,7 +231,13 @@ export async function ensureOracleReady(
   }
 
   await program.methods
-    .updateOracleConfig(authority.publicKey, reporter)
+    .updateOracleConfig(
+      authority.publicKey,
+      reporter,
+      finalizer,
+      challenger,
+      new BN(disputeWindowSecs),
+    )
     .accountsPartial({
       authority: authority.publicKey,
       oracleConfig,
@@ -374,7 +383,7 @@ export async function cancelDuel(
   return duelState;
 }
 
-export async function reportDuelResult(
+export async function proposeDuelResult(
   program: Program<FightOracle>,
   reporter: Keypair,
   duelKey: readonly number[],
@@ -391,7 +400,7 @@ export async function reportDuelResult(
   const duelState = deriveDuelStatePda(program.programId, duelKey);
 
   await program.methods
-    .reportResult(
+    .proposeResult(
       [...duelKey],
       options.winner,
       toBn(options.seed ?? 42),
@@ -404,7 +413,7 @@ export async function reportDuelResult(
           hashLabel(`${Buffer.from(duelKey).toString("hex")}:result`)),
       ],
       toBn(options.duelEndTs),
-      options.metadataUri ?? "https://hyperscape.gg/duels/result",
+      options.metadataUri ?? "https://hyperscape.gg/duels/proposal",
     )
     .accountsPartial({
       reporter: reporter.publicKey,
@@ -412,6 +421,50 @@ export async function reportDuelResult(
       duelState,
     })
     .signers([reporter])
+    .rpc();
+
+  return duelState;
+}
+
+export async function challengeDuelResult(
+  program: Program<FightOracle>,
+  challenger: Keypair,
+  duelKey: readonly number[],
+  metadataUri = "https://hyperscape.gg/duels/challenged",
+): Promise<PublicKey> {
+  const oracleConfig = deriveOracleConfigPda(program.programId);
+  const duelState = deriveDuelStatePda(program.programId, duelKey);
+
+  await program.methods
+    .challengeResult([...duelKey], metadataUri)
+    .accountsPartial({
+      challenger: challenger.publicKey,
+      oracleConfig,
+      duelState,
+    })
+    .signers([challenger])
+    .rpc();
+
+  return duelState;
+}
+
+export async function finalizeDuelResult(
+  program: Program<FightOracle>,
+  finalizer: Keypair,
+  duelKey: readonly number[],
+  metadataUri = "https://hyperscape.gg/duels/final",
+): Promise<PublicKey> {
+  const oracleConfig = deriveOracleConfigPda(program.programId);
+  const duelState = deriveDuelStatePda(program.programId, duelKey);
+
+  await program.methods
+    .finalizeResult([...duelKey], metadataUri)
+    .accountsPartial({
+      finalizer: finalizer.publicKey,
+      oracleConfig,
+      duelState,
+    })
+    .signers([finalizer])
     .rpc();
 
   return duelState;
