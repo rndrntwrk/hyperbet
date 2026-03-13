@@ -7,7 +7,8 @@ The foundation is built. The remaining work is launch-completion, not
 architecture bootstrap.
 
 For the keep/adapt/reject record on the imported EVM parity-sweep direction,
-see `docs/enoomian-evm-standardization-decisions.md`.
+and the resulting local canonization decisions, see
+`docs/enoomian-evm-standardization-decisions.md`.
 
 ## Execution Model
 
@@ -26,9 +27,9 @@ treated as an independent mergeable unit.
 
 ## Current State
 
-- Current branch head: `4663549`
+- Current branch head: local sprint-base standardization head
 - Latest integrated code-hardening batch: `5d722dc`
-- Latest integrated doc/tracker refresh: `4663549`
+- Latest integrated doc/tracker refresh: local sprint-base standardization head
 - Latest known fully green branch-check baseline: `f1824a0`
 - Gates `01-13` and `15` are complete on the sprint base.
 - Gate `14` is partially complete:
@@ -54,6 +55,12 @@ treated as an independent mergeable unit.
   - fallback winner preservation for degraded BSC/AVAX lifecycle records
   - duplicate-bet startup quarantine instead of hard boot failure
   - Solana MM environment normalization for `e2e` and `stream-ui`
+  - EVM standardization:
+    - deployments materialization under `@hyperbet/chain-registry`
+    - canonical `hyperbet-evm` app shell
+    - hardened shared EVM keeper core
+    - canonicalized `hyperbet-evm/keeper`
+    - safe shell-level wrapper convergence
 
 This plan is written against the current launch bar:
 

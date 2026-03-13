@@ -13,7 +13,8 @@ Today, the sprint branch still treats the following as authoritative:
 - the existing BSC/AVAX wrappers and keepers for current launch surfaces
 
 For the detailed keep/adapt/reject record on the imported
-`hyperbet-evm-parity-sweep` direction, see
+`hyperbet-evm-parity-sweep` direction, and the implemented local
+standardization outcome, see
 `docs/enoomian-evm-standardization-decisions.md`.
 
 This document captures the intended convergence target while that migration is
@@ -48,12 +49,12 @@ The goal is to prevent design drift while the codebase transitions from mixed ch
 ### EVM runtime
 
 - Lives in `packages/hyperbet-evm`.
-- Owns the directional canonical EVM app shell and the intended long-term EVM
-  runtime shape.
-- The current sprint branch does not yet treat `packages/hyperbet-evm/keeper`
-  or `packages/hyperbet-deployments` as authoritative over the hardened current
-  keeper/deploy model.
-- AVAX, BSC, and Base should become wrappers over this runtime, not separate architectures.
+- Owns the canonical EVM app shell and the canonicalized additive EVM keeper
+  direction on the local sprint-base standardization path.
+- `packages/hyperbet-deployments` is subordinate to
+  `@hyperbet/chain-registry`, not a competing deployment authority.
+- AVAX, BSC, and Base should continue converging toward wrapper shells over
+  this runtime, not separate architectures.
 
 ### Shared UI
 
@@ -68,8 +69,9 @@ The goal is to prevent design drift while the codebase transitions from mixed ch
 - `packages/hyperbet-ui`
   - shared React UI and theme system
 - `packages/hyperbet-evm`
-  - canonical EVM app-shell direction
-  - keeper/runtime canonicalization still pending standardization
+  - canonical EVM app shell
+  - canonicalized additive EVM keeper/backend surface on the local
+    sprint-base standardization path
 - `packages/hyperbet-solana`
   - canonical Solana app + keeper runtime
 - `packages/hyperbet-avax`
@@ -79,8 +81,8 @@ The goal is to prevent design drift while the codebase transitions from mixed ch
 - `packages/evm-contracts`
   - canonical EVM contracts
 - `packages/hyperbet-deployments`
-  - additive deployment-manifest package introduced for convergence work
-  - not yet a replacement for the sprint branch's current chain-registry truth
+  - additive deployment materialization layer introduced for convergence work
+  - subordinate to the sprint branch's current chain-registry truth
 - `packages/hyperbet-sdk`
   - shared SDK surface for external consumers
 - `packages/market-maker-bot`
@@ -178,8 +180,9 @@ Prediction and perps are product capabilities, not chain-specific products.
 
 ### 2. Keep one canonical EVM runtime
 
-`hyperbet-evm` is the canonical EVM direction, but not every imported subsystem
-is yet accepted as canonical on the sprint branch.
+`hyperbet-evm` is now the canonical EVM direction on the local sprint-base
+standardization path, but deploy adoption and wrapper retirement still follow
+the existing sprint operational model.
 
 - AVAX, Base, and BSC should be deployment presets plus theme wrappers.
 - Chain wrappers should not own their own keeper/business logic long term.
@@ -192,16 +195,16 @@ is yet accepted as canonical on the sprint branch.
 
 ### 4. Converge toward one shared deployment manifest
 
-`@hyperbet/deployments` is the intended long-term manifest layer for:
+`@hyperbet/deployments` is the intended materialized manifest layer for:
 
 - contract/program addresses
 - chain IDs
 - operator/admin accounts
 - margin token addresses
 
-Until that convergence is complete, the sprint branch's existing
-`@hyperbet/chain-registry` remains authoritative for runtime and release
-hardening behavior.
+It remains subordinate to the sprint branch's existing
+`@hyperbet/chain-registry`, which continues to be authoritative for runtime and
+release-hardening behavior.
 
 ### 5. Keep one shared UI layer
 

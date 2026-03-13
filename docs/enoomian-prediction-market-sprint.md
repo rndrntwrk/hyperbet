@@ -2,7 +2,9 @@
 
 This is the living gate tracker for the `enoomian/prediction-market-sprint-base` branch.
 
-Update this document every time the sprint base branch is pushed. Each update should record:
+Update this document every time the sprint base branch is pushed, or when the
+local sprint-base canonization materially changes its scope. Each update should
+record:
 
 1. The new sprint base commit.
 2. Which gate branch merged into the base.
@@ -39,9 +41,9 @@ Update this document every time the sprint base branch is pushed. Each update sh
 
 ## Current Branch State
 
-- Current branch head: `4663549`
-- Latest integrated code-hardening batch: `5d722dc`
-- Latest integrated doc/tracker refresh: `4663549`
+- Current branch head: local sprint-base standardization head
+- Latest integrated code-hardening batch: local sprint-base standardization head
+- Latest integrated doc/tracker refresh: local sprint-base standardization head
 - Latest known fully green branch-check baseline: `f1824a0`
 - Current CI state on the latest fully green branch-check baseline:
   - `Hyperbet CI` green
@@ -66,6 +68,12 @@ Update this document every time the sprint base branch is pushed. Each update sh
 - fallback winner preservation for BSC/AVAX degraded lifecycle records
 - duplicate-bet startup quarantine instead of keeper boot failure
 - Solana MM environment normalization for `MM_ENV=e2e|stream-ui`
+- EVM standardization:
+  - deployment materialization under `@hyperbet/chain-registry`
+  - canonical `hyperbet-evm` app shell
+  - hardened shared EVM keeper core
+  - canonicalized `hyperbet-evm/keeper`
+  - safe shell-level wrapper convergence
 
 ### What The Sprint Base Contains Today
 
@@ -118,6 +126,7 @@ Today, the sprint base includes the following integrated work:
   - deterministic duplicate-bet quarantine instead of startup outage
   - Solana MM env normalization for `e2e` and `stream-ui`
 - CI, deploy, and operational hardening:
+  - canonical EVM surfaces now recognized by CI
   - fast CI plus heavyweight prediction-market gates
   - verified install wrapper and env/deploy audit
   - deploy rail hardening without topology redesign

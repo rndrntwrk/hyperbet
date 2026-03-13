@@ -3,17 +3,17 @@
 Additive EVM runtime package and canonical EVM app-shell direction for
 Hyperbet.
 
-This package is part of the current EVM standardization effort. Today, it
-should be understood as:
+This package is part of the current EVM standardization effort. On the local
+sprint-base standardization path, it should be understood as:
 
-- the directional canonical EVM app shell
+- the canonical EVM app shell
 - an additive shared EVM runtime package
-- not yet the authoritative canonical EVM keeper/backend
+- a canonicalized additive EVM keeper/backend surface
 
-The authoritative runtime/deploy model on the sprint branch still lives in:
+The authoritative runtime/deploy model still lives in:
 
 - `@hyperbet/chain-registry` for current chain/runtime truth
-- the hardened BSC/AVAX keepers for current EVM backend behavior
+- the hardened EVM keeper model now shared with `packages/hyperbet-evm/keeper`
 - the current CI/deploy/proof rails for release hardening
 
 For the current keep/adapt/reject decisions, see:
@@ -24,8 +24,8 @@ For the current keep/adapt/reject decisions, see:
 
 - `app`: shared EVM app shell for wallet connect, market creation, bet
   placement, settlement, and claiming across supported EVM chains
-- `keeper`: additive EVM keeper/runtime package under standardization; it is
-  not yet the authoritative keeper baseline
+- `keeper`: canonicalized additive EVM keeper/runtime package on the local
+  sprint-base standardization path
 - `packages/hyperbet-deployments/contracts.json`: additive deployment
   materialization for convergence work; it is not a replacement for the sprint
   branch's authoritative chain/deployment registry
@@ -103,9 +103,10 @@ bun run bot
 
 Important:
 
-- this keeper package is still under standardization
-- it should not be treated as the canonical EVM backend until it reaches parity
-  with the hardened current sprint-branch keepers
+- this keeper package is canonized locally against the hardened current
+  sprint-branch keeper model
+- deploy adoption and wrapper retirement still follow the existing sprint
+  operational model
 - the decision log above is the authoritative status record for that work
 
 ## Deployment prep
