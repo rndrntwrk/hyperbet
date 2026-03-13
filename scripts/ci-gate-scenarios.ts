@@ -2,7 +2,10 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import {
-  copyIntoArtifacts,
+  SCENARIO_PRESETS,
+  type ScenarioPreset,
+} from "../packages/simulation-dashboard/src/scenario-catalog.ts";
+import {
   findAvailablePort,
   materializeCiSolanaWallet,
   resolveArtifactRoot,
@@ -10,9 +13,30 @@ import {
   runCommand,
   spawnBackground,
   waitForJsonEndpoint,
+  writeJsonArtifact,
 } from "./ci-lib";
 
 type ScenarioTarget = "evm" | "solana";
+
+type ScenarioRunRecord = {
+  runId: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  result?: {
+    passed?: boolean;
+  } | null;
+};
+
+type ScenarioExecution = {
+  mode: "canonical" | "matrix";
+  scenarioId: string;
+  seed: string;
+  artifactName: string;
+};
+
+type ScenarioServerContext = {
+  apiBaseUrl: string;
+  scenarioArtifactRoot: string;
+};
 
 function parseArgs(): ScenarioTarget {
   const targetArg =
@@ -30,14 +54,16 @@ const target = parseArgs();
 const artifactRoot = resolveArtifactRoot(
   target === "evm" ? "evm-exploit-gate" : "solana-exploit-gate",
 );
-const simRoot = path.join(rootDir, "packages/simulation-dashboard");
-const historyPath = path.join(artifactRoot, "scenario-history.json");
-const serverLog = path.join(artifactRoot, "simulation-server.log");
-const bootstrapKeypairPath = path.join(artifactRoot, "solana-bootstrap-keypair.json");
+const bootstrapKeypairPath = path.join(
+  artifactRoot,
+  "solana-bootstrap-keypair.json",
+);
 const ciHome = path.join(artifactRoot, "home");
-let httpPort = target === "evm" ? "3401" : "3501";
-let wsPort = target === "evm" ? "3400" : "3500";
-let anvilPort = target === "evm" ? "18546" : "18547";
+const reservedPorts = new Set<number>();
+const preferredPorts =
+  target === "evm"
+    ? { http: 3401, ws: 3400, anvil: 18546 }
+    : { http: 3501, ws: 3500, anvil: 18547 };
 
 const evmCanonical = [
   "stale-signal-sniping",
@@ -85,6 +111,50 @@ function scenarioEnv(): NodeJS.ProcessEnv {
   };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function sanitizeArtifactName(value: string): string {
+  return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
+}
+
+function getScenarioPreset(scenarioId: string): ScenarioPreset {
+  const chainKey = target === "evm" ? "bsc" : "solana";
+  const preset =
+    SCENARIO_PRESETS.find(
+      (entry) => entry.id === scenarioId && entry.chainKey === chainKey,
+    ) ?? null;
+  if (!preset) {
+    throw new Error(`unknown scenario preset ${scenarioId} for ${chainKey}`);
+  }
+  return preset;
+}
+
+function buildScenarioExecutions(
+  scenarioIds: string[],
+  mode: "canonical" | "matrix",
+): ScenarioExecution[] {
+  return scenarioIds.flatMap((scenarioId) => {
+    const preset = getScenarioPreset(scenarioId);
+    const seeds =
+      mode === "canonical"
+        ? [preset.canonicalSeed]
+        : [preset.canonicalSeed, ...preset.matrixSeeds];
+    return seeds.map((seed, index) => ({
+      mode,
+      scenarioId: preset.id,
+      seed,
+      artifactName:
+        mode === "canonical"
+          ? `${preset.id}-canonical`
+          : `${preset.id}-matrix-${index + 1}`,
+    }));
+  });
+}
+
 async function ensureBootstrapWallet(): Promise<void> {
   if (target !== "solana") {
     return;
@@ -94,7 +164,14 @@ async function ensureBootstrapWallet(): Promise<void> {
     mkdirSync(path.dirname(bootstrapKeypairPath), { recursive: true });
     await runCommand(
       "solana-keygen",
-      ["new", "--no-bip39-passphrase", "--silent", "--force", "-o", bootstrapKeypairPath],
+      [
+        "new",
+        "--no-bip39-passphrase",
+        "--silent",
+        "--force",
+        "-o",
+        bootstrapKeypairPath,
+      ],
       {
         stdoutFile: path.join(artifactRoot, "solana-keygen.out.log"),
         stderrFile: path.join(artifactRoot, "solana-keygen.err.log"),
@@ -105,52 +182,142 @@ async function ensureBootstrapWallet(): Promise<void> {
   materializeCiSolanaWallet(bootstrapKeypairPath, ciHome);
 }
 
-async function runCli(args: string[], name: string): Promise<void> {
-  await runCommand("bun", ["run", "--cwd", "packages/simulation-dashboard", "scenario", ...args], {
-    env: {
-      SIM_API_URL: `http://127.0.0.1:${httpPort}`,
-      ...scenarioEnv(),
-    },
-    stdoutFile: path.join(artifactRoot, `${name}.out.log`),
-    stderrFile: path.join(artifactRoot, `${name}.err.log`),
-  });
+async function fetchScenarioJson(
+  apiBaseUrl: string,
+  pathname: string,
+  options: {
+    retries?: number;
+    backoffMs?: number;
+  } = {},
+): Promise<any> {
+  const retries = Math.max(1, options.retries ?? 1);
+  const backoffMs = Math.max(50, options.backoffMs ?? 250);
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(`${apiBaseUrl}${pathname}`);
+      const text = await response.text();
+      const payload = text ? JSON.parse(text) : null;
+      if (!response.ok) {
+        const error = new Error(
+          payload?.error || `${response.status} ${response.statusText}`,
+        );
+        if (response.status >= 500 && attempt < retries) {
+          lastError = error;
+          await sleep(backoffMs * attempt);
+          continue;
+        }
+        throw error;
+      }
+      return payload;
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) {
+        await sleep(backoffMs * attempt);
+        continue;
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-let stopServer: (() => void) | null = null;
-let fatalError: unknown = null;
-
-async function allocateDistinctPort(
-  preferredPort: number,
-  usedPorts: Set<number>,
-): Promise<number> {
-  while (true) {
-    const candidate = await findAvailablePort(preferredPort);
-    if (!usedPorts.has(candidate)) {
-      usedPorts.add(candidate);
-      return candidate;
+async function pollScenarioRun(
+  apiBaseUrl: string,
+  runId: string,
+): Promise<ScenarioRunRecord> {
+  const deadline = Date.now() + 300_000;
+  while (Date.now() < deadline) {
+    const payload = await fetchScenarioJson(
+      apiBaseUrl,
+      `/api/scenarios/results?runId=${encodeURIComponent(runId)}`,
+      {
+        retries: 3,
+        backoffMs: 300,
+      },
+    );
+    const run = payload.run as ScenarioRunRecord | null;
+    if (!run) {
+      throw new Error(`scenario run not found: ${runId}`);
     }
+    if (run.status === "succeeded" || run.status === "failed") {
+      return run;
+    }
+    await sleep(1_500);
+  }
+  throw new Error(`scenario run ${runId} timed out after 300000ms`);
+}
+
+async function runScenarioViaApi(
+  context: ScenarioServerContext,
+  execution: ScenarioExecution,
+): Promise<void> {
+  writeJsonArtifact(context.scenarioArtifactRoot, "request.json", execution);
+
+  const params = new URLSearchParams({
+    name: execution.scenarioId,
+    seed: execution.seed,
+    fresh: "1",
+  });
+  const payload = await fetchScenarioJson(
+    context.apiBaseUrl,
+    `/api/scenarios/run?${params.toString()}`,
+    {
+      retries: 5,
+      backoffMs: 300,
+    },
+  );
+  const queuedRun = payload.run as ScenarioRunRecord | null;
+  if (!queuedRun) {
+    throw new Error(
+      `scenario ${execution.scenarioId} was accepted without a run record`,
+    );
+  }
+
+  const completedRun = await pollScenarioRun(context.apiBaseUrl, queuedRun.runId);
+  writeJsonArtifact(context.scenarioArtifactRoot, "result.json", completedRun);
+  if (
+    completedRun.status !== "succeeded" ||
+    completedRun.result?.passed !== true
+  ) {
+    throw new Error(
+      `scenario ${execution.scenarioId} (${execution.seed}) failed`,
+    );
   }
 }
 
-try {
-  const preferredHttpPort = target === "evm" ? 3401 : 3501;
-  const preferredWsPort = target === "evm" ? 3400 : 3500;
-  const preferredAnvilPort = target === "evm" ? 18546 : 18547;
-  const usedPorts = new Set<number>();
-  httpPort = String(await allocateDistinctPort(preferredHttpPort, usedPorts));
-  wsPort = String(await allocateDistinctPort(preferredWsPort, usedPorts));
-  anvilPort = String(await allocateDistinctPort(preferredAnvilPort, usedPorts));
+let stopServer: (() => Promise<void>) | null = null;
+let fatalError: unknown = null;
 
-  await ensureBootstrapWallet();
-
-  await runCommand(
-    "bun",
-    ["run", "--cwd", "packages/evm-contracts", "build:foundry"],
-    {
-      stdoutFile: path.join(artifactRoot, "foundry-build.out.log"),
-      stderrFile: path.join(artifactRoot, "foundry-build.err.log"),
-    },
+async function withSimulationServer<T>(
+  execution: ScenarioExecution,
+  run: (context: ScenarioServerContext) => Promise<T>,
+): Promise<T> {
+  const scenarioArtifactRoot = path.join(
+    artifactRoot,
+    "scenarios",
+    sanitizeArtifactName(execution.artifactName),
   );
+  mkdirSync(scenarioArtifactRoot, { recursive: true });
+
+  const httpPort = String(
+    await allocateDistinctPort(preferredPorts.http, reservedPorts),
+  );
+  const wsPort = String(await allocateDistinctPort(preferredPorts.ws, reservedPorts));
+  const anvilPort = String(
+    await allocateDistinctPort(preferredPorts.anvil, reservedPorts),
+  );
+  const apiBaseUrl = `http://127.0.0.1:${httpPort}`;
+  const serverLog = path.join(scenarioArtifactRoot, "simulation-server.log");
+  const historyPath = path.join(scenarioArtifactRoot, "scenario-history.json");
+
+  writeJsonArtifact(scenarioArtifactRoot, "server.json", {
+    apiBaseUrl,
+    anvilPort,
+    httpPort,
+    wsPort,
+  });
 
   const server = await spawnBackground(
     "bun",
@@ -167,29 +334,74 @@ try {
       logFile: serverLog,
     },
   );
-  stopServer = server.stop;
+  stopServer = () => server.stop({ timeoutMs: 15_000 });
 
-  const apiBaseUrl = `http://127.0.0.1:${httpPort}`;
-  await waitForJsonEndpoint(`${apiBaseUrl}/api/scenarios`, {
-    validate: (payload) => Array.isArray(payload?.scenarios),
-  });
+  try {
+    await waitForJsonEndpoint(`${apiBaseUrl}/api/scenarios`, {
+      validate: (payload) => Array.isArray(payload?.scenarios),
+    });
+    await fetchScenarioJson(apiBaseUrl, "/api/scenarios", {
+      retries: 5,
+      backoffMs: 300,
+    });
+    return await run({
+      apiBaseUrl,
+      scenarioArtifactRoot,
+    });
+  } finally {
+    await server.stop({ timeoutMs: 15_000 });
+    stopServer = null;
+  }
+}
+
+async function allocateDistinctPort(
+  preferredPort: number,
+  usedPorts: Set<number>,
+): Promise<number> {
+  const preferredCandidate = await findAvailablePort(preferredPort);
+  if (!usedPorts.has(preferredCandidate)) {
+    usedPorts.add(preferredCandidate);
+    return preferredCandidate;
+  }
+
+  while (true) {
+    const candidate = await findAvailablePort(0);
+    if (!usedPorts.has(candidate)) {
+      usedPorts.add(candidate);
+      return candidate;
+    }
+  }
+}
+
+try {
+  await ensureBootstrapWallet();
+
+  await runCommand(
+    "bun",
+    ["run", "--cwd", "packages/evm-contracts", "build:foundry"],
+    {
+      stdoutFile: path.join(artifactRoot, "foundry-build.out.log"),
+      stderrFile: path.join(artifactRoot, "foundry-build.err.log"),
+    },
+  );
 
   const canonical = target === "evm" ? evmCanonical : solanaCanonical;
   const matrix = target === "evm" ? evmMatrix : solanaMatrix;
+  const executions = [
+    ...buildScenarioExecutions(canonical, "canonical"),
+    ...buildScenarioExecutions(matrix, "matrix"),
+  ];
+  writeJsonArtifact(artifactRoot, "executions.json", executions);
 
-  for (const scenarioId of canonical) {
-    await runCli(["canonical", scenarioId, "--fresh"], `${scenarioId}-canonical`);
-  }
-
-  for (const scenarioId of matrix) {
-    await runCli(["matrix", scenarioId, "--fresh"], `${scenarioId}-matrix`);
+  for (const execution of executions) {
+    await withSimulationServer(execution, (context) =>
+      runScenarioViaApi(context, execution),
+    );
   }
 } catch (error) {
   fatalError = error;
 } finally {
-  stopServer?.();
-  copyIntoArtifacts(artifactRoot, historyPath, "scenario-history.json");
-  copyIntoArtifacts(artifactRoot, serverLog, "simulation-server.log");
+  await stopServer?.();
 }
 
 if (fatalError) {
