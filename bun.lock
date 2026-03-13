@@ -344,6 +344,7 @@
         "@tanstack/react-query": "^5.90.21",
         "bs58": "^6.0.0",
         "hls.js": "^1.6.15",
+        "lightweight-charts": "^5.1.0",
         "react": "19.2.4",
         "react-dom": "19.2.4",
         "recharts": "^3.7.0",

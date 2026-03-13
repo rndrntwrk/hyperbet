@@ -57,6 +57,26 @@
   --hm-font-body: "Inter", system-ui, -apple-system, sans-serif;
   --hm-font-mono: "IBM Plex Mono", "Menlo", monospace;
   --hm-font-display: "Orbitron", "Inter", system-ui, sans-serif;
+  --hm-header-control-bg: linear-gradient(180deg, rgba(28, 29, 33, 0.94) 0%, rgba(14, 14, 16, 0.99) 100%);
+  --hm-header-control-hover-bg: linear-gradient(180deg, rgba(38, 39, 44, 0.98) 0%, rgba(18, 18, 21, 1) 100%);
+  --hm-header-control-border: rgba(255, 255, 255, 0.1);
+  --hm-header-control-border-strong: rgba(229, 184, 74, 0.34);
+  --hm-header-control-text: #eceef2;
+  --hm-header-theme-icon: var(--hm-accent-gold);
+  --hm-header-control-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  --hm-chart-bg: #0d0e10;
+  --hm-chart-grid: rgba(255, 255, 255, 0.06);
+  --hm-chart-border: rgba(255, 255, 255, 0.08);
+  --hm-chart-text: rgba(236, 238, 242, 0.68);
+  --hm-chart-midline: rgba(255, 255, 255, 0.14);
+  --hm-chart-crosshair: rgba(236, 238, 242, 0.18);
+  --hm-chart-crosshair-label-bg: #16181b;
+  --hm-chart-yes: var(--hm-accent-gold);
+  --hm-chart-yes-dim: rgba(229, 184, 74, 0.22);
+  --hm-chart-yes-zero: rgba(229, 184, 74, 0);
+  --hm-chart-no: #22c55e;
+  --hm-chart-no-dim: rgba(34, 197, 94, 0.12);
+  --hm-chart-no-zero: rgba(34, 197, 94, 0);
 }
 
 * {
@@ -1683,6 +1703,54 @@ select:focus-visible {
   pointer-events: none;
   color: var(--hm-text-muted);
   font-size: 9px;
+}
+
+.hm-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--hm-radius);
+  border: 1px solid var(--hm-header-control-border);
+  background: var(--hm-header-control-bg);
+  color: var(--hm-header-theme-icon);
+  box-shadow: var(--hm-header-control-shadow);
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s,
+    box-shadow 0.2s;
+}
+
+.hm-theme-toggle:hover {
+  background: var(--hm-header-control-hover-bg);
+  border-color: var(--hm-header-control-border-strong);
+  color: var(--hm-header-control-text);
+}
+
+.hm-theme-toggle svg {
+  color: inherit;
+}
+
+.hm-theme-toggle:focus-visible {
+  border-color: var(--hm-header-control-border-strong);
+  outline: 2px solid var(--hm-header-control-border-strong);
+  outline-offset: 2px;
+}
+
+.hm-theme-toggle--compact {
+  width: 30px;
+  height: 30px;
+}
+
+[data-theme="light"] .hm-theme-toggle,
+[data-theme="light"] .hm-theme-toggle svg {
+  color: var(--hm-header-theme-icon);
 }
 
 /* ============================================================
