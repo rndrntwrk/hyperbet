@@ -35,14 +35,14 @@ import {
 import { usePredictionMarketLifecycle } from "@hyperbet/ui/lib/predictionMarkets";
 import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
 import { ChainSelector } from "@hyperbet/ui/components/ChainSelector";
-import { ThemeSelector } from "./components/ThemeSelector";
+import { ThemeSelector } from "@hyperbet/ui/components/ThemeSelector";
 
 import { useChain } from "./lib/ChainContext";
 import { useStreamingState } from "@hyperbet/ui/spectator/useStreamingState";
 import { useDuelContext } from "@hyperbet/ui/spectator/useDuelContext";
 import { useResizePanel, useIsMobile } from "@hyperbet/ui/lib/useResizePanel";
 import { ResizeHandle } from "@hyperbet/ui/components/ResizeHandle";
-import { HmChart, type HmChartPoint } from "./components/HmChart";
+import { HmChart, type HmChartPoint } from "@hyperbet/ui/components/HmChart";
 import {
   getMarketMeta,
   createEvmPublicClient,
@@ -1285,7 +1285,7 @@ const [hmBottomTab, setHmBottomTab] = useState<
                   onChange={handleLocaleChange}
                   compact
                 />
-                <ThemeSelector compact />
+                <ThemeSelector compact theme="avax" />
                 <button
                   type="button"
                   className="hm-header-mob-icon-btn"
@@ -1389,7 +1389,7 @@ const [hmBottomTab, setHmBottomTab] = useState<
 
             <div className="hm-header-right">
               <LocaleSelector locale={locale} onChange={handleLocaleChange} />
-              <ThemeSelector />
+              <ThemeSelector theme="avax" />
               {/* <PointsDisplay
                 walletAddress={pointsWalletAddress}
                 compact
@@ -1575,7 +1575,7 @@ const [hmBottomTab, setHmBottomTab] = useState<
                     </span>
                   </div>
                   <div className="hm-chart-container">
-                    <HmChart data={effChartData} />
+                    <HmChart data={effChartData} theme="avax" />
                   </div>
                 </div>
               </div>
