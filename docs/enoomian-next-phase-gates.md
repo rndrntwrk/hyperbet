@@ -6,6 +6,10 @@ This document defines the post-sprint launch-completion work for
 The foundation is built. The remaining work is launch-completion, not
 architecture bootstrap.
 
+Launch-evidence contract for Gates `22-24`:
+
+- [`docs/release/launch-evidence-control.md`](release/launch-evidence-control.md)
+
 ## Execution Model
 
 This is a tracked execution document for independent teams or agents branching
@@ -677,6 +681,8 @@ is yet stable and required.
 - re-promotion of cross-chain E2E when stable
 - AVAX proof lanes after canonicalization
 - final gate policy documentation
+- enforcement against
+  [`docs/release/launch-evidence-control.md`](release/launch-evidence-control.md)
 
 ### Explicitly Out Of Scope
 
@@ -736,6 +742,8 @@ behavior. This gate does that.
 - restart/recovery drill
 - proof artifact package
 - launch evidence summary
+- artifact bundle format defined in
+  [`docs/release/launch-evidence-control.md`](release/launch-evidence-control.md)
 
 ### Explicitly Out Of Scope
 
@@ -796,6 +804,8 @@ just internal confidence.
 - remediation cycle
 - release memo
 - final residual-risk statement
+- audit handoff + remediation ledger format from
+  [`docs/release/launch-evidence-control.md`](release/launch-evidence-control.md)
 
 ### Explicitly Out Of Scope
 
