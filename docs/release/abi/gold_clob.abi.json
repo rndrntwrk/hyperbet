@@ -1,0 +1,11 @@
+[
+  { "type": "function", "name": "createMarketForDuel", "inputs": [ { "type": "bytes32", "name": "duelKey" }, { "type": "uint8", "name": "marketKind" } ], "outputs": [ { "type": "bytes32" } ], "stateMutability": "nonpayable" },
+  { "type": "function", "name": "syncMarketFromOracle", "inputs": [ { "type": "bytes32", "name": "duelKey" }, { "type": "uint8", "name": "marketKind" } ], "outputs": [ { "type": "uint8" } ], "stateMutability": "nonpayable" },
+  { "type": "function", "name": "placeOrder", "inputs": [ { "type": "bytes32", "name": "duelKey" }, { "type": "uint8", "name": "marketKind" }, { "type": "uint8", "name": "side" }, { "type": "uint16", "name": "price" }, { "type": "uint128", "name": "amount" } ], "outputs": [], "stateMutability": "payable" },
+  { "type": "function", "name": "cancelOrder", "inputs": [ { "type": "bytes32", "name": "duelKey" }, { "type": "uint8", "name": "marketKind" }, { "type": "uint64", "name": "orderId" } ], "outputs": [], "stateMutability": "nonpayable" },
+  { "type": "function", "name": "claim", "inputs": [ { "type": "bytes32", "name": "duelKey" }, { "type": "uint8", "name": "marketKind" } ], "outputs": [], "stateMutability": "nonpayable" },
+  { "type": "function", "name": "setFeeConfig", "inputs": [ { "type": "uint256", "name": "tradeTreasuryFeeBps" }, { "type": "uint256", "name": "tradeMarketMakerFeeBps" }, { "type": "uint256", "name": "winningsMarketMakerFeeBps" } ], "outputs": [], "stateMutability": "nonpayable" },
+  { "type": "function", "name": "setOracle", "inputs": [ { "type": "address", "name": "oracle" } ], "outputs": [], "stateMutability": "nonpayable" },
+  { "type": "function", "name": "setTreasury", "inputs": [ { "type": "address", "name": "treasury_" } ], "outputs": [], "stateMutability": "nonpayable" },
+  { "type": "function", "name": "setMarketMaker", "inputs": [ { "type": "address", "name": "marketMaker_" } ], "outputs": [], "stateMutability": "nonpayable" }
+]
