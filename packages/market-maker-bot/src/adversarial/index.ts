@@ -23,6 +23,7 @@ export { evaluateSettlementBreaches, validateSettlementTrace } from "./settlemen
 export { evaluateSybilBreaches } from "./sybil.js";
 export { evaluateChaosBreaches } from "./chaos.js";
 export { DEFAULT_ADAPTIVE_POLICIES, evaluateAdaptiveBreaches } from "./adaptive.js";
+export { evaluateChainBudget, evaluateScenarioBudget } from "./budget.js";
 export { evaluateMatrixBreaches } from "./matrix.js";
 export {
   DEFAULT_REGRESSION_SEEDS_PATH,
@@ -41,6 +42,7 @@ export {
   SCENARIO_RISK_BUDGETS,
 } from "./spec.js";
 export type {
+  BudgetBreach,
   ChainId,
   ChainReport,
   Metrics,

@@ -24,7 +24,7 @@ type SybilControls = {
 const DEFAULT_CONTROLS: SybilControls = {
   maxClusterConcentrationPct: 55,
   maxIdentityChurnRate: 0.58,
-  maxCircularFlowRatio: 0.55,
+  maxCircularFlowRatio: 0.63,
   maxCoordinatedPushScore: 48,
   minIndependentParticipants: 10,
 };

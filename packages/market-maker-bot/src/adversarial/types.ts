@@ -7,6 +7,14 @@ export type ScenarioId =
   | "stale_signal_arbitrage"
   | "liquidation_cascade"
   | "gas_auction_backrun"
+  | "restart_mid_fill"
+  | "orphan_sweep_failure"
+  | "rpc_split_brain"
+  | "nonce_collision_replay"
+  | "reorg_finality_lag"
+  | "rounding_abuse"
+  | "fee_token_depletion"
+  | "cross_market_inventory_bleed"
   | "layering_spoof_ladder"
   | "quote_stuffing_burst"
   | "cancel_storm_griefing"
@@ -14,6 +22,12 @@ export type ScenarioId =
   | "sybil_identity_churn"
   | "rebate_farming_ring"
   | "coordinated_resolution_push";
+
+export type BudgetBreach = {
+  control: string;
+  expected: string;
+  actual: number;
+};
 
 export type GuardProfile = {
   name: "baseline" | "mitigated";
@@ -47,6 +61,10 @@ export type Metrics = {
   inventoryPeak: number;
   exploitEvents: number;
   avgAdverseSlippageBps: number;
+  staleQuoteUptimeRatio: number;
+  orphanOrderCount: number;
+  reconciliationLagMs: number;
+  unresolvedClaimBacklog: number;
 };
 
 export type ScenarioRun = {
@@ -54,7 +72,10 @@ export type ScenarioRun = {
   baseline: Metrics;
   mitigated: Metrics;
   improved: boolean;
+  budgetPass: boolean;
   mitigationPass: boolean;
+  requiredControls: string[];
+  budgetBreaches: BudgetBreach[];
   notes: string[];
 };
 
