@@ -68,6 +68,30 @@ contract GoldClobSettlementTest is Test {
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }
 
+    function testClaimUsesWinningsFeeSnapshotAfterFeeConfigChanges() public {
+        bytes32 duel = _createOpenMarket("snapshot-fee-claim");
+        uint128 amount = 1_000;
+
+        GoldClob.Market memory marketBefore = clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
+        assertEq(marketBefore.winningsMarketMakerFeeBpsSnapshot, 200, "market should snapshot initial winnings fee");
+
+        vm.prank(admin);
+        clob.setFeeConfig(0, 0, 5_000);
+
+        _matchTrade(duel, 600, amount);
+        _resolveDuel(duel, DuelOutcomeOracle.Side.A);
+
+        uint256 traderBefore = traderB.balance;
+        uint256 mmBefore = marketMaker.balance;
+
+        vm.prank(traderB);
+        clob.claim(duel, MARKET_KIND_DUEL_WINNER);
+
+        uint256 expectedFee = (uint256(amount) * 200) / 10_000;
+        assertEq(marketMaker.balance - mmBefore, expectedFee, "claim fee should use snapshotted winnings fee");
+        assertEq(traderB.balance - traderBefore, uint256(amount) - expectedFee, "winner payout should ignore updated global fee");
+    }
+
     function testResolvedLoserClaimClearsStateAndRejectsRepeat() public {
         bytes32 duel = _createOpenMarket("loser-clear");
         uint128 amount = 1_000;

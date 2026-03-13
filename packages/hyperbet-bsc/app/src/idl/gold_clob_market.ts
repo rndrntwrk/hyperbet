@@ -1072,6 +1072,18 @@ export type GoldClobMarket = {
             }
           },
           {
+            "name": "tradeTreasuryFeeBpsSnapshot",
+            "type": "u16"
+          },
+          {
+            "name": "tradeMarketMakerFeeBpsSnapshot",
+            "type": "u16"
+          },
+          {
+            "name": "winningsMarketMakerFeeBpsSnapshot",
+            "type": "u16"
+          },
+          {
             "name": "nextOrderId",
             "type": "u64"
           },

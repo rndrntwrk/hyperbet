@@ -16,6 +16,7 @@ import {
   hasProgramError,
   initializeCanonicalMarket,
   placeClobOrder,
+  reportDuelResult,
   syncMarketFromDuel,
   uniqueDuelKey,
   upsertDuel,
@@ -459,6 +460,112 @@ describe("gold_clob_market (native SOL settlement)", () => {
 
     const firstOrder = await clobProgram.account.order.fetch(firstAsk.order);
     assert.strictEqual(firstOrder.nextOrderId.toString(), "0");
+  });
+
+  it("uses market fee snapshots for claims after config fee changes", async () => {
+    const marketMaker = Keypair.generate();
+    const maker = Keypair.generate();
+    const taker = Keypair.generate();
+
+    await Promise.all([
+      airdrop(provider.connection, marketMaker.publicKey, 2),
+      airdrop(provider.connection, maker.publicKey, 5),
+      airdrop(provider.connection, taker.publicKey, 5),
+    ]);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      {
+        duelKey: uniqueDuelKey("fee-snapshot-claim"),
+        marketMaker: marketMaker.publicKey,
+      },
+    );
+
+    const marketStateBefore = await clobProgram.account.marketState.fetch(
+      market.marketState,
+    );
+    assert.strictEqual(
+      marketStateBefore.winningsMarketMakerFeeBpsSnapshot,
+      200,
+    );
+
+    await clobProgram.methods
+      .updateConfig(
+        authority.publicKey,
+        authority.publicKey,
+        authority.publicKey,
+        market.marketMaker,
+        100,
+        100,
+        5000,
+      )
+      .accountsPartial({
+        authority: authority.publicKey,
+        config: market.config,
+      })
+      .signers([authority])
+      .rpc();
+
+    const makerAsk = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: maker,
+      orderId: 1,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 1000,
+    });
+
+    const takerBid = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+      orderId: 2,
+      side: SIDE_BID,
+      price: 600,
+      amount: 1000,
+      remainingAccounts: [
+        writableAccount(makerAsk.restingLevel),
+        writableAccount(makerAsk.order),
+        writableAccount(makerAsk.userBalance),
+      ],
+    });
+
+    const mmBefore = await provider.connection.getBalance(market.marketMaker);
+
+    await reportDuelResult(fightProgram, authority, market.duelKey, {
+      winner: { a: {} },
+      duelEndTs: Math.floor(Date.now() / 1000) - 10,
+      metadataUri: "https://hyperscape.gg/duels/resolved-fee-snapshot",
+    });
+    await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
+
+    await claimClobWinnings(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+    });
+
+    const takerBalanceAfter = await clobProgram.account.userBalance.fetch(
+      takerBid.userBalance,
+    );
+    assert.strictEqual(takerBalanceAfter.aShares.toString(), "0");
+
+    const mmAfter = await provider.connection.getBalance(market.marketMaker);
+    assert.strictEqual(mmAfter - mmBefore, 20);
   });
 
   it("refunds matched stake when a duel is cancelled", async () => {

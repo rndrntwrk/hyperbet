@@ -74,6 +74,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         bytes32 duelKey;
         MarketStatus status;
         Side winner;
+        uint16 tradeTreasuryFeeBpsSnapshot;
+        uint16 tradeMarketMakerFeeBpsSnapshot;
+        uint16 winningsMarketMakerFeeBpsSnapshot;
         uint64 nextOrderId;
         uint16 bestBid;
         uint16 bestAsk;
@@ -258,6 +261,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         market.exists = true;
         market.duelKey = duelKey;
         market.status = _mapDuelStatus(duel.status);
+        market.tradeTreasuryFeeBpsSnapshot = uint16(tradeTreasuryFeeBps);
+        market.tradeMarketMakerFeeBpsSnapshot = uint16(tradeMarketMakerFeeBps);
+        market.winningsMarketMakerFeeBpsSnapshot = uint16(winningsMarketMakerFeeBps);
         market.nextOrderId = 1;
         market.bestAsk = MAX_PRICE;
 
@@ -367,7 +373,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             uint256 winningShares = market.winner == Side.A ? position.aShares : position.bShares;
             _clearPosition(position);
             if (winningShares > 0) {
-                uint256 fee = (winningShares * winningsMarketMakerFeeBps) / MAX_FEE_BPS;
+                uint256 fee = (winningShares * market.winningsMarketMakerFeeBpsSnapshot) / MAX_FEE_BPS;
                 payout = winningShares - fee;
                 if (fee > 0) payable(marketMaker).sendValue(fee);
             }

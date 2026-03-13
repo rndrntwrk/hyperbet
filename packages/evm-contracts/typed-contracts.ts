@@ -17,6 +17,9 @@ export type GoldClobMatch = {
   duelKey: string;
   status: bigint;
   winner: bigint;
+  tradeTreasuryFeeBpsSnapshot: bigint;
+  tradeMarketMakerFeeBpsSnapshot: bigint;
+  winningsMarketMakerFeeBpsSnapshot: bigint;
   nextOrderId: bigint;
   bestBid: bigint;
   bestAsk: bigint;

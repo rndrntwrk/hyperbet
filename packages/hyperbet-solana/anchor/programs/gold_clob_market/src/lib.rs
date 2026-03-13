@@ -3,7 +3,9 @@
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use fight_oracle::{self, DuelState as OracleDuelState, DuelStatus as OracleDuelStatus, MarketSide};
+use fight_oracle::{
+    self, DuelState as OracleDuelState, DuelStatus as OracleDuelStatus, MarketSide,
+};
 
 declare_id!("ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi");
 
@@ -127,7 +129,10 @@ pub mod gold_clob_market {
         duel_key: [u8; 32],
         market_kind: u8,
     ) -> Result<()> {
-        require!(market_kind == MARKET_KIND_DUEL_WINNER, ErrorCode::InvalidMarketKind);
+        require!(
+            market_kind == MARKET_KIND_DUEL_WINNER,
+            ErrorCode::InvalidMarketKind
+        );
         require!(
             ctx.accounts.operator.key() == ctx.accounts.config.authority
                 || ctx.accounts.operator.key() == ctx.accounts.config.market_operator,
@@ -150,6 +155,11 @@ pub mod gold_clob_market {
         market_state.duel_key = duel_key;
         market_state.market_kind = market_kind;
         market_state.status = map_duel_status(ctx.accounts.duel_state.status);
+        market_state.trade_treasury_fee_bps_snapshot = ctx.accounts.config.trade_treasury_fee_bps;
+        market_state.trade_market_maker_fee_bps_snapshot =
+            ctx.accounts.config.trade_market_maker_fee_bps;
+        market_state.winnings_market_maker_fee_bps_snapshot =
+            ctx.accounts.config.winnings_market_maker_fee_bps;
         market_state.next_order_id = 1;
         market_state.best_ask = 1000;
         market_state.authority = ctx.accounts.operator.key();
@@ -176,13 +186,23 @@ pub mod gold_clob_market {
         require!(amount > 0, ErrorCode::InvalidAmount);
 
         let market_state = &mut ctx.accounts.market_state;
-        sync_market_status(market_state, &ctx.accounts.duel_state, ctx.accounts.duel_state.key())?;
-        require!(market_state.status == MarketStatus::Open, ErrorCode::MarketNotOpen);
+        sync_market_status(
+            market_state,
+            &ctx.accounts.duel_state,
+            ctx.accounts.duel_state.key(),
+        )?;
+        require!(
+            market_state.status == MarketStatus::Open,
+            ErrorCode::MarketNotOpen
+        );
         require!(
             Clock::get()?.unix_timestamp < ctx.accounts.duel_state.bet_close_ts,
             ErrorCode::BettingClosed
         );
-        require!(order_id == market_state.next_order_id, ErrorCode::InvalidOrderId);
+        require!(
+            order_id == market_state.next_order_id,
+            ErrorCode::InvalidOrderId
+        );
         market_state.next_order_id = market_state
             .next_order_id
             .checked_add(1)
@@ -268,15 +288,21 @@ pub mod gold_clob_market {
                 ErrorCode::InvalidRemainingAccount
             );
             account_idx += 1;
-            let mut level: Account<PriceLevel> = Account::try_from(level_info)
-                .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
+            let mut level: Account<PriceLevel> =
+                Account::try_from(level_info).map_err(|_| ErrorCode::InvalidRemainingAccount)?;
             require_keys_eq!(
                 level.market_state,
                 market_key,
                 ErrorCode::InvalidRemainingAccount
             );
-            require!(level.side == opposite_side, ErrorCode::InvalidRemainingAccount);
-            require!(level.price == boundary_price, ErrorCode::InvalidRemainingAccount);
+            require!(
+                level.side == opposite_side,
+                ErrorCode::InvalidRemainingAccount
+            );
+            require!(
+                level.price == boundary_price,
+                ErrorCode::InvalidRemainingAccount
+            );
 
             if level.total_open == 0 || level.head_order_id == 0 {
                 set_price_bit(market_state, opposite_side, boundary_price, false);
@@ -306,14 +332,25 @@ pub mod gold_clob_market {
                 .get(account_idx)
                 .ok_or(ErrorCode::MissingMatchAccounts)?;
             account_idx += 1;
-            let mut maker_balance: Account<UserBalance> =
-                Account::try_from(maker_balance_info)
-                    .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
+            let mut maker_balance: Account<UserBalance> = Account::try_from(maker_balance_info)
+                .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
 
-            require!(maker_order.market_state == market_key, ErrorCode::InvalidRemainingAccount);
-            require!(maker_order.side == opposite_side, ErrorCode::InvalidRemainingAccount);
-            require!(maker_order.price == boundary_price, ErrorCode::InvalidRemainingAccount);
-            require!(maker_order.maker == maker_balance.user, ErrorCode::InvalidRemainingAccount);
+            require!(
+                maker_order.market_state == market_key,
+                ErrorCode::InvalidRemainingAccount
+            );
+            require!(
+                maker_order.side == opposite_side,
+                ErrorCode::InvalidRemainingAccount
+            );
+            require!(
+                maker_order.price == boundary_price,
+                ErrorCode::InvalidRemainingAccount
+            );
+            require!(
+                maker_order.maker == maker_balance.user,
+                ErrorCode::InvalidRemainingAccount
+            );
             require!(
                 maker_balance.market_state == market_key,
                 ErrorCode::InvalidRemainingAccount
@@ -459,7 +496,11 @@ pub mod gold_clob_market {
                 level.price = price;
                 level.bump = ctx.bumps.resting_level;
             } else {
-                require_keys_eq!(level.market_state, market_key, ErrorCode::PriceLevelMismatch);
+                require_keys_eq!(
+                    level.market_state,
+                    market_key,
+                    ErrorCode::PriceLevelMismatch
+                );
                 require!(level.side == side, ErrorCode::PriceLevelMismatch);
                 require!(level.price == price, ErrorCode::PriceLevelMismatch);
             }
@@ -488,8 +529,8 @@ pub mod gold_clob_market {
                     expected_tail_key,
                     ErrorCode::InvalidRemainingAccount
                 );
-                let mut tail_order: Account<Order> = Account::try_from(tail_info)
-                    .map_err(|_| ErrorCode::InvalidRemainingAccount)?;
+                let mut tail_order: Account<Order> =
+                    Account::try_from(tail_info).map_err(|_| ErrorCode::InvalidRemainingAccount)?;
                 tail_order.next_order_id = order_id;
                 tail_order.exit(&crate::ID)?;
             } else {
@@ -540,7 +581,10 @@ pub mod gold_clob_market {
         require!(order.id == order_id, ErrorCode::InvalidOrderId);
         require!(order.side == side, ErrorCode::OrderSideMismatch);
         require!(order.price == price, ErrorCode::OrderPriceMismatch);
-        require!(order.maker == ctx.accounts.user.key(), ErrorCode::NotOrderMaker);
+        require!(
+            order.maker == ctx.accounts.user.key(),
+            ErrorCode::NotOrderMaker
+        );
 
         let remaining = order
             .amount
@@ -617,7 +661,11 @@ pub mod gold_clob_market {
 
     pub fn claim(ctx: Context<Claim>) -> Result<()> {
         let market_state = &mut ctx.accounts.market_state;
-        sync_market_status(market_state, &ctx.accounts.duel_state, ctx.accounts.duel_state.key())?;
+        sync_market_status(
+            market_state,
+            &ctx.accounts.duel_state,
+            ctx.accounts.duel_state.key(),
+        )?;
 
         let user_balance = &mut ctx.accounts.user_balance;
         let (fee, payout) = if market_state.status == MarketStatus::Cancelled {
@@ -632,7 +680,10 @@ pub mod gold_clob_market {
             user_balance.b_locked_lamports = 0;
             (0, refund_lamports)
         } else {
-            require!(market_state.status == MarketStatus::Resolved, ErrorCode::MarketNotResolved);
+            require!(
+                market_state.status == MarketStatus::Resolved,
+                ErrorCode::MarketNotResolved
+            );
             let mut winning_shares = 0_u64;
             if market_state.winner == MarketSide::A {
                 winning_shares = user_balance.a_shares;
@@ -645,7 +696,10 @@ pub mod gold_clob_market {
             }
             require!(winning_shares > 0, ErrorCode::NothingToClaim);
 
-            let fee = bps_fee(winning_shares, ctx.accounts.config.winnings_market_maker_fee_bps)?;
+            let fee = bps_fee(
+                winning_shares,
+                market_state.winnings_market_maker_fee_bps_snapshot,
+            )?;
             let payout = winning_shares
                 .checked_sub(fee)
                 .ok_or(ErrorCode::MathOverflow)?;
@@ -912,6 +966,9 @@ pub struct MarketState {
     pub market_kind: u8,
     pub status: MarketStatus,
     pub winner: MarketSide,
+    pub trade_treasury_fee_bps_snapshot: u16,
+    pub trade_market_maker_fee_bps_snapshot: u16,
+    pub winnings_market_maker_fee_bps_snapshot: u16,
     pub next_order_id: u64,
     pub best_bid: u16,
     pub best_ask: u16,
@@ -978,7 +1035,10 @@ fn validate_fee_config(
         trade_treasury_fee_bps + trade_market_maker_fee_bps <= 10_000,
         ErrorCode::FeeTooHigh
     );
-    require!(winnings_market_maker_fee_bps <= 10_000, ErrorCode::FeeTooHigh);
+    require!(
+        winnings_market_maker_fee_bps <= 10_000,
+        ErrorCode::FeeTooHigh
+    );
     Ok(())
 }
 
@@ -1029,7 +1089,11 @@ fn sync_market_status(
     duel_state: &OracleDuelState,
     duel_pubkey: Pubkey,
 ) -> Result<()> {
-    require_keys_eq!(market_state.duel_state, duel_pubkey, ErrorCode::DuelMismatch);
+    require_keys_eq!(
+        market_state.duel_state,
+        duel_pubkey,
+        ErrorCode::DuelMismatch
+    );
     market_state.status = map_duel_status(duel_state.status);
     if duel_state.status == OracleDuelStatus::Resolved {
         market_state.winner = duel_state.winner;
@@ -1050,7 +1114,12 @@ fn derive_order_key(market_key: &Pubkey, order_id: u64) -> Pubkey {
 
 fn derive_level_key(market_key: &Pubkey, side: u8, price: u16) -> Pubkey {
     Pubkey::find_program_address(
-        &[LEVEL_SEED, market_key.as_ref(), &[side], &price.to_le_bytes()],
+        &[
+            LEVEL_SEED,
+            market_key.as_ref(),
+            &[side],
+            &price.to_le_bytes(),
+        ],
         &crate::ID,
     )
     .0
@@ -1069,9 +1138,7 @@ fn highest_set_price(bitmap: &[u64; BITMAP_WORDS]) -> Option<u16> {
         if *word == 0 {
             continue;
         }
-        let bit = 63_u32
-            .checked_sub(word.leading_zeros())
-            .unwrap_or_default() as usize;
+        let bit = 63_u32.checked_sub(word.leading_zeros()).unwrap_or_default() as usize;
         let price = word_idx
             .checked_mul(64)
             .and_then(|value| value.checked_add(bit))?;
@@ -1114,11 +1181,7 @@ fn set_price_bit(market_state: &mut MarketState, side: u8, price: u16, active: b
     }
 }
 
-fn unlink_head_order(
-    market_state: &mut MarketState,
-    level: &mut PriceLevel,
-    order: &mut Order,
-) {
+fn unlink_head_order(market_state: &mut MarketState, level: &mut PriceLevel, order: &mut Order) {
     level.head_order_id = order.next_order_id;
     if level.head_order_id == 0 {
         level.tail_order_id = 0;
@@ -1161,7 +1224,10 @@ fn unlink_order(
         price_level.head_order_id = order.next_order_id;
     } else {
         let prev = prev_order.ok_or(ErrorCode::MissingLinkedOrderAccount)?;
-        require!(prev.id == order.prev_order_id, ErrorCode::InvalidRemainingAccount);
+        require!(
+            prev.id == order.prev_order_id,
+            ErrorCode::InvalidRemainingAccount
+        );
         prev.next_order_id = order.next_order_id;
     }
 
@@ -1169,7 +1235,10 @@ fn unlink_order(
         price_level.tail_order_id = order.prev_order_id;
     } else {
         let next = next_order.ok_or(ErrorCode::MissingLinkedOrderAccount)?;
-        require!(next.id == order.next_order_id, ErrorCode::InvalidRemainingAccount);
+        require!(
+            next.id == order.next_order_id,
+            ErrorCode::InvalidRemainingAccount
+        );
         next.prev_order_id = order.prev_order_id;
     }
 
