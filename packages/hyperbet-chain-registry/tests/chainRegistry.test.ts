@@ -152,7 +152,7 @@ describe("chain registry", () => {
       ]);
   });
 
-  test("resolves EVM runtime env with shared override precedence", () => {
+  test("allows non-production runtime address overrides for shared EVM tooling", () => {
     const runtime = resolveBettingEvmRuntimeEnv("avax", "testnet", {
       EVM_AVAX_RPC_URL: "https://override.example/rpc",
       AVAX_DUEL_ORACLE_ADDRESS: "0x1111111111111111111111111111111111111111",
@@ -166,6 +166,29 @@ describe("chain registry", () => {
     expect(runtime.goldClobAddress).toBe(
       "0x2222222222222222222222222222222222222222",
     );
+  });
+
+  test("ignores production address overrides and fails closed for incomplete canonical deployments", () => {
+    const baseRuntime = resolveBettingEvmRuntimeEnv("base", "mainnet-beta", {
+      BASE_MAINNET_RPC: "https://override.example/base",
+      BASE_DUEL_ORACLE_ADDRESS: "0x1111111111111111111111111111111111111111",
+      BASE_GOLD_CLOB_ADDRESS: "0x2222222222222222222222222222222222222222",
+    });
+    expect(baseRuntime.rpcUrl).toBe("https://override.example/base");
+    expect(baseRuntime.duelOracleAddress).toBe(
+      BETTING_DEPLOYMENTS.evm.base.duelOracleAddress,
+    );
+    expect(baseRuntime.goldClobAddress).toBe(
+      BETTING_DEPLOYMENTS.evm.base.goldClobAddress,
+    );
+
+    expect(() =>
+      resolveBettingEvmRuntimeEnv("avax", "mainnet-beta", {
+        AVAX_MAINNET_RPC: "https://override.example/avax",
+        AVAX_DUEL_ORACLE_ADDRESS: "0x1111111111111111111111111111111111111111",
+        AVAX_GOLD_CLOB_ADDRESS: "0x2222222222222222222222222222222222222222",
+      }),
+    ).toThrow(/Canonical Avalanche C-Chain deployment is incomplete/);
   });
 
   test("parses configurable EVM keeper chain lists without duplicates", () => {

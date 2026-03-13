@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS claim_backlog (
   last_error TEXT,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb
 );
+ALTER TABLE claim_backlog ADD COLUMN IF NOT EXISTS lease_owner TEXT;
+ALTER TABLE claim_backlog ADD COLUMN IF NOT EXISTS lease_expires_at BIGINT;
 CREATE TABLE IF NOT EXISTS outbox (
   id BIGSERIAL PRIMARY KEY,
   topic TEXT NOT NULL,
@@ -77,6 +79,8 @@ CREATE TABLE IF NOT EXISTS outbox (
   last_error TEXT,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb
 );
+ALTER TABLE outbox ADD COLUMN IF NOT EXISTS lease_owner TEXT;
+ALTER TABLE outbox ADD COLUMN IF NOT EXISTS lease_expires_at BIGINT;
 `;
 
 function parseOrderRecord(row: Record<string, any>): OrderRecord {
@@ -115,6 +119,9 @@ function parseClaimBacklog(row: Record<string, any>): ClaimBacklogItem {
       row.last_attempt_at == null ? null : Number(row.last_attempt_at),
     resolvedAt: row.resolved_at == null ? null : Number(row.resolved_at),
     lastError: row.last_error,
+    leaseOwner: row.lease_owner,
+    leaseExpiresAt:
+      row.lease_expires_at == null ? null : Number(row.lease_expires_at),
     payload: row.payload ?? {},
   };
 }
@@ -126,6 +133,9 @@ function parseOutbox(row: Record<string, any>): OutboxItem {
     status: row.status,
     availableAt: Number(row.available_at),
     leasedAt: row.leased_at == null ? null : Number(row.leased_at),
+    leaseOwner: row.lease_owner,
+    leaseExpiresAt:
+      row.lease_expires_at == null ? null : Number(row.lease_expires_at),
     attempts: Number(row.attempts),
     chainKey: row.chain_key,
     duelKey: row.duel_key,
@@ -278,9 +288,40 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
   async listDueClaimBacklog(now: number): Promise<ClaimBacklogItem[]> {
     const result = await this.pool.query(
       `SELECT * FROM claim_backlog
-       WHERE status <> 'RESOLVED' AND next_attempt_at <= $1
+       WHERE status <> 'RESOLVED'
+         AND next_attempt_at <= $1
+         AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
        ORDER BY next_attempt_at ASC`,
       [now],
+    );
+    return result.rows.map(parseClaimBacklog);
+  }
+
+  async leaseClaimBacklog(
+    now: number,
+    limit: number,
+    leaseOwner: string,
+    leaseDurationMs: number,
+  ): Promise<ClaimBacklogItem[]> {
+    const result = await this.pool.query(
+      `WITH due AS (
+         SELECT backlog_key
+         FROM claim_backlog
+         WHERE status <> 'RESOLVED'
+           AND next_attempt_at <= $1
+           AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+         ORDER BY next_attempt_at ASC
+         LIMIT $2
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE claim_backlog backlog
+       SET status = 'PROCESSING',
+           lease_owner = $3,
+           lease_expires_at = $4
+       FROM due
+       WHERE backlog.backlog_key = due.backlog_key
+       RETURNING backlog.*`,
+      [now, limit, leaseOwner, now + leaseDurationMs],
     );
     return result.rows.map(parseClaimBacklog);
   }
@@ -298,9 +339,11 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
         last_attempt_at,
         resolved_at,
         last_error,
+        lease_owner,
+        lease_expires_at,
         payload
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb
       )
       ON CONFLICT (backlog_key) DO UPDATE SET
         status = EXCLUDED.status,
@@ -309,6 +352,8 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
         last_attempt_at = EXCLUDED.last_attempt_at,
         resolved_at = EXCLUDED.resolved_at,
         last_error = EXCLUDED.last_error,
+        lease_owner = EXCLUDED.lease_owner,
+        lease_expires_at = EXCLUDED.lease_expires_at,
         payload = EXCLUDED.payload`,
       [
         item.backlogKey,
@@ -321,6 +366,8 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
         item.lastAttemptAt ?? null,
         item.resolvedAt ?? null,
         item.lastError ?? null,
+        item.leaseOwner ?? null,
+        item.leaseExpiresAt ?? null,
         JSON.stringify(item.payload ?? {}),
       ],
     );
@@ -344,7 +391,9 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
            next_attempt_at = $4,
            last_attempt_at = $5,
            last_error = $6,
-           resolved_at = $7
+           resolved_at = $7,
+           lease_owner = NULL,
+           lease_expires_at = NULL
        WHERE backlog_key = $1`,
       [
         backlogKey,
@@ -365,6 +414,8 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
         status,
         available_at,
         leased_at,
+        lease_owner,
+        lease_expires_at,
         attempts,
         chain_key,
         duel_key,
@@ -373,13 +424,15 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
         last_error,
         payload
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb
       ) RETURNING id`,
       [
         item.topic,
         item.status,
         item.availableAt,
         item.leasedAt ?? null,
+        item.leaseOwner ?? null,
+        item.leaseExpiresAt ?? null,
         item.attempts ?? 0,
         item.chainKey,
         item.duelKey,
@@ -392,37 +445,44 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
     return Number(result.rows[0]?.id ?? 0);
   }
 
-  async leaseOutbox(now: number, limit: number): Promise<OutboxItem[]> {
-    const select = await this.pool.query(
-      `SELECT * FROM outbox
-       WHERE status = 'PENDING' AND available_at <= $1
-       ORDER BY available_at ASC
-       LIMIT $2`,
-      [now, limit],
+  async leaseOutbox(
+    now: number,
+    limit: number,
+    leaseOwner: string,
+    leaseDurationMs: number,
+  ): Promise<OutboxItem[]> {
+    const result = await this.pool.query(
+      `WITH due AS (
+         SELECT id
+         FROM outbox
+         WHERE status <> 'DONE'
+           AND available_at <= $1
+           AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+         ORDER BY available_at ASC
+         LIMIT $2
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE outbox item
+       SET status = 'LEASED',
+           leased_at = $1,
+           lease_owner = $3,
+           lease_expires_at = $4,
+           attempts = item.attempts + 1
+       FROM due
+       WHERE item.id = due.id
+       RETURNING item.*`,
+      [now, limit, leaseOwner, now + leaseDurationMs],
     );
-    const leased: OutboxItem[] = [];
-    for (const row of select.rows) {
-      await this.pool.query(
-        `UPDATE outbox
-         SET status = 'LEASED', leased_at = $2, attempts = attempts + 1
-         WHERE id = $1`,
-        [row.id, now],
-      );
-      leased.push(
-        parseOutbox({
-          ...row,
-          status: "LEASED",
-          leased_at: now,
-          attempts: Number(row.attempts) + 1,
-        }),
-      );
-    }
-    return leased;
+    return result.rows.map(parseOutbox);
   }
 
   async completeOutbox(id: number): Promise<void> {
     await this.pool.query(
-      `UPDATE outbox SET status = 'DONE' WHERE id = $1`,
+      `UPDATE outbox
+       SET status = 'DONE',
+           lease_owner = NULL,
+           lease_expires_at = NULL
+       WHERE id = $1`,
       [id],
     );
   }
@@ -430,7 +490,11 @@ export class PostgresMarketMakerStateStore implements MarketMakerStateStore {
   async failOutbox(id: number, lastError: string, availableAt: number): Promise<void> {
     await this.pool.query(
       `UPDATE outbox
-       SET status = 'PENDING', available_at = $2, last_error = $3
+       SET status = 'PENDING',
+           available_at = $2,
+           last_error = $3,
+           lease_owner = NULL,
+           lease_expires_at = NULL
        WHERE id = $1`,
       [id, availableAt, lastError],
     );

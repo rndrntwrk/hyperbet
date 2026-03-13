@@ -133,10 +133,16 @@ Both chains enforce:
 
 ## 3.2 Trade-time fees
 
-On order placement, trade fees are charged on `cost`:
+Trade fees are charged only on executed taker cost:
 
-- treasury fee = `cost * trade_treasury_fee_bps / 10_000`
-- market-maker fee = `cost * trade_market_maker_fee_bps / 10_000`
+- treasury fee = `executed_cost * trade_treasury_fee_bps / 10_000`
+- market-maker fee = `executed_cost * trade_market_maker_fee_bps / 10_000`
+
+Funding semantics:
+
+- resting GTC size leaves only quote cost locked in the book;
+- IOC remainders, post-only rejections, and cancel-taker STP remainders refund unused value immediately;
+- user-initiated cancels refund the full unfilled quote cost with no execution fee on the cancelled size.
 
 Fee cap invariants:
 

@@ -38,7 +38,7 @@ contract GoldClobFuzzTest is Test {
         vm.deal(traderB, 1_000 ether);
     }
 
-    function testFuzz_RevertsWhenOrderValueIsUnderfunded(
+    function testFuzz_RevertsWhenRestingOrderValueIsUnderfunded(
         uint8 sideSeed,
         uint16 rawPrice,
         uint96 rawAmountUnits,
@@ -48,7 +48,7 @@ contract GoldClobFuzzTest is Test {
         uint8 side = sideSeed % 2 == 0 ? BUY_SIDE : SELL_SIDE;
         uint16 price = _boundPrice(rawPrice);
         uint128 amount = _boundAmount(rawAmountUnits, 1, 200);
-        uint256 requiredValue = _totalOrderValue(side, price, amount);
+        uint256 requiredValue = _quoteCost(side, price, amount);
         uint256 shortfall = bound(rawShortfall, 1, requiredValue);
 
         vm.expectRevert(GoldClob.InsufficientNativeValue.selector);

@@ -543,6 +543,12 @@ export function resolveBettingEvmRuntimeEnv(
 ): ResolvedBettingEvmRuntimeEnv {
   const deployment = resolveBettingEvmDeploymentForChain(chainKey, environment);
   const chainUpper = chainKey.toUpperCase();
+  if (environment === "mainnet-beta" && !isBettingEvmDeploymentCanonicalReady(deployment)) {
+    const missing = getMissingBettingEvmCanonicalFields(deployment).join(", ");
+    throw new Error(
+      `Canonical ${deployment.label} deployment is incomplete for production runtime resolution: ${missing}`,
+    );
+  }
   return {
     chainKey,
     deployment,
@@ -553,15 +559,19 @@ export function resolveBettingEvmRuntimeEnv(
         deployment.rpcEnvVar,
       ]) ?? defaultRpcUrlForEvmNetwork(deployment.networkKey),
     duelOracleAddress:
-      firstNonEmptyEnvValue(env, [
-        `ORACLE_CONTRACT_ADDRESS_${chainUpper}`,
-        `${chainUpper}_DUEL_ORACLE_ADDRESS`,
-      ]) ?? deployment.duelOracleAddress,
+      environment === "mainnet-beta"
+        ? deployment.duelOracleAddress
+        : firstNonEmptyEnvValue(env, [
+            `ORACLE_CONTRACT_ADDRESS_${chainUpper}`,
+            `${chainUpper}_DUEL_ORACLE_ADDRESS`,
+          ]) ?? deployment.duelOracleAddress,
     goldClobAddress:
-      firstNonEmptyEnvValue(env, [
-        `CLOB_CONTRACT_ADDRESS_${chainUpper}`,
-        `${chainUpper}_GOLD_CLOB_ADDRESS`,
-      ]) ?? deployment.goldClobAddress,
+      environment === "mainnet-beta"
+        ? deployment.goldClobAddress
+        : firstNonEmptyEnvValue(env, [
+            `CLOB_CONTRACT_ADDRESS_${chainUpper}`,
+            `${chainUpper}_GOLD_CLOB_ADDRESS`,
+          ]) ?? deployment.goldClobAddress,
   };
 }
 

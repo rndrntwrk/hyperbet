@@ -47,6 +47,15 @@ describe("hyperbet-solana", () => {
       airdrop(provider.connection, taker.publicKey, 5),
     ]);
 
+    await ensureOracleReady(
+      fightProgram,
+      authority,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      60,
+    );
+
     const market = await createOpenMarketFixture(
       fightProgram,
       clobProgram,
@@ -328,6 +337,15 @@ describe("hyperbet-solana", () => {
       { duelKey: uniqueDuelKey("disputed-claim") },
     );
 
+    await ensureOracleReady(
+      fightProgram,
+      authority,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      60,
+    );
+
     const makerAsk = await placeClobOrder(clobProgram, {
       marketState: market.marketState,
       duelState: market.duelState,
@@ -426,6 +444,8 @@ describe("hyperbet-solana", () => {
         `expected MarketNotOpen, got ${String(error)}`,
       );
     }
+
+    await ensureOracleReady(fightProgram, authority, authority.publicKey);
   });
 
   it("rejects unauthorized finalization", async () => {
@@ -508,6 +528,45 @@ describe("hyperbet-solana", () => {
       );
     }
 
+    await ensureOracleReady(fightProgram, authority, authority.publicKey);
+  });
+
+  it("rejects challenges after the dispute window expires and allows finalization", async () => {
+    await ensureOracleReady(
+      fightProgram,
+      authority,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      1,
+    );
+
+    const duelKey = uniqueDuelKey("late-challenge-window");
+    const now = Math.floor(Date.now() / 1000);
+    await upsertDuel(fightProgram, authority, duelKey, {
+      status: duelStatusLocked(),
+      betOpenTs: now - 120,
+      betCloseTs: now - 10,
+      duelStartTs: now - 5,
+    });
+    await proposeDuelResult(fightProgram, authority, duelKey, {
+      winner: marketSideA(),
+      duelEndTs: now + 5,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+
+    try {
+      await challengeDuelResult(fightProgram, authority, duelKey);
+      assert.fail("late challenge should fail");
+    } catch (error: unknown) {
+      assert.ok(
+        hasProgramError(error, "ChallengeWindowExpired"),
+        `expected ChallengeWindowExpired, got ${String(error)}`,
+      );
+    }
+
+    await finalizeDuelResult(fightProgram, authority, duelKey);
     await ensureOracleReady(fightProgram, authority, authority.publicKey);
   });
 

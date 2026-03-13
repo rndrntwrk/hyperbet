@@ -794,6 +794,11 @@
     },
     {
       "code": 6016,
+      "name": "ChallengeWindowExpired",
+      "msg": "Challenge window already expired"
+    },
+    {
+      "code": 6017,
       "name": "DisputeWindowActive",
       "msg": "Dispute window still active"
     }

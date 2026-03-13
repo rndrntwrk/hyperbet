@@ -685,6 +685,54 @@ describe("CrossChainMarketMaker", () => {
     expect(afterRestartPlacements).toBe(beforeRestartPlacements);
   });
 
+  it("keeps EVM claim backlog pending until the market is terminal", async () => {
+    process.env.MM_ENABLE_SOLANA = "false";
+    process.env.MM_ENABLE_BASE = "false";
+    process.env.MM_ENABLE_AVAX = "false";
+    activePredictionChains = ["bsc"];
+    evmLifecycleStatus = "LOCKED";
+    const { createTestMarketMakerStateStore } = await import("./storage/index.ts");
+    const stateStore = createTestMarketMakerStateStore();
+    await stateStore.upsertClaimBacklog({
+      backlogKey: "claim-bsc-1",
+      chainKey: "bsc",
+      duelKey: TEST_DUEL_KEY,
+      marketKey: "0xmarket",
+      status: "PENDING",
+      nextAttemptAt: 0,
+      payload: {},
+    });
+
+    const mm = await loadMarketMaker(stateStore);
+    await mm.marketMakeCycle();
+
+    const backlog = await stateStore.listDueClaimBacklog(Date.now() + 60_000);
+    expect(backlog).toHaveLength(1);
+    expect(backlog[0]?.status).toBe("PENDING");
+    expect(backlog[0]?.resolvedAt).toBeNull();
+    expect(backlog[0]?.lastError).toContain("claim-not-ready");
+  });
+
+  it("re-reads the runtime nonce after a pre-broadcast EVM send failure", async () => {
+    process.env.MM_ENABLE_SOLANA = "false";
+    process.env.MM_ENABLE_BASE = "false";
+    process.env.MM_ENABLE_AVAX = "false";
+    activePredictionChains = ["bsc"];
+
+    const mm = await loadMarketMaker();
+    const bscContract = contractInstances[0];
+    expect(bscContract).toBeTruthy();
+
+    bscContract.placeOrder.mockImplementationOnce(() => {
+      throw new Error("pre-broadcast failure");
+    });
+
+    await expect(mm.marketMakeCycle()).rejects.toThrow("pre-broadcast failure");
+    await mm.marketMakeCycle();
+
+    expect(bscContract.placeOrder.mock.calls[1]?.[6]?.nonce).toBe(0);
+  });
+
   it("places bid and ask orders on an open Solana market", async () => {
     process.env.MM_ENABLE_BSC = "false";
     process.env.MM_ENABLE_BASE = "false";

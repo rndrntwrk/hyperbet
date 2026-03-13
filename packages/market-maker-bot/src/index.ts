@@ -64,6 +64,8 @@ const SELL_SIDE = 2;
 const MAX_PRICE = 1000;
 const SHARE_UNIT_SIZE = 1_000n;
 const EVM_ORDER_FLAG_GTC = 0x01;
+const OUTBOX_LEASE_MS = 60_000;
+const CLAIM_BACKLOG_LEASE_MS = 60_000;
 
 const GOLD_CLOB_ABI = [
   "function marketKey(bytes32 duelKey, uint8 marketKind) view returns (bytes32)",
@@ -1393,7 +1395,12 @@ export class CrossChainMarketMaker {
   }
 
   private async processOutbox() {
-    const items = await this.stateStore.leaseOutbox(Date.now(), 20);
+    const items = await this.stateStore.leaseOutbox(
+      Date.now(),
+      20,
+      this.instanceId,
+      OUTBOX_LEASE_MS,
+    );
     for (const item of items) {
       try {
         if (item.topic === "cancel_orphan_evm_order" && item.chainKey && item.orderKey) {
@@ -1424,13 +1431,20 @@ export class CrossChainMarketMaker {
   }
 
   private async sweepClaimBacklog(predictionMarkets: PredictionMarketsResponse | null) {
-    const items = await this.stateStore.listDueClaimBacklog(Date.now());
+    const items = await this.stateStore.leaseClaimBacklog(
+      Date.now(),
+      20,
+      this.instanceId,
+      CLAIM_BACKLOG_LEASE_MS,
+    );
     for (const item of items) {
       const attemptAt = Date.now();
       try {
         if (item.chainKey === "solana") {
           const runtime = this.solanaRuntime;
-          if (!this.solanaEnabled || !runtime) continue;
+          if (!this.solanaEnabled || !runtime) {
+            throw new Error("solana-runtime-unavailable");
+          }
           const duelState = findDuelStatePda(
             runtime.fightOracleProgramId,
             duelKeyHexToBytes(item.duelKey),
@@ -1456,21 +1470,26 @@ export class CrossChainMarketMaker {
           const runtime = this.evmRuntimes.find(
             (candidate) => candidate.chainKey === item.chainKey,
           );
-          if (!runtime || !runtime.enabled) continue;
+          if (!runtime || !runtime.enabled) {
+            throw new Error("evm-runtime-unavailable");
+          }
           const lifecycleRecord =
             predictionMarkets?.markets.find((market) => market.chainKey === item.chainKey) ??
             null;
           if (
-            lifecycleRecord?.lifecycleStatus === "RESOLVED" ||
-            lifecycleRecord?.lifecycleStatus === "CANCELLED"
+            lifecycleRecord?.lifecycleStatus !== "RESOLVED" &&
+            lifecycleRecord?.lifecycleStatus !== "CANCELLED"
           ) {
-            const tx = await runtime.clob.claim(
+            throw new Error("claim-not-ready");
+          }
+          const { tx } = await this.sendEvmTransaction(runtime, (nonce) =>
+            runtime.clob.claim(
               item.duelKey,
               EVM_MARKET_KIND_DUEL_WINNER,
-              { nonce: await this.nextRuntimeNonce(runtime) },
-            );
-            await tx.wait();
-          }
+              { nonce },
+            ),
+          );
+          await tx.wait();
         }
         await this.stateStore.markClaimBacklogAttempt(item.backlogKey, {
           status: "RESOLVED",
@@ -1496,10 +1515,15 @@ export class CrossChainMarketMaker {
           });
           continue;
         }
+        const nextAttemptAt =
+          message.includes("claim-not-ready") ||
+          message.includes("runtime-unavailable")
+            ? attemptAt + 15_000
+            : attemptAt + 30_000;
         await this.stateStore.markClaimBacklogAttempt(item.backlogKey, {
           status: "PENDING",
           attempts: item.attempts + 1,
-          nextAttemptAt: attemptAt + 30_000,
+          nextAttemptAt,
           lastAttemptAt: attemptAt,
           lastError: message,
         });
@@ -1674,8 +1698,24 @@ export class CrossChainMarketMaker {
       return;
     }
 
-    await this.reconcileOrder(runtime, duelKey, marketKey, BUY_SIDE, plan);
-    await this.reconcileOrder(runtime, duelKey, marketKey, SELL_SIDE, plan);
+    await this.reconcileOrder(
+      runtime,
+      duelKey,
+      marketKey,
+      BUY_SIDE,
+      plan,
+      BigInt(market.tradeTreasuryFeeBpsSnapshot ?? 0n),
+      BigInt(market.tradeMarketMakerFeeBpsSnapshot ?? 0n),
+    );
+    await this.reconcileOrder(
+      runtime,
+      duelKey,
+      marketKey,
+      SELL_SIDE,
+      plan,
+      BigInt(market.tradeTreasuryFeeBpsSnapshot ?? 0n),
+      BigInt(market.tradeMarketMakerFeeBpsSnapshot ?? 0n),
+    );
   }
 
   private async reconcileOrder(
@@ -1684,6 +1724,8 @@ export class CrossChainMarketMaker {
     marketKey: string,
     side: typeof BUY_SIDE | typeof SELL_SIDE,
     plan: ReturnType<typeof buildQuotePlan>,
+    tradeTreasuryFeeBps: bigint,
+    tradeMarketMakerFeeBps: bigint,
   ) {
     const existing = this.activeOrders.filter(
       (order) =>
@@ -1725,29 +1767,29 @@ export class CrossChainMarketMaker {
     }
 
     const rawAmount = unitsToRawAmount(decision.targetUnits);
-    const [tradeTreasuryFeeBps, tradeMarketMakerFeeBps] = await Promise.all([
-      runtime.clob.tradeTreasuryFeeBps() as Promise<bigint>,
-      runtime.clob.tradeMarketMakerFeeBps() as Promise<bigint>,
-    ]);
     const cost = computeCost(side, decision.targetPrice, rawAmount);
     const nativeValue =
       cost +
       (cost * tradeTreasuryFeeBps) / 10_000n +
       (cost * tradeMarketMakerFeeBps) / 10_000n;
 
-    const tx = await runtime.clob.placeOrder(
-      duelKey,
-      EVM_MARKET_KIND_DUEL_WINNER,
-      side,
-      decision.targetPrice,
-      rawAmount,
-      EVM_ORDER_FLAG_GTC,
-      {
-        value: nativeValue,
-        nonce: await this.nextRuntimeNonce(runtime),
-      },
+    const { tx, nonce } = await this.sendEvmTransaction(
+      runtime,
+      (runtimeNonce) =>
+        runtime.clob.placeOrder(
+          duelKey,
+          EVM_MARKET_KIND_DUEL_WINNER,
+          side,
+          decision.targetPrice,
+          rawAmount,
+          EVM_ORDER_FLAG_GTC,
+          {
+            value: nativeValue,
+            nonce: runtimeNonce,
+          },
+        ),
     );
-    const reservedNonce = Number(tx.nonce ?? 0);
+    const reservedNonce = Number(tx.nonce ?? nonce);
     const receipt = await tx.wait();
     const orderId = this.extractOrderId(receipt?.logs ?? [], marketKey);
     if (orderId == null) {
@@ -1811,30 +1853,45 @@ export class CrossChainMarketMaker {
   private async nextRuntimeNonce(runtime: EvmRuntime): Promise<number> {
     const cached = this.nextNonceByChain.get(runtime.chainKey);
     if (cached != null) {
-      this.nextNonceByChain.set(runtime.chainKey, cached + 1);
-      await this.stateStore.setCursor(
-        `nonce:${runtime.chainKey}`,
-        String(cached + 1),
-      );
       return cached;
-    }
-    const persisted = await this.stateStore.getCursor(`nonce:${runtime.chainKey}`);
-    if (persisted) {
-      const nonce = Number(persisted.cursorValue);
-      this.nextNonceByChain.set(runtime.chainKey, nonce + 1);
-      await this.stateStore.setCursor(
-        `nonce:${runtime.chainKey}`,
-        String(nonce + 1),
-      );
-      return nonce;
     }
     const fresh = await runtime.provider.getTransactionCount(
       runtime.walletAddress,
       "pending",
     );
-    this.nextNonceByChain.set(runtime.chainKey, fresh + 1);
-    await this.stateStore.setCursor(`nonce:${runtime.chainKey}`, String(fresh + 1));
+    this.nextNonceByChain.set(runtime.chainKey, fresh);
     return fresh;
+  }
+
+  private noteRuntimeNonceCommitted(runtime: EvmRuntime, nonce: number) {
+    const cached = this.nextNonceByChain.get(runtime.chainKey);
+    if (cached == null || nonce >= cached) {
+      this.nextNonceByChain.set(runtime.chainKey, nonce + 1);
+    }
+  }
+
+  private async refreshRuntimeNonce(runtime: EvmRuntime): Promise<number> {
+    const fresh = await runtime.provider.getTransactionCount(
+      runtime.walletAddress,
+      "pending",
+    );
+    this.nextNonceByChain.set(runtime.chainKey, fresh);
+    return fresh;
+  }
+
+  private async sendEvmTransaction<T>(
+    runtime: EvmRuntime,
+    buildTransaction: (nonce: number) => Promise<T>,
+  ): Promise<{ tx: T; nonce: number }> {
+    const nonce = await this.nextRuntimeNonce(runtime);
+    try {
+      const tx = await buildTransaction(nonce);
+      this.noteRuntimeNonceCommitted(runtime, nonce);
+      return { tx, nonce };
+    } catch (error) {
+      await this.refreshRuntimeNonce(runtime);
+      throw error;
+    }
   }
 
   private async cancelTrackedOrder(runtime: EvmRuntime, order: TrackedOrder) {
@@ -1842,11 +1899,13 @@ export class CrossChainMarketMaker {
     let lastError: string | null = null;
     let txSignature: string | null = null;
     try {
-      const tx = await runtime.clob.cancelOrder(
-        duelKeyHex(order.duelKey),
-        EVM_MARKET_KIND_DUEL_WINNER,
-        order.orderId,
-        { nonce: await this.nextRuntimeNonce(runtime) },
+      const { tx } = await this.sendEvmTransaction(runtime, (nonce) =>
+        runtime.clob.cancelOrder(
+          duelKeyHex(order.duelKey),
+          EVM_MARKET_KIND_DUEL_WINNER,
+          order.orderId,
+          { nonce },
+        ),
       );
       const receipt = await tx.wait();
       txSignature = receipt?.hash ?? tx.hash ?? null;

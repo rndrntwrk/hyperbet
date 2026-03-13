@@ -51,6 +51,8 @@ export type ClaimBacklogItem = {
   lastAttemptAt: number | null;
   resolvedAt: number | null;
   lastError: string | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: number | null;
   payload: Record<string, unknown>;
 };
 
@@ -62,6 +64,8 @@ export type OutboxItem = {
   status: OutboxStatus;
   availableAt: number;
   leasedAt: number | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: number | null;
   attempts: number;
   chainKey: string | null;
   duelKey: string | null;
@@ -80,19 +84,28 @@ export type ReconciliationResult = {
 
 export type ClaimBacklogInput = Omit<
   ClaimBacklogItem,
-  "attempts" | "lastAttemptAt" | "resolvedAt" | "lastError"
+  | "attempts"
+  | "lastAttemptAt"
+  | "resolvedAt"
+  | "lastError"
+  | "leaseOwner"
+  | "leaseExpiresAt"
 > & {
   attempts?: number;
   lastAttemptAt?: number | null;
   resolvedAt?: number | null;
   lastError?: string | null;
+  leaseOwner?: string | null;
+  leaseExpiresAt?: number | null;
 };
 
 export type OutboxInput = Omit<
   OutboxItem,
-  "id" | "leasedAt" | "attempts" | "lastError"
+  "id" | "leasedAt" | "leaseOwner" | "leaseExpiresAt" | "attempts" | "lastError"
 > & {
   leasedAt?: number | null;
+  leaseOwner?: string | null;
+  leaseExpiresAt?: number | null;
   attempts?: number;
   lastError?: string | null;
 };
@@ -110,6 +123,12 @@ export type MarketMakerStateStore = {
     updates?: Partial<Pick<OrderRecord, "amount" | "price" | "lastSeenOnChainAt" | "lastReconciledAt" | "txSignature" | "quarantineReason" | "metadata">>,
   ): Promise<void>;
   listDueClaimBacklog(now: number): Promise<ClaimBacklogItem[]>;
+  leaseClaimBacklog(
+    now: number,
+    limit: number,
+    leaseOwner: string,
+    leaseDurationMs: number,
+  ): Promise<ClaimBacklogItem[]>;
   upsertClaimBacklog(item: ClaimBacklogInput): Promise<void>;
   markClaimBacklogAttempt(
     backlogKey: string,
@@ -123,7 +142,12 @@ export type MarketMakerStateStore = {
     },
   ): Promise<void>;
   enqueueOutbox(item: OutboxInput): Promise<number>;
-  leaseOutbox(now: number, limit: number): Promise<OutboxItem[]>;
+  leaseOutbox(
+    now: number,
+    limit: number,
+    leaseOwner: string,
+    leaseDurationMs: number,
+  ): Promise<OutboxItem[]>;
   completeOutbox(id: number): Promise<void>;
   failOutbox(id: number, lastError: string, availableAt: number): Promise<void>;
   getCursor(cursorKey: string): Promise<ReconciliationCursor | null>;

@@ -228,11 +228,19 @@ pub mod fight_oracle {
         metadata_uri: String,
     ) -> Result<()> {
         let duel_state = &mut ctx.accounts.duel_state;
+        let oracle_config = &ctx.accounts.oracle_config;
         require!(
             duel_state.status == DuelStatus::Proposed,
             ErrorCode::NotProposed
         );
         require!(!duel_state.pending_challenged, ErrorCode::AlreadyChallenged);
+
+        let now = Clock::get()?.unix_timestamp;
+        let challenge_deadline = duel_state
+            .pending_proposed_at
+            .checked_add(oracle_config.dispute_window_secs)
+            .ok_or(ErrorCode::InvalidDisputeWindow)?;
+        require!(now < challenge_deadline, ErrorCode::ChallengeWindowExpired);
 
         duel_state.pending_challenged = true;
         duel_state.status = DuelStatus::Challenged;
@@ -555,6 +563,8 @@ pub enum ErrorCode {
     NotProposed,
     #[msg("Proposal already challenged")]
     AlreadyChallenged,
+    #[msg("Challenge window already expired")]
+    ChallengeWindowExpired,
     #[msg("Dispute window still active")]
     DisputeWindowActive,
 }

@@ -78,8 +78,43 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
 
   async listDueClaimBacklog(now: number): Promise<ClaimBacklogItem[]> {
     return [...this.claimBacklog.values()].filter(
-      (item) => item.status !== "RESOLVED" && item.nextAttemptAt <= now,
+      (item) =>
+        item.status !== "RESOLVED" &&
+        item.nextAttemptAt <= now &&
+        (item.leaseExpiresAt == null || item.leaseExpiresAt <= now),
     );
+  }
+
+  async leaseClaimBacklog(
+    now: number,
+    limit: number,
+    leaseOwner: string,
+    leaseDurationMs: number,
+  ): Promise<ClaimBacklogItem[]> {
+    const items = [...this.claimBacklog.values()]
+      .filter(
+        (item) =>
+          item.status !== "RESOLVED" &&
+          item.nextAttemptAt <= now &&
+          (item.leaseExpiresAt == null || item.leaseExpiresAt <= now),
+      )
+      .sort((a, b) => a.nextAttemptAt - b.nextAttemptAt)
+      .slice(0, limit);
+    const leaseExpiresAt = now + leaseDurationMs;
+    for (const item of items) {
+      this.claimBacklog.set(item.backlogKey, {
+        ...item,
+        status: "PROCESSING",
+        leaseOwner,
+        leaseExpiresAt,
+      });
+    }
+    return items.map((item) => ({
+      ...item,
+      status: "PROCESSING",
+      leaseOwner,
+      leaseExpiresAt,
+    }));
   }
 
   async upsertClaimBacklog(item: ClaimBacklogInput): Promise<void> {
@@ -89,6 +124,8 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
       lastAttemptAt: item.lastAttemptAt ?? current?.lastAttemptAt ?? null,
       resolvedAt: item.resolvedAt ?? current?.resolvedAt ?? null,
       lastError: item.lastError ?? current?.lastError ?? null,
+      leaseOwner: item.leaseOwner ?? current?.leaseOwner ?? null,
+      leaseExpiresAt: item.leaseExpiresAt ?? current?.leaseExpiresAt ?? null,
       ...structuredClone(item),
     });
   }
@@ -111,6 +148,8 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
       ...updates,
       lastError: updates.lastError ?? current.lastError,
       resolvedAt: updates.resolvedAt ?? current.resolvedAt,
+      leaseOwner: null,
+      leaseExpiresAt: null,
     });
   }
 
@@ -119,6 +158,8 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
     this.outbox.set(id, {
       id,
       leasedAt: item.leasedAt ?? null,
+      leaseOwner: item.leaseOwner ?? null,
+      leaseExpiresAt: item.leaseExpiresAt ?? null,
       attempts: item.attempts ?? 0,
       lastError: item.lastError ?? null,
       ...structuredClone(item),
@@ -126,16 +167,29 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
     return id;
   }
 
-  async leaseOutbox(now: number, limit: number): Promise<OutboxItem[]> {
+  async leaseOutbox(
+    now: number,
+    limit: number,
+    leaseOwner: string,
+    leaseDurationMs: number,
+  ): Promise<OutboxItem[]> {
     const items = [...this.outbox.values()]
-      .filter((item) => item.status === "PENDING" && item.availableAt <= now)
+      .filter(
+        (item) =>
+          item.status !== "DONE" &&
+          item.availableAt <= now &&
+          (item.leaseExpiresAt == null || item.leaseExpiresAt <= now),
+      )
       .sort((a, b) => a.availableAt - b.availableAt)
       .slice(0, limit);
+    const leaseExpiresAt = now + leaseDurationMs;
     for (const item of items) {
       this.outbox.set(item.id, {
         ...item,
         status: "LEASED",
         leasedAt: now,
+        leaseOwner,
+        leaseExpiresAt,
         attempts: item.attempts + 1,
       });
     }
@@ -143,6 +197,8 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
       ...item,
       status: "LEASED",
       leasedAt: now,
+      leaseOwner,
+      leaseExpiresAt,
       attempts: item.attempts + 1,
     }));
   }
@@ -153,6 +209,8 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
     this.outbox.set(id, {
       ...item,
       status: "DONE",
+      leaseOwner: null,
+      leaseExpiresAt: null,
     });
   }
 
@@ -164,6 +222,8 @@ export class InMemoryMarketMakerStateStore implements MarketMakerStateStore {
       status: "PENDING",
       availableAt,
       lastError,
+      leaseOwner: null,
+      leaseExpiresAt: null,
     });
   }
 

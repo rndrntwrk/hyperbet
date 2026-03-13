@@ -124,6 +124,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint128 remainingAmount;
         uint16 boundaryPrice;
         uint8 matchesCount;
+        uint256 executedCost;
         uint256 totalImprovement;
         bool selfTradePrevented;
     }
@@ -343,25 +344,27 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         market.nextOrderId += 1;
         emit OrderPlaced(key, takerOrderId, msg.sender, side, price, amount);
 
-        (uint256 tradeTreasuryFee, uint256 tradeMarketMakerFee, uint256 excess) =
-            _quoteOrder(side, price, amount, msg.value);
-
         MatchProgress memory progress = side == BUY_SIDE
             ? _matchBuyOrder(key, market, price, amount, takerOrderId)
             : _matchSellOrder(key, market, price, amount, takerOrderId);
 
+        uint256 restingCost = 0;
         if (progress.remainingAmount > 0 && _isGoodTilCancelled(orderFlags) && !progress.selfTradePrevented) {
             _restOrder(key, market, side, price, uint128(progress.remainingAmount), takerOrderId);
+            restingCost = _quoteCost(side, price, uint128(progress.remainingAmount));
         } else {
             _persistInactiveTakerOrder(key, side, price, amount, amount - progress.remainingAmount, takerOrderId);
         }
 
+        uint256 tradeTreasuryFee =
+            (progress.executedCost * market.tradeTreasuryFeeBpsSnapshot) / MAX_FEE_BPS;
+        uint256 tradeMarketMakerFee =
+            (progress.executedCost * market.tradeMarketMakerFeeBpsSnapshot) / MAX_FEE_BPS;
+        uint256 requiredValue = restingCost + progress.executedCost + tradeTreasuryFee + tradeMarketMakerFee;
+        if (msg.value < requiredValue) revert InsufficientNativeValue();
         if (tradeTreasuryFee > 0) payable(treasury).sendValue(tradeTreasuryFee);
         if (tradeMarketMakerFee > 0) payable(marketMaker).sendValue(tradeMarketMakerFee);
-        uint256 traderRefund = progress.totalImprovement + excess;
-        if (progress.remainingAmount > 0 && (!_isGoodTilCancelled(orderFlags) || progress.selfTradePrevented)) {
-            traderRefund += _quoteCost(side, price, uint128(progress.remainingAmount));
-        }
+        uint256 traderRefund = msg.value - requiredValue;
         if (traderRefund > 0) payable(msg.sender).sendValue(traderRefund);
     }
 
@@ -451,19 +454,6 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         );
     }
 
-    function _quoteOrder(uint8 side, uint16 price, uint128 amount, uint256 value)
-        internal
-        view
-        returns (uint256 tradeTreasuryFee, uint256 tradeMarketMakerFee, uint256 excess)
-    {
-        uint256 cost = _quoteCost(side, price, amount);
-        tradeTreasuryFee = (cost * tradeTreasuryFeeBps) / MAX_FEE_BPS;
-        tradeMarketMakerFee = (cost * tradeMarketMakerFeeBps) / MAX_FEE_BPS;
-        uint256 totalRequired = cost + tradeTreasuryFee + tradeMarketMakerFee;
-        if (value < totalRequired) revert InsufficientNativeValue();
-        excess = value - totalRequired;
-    }
-
     function _quoteCost(uint8 side, uint16 price, uint128 amount) internal pure returns (uint256) {
         uint256 priceComponent = side == BUY_SIDE ? price : MAX_PRICE - price;
         uint256 quoteValue = uint256(amount) * priceComponent;
@@ -539,6 +529,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             makerPosition.bStake += askStake;
             takerPosition.aShares += fillAmount;
             takerPosition.aStake += bidStake;
+            progress.executedCost += bidStake;
             market.totalAShares += fillAmount;
             market.totalBShares += fillAmount;
 
@@ -620,6 +611,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             makerPosition.aStake += bidStake;
             takerPosition.bShares += fillAmount;
             takerPosition.bStake += askStake;
+            progress.executedCost += askStake;
             market.totalAShares += fillAmount;
             market.totalBShares += fillAmount;
 
