@@ -39,11 +39,16 @@ on:
       - ".github/workflows/prediction-market-gates.yml"
       - "package.json"
       - "bun.lock"
+  schedule:
+    - cron: "0 7 * * *"
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  PREDICTION_MARKET_GATE_REF: ${{ github.event_name == 'schedule' && 'enoomian/prediction-market-sprint-base' || github.ref }}
 
 jobs:
   solana-program-build-gate:
@@ -52,6 +57,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PREDICTION_MARKET_GATE_REF }}
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
@@ -80,6 +87,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PREDICTION_MARKET_GATE_REF }}
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
@@ -106,6 +115,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PREDICTION_MARKET_GATE_REF }}
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
@@ -140,6 +151,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PREDICTION_MARKET_GATE_REF }}
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
@@ -169,6 +182,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PREDICTION_MARKET_GATE_REF }}
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
@@ -195,12 +210,52 @@ jobs:
           path: .ci-artifacts/solana-exploit-gate
           if-no-files-found: ignore
 
+  cross-chain-e2e:
+    name: Cross-Chain E2E (${{ matrix.chain }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chain: [solana, bsc, avax]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PREDICTION_MARKET_GATE_REF }}
+
+      - name: Setup Hyperbet toolchain
+        uses: ./.github/actions/setup-hyperbet
+        with:
+          install-rust: "true"
+          install-foundry: "true"
+          install-solana: "true"
+          install-anchor: "true"
+
+      - name: Bootstrap workspace
+        run: bun run dev:bootstrap
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run Gate 10 local E2E
+        run: node --import tsx scripts/ci-gate-e2e.ts --chain=${{ matrix.chain }}
+
+      - name: Upload E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-chain-e2e-${{ matrix.chain }}
+          path: .ci-artifacts/e2e-${{ matrix.chain }}
+          if-no-files-found: ignore
+
   base-add-chain-smoke:
     name: Base Add-Chain Smoke
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PREDICTION_MARKET_GATE_REF }}
 
       - name: Setup Hyperbet toolchain
         uses: ./.github/actions/setup-hyperbet
