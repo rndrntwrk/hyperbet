@@ -7,6 +7,7 @@ import { resolveBettingEvmDeploymentForChain } from "../packages/hyperbet-chain-
 import {
   copyIntoArtifacts,
   resolveArtifactRoot,
+  rootDir,
   runCommand,
 } from "./ci-lib";
 
@@ -23,7 +24,7 @@ async function startAnvil(): Promise<{ pid: number; stop: () => void }> {
     "anvil",
     ["--silent", "--host", "127.0.0.1", "--port", "18545", "--chain-id", "8453"],
     {
-      cwd: process.cwd(),
+      cwd: rootDir,
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -74,7 +75,7 @@ async function waitForAnvil(): Promise<void> {
           }),
         ],
         {
-          cwd: process.cwd(),
+          cwd: rootDir,
           encoding: "utf8",
         },
       );
@@ -175,7 +176,7 @@ try {
 
   copyIntoArtifacts(
     artifactRoot,
-    path.join(process.cwd(), "packages/hyperbet-bsc/app/dist/build-info.json"),
+    path.join(rootDir, "packages/hyperbet-bsc/app/dist/build-info.json"),
     "build-info.json",
   );
 } finally {

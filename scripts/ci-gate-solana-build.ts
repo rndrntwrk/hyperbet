@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-import { copyIntoArtifacts, resolveArtifactRoot, runCommand } from "./ci-lib";
+import { copyIntoArtifacts, resolveArtifactRoot, rootDir, runCommand } from "./ci-lib";
 
 const artifactRoot = resolveArtifactRoot("solana-program-build-gate");
-const anchorRoot = path.join(process.cwd(), "packages/hyperbet-solana/anchor");
+const anchorRoot = path.join(rootDir, "packages/hyperbet-solana/anchor");
 const buildLogPath = path.join(artifactRoot, "anchor-build.log");
 const deployRoot = path.join(anchorRoot, "target", "deploy");
 const deployArtifacts = [
@@ -20,7 +20,7 @@ const trackedArtifactPaths = [
 
 function currentGitStatus(paths: string[]): string {
   const result = spawnSync("git", ["status", "--short", "--", ...paths], {
-    cwd: process.cwd(),
+    cwd: rootDir,
     encoding: "utf8",
   });
 

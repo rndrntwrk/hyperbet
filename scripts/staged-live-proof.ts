@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   resolveArtifactRoot,
+  rootDir,
   writeJsonArtifact,
 } from "./ci-lib";
 
@@ -316,7 +317,7 @@ function runJsonCommand<T>(
   env?: Record<string, string>,
 ): T {
   const result = spawnSync(command, args, {
-    cwd: process.cwd(),
+    cwd: rootDir,
     env: { ...process.env, ...env },
     encoding: "utf8",
   });
@@ -351,7 +352,7 @@ function runExpectedAuditFailure(
       `--deployment=${deployment}`,
     ],
     {
-      cwd: process.cwd(),
+      cwd: rootDir,
       env: { ...process.env, ...env },
       encoding: "utf8",
     },

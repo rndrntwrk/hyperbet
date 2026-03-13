@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   copyIntoArtifacts,
   resolveArtifactRoot,
+  rootDir,
   runCommand,
   writeJsonArtifact,
 } from "./ci-lib";
@@ -34,12 +35,12 @@ function parseArgs(): ChainKey {
 
 const chain = parseArgs();
 const artifactRoot = resolveArtifactRoot(`e2e-${chain}`);
-const appRoot = path.join(process.cwd(), `packages/hyperbet-${chain}/app`);
-const anchorRoot = path.join(process.cwd(), "packages/hyperbet-solana/anchor");
+const appRoot = path.join(rootDir, `packages/hyperbet-${chain}/app`);
+const anchorRoot = path.join(rootDir, "packages/hyperbet-solana/anchor");
 const evmRoot =
   chain === "solana"
     ? null
-    : path.join(process.cwd(), "packages/evm-contracts");
+    : path.join(rootDir, "packages/evm-contracts");
 const statePath = path.join(appRoot, "tests/e2e/state.json");
 const controlPath = path.join(appRoot, "tests/e2e/control.json");
 const bootstrapKeypairPath = path.join(artifactRoot, "solana-bootstrap-keypair.json");

@@ -6,6 +6,7 @@ import {
   findAvailablePort,
   materializeCiSolanaWallet,
   resolveArtifactRoot,
+  rootDir,
   runCommand,
   spawnBackground,
   waitForJsonEndpoint,
@@ -29,7 +30,7 @@ const target = parseArgs();
 const artifactRoot = resolveArtifactRoot(
   target === "evm" ? "evm-exploit-gate" : "solana-exploit-gate",
 );
-const simRoot = path.join(process.cwd(), "packages/simulation-dashboard");
+const simRoot = path.join(rootDir, "packages/simulation-dashboard");
 const historyPath = path.join(artifactRoot, "scenario-history.json");
 const serverLog = path.join(artifactRoot, "simulation-server.log");
 const bootstrapKeypairPath = path.join(artifactRoot, "solana-bootstrap-keypair.json");
@@ -155,7 +156,7 @@ try {
     "bun",
     ["run", "--cwd", "packages/simulation-dashboard", "dev"],
     {
-      cwd: process.cwd(),
+      cwd: rootDir,
       env: {
         SIM_HTTP_PORT: httpPort,
         SIM_WS_PORT: wsPort,
