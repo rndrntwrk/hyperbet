@@ -44,6 +44,17 @@ describe("@hyperbet/deployments materialization", () => {
     );
   });
 
+  test("keeps governance metadata keys in the committed deployment manifest", () => {
+    expect((rawManifest as any).evm.bsc).toHaveProperty("reporterAddress");
+    expect((rawManifest as any).evm.bsc).toHaveProperty("finalizerAddress");
+    expect((rawManifest as any).evm.bsc).toHaveProperty("challengerAddress");
+    expect((rawManifest as any).evm.bsc).toHaveProperty("timelockAddress");
+    expect((rawManifest as any).evm.bsc).toHaveProperty("multisigAddress");
+    expect((rawManifest as any).evm.bsc).toHaveProperty(
+      "emergencyCouncilAddress",
+    );
+  });
+
   test("defaults delegate through registry network selection while preserving additive fields", () => {
     const registryTestnet = resolveRegistryBettingEvmDefaults("testnet");
     const testnet = resolveBettingEvmDefaults("testnet");

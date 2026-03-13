@@ -20,6 +20,7 @@ on:
           - all
           - solana
           - bsc
+          - avax
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

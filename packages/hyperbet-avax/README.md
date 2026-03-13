@@ -13,7 +13,10 @@ Avalanche C-Chain focused Hyperbet package for betting, CLOB, and futures interf
 - **Mainnet**: Avalanche C-Chain (chain ID `43114`)
 - **Testnet**: Avalanche Fuji (chain ID `43113`)
 
-Mainnet AVAX is intentionally fail-closed in shared CI and deploy flows until the shared chain registry contains canonical AVAX deployment addresses. Local and testnet flows still work with explicit env overrides.
+Production AVAX rollout is blocked until the shared chain registry contains
+canonical AVAX deployment addresses and staged-proof artifacts have been
+captured for the target environment. Local and testnet flows still work with
+explicit env overrides.
 
 `deployments/contracts.json` is updated after manual EVM deployment work, but it must not be treated as canonical production metadata. The app and keeper should use the shared chain registry for production defaults and only use explicit env overrides for local or testnet operation.
 
@@ -111,6 +114,16 @@ and updates `packages/hyperbet-avax/deployments/contracts.json` automatically.
 
 Those receipts are local package metadata only. They do not make AVAX production-ready on their own; production readiness is controlled by canonical addresses committed to the shared chain registry.
 
+Mainnet deploy preflight now also expects the governance owner set to be
+explicit:
+
+- `TIMELOCK_ADDRESS`
+- `MULTISIG_ADDRESS` or legacy `ADMIN_ADDRESS`
+- `EMERGENCY_COUNCIL_ADDRESS`
+- `REPORTER_ADDRESS`
+- `FINALIZER_ADDRESS`
+- `CHALLENGER_ADDRESS`
+
 Private env files stay local:
 
 - `packages/hyperbet-avax/.env.mainnet`
@@ -118,3 +131,14 @@ Private env files stay local:
 - `packages/hyperbet-avax/app/.env.mainnet`
 
 These should hold RPC URLs, signer paths, and private API keys. They should not be treated as public deployment metadata.
+
+## Staged proof canary
+
+From `packages/hyperbet-avax/keeper`:
+
+```bash
+bun run proof:canary
+```
+
+This is the AVAX canary entrypoint used by the staged live proof wrapper after
+the AVAX read-only proof and AVAX staging env audits pass.

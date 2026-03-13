@@ -84,7 +84,6 @@ async function main(): Promise<void> {
   const evmEnv = loadMergedEvmEnv(evmDir);
   const requiredSharedEnv = [
     "PRIVATE_KEY",
-    "ADMIN_ADDRESS",
     "MARKET_OPERATOR_ADDRESS",
     "REPORTER_ADDRESS",
     "TREASURY_ADDRESS",
@@ -94,6 +93,30 @@ async function main(): Promise<void> {
     appendStatus(
       typeof evmEnv[envName] === "string" && evmEnv[envName].trim().length > 0,
       `EVM deploy env provides ${envName}`,
+      failures,
+      warnings,
+    );
+  }
+
+  if (target === "mainnet") {
+    const requiredGovernanceEnv = [
+      "TIMELOCK_ADDRESS",
+      "EMERGENCY_COUNCIL_ADDRESS",
+      "FINALIZER_ADDRESS",
+      "CHALLENGER_ADDRESS",
+    ] as const;
+    for (const envName of requiredGovernanceEnv) {
+      appendStatus(
+        typeof evmEnv[envName] === "string" && evmEnv[envName].trim().length > 0,
+        `EVM deploy env provides ${envName}`,
+        failures,
+        warnings,
+      );
+    }
+    appendStatus(
+      (evmEnv.MULTISIG_ADDRESS?.trim().length ?? 0) > 0 ||
+        (evmEnv.ADMIN_ADDRESS?.trim().length ?? 0) > 0,
+      "EVM deploy env provides MULTISIG_ADDRESS or legacy ADMIN_ADDRESS",
       failures,
       warnings,
     );
@@ -130,6 +153,18 @@ async function main(): Promise<void> {
     appendStatus(
       deployment.deploymentVersion === "v2",
       `${deployment.label} deployment manifest version is ${deployment.deploymentVersion}`,
+      failures,
+      warnings,
+      true,
+    );
+    appendStatus(
+      deployment.reporterAddress.trim().length > 0 ||
+        deployment.finalizerAddress.trim().length > 0 ||
+        deployment.challengerAddress.trim().length > 0 ||
+        deployment.timelockAddress.trim().length > 0 ||
+        deployment.multisigAddress.trim().length > 0 ||
+        deployment.emergencyCouncilAddress.trim().length > 0,
+      `${deployment.label} governance metadata is ${deployment.reporterAddress || deployment.finalizerAddress || deployment.challengerAddress || deployment.timelockAddress || deployment.multisigAddress || deployment.emergencyCouncilAddress ? "present" : "pending"} in deployment manifest`,
       failures,
       warnings,
       true,
