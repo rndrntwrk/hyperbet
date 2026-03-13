@@ -606,7 +606,7 @@ export class OracleAttackAgent extends BaseAgent {
     async executeOracleAttack(duelKey: string): Promise<string> {
         try {
             const { ethers } = await import("ethers");
-            const tx = await (this.oracle.connect(this.signer) as any).reportResult(
+            const tx = await (this.oracle.connect(this.signer) as any).proposeResult(
                 duelKey,
                 SIDE_A,
                 13,

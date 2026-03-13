@@ -357,6 +357,8 @@ export class SolanaProgramRuntime {
         const existingConfig = await (this.fightProgram.account as any).oracleConfig.fetchNullable(
             oracleConfig,
         );
+        const finalizer = this.authority.publicKey;
+        const challenger = this.authority.publicKey;
 
         if (!existingConfig) {
             await this.fightProgram.methods
@@ -370,11 +372,16 @@ export class SolanaProgramRuntime {
                 })
                 .signers([this.authority])
                 .rpc();
-            return oracleConfig;
         }
 
         await this.fightProgram.methods
-            .updateOracleConfig(this.authority.publicKey, reporter)
+            .updateOracleConfig(
+                this.authority.publicKey,
+                reporter,
+                finalizer,
+                challenger,
+                toBn(0),
+            )
             .accountsPartial({
                 authority: this.authority.publicKey,
                 oracleConfig,
@@ -715,8 +722,8 @@ export class SolanaProgramRuntime {
         const duelState = deriveDuelStatePda(this.fightProgram.programId, args.duelKey);
         const now = Math.floor(Date.now() / 1000);
 
-        return this.fightProgram.methods
-            .reportResult(
+        const proposalSignature = await this.fightProgram.methods
+            .proposeResult(
                 [...args.duelKey],
                 args.winner === "B" ? marketSideB() : marketSideA(),
                 toBn(BigInt(`0x${Buffer.from(hashLabel(args.seed)).toString("hex")}`) % 10_000n),
@@ -732,6 +739,21 @@ export class SolanaProgramRuntime {
             })
             .signers([args.reporter])
             .rpc();
+
+        await confirmSignatureByPolling(this.connection, proposalSignature);
+
+        const finalizeSignature = await this.fightProgram.methods
+            .finalizeResult([...args.duelKey], args.metadataUri)
+            .accountsPartial({
+                finalizer: args.reporter.publicKey,
+                oracleConfig,
+                duelState,
+            })
+            .signers([args.reporter])
+            .rpc();
+
+        await confirmSignatureByPolling(this.connection, finalizeSignature);
+        return finalizeSignature;
     }
 
     async syncMarketFromDuel(market: SolanaOpenMarket): Promise<string> {

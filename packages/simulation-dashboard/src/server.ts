@@ -843,6 +843,9 @@ async function deployContracts(): Promise<void> {
     oracle = (await oracleFactory.deploy(
         await admin.getAddress(),
         await reporter.getAddress(),
+        await operator.getAddress(),
+        await treasury.getAddress(),
+        0,
     )) as unknown as Contract;
     await oracle.waitForDeployment();
 
@@ -2177,9 +2180,9 @@ async function settleDuel(
             "resolve cancelDuel receipt",
         );
     } else {
-        updateActiveRunStage("resolve-report-result");
+        updateActiveRunStage("resolve-propose-result");
         tx1 = await withTimeout(
-            (oracle.connect(reporter) as any).reportResult(
+            (oracle.connect(reporter) as any).proposeResult(
                 currentDuelKey,
                 winnerSide,
                 BigInt(Math.floor(random() * 1000000)),
@@ -2189,12 +2192,27 @@ async function settleDuel(
                 `resolved-${currentDuelLabel}`,
             ),
             SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
-            "resolve reportResult",
+            "resolve proposeResult",
         );
         await withTimeout(
             tx1.wait(),
             SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
-            "resolve reportResult receipt",
+            "resolve proposeResult receipt",
+        );
+
+        updateActiveRunStage("resolve-finalize-result");
+        const txFinalize: any = await withTimeout(
+            (oracle.connect(operator) as any).finalizeResult(
+                currentDuelKey,
+                `finalized-${currentDuelLabel}`,
+            ),
+            SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
+            "resolve finalizeResult",
+        );
+        await withTimeout(
+            txFinalize.wait(),
+            SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
+            "resolve finalizeResult receipt",
         );
     }
 
