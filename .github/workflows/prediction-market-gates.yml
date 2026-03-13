@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, staging, develop, hackathon]
     paths:
+      - "packages/hyperbet-evm/**"
+      - "packages/hyperbet-deployments/**"
       - "packages/hyperbet-solana/**"
       - "packages/hyperbet-bsc/**"
       - "packages/hyperbet-avax/**"
@@ -21,6 +23,8 @@ on:
   pull_request:
     branches: [main, staging, develop, hackathon]
     paths:
+      - "packages/hyperbet-evm/**"
+      - "packages/hyperbet-deployments/**"
       - "packages/hyperbet-solana/**"
       - "packages/hyperbet-bsc/**"
       - "packages/hyperbet-avax/**"
