@@ -26,6 +26,7 @@ on:
       - "bun.lock"
   pull_request:
     branches: [main, staging, develop, hackathon]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
     paths:
       - "packages/hyperbet-solana/app/**"
       - "packages/hyperbet-solana/keeper/**"
@@ -61,6 +62,7 @@ concurrency:
 
 jobs:
   evm-contract-validation:
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     name: EVM Contract Validation
     runs-on: ubuntu-latest
     steps:
@@ -87,6 +89,7 @@ jobs:
           if-no-files-found: ignore
 
   shared-validation:
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     name: Shared Validation
     runs-on: ubuntu-latest
     steps:
@@ -123,6 +126,7 @@ jobs:
           bun run --cwd packages/simulation-dashboard test
 
   validate-package:
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     name: Validate ${{ matrix.package }}
     runs-on: ubuntu-latest
     needs: shared-validation
