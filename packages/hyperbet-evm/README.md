@@ -1,24 +1,44 @@
 # Hyperbet EVM
 
-Canonical EVM Hyperbet package for betting, CLOB, and futures interfaces backed by the shared duel oracle.
+Additive EVM runtime package and canonical EVM app-shell direction for
+Hyperbet.
 
-This package is the source EVM runtime for themed chain wrappers such as
-`packages/hyperbet-avax` and `packages/hyperbet-bsc`. Those wrappers should
-own deployment presets, chain branding, and package entrypoints only. Keeper
-execution and shared EVM runtime logic belong here.
+This package is part of the current EVM standardization effort. Today, it
+should be understood as:
+
+- the directional canonical EVM app shell
+- an additive shared EVM runtime package
+- not yet the authoritative canonical EVM keeper/backend
+
+The authoritative runtime/deploy model on the sprint branch still lives in:
+
+- `@hyperbet/chain-registry` for current chain/runtime truth
+- the hardened BSC/AVAX keepers for current EVM backend behavior
+- the current CI/deploy/proof rails for release hardening
+
+For the current keep/adapt/reject decisions, see:
+
+- `docs/enoomian-evm-standardization-decisions.md`
 
 ## What this includes
 
-- `app`: standalone Vite app for wallet connect, market creation, bet placement, EVM GOLD token interactions, settlement, and claiming across supported EVM chains.
-- `keeper`: canonical EVM automation scripts for market-maker seeding and oracle resolution.
-- `packages/hyperbet-deployments/contracts.json`: shared source of truth for EVM contract addresses, chain IDs, and RPC env var names.
+- `app`: shared EVM app shell for wallet connect, market creation, bet
+  placement, settlement, and claiming across supported EVM chains
+- `keeper`: additive EVM keeper/runtime package under standardization; it is
+  not yet the authoritative keeper baseline
+- `packages/hyperbet-deployments/contracts.json`: additive deployment
+  materialization for convergence work; it is not a replacement for the sprint
+  branch's authoritative chain/deployment registry
 
 ## EVM Chain Configuration
 
 - **Mainnet**: Base, BSC, and Avalanche
 - **Testnet**: Base Sepolia, BSC Testnet, and Avalanche Fuji
 
-Contract addresses are populated in `packages/hyperbet-deployments/contracts.json` after EVM deployment. The app reads these at build time; override with env vars at runtime.
+Current deployment/runtime truth still comes from the sprint branch's existing
+registry and deploy model. `packages/hyperbet-deployments/contracts.json` is an
+additive manifest for the convergence effort and should be treated as
+subordinate to that source of truth until the standardization work is complete.
 
 ## UI E2E tests
 
@@ -33,8 +53,8 @@ What this command does:
 - compiles EVM contracts
 - starts local Anvil for EVM
 - deploys local `MockERC20` + `GoldClob` and seeds an open EVM duel market
-- starts the canonical EVM keeper service against local seeded data
-- runs the canonical EVM Playwright smoke test against the Vite app
+- starts the additive EVM keeper service against local seeded data
+- runs the additive EVM Playwright smoke test against the Vite app
 
 The app runs in `--mode e2e` with generated `/app/.env.e2e`.
 
@@ -81,6 +101,13 @@ bun install
 bun run bot
 ```
 
+Important:
+
+- this keeper package is still under standardization
+- it should not be treated as the canonical EVM backend until it reaches parity
+  with the hardened current sprint-branch keepers
+- the decision log above is the authoritative status record for that work
+
 ## Deployment prep
 
 Preflight the repo before touching real chains:
@@ -101,8 +128,9 @@ bun run deploy:evm:bsc
 bun run deploy:evm:avax
 ```
 
-The EVM deploy script writes a receipt to `packages/evm-contracts/deployments/<network>.json`
-and updates the shared deployment manifests automatically.
+The EVM deploy script writes a receipt to
+`packages/evm-contracts/deployments/<network>.json` and may update additive
+deployment manifests used for convergence work.
 
 Perps deployment can also bootstrap live markets in one pass via env:
 

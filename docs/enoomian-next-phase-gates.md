@@ -6,6 +6,9 @@ This document defines the post-sprint launch-completion work for
 The foundation is built. The remaining work is launch-completion, not
 architecture bootstrap.
 
+For the keep/adapt/reject record on the imported EVM parity-sweep direction,
+see `docs/enoomian-evm-standardization-decisions.md`.
+
 ## Execution Model
 
 This is a tracked execution document for independent teams or agents branching

@@ -12,6 +12,10 @@ Today, the sprint branch still treats the following as authoritative:
 - the existing CI/deploy/proof rails for release hardening
 - the existing BSC/AVAX wrappers and keepers for current launch surfaces
 
+For the detailed keep/adapt/reject record on the imported
+`hyperbet-evm-parity-sweep` direction, see
+`docs/enoomian-evm-standardization-decisions.md`.
+
 This document captures the intended convergence target while that migration is
 still in progress:
 
@@ -44,7 +48,11 @@ The goal is to prevent design drift while the codebase transitions from mixed ch
 ### EVM runtime
 
 - Lives in `packages/hyperbet-evm`.
-- Owns canonical EVM app, EVM keeper, EVM deployment tooling, and EVM contract interactions.
+- Owns the directional canonical EVM app shell and the intended long-term EVM
+  runtime shape.
+- The current sprint branch does not yet treat `packages/hyperbet-evm/keeper`
+  or `packages/hyperbet-deployments` as authoritative over the hardened current
+  keeper/deploy model.
 - AVAX, BSC, and Base should become wrappers over this runtime, not separate architectures.
 
 ### Shared UI
@@ -60,7 +68,8 @@ The goal is to prevent design drift while the codebase transitions from mixed ch
 - `packages/hyperbet-ui`
   - shared React UI and theme system
 - `packages/hyperbet-evm`
-  - canonical EVM app + keeper runtime
+  - canonical EVM app-shell direction
+  - keeper/runtime canonicalization still pending standardization
 - `packages/hyperbet-solana`
   - canonical Solana app + keeper runtime
 - `packages/hyperbet-avax`
@@ -169,7 +178,8 @@ Prediction and perps are product capabilities, not chain-specific products.
 
 ### 2. Keep one canonical EVM runtime
 
-`hyperbet-evm` is the canonical EVM product package.
+`hyperbet-evm` is the canonical EVM direction, but not every imported subsystem
+is yet accepted as canonical on the sprint branch.
 
 - AVAX, Base, and BSC should be deployment presets plus theme wrappers.
 - Chain wrappers should not own their own keeper/business logic long term.
@@ -219,7 +229,9 @@ Chain packages should only inject:
 
 ### Keeper boundaries
 
-1. `hyperbet-evm/keeper` has moved in the right direction, but its service still carries optional Solana compatibility code.
+1. `hyperbet-evm/keeper` is directionally useful but is not yet accepted as the
+   canonical keeper baseline; see
+   `docs/enoomian-evm-standardization-decisions.md`.
 2. `hyperbet-solana/keeper` remains the correct home for Solana-first automation.
 3. Shared keeper logic has not yet been extracted into reusable modules, so semantic duplication risk remains.
 
