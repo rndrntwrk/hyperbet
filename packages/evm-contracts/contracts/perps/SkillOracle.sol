@@ -12,6 +12,9 @@ contract SkillOracle is Ownable {
     uint256 public constant Z_SCORE = 3;
     uint256 public constant K_FACTOR = 500;
 
+    error InvalidReporter();
+    error UnauthorizedReporter();
+
     struct AgentSkill {
         uint256 mu;
         uint256 sigma;
@@ -20,19 +23,34 @@ contract SkillOracle is Ownable {
 
     mapping(bytes32 => AgentSkill) public agentSkills;
     bytes32[] public activeAgents;
+    mapping(address => bool) public reporters;
 
     uint256 public globalMeanMu;
     uint256 private totalMu;
     uint256 public immutable basePrice;
 
     event SkillUpdated(bytes32 indexed agentId, uint256 mu, uint256 sigma);
+    event ReporterUpdated(address indexed reporter, bool enabled);
 
     constructor(uint256 initialBasePrice) Ownable(msg.sender) {
         require(initialBasePrice > 0, "Invalid base price");
         basePrice = initialBasePrice;
+        reporters[msg.sender] = true;
+        emit ReporterUpdated(msg.sender, true);
     }
 
-    function updateAgentSkill(bytes32 agentId, uint256 mu, uint256 sigma) external onlyOwner {
+    modifier onlyReporter() {
+        if (!reporters[msg.sender]) revert UnauthorizedReporter();
+        _;
+    }
+
+    function setReporter(address reporter, bool enabled) external onlyOwner {
+        if (reporter == address(0)) revert InvalidReporter();
+        reporters[reporter] = enabled;
+        emit ReporterUpdated(reporter, enabled);
+    }
+
+    function updateAgentSkill(bytes32 agentId, uint256 mu, uint256 sigma) external onlyReporter {
         if (agentSkills[agentId].lastUpdate == 0) {
             activeAgents.push(agentId);
             totalMu += mu;

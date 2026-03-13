@@ -455,7 +455,7 @@ describe("GoldClob", function () {
   });
 
   it("uses fee snapshots from market creation for claims even after fee updates", async function () {
-    const { clob, oracle, operator, reporter, admin, marketMaker, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, admin, marketMaker, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-claim-fee-snapshot");
 
@@ -484,7 +484,7 @@ describe("GoldClob", function () {
 
     await oracle
       .connect(reporter)
-      .reportResult(
+      .proposeResult(
         duel,
         SIDE_A,
         99,
@@ -493,6 +493,9 @@ describe("GoldClob", function () {
         openedAt + 180n,
         "resolved-snapshot",
       );
+    await ethers.provider.send("evm_increaseTime", [3600]);
+    await ethers.provider.send("evm_mine", []);
+    await oracle.connect(finalizer).finalizeResult(duel, "resolved-snapshot-final");
     await clob
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);

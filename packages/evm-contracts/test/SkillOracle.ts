@@ -43,4 +43,17 @@ describe("SkillOracle", () => {
     expect(lowerPrice).to.be.greaterThan(0n);
     expect(higherPrice).to.be.greaterThan(lowerPrice);
   });
+
+  it("allows owner-managed reporter rotation for updates", async () => {
+    const { owner, oracle } = await deployFixture();
+    const [, reporter] = await ethers.getSigners();
+    const agent = ethers.encodeBytes32String("MODEL_A");
+
+    await oracle.connect(owner).setReporter(reporter.address, true);
+    await oracle.connect(reporter).updateAgentSkill(agent, 1_700, 25);
+
+    const stored = await oracle.agentSkills(agent);
+    expect(stored.mu).to.equal(1_700n);
+    expect(stored.sigma).to.equal(25n);
+  });
 });
