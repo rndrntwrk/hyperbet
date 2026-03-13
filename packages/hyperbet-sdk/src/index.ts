@@ -18,7 +18,9 @@ export class HyperbetClient {
 
   // Constants
   public static readonly DEFAULT_BSC_RPC = "https://bsc-dataseed.binance.org/";
+  public static readonly DEFAULT_BSC_TESTNET_RPC = "https://data-seed-prebsc-1-s1.binance.org:8545";
   public static readonly DEFAULT_AVAX_RPC = "https://api.avax.network/ext/bc/C/rpc";
+  public static readonly DEFAULT_AVAX_FUJI_RPC = "https://api.avax-test.network/ext/bc/C/rpc";
   public static readonly DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com";
   public static readonly DEFAULT_STREAM_URL = "wss://api.hyperbet.gg/ws";
 
@@ -43,7 +45,7 @@ export class HyperbetClient {
         bscDeployment.duelOracleAddress
       ) {
         this.evmBsc = new HyperbetEVMClient(
-          config.bscRpcUrl || HyperbetClient.DEFAULT_BSC_RPC,
+          config.bscRpcUrl || resolveBscRpcUrl(config),
           config.evmPrivateKey,
           bscDeployment.goldClobAddress,
           bscDeployment.duelOracleAddress
@@ -54,7 +56,7 @@ export class HyperbetClient {
         avaxDeployment.duelOracleAddress
       ) {
         this.evmAvax = new HyperbetEVMClient(
-          config.avaxRpcUrl || HyperbetClient.DEFAULT_AVAX_RPC,
+          config.avaxRpcUrl || resolveAvaxRpcUrl(config),
           config.evmPrivateKey,
           avaxDeployment.goldClobAddress,
           avaxDeployment.duelOracleAddress
@@ -90,6 +92,26 @@ function resolveBscDeployment(config: SdkConfig): BettingEvmDeployment {
   return BETTING_EVM_DEPLOYMENTS[config.bscNetwork ?? "bsc"];
 }
 
+const BSC_RPC_DEFAULTS: Record<"bsc" | "bscTestnet", string> = {
+  bsc: HyperbetClient.DEFAULT_BSC_RPC,
+  bscTestnet: HyperbetClient.DEFAULT_BSC_TESTNET_RPC,
+};
+
+function resolveBscRpcUrl(config: SdkConfig): string {
+  const network: "bsc" | "bscTestnet" = config.bscNetwork ?? "bsc";
+  return BSC_RPC_DEFAULTS[network];
+}
+
 function resolveAvaxDeployment(config: SdkConfig): BettingEvmDeployment {
   return BETTING_EVM_DEPLOYMENTS[config.avaxNetwork ?? "avax"];
+}
+
+const AVAX_RPC_DEFAULTS: Record<"avax" | "avaxFuji", string> = {
+  avax: HyperbetClient.DEFAULT_AVAX_RPC,
+  avaxFuji: HyperbetClient.DEFAULT_AVAX_FUJI_RPC,
+};
+
+function resolveAvaxRpcUrl(config: SdkConfig): string {
+  const network: "avax" | "avaxFuji" = config.avaxNetwork ?? "avax";
+  return AVAX_RPC_DEFAULTS[network];
 }

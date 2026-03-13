@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HyperbetEVMClient } from "../src/evm/client";
+import { HyperbetClient } from "../src";
 import { SIDE_BID, SIDE_ASK, MARKET_KIND_DUEL_WINNER } from "../src/types";
 
 // Mock ethers
@@ -81,5 +82,28 @@ describe("HyperbetEVMClient", () => {
   it("should claim winnings", async () => {
     await client.claim({ duelId: "test-duel" });
     expect(client.clob.claim).toHaveBeenCalledWith("mock-hash", MARKET_KIND_DUEL_WINNER);
+  });
+});
+
+
+describe("HyperbetClient network RPC defaults", () => {
+  const evmPrivateKey = "0x" + "1".repeat(64);
+
+  it("uses BSC testnet RPC by default when bscNetwork is bscTestnet", () => {
+    const client = new HyperbetClient({
+      evmPrivateKey,
+      bscNetwork: "bscTestnet",
+    });
+
+    expect((client.evmBsc?.provider as any).url).toBe(HyperbetClient.DEFAULT_BSC_TESTNET_RPC);
+  });
+
+  it("uses Avalanche Fuji RPC by default when avaxNetwork is avaxFuji", () => {
+    const client = new HyperbetClient({
+      evmPrivateKey,
+      avaxNetwork: "avaxFuji",
+    });
+
+    expect((client.evmAvax?.provider as any).url).toBe(HyperbetClient.DEFAULT_AVAX_FUJI_RPC);
   });
 });
