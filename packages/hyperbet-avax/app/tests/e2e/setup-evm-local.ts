@@ -44,6 +44,8 @@ const MARKET_KIND_DUEL_WINNER = 0;
 const BUY_SIDE = 1;
 const SELL_SIDE = 2;
 const DUEL_STATUS_BETTING_OPEN = 2;
+const ORDER_FLAG_GTC = 0x01;
+const DUEL_ORACLE_DISPUTE_WINDOW_SECONDS = 3_600;
 
 type EvmArtifact = {
   abi: unknown[];
@@ -170,6 +172,14 @@ async function main(): Promise<void> {
         accountIndex: 0,
         addressIndex: 1,
       });
+  const finalizerAccount = mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+    accountIndex: 0,
+    addressIndex: 2,
+  });
+  const challengerAccount = mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+    accountIndex: 0,
+    addressIndex: 3,
+  });
   const walletClient = createWalletClient({
     account: adminAccount,
     chain: localChain,
@@ -235,7 +245,14 @@ async function main(): Promise<void> {
     bytecode: resolveArtifactBytecode(
       duelOutcomeOracleArtifact as EvmArtifact,
     ),
-    args: [adminAccount.address, adminAccount.address],
+    args: [
+      adminAccount.address,
+      adminAccount.address,
+      finalizerAccount.address,
+      challengerAccount.address,
+      adminAccount.address,
+      DUEL_ORACLE_DISPUTE_WINDOW_SECONDS,
+    ],
     nonce: consumeNonce(),
   });
   const oracleDeployReceipt = await publicClient.waitForTransactionReceipt({
@@ -253,6 +270,7 @@ async function main(): Promise<void> {
       adminAccount.address,
       adminAccount.address,
       oracleAddress,
+      adminAccount.address,
       adminAccount.address,
       adminAccount.address,
     ],
@@ -322,6 +340,7 @@ async function main(): Promise<void> {
       SELL_SIDE,
       seedNoOrderPrice,
       parseUnits(seedOrderAmountUi, 18),
+      ORDER_FLAG_GTC,
     ],
     value: (() => {
       const amount = parseUnits(seedOrderAmountUi, 18);
@@ -345,6 +364,7 @@ async function main(): Promise<void> {
       BUY_SIDE,
       seedYesOrderPrice,
       parseUnits(seedOrderAmountUi, 18),
+      ORDER_FLAG_GTC,
     ],
     value: (() => {
       const amount = parseUnits(seedOrderAmountUi, 18);

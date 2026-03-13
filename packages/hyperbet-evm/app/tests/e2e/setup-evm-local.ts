@@ -13,9 +13,9 @@ import {
 } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 
-import mockErc20Artifact from "../../../../evm-contracts/artifacts/contracts/MockERC20.sol/MockERC20.json";
-import duelOutcomeOracleArtifact from "../../../../evm-contracts/artifacts/contracts/DuelOutcomeOracle.sol/DuelOutcomeOracle.json";
-import goldClobArtifact from "../../../../evm-contracts/artifacts/contracts/GoldClob.sol/GoldClob.json";
+import mockErc20Artifact from "../../../../evm-contracts/out/MockERC20.sol/MockERC20.json";
+import duelOutcomeOracleArtifact from "../../../../evm-contracts/out/DuelOutcomeOracle.sol/DuelOutcomeOracle.json";
+import goldClobArtifact from "../../../../evm-contracts/out/GoldClob.sol/GoldClob.json";
 
 type E2eState = Record<string, unknown> & {
   currentDuelKeyHex?: string;
@@ -44,6 +44,28 @@ const MARKET_KIND_DUEL_WINNER = 0;
 const BUY_SIDE = 1;
 const SELL_SIDE = 2;
 const DUEL_STATUS_BETTING_OPEN = 2;
+const ORDER_FLAG_GTC = 0x01;
+const DUEL_ORACLE_DISPUTE_WINDOW_SECONDS = 3_600;
+
+type EvmArtifact = {
+  abi: unknown[];
+  bytecode:
+    | `0x${string}`
+    | {
+        object?: string;
+      };
+};
+
+function resolveArtifactBytecode(artifact: EvmArtifact): `0x${string}` {
+  const raw =
+    typeof artifact.bytecode === "string"
+      ? artifact.bytecode
+      : artifact.bytecode.object || "";
+  if (!raw) {
+    throw new Error("Artifact is missing deployable bytecode");
+  }
+  return (raw.startsWith("0x") ? raw : `0x${raw}`) as `0x${string}`;
+}
 
 function ensureHex32(value: string, label: string): `0x${string}` {
   const normalized = value.trim().toLowerCase().replace(/^0x/, "");
@@ -146,6 +168,14 @@ async function main(): Promise<void> {
         accountIndex: 0,
         addressIndex: 1,
       });
+  const finalizerAccount = mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+    accountIndex: 0,
+    addressIndex: 2,
+  });
+  const challengerAccount = mnemonicToAccount(DEFAULT_ANVIL_MNEMONIC, {
+    accountIndex: 0,
+    addressIndex: 3,
+  });
   const walletClient = createWalletClient({
     account: adminAccount,
     chain: localChain,
@@ -194,7 +224,7 @@ async function main(): Promise<void> {
 
   const tokenDeployTx = await walletClient.deployContract({
     abi: mockErc20Artifact.abi,
-    bytecode: mockErc20Artifact.bytecode as `0x${string}`,
+    bytecode: resolveArtifactBytecode(mockErc20Artifact as EvmArtifact),
     args: ["Mock Gold", "GOLD"],
     nonce: consumeNonce(),
   });
@@ -208,8 +238,17 @@ async function main(): Promise<void> {
 
   const oracleDeployTx = await walletClient.deployContract({
     abi: duelOutcomeOracleArtifact.abi,
-    bytecode: duelOutcomeOracleArtifact.bytecode as `0x${string}`,
-    args: [adminAccount.address, adminAccount.address],
+    bytecode: resolveArtifactBytecode(
+      duelOutcomeOracleArtifact as EvmArtifact,
+    ),
+    args: [
+      adminAccount.address,
+      adminAccount.address,
+      finalizerAccount.address,
+      challengerAccount.address,
+      adminAccount.address,
+      DUEL_ORACLE_DISPUTE_WINDOW_SECONDS,
+    ],
     nonce: consumeNonce(),
   });
   const oracleDeployReceipt = await publicClient.waitForTransactionReceipt({
@@ -222,11 +261,12 @@ async function main(): Promise<void> {
 
   const clobDeployTx = await walletClient.deployContract({
     abi: goldClobArtifact.abi,
-    bytecode: goldClobArtifact.bytecode as `0x${string}`,
+    bytecode: resolveArtifactBytecode(goldClobArtifact as EvmArtifact),
     args: [
       adminAccount.address,
       adminAccount.address,
       oracleAddress,
+      adminAccount.address,
       adminAccount.address,
       adminAccount.address,
     ],
@@ -296,6 +336,7 @@ async function main(): Promise<void> {
       SELL_SIDE,
       seedNoOrderPrice,
       parseUnits(seedOrderAmountUi, 18),
+      ORDER_FLAG_GTC,
     ],
     value: (() => {
       const amount = parseUnits(seedOrderAmountUi, 18);
@@ -319,6 +360,7 @@ async function main(): Promise<void> {
       BUY_SIDE,
       seedYesOrderPrice,
       parseUnits(seedOrderAmountUi, 18),
+      ORDER_FLAG_GTC,
     ],
     value: (() => {
       const amount = parseUnits(seedOrderAmountUi, 18);

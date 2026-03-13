@@ -31,6 +31,7 @@ import {
   getOrderBook,
   getPosition,
   getRecentTrades,
+  ORDER_FLAG_GTC,
   placeOrder,
   toDuelKeyHex,
   type MarketMeta,
@@ -96,6 +97,8 @@ function getEvmPanelCopy(locale: UiLocale) {
       resolved: "已结算",
       marketCancelled: "市场已取消",
       bettingLocked: "下注已锁定",
+      resolutionProposed: "结果已提交，等待挑战期结束",
+      resolutionChallenged: "结果已被挑战，结算已暂停",
       marketOpen: "市场开放中",
       refreshFailed: (message: string) => `刷新失败：${message}`,
       walletNotConnected: "钱包未连接",
@@ -148,6 +151,8 @@ function getEvmPanelCopy(locale: UiLocale) {
     resolved: "Resolved",
     marketCancelled: "Market cancelled",
     bettingLocked: "Betting locked",
+    resolutionProposed: "Result proposed; challenge window active",
+    resolutionChallenged: "Result challenged; settlement paused",
     marketOpen: "Market open",
     refreshFailed: (message: string) => `Refresh failed: ${message}`,
     walletNotConnected: "Wallet not connected",
@@ -274,6 +279,10 @@ function getLifecycleStatusLabel(
       return copy.marketCancelled;
     case "LOCKED":
       return copy.bettingLocked;
+    case "PROPOSED":
+      return copy.resolutionProposed;
+    case "CHALLENGED":
+      return copy.resolutionChallenged;
     case "OPEN":
       return copy.marketOpen;
     case "PENDING":
@@ -812,6 +821,7 @@ export function EvmBettingPanel({
         orderSide,
         price,
         amount,
+        ORDER_FLAG_GTC,
         effectiveAddress,
         totalValue,
       );

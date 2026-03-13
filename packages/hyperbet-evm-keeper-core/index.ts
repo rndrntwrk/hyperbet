@@ -57,7 +57,7 @@ const GOLD_CLOB_PLACE_ORDER_DISCRIMINATOR = createHash("sha256")
   .digest()
   .subarray(0, 8);
 const GOLD_CLOB_EVM_PLACE_ORDER_ABI = parseAbi([
-  "function placeOrder(bytes32 duelKey, uint8 marketKind, uint8 side, uint16 price, uint128 amount)",
+  "function placeOrder(bytes32 duelKey, uint8 marketKind, uint8 side, uint16 price, uint128 amount, uint8 orderFlags)",
 ]);
 const GOLD_CLOB_EVM_ORDER_PLACED_EVENT = parseAbiItem(
   "event OrderPlaced(bytes32 indexed marketKey, uint64 indexed orderId, address indexed maker, uint8 side, uint16 price, uint128 amount)",

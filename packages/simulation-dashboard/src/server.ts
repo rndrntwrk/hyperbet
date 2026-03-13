@@ -26,6 +26,7 @@ import {
     MARKET_KIND_DUEL_WINNER,
     DUEL_STATUS_BETTING_OPEN,
     DUEL_STATUS_LOCKED,
+    DISPUTE_WINDOW_SECONDS,
     SIDE_A,
     SIDE_B,
     BUY_SIDE,
@@ -132,6 +133,7 @@ let oracle: Contract;
 let oracleRead: Contract;
 let clob: Contract;
 let clobRead: Contract;
+let finalizerSigner: ethers.JsonRpcSigner | null = null;
 let agents: BaseAgent[] = [];
 let simRunning = false;
 let simSpeed = 500; // ms between ticks
@@ -821,6 +823,12 @@ async function deployContracts(): Promise<void> {
     const reporter = signers[2];
     const treasury = signers[3];
     const marketMaker = signers[4];
+    const challenger = signers.at(-2);
+    const finalizer = signers.at(-1);
+    if (!challenger || !finalizer) {
+        throw new Error("simulation runtime requires dedicated finalizer/challenger signers");
+    }
+    finalizerSigner = finalizer;
 
     treasuryAddr = await treasury.getAddress();
     mmAddr = await marketMaker.getAddress();
@@ -843,9 +851,10 @@ async function deployContracts(): Promise<void> {
     oracle = (await oracleFactory.deploy(
         await admin.getAddress(),
         await reporter.getAddress(),
-        await operator.getAddress(),
-        await treasury.getAddress(),
-        0,
+        await finalizer.getAddress(),
+        await challenger.getAddress(),
+        await admin.getAddress(),
+        DISPUTE_WINDOW_SECONDS,
     )) as unknown as Contract;
     await oracle.waitForDeployment();
 
@@ -857,6 +866,7 @@ async function deployContracts(): Promise<void> {
         await oracle.getAddress(),
         await treasury.getAddress(),
         await marketMaker.getAddress(),
+        await admin.getAddress(),
     )) as unknown as Contract;
     await clob.waitForDeployment();
 
@@ -1027,6 +1037,14 @@ async function ensureScenarioMarketLocked(
 
     const reporter = await provider.getSigner(2);
     const operator = await provider.getSigner(1);
+    const latestBlock = await provider.getBlock("latest");
+    const latestTimestamp = BigInt(
+        latestBlock?.timestamp ?? Math.floor(Date.now() / 1000),
+    );
+    if (latestTimestamp < BigInt(duel.betCloseTs)) {
+        await provider.send("evm_setNextBlockTimestamp", [Number(duel.betCloseTs)]);
+        await provider.send("evm_mine", []);
+    }
     const lockReason = closeWindowReached
         ? "close-window"
         : staleOracleLocked
@@ -2180,6 +2198,40 @@ async function settleDuel(
             "resolve cancelDuel receipt",
         );
     } else {
+        const duel = await withReadFallback(
+            `tick ${simTick} getDuel for resolve`,
+            () => oracleRead.getDuel(currentDuelKey),
+            () => oracle.getDuel(currentDuelKey),
+        );
+        if (Number(duel.status ?? 0) < DUEL_STATUS_LOCKED) {
+            const latestBlock = await provider.getBlock("latest");
+            const latestTimestamp = BigInt(
+                latestBlock?.timestamp ?? Math.floor(Date.now() / 1000),
+            );
+            if (latestTimestamp < BigInt(duel.betCloseTs)) {
+                await provider.send("evm_setNextBlockTimestamp", [Number(duel.betCloseTs)]);
+                await provider.send("evm_mine", []);
+            }
+            const lockTx: any = await withTimeout(
+                (oracle.connect(reporter) as any).upsertDuel(
+                    currentDuelKey,
+                    duel.participantAHash,
+                    duel.participantBHash,
+                    duel.betOpenTs,
+                    duel.betCloseTs,
+                    duel.duelStartTs,
+                    duel.metadataUri,
+                    DUEL_STATUS_LOCKED,
+                ),
+                SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
+                "resolve lock duel",
+            );
+            await withTimeout(
+                lockTx.wait(),
+                SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
+                "resolve lock duel receipt",
+            );
+        }
         updateActiveRunStage("resolve-propose-result");
         tx1 = await withTimeout(
             (oracle.connect(reporter) as any).proposeResult(
@@ -2199,18 +2251,21 @@ async function settleDuel(
             SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
             "resolve proposeResult receipt",
         );
-
-        updateActiveRunStage("resolve-finalize-result");
-        const txFinalize: any = await withTimeout(
-            (oracle.connect(operator) as any).finalizeResult(
+        await provider.send("evm_increaseTime", [DISPUTE_WINDOW_SECONDS]);
+        await provider.send("evm_mine", []);
+        if (!finalizerSigner) {
+            throw new Error("missing finalizer signer");
+        }
+        const finalizeTx: any = await withTimeout(
+            (oracle.connect(finalizerSigner) as any).finalizeResult(
                 currentDuelKey,
-                `finalized-${currentDuelLabel}`,
+                `resolved-${currentDuelLabel}`,
             ),
             SCENARIO_SETTLEMENT_TX_TIMEOUT_MS,
             "resolve finalizeResult",
         );
         await withTimeout(
-            txFinalize.wait(),
+            finalizeTx.wait(),
             SCENARIO_SETTLEMENT_RECEIPT_TIMEOUT_MS,
             "resolve finalizeResult receipt",
         );

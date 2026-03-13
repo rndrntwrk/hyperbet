@@ -961,6 +961,11 @@
           "internalType": "uint128",
           "name": "amount",
           "type": "uint128"
+        },
+        {
+          "internalType": "uint8",
+          "name": "orderFlags",
+          "type": "uint8"
         }
       ],
       "name": "placeOrder",

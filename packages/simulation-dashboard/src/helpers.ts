@@ -11,6 +11,8 @@ export const SIDE_B = 2;
 export const BUY_SIDE = 1;
 export const SELL_SIDE = 2;
 export const MAX_PRICE = 1000;
+export const ORDER_FLAG_GTC = 0x01;
+export const DISPUTE_WINDOW_SECONDS = 3_600;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 export function duelKey(label: string): string {
