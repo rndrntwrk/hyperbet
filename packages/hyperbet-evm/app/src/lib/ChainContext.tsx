@@ -8,6 +8,5 @@ const defaultEvmChain = enabledEvmChains[0] ?? "bsc";
 
 export const ChainProvider = createChainProvider({
   e2eDefaultChain: defaultEvmChain,
-  defaultChain: defaultEvmChain,
   chains: enabledEvmChains.length ? enabledEvmChains : [defaultEvmChain],
 });
