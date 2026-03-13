@@ -193,11 +193,19 @@ pub mod fight_oracle {
             ErrorCode::DuelAlreadyFinalized
         );
         require!(
+            duel_state.status != DuelStatus::Challenged,
+            ErrorCode::AlreadyChallenged
+        );
+        require!(
             duel_end_ts >= duel_state.bet_close_ts,
             ErrorCode::InvalidLifecycleTransition
         );
 
         let proposal_id = proposal_id_for(duel_state.duel_key, result_hash, replay_hash);
+        require!(
+            duel_state.active_proposal != proposal_id,
+            ErrorCode::ProposalExists
+        );
         duel_state.status = DuelStatus::Proposed;
         duel_state.active_proposal = proposal_id;
         duel_state.pending_winner = winner;
@@ -553,6 +561,8 @@ pub enum ErrorCode {
     InvalidWinner,
     #[msg("No active proposal exists")]
     NotProposed,
+    #[msg("Proposal already exists")]
+    ProposalExists,
     #[msg("Proposal already challenged")]
     AlreadyChallenged,
     #[msg("Dispute window still active")]
