@@ -708,8 +708,6 @@ contract AgentPerpEngine is Ownable, ReentrancyGuard {
     }
 
     function _mulDivSigned(int256 a, int256 b, int256 denominator) internal pure returns (int256) {
-        if (a == 0 || b == 0) return 0;
-
         bool negative = (a < 0) != (b < 0);
         uint256 absA = uint256(a < 0 ? -a : a);
         uint256 absB = uint256(b < 0 ? -b : b);
