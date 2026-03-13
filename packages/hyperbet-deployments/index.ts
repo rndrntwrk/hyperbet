@@ -13,7 +13,7 @@ import {
   type BettingSolanaCluster,
   type BettingSolanaDeployment,
   type BettingTargetKind,
-} from "../hyperbet-chain-registry/src/index.ts";
+} from "../hyperbet-chain-registry/src/index";
 
 export type {
   BettingAppEnvironment,
@@ -22,7 +22,7 @@ export type {
   BettingSolanaCluster,
   BettingSolanaDeployment,
   BettingTargetKind,
-} from "../hyperbet-chain-registry/src/index.ts";
+} from "../hyperbet-chain-registry/src/index";
 
 export interface BettingEvmMaterializedFields {
   skillOracleAddress: string;
