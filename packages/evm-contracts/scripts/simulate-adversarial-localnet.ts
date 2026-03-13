@@ -98,8 +98,17 @@ async function deployFixture(
   const arbBot = taker;
   const attacker = retailBot;
 
+  const governanceArtifact = loadArtifact(projectDir, "GovernanceController");
   const oracleArtifact = loadArtifact(projectDir, "DuelOutcomeOracle");
   const clobArtifact = loadArtifact(projectDir, "GoldClob");
+
+  const governanceFactory = new ContractFactory(
+    governanceArtifact.abi,
+    normalizeBytecode(governanceArtifact.bytecode),
+    admin,
+  );
+  const governance = await governanceFactory.deploy(await admin.getAddress(), 300);
+  await governance.waitForDeployment();
 
   const oracleFactory = new ContractFactory(
     oracleArtifact.abi,
@@ -109,6 +118,7 @@ async function deployFixture(
   const oracle = (await oracleFactory.deploy(
     await admin.getAddress(),
     await reporter.getAddress(),
+    await governance.getAddress(),
   )) as DuelOutcomeOracleContract;
   await oracle.waitForDeployment();
 
@@ -123,6 +133,7 @@ async function deployFixture(
     await oracle.getAddress(),
     await treasury.getAddress(),
     await marketMaker.getAddress(),
+    await governance.getAddress(),
   )) as GoldClobContract;
   await clob.waitForDeployment();
 

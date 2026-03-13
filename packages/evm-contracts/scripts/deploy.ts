@@ -140,6 +140,11 @@ async function main() {
     process.env.MARKET_OPERATOR_ADDRESS?.trim() || deployer.address;
   const reporterAddress =
     process.env.REPORTER_ADDRESS?.trim() || deployer.address;
+  const governanceOwnerAddress =
+    process.env.GOVERNANCE_OWNER_ADDRESS?.trim() || adminAddress;
+  const governanceMinDelaySeconds = Number(
+    process.env.GOVERNANCE_MIN_DELAY_SECONDS?.trim() || "300",
+  );
   const goldTokenAddress = process.env.GOLD_TOKEN_ADDRESS?.trim() || "";
 
   if (!isValidAddress(adminAddress)) {
@@ -160,6 +165,12 @@ async function main() {
   if (goldTokenAddress && !isValidAddress(goldTokenAddress)) {
     throw new Error(`Invalid GOLD_TOKEN_ADDRESS: ${goldTokenAddress}`);
   }
+  if (!isValidAddress(governanceOwnerAddress)) {
+    throw new Error(`Invalid GOVERNANCE_OWNER_ADDRESS: ${governanceOwnerAddress}`);
+  }
+  if (!Number.isFinite(governanceMinDelaySeconds) || governanceMinDelaySeconds < 0) {
+    throw new Error(`Invalid GOVERNANCE_MIN_DELAY_SECONDS: ${governanceMinDelaySeconds}`);
+  }
 
   if (isProduction) {
     if (
@@ -167,17 +178,30 @@ async function main() {
       !process.env.MARKET_OPERATOR_ADDRESS ||
       !process.env.REPORTER_ADDRESS ||
       !process.env.TREASURY_ADDRESS ||
-      !process.env.MARKET_MAKER_ADDRESS
+      !process.env.MARKET_MAKER_ADDRESS ||
+      !process.env.GOVERNANCE_OWNER_ADDRESS
     ) {
       throw new Error(
-        "Mainnet deployment requires ADMIN_ADDRESS, MARKET_OPERATOR_ADDRESS, REPORTER_ADDRESS, TREASURY_ADDRESS, and MARKET_MAKER_ADDRESS to be explicitly set",
+        "Mainnet deployment requires ADMIN_ADDRESS, MARKET_OPERATOR_ADDRESS, REPORTER_ADDRESS, TREASURY_ADDRESS, MARKET_MAKER_ADDRESS, and GOVERNANCE_OWNER_ADDRESS to be explicitly set",
       );
     }
   }
 
+  console.log("Deploying GovernanceController...");
+  const GovernanceController = await ethers.getContractFactory("GovernanceController");
+  const governanceController = await GovernanceController.deploy(
+    governanceOwnerAddress,
+    governanceMinDelaySeconds,
+  );
+  await governanceController.waitForDeployment();
+
   console.log("Deploying DuelOutcomeOracle...");
   const DuelOutcomeOracle = await ethers.getContractFactory("DuelOutcomeOracle");
-  const duelOracle = await DuelOutcomeOracle.deploy(adminAddress, reporterAddress);
+  const duelOracle = await DuelOutcomeOracle.deploy(
+    adminAddress,
+    reporterAddress,
+    await governanceController.getAddress(),
+  );
   await duelOracle.waitForDeployment();
 
   console.log("Deploying GoldClob...");
@@ -188,9 +212,11 @@ async function main() {
     await duelOracle.getAddress(),
     treasury,
     marketMaker,
+    await governanceController.getAddress(),
   );
   await clob.waitForDeployment();
 
+  console.log("GovernanceController deployed to:", await governanceController.getAddress());
   console.log("DuelOutcomeOracle deployed to:", await duelOracle.getAddress());
   console.log("GoldClob deployed to:", await clob.getAddress());
   console.log("Configuration:");
@@ -199,17 +225,21 @@ async function main() {
   console.log("- Reporter:", reporterAddress);
   console.log("- Treasury:", treasury);
   console.log("- Market Maker:", marketMaker);
+  console.log("- Governance Owner:", governanceOwnerAddress);
+  console.log("- Governance Min Delay (seconds):", governanceMinDelaySeconds);
   if (goldTokenAddress) {
     console.log("- GOLD token:", goldTokenAddress);
   }
 
   const clobAddress = await clob.getAddress();
   const duelOracleAddress = await duelOracle.getAddress();
+  const governanceControllerAddress = await governanceController.getAddress();
   const deploymentTxHash = clob.deploymentTransaction()?.hash ?? null;
   writeDeploymentReceipt(network.name, {
     network: network.name,
     chainId,
     deployer: deployer.address,
+    governanceControllerAddress,
     duelOracleAddress,
     goldClobAddress: clobAddress,
     adminAddress,
@@ -217,6 +247,8 @@ async function main() {
     reporterAddress,
     treasuryAddress: treasury,
     marketMakerAddress: marketMaker,
+    governanceOwnerAddress,
+    governanceMinDelaySeconds,
     goldTokenAddress,
     deploymentTxHash,
     deployedAt: new Date().toISOString(),

@@ -40,15 +40,24 @@ async function main() {
   const chainId = Number(deployedNetwork.chainId);
   const admin = requireAddress("ORACLE_ADMIN_ADDRESS", deployer.address);
   const reporter = requireAddress("ORACLE_REPORTER_ADDRESS", deployer.address);
+  const governanceController = requireAddress(
+    "ORACLE_GOVERNANCE_CONTROLLER_ADDRESS",
+    admin,
+  );
 
   console.log("Deploying DuelOutcomeOracle with account:", deployer.address);
   console.log("Network:", network.name, `(chainId=${chainId})`);
   console.log("Admin:", admin);
   console.log("Reporter:", reporter);
+  console.log("Governance Controller:", governanceController);
 
   const DuelOutcomeOracle =
     await ethers.getContractFactory("DuelOutcomeOracle");
-  const oracle = await DuelOutcomeOracle.deploy(admin, reporter);
+  const oracle = await DuelOutcomeOracle.deploy(
+    admin,
+    reporter,
+    governanceController,
+  );
   await oracle.waitForDeployment();
 
   const contractAddress = await oracle.getAddress();
@@ -63,6 +72,7 @@ async function main() {
     oracleAddress: contractAddress,
     adminAddress: admin,
     reporterAddress: reporter,
+    governanceControllerAddress: governanceController,
     deploymentTxHash,
     deployedAt: new Date().toISOString(),
   });
