@@ -10,10 +10,13 @@ contract GoldClobSettlementTest is Test {
     uint8 private constant MARKET_KIND_DUEL_WINNER = 0;
     uint8 private constant BUY_SIDE = 1;
     uint8 private constant SELL_SIDE = 2;
+    uint8 private constant ORDER_FLAG_GTC = 0x01;
 
     address private admin = address(0xA11CE);
     address private operator = address(0x0F03);
     address private reporter = address(0xB0B);
+    address private finalizer = address(0xF1A1);
+    address private challenger = address(0xC0B1);
     address private treasury = address(0x7001);
     address private marketMaker = address(0xAA01);
     address private traderA = address(0xAAA1);
@@ -26,10 +29,10 @@ contract GoldClobSettlementTest is Test {
         vm.txGasPrice(0);
         vm.warp(1_000);
 
-        oracle = new DuelOutcomeOracle(admin, reporter, reporter, reporter, 0);
+        oracle = new DuelOutcomeOracle(admin, reporter, finalizer, challenger, admin, 3_600);
 
         vm.prank(admin);
-        clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker);
+        clob = new GoldClob(admin, operator, address(oracle), treasury, marketMaker, admin);
 
         vm.deal(traderA, 100 ether);
         vm.deal(traderB, 100 ether);
@@ -192,7 +195,8 @@ contract GoldClobSettlementTest is Test {
             MARKET_KIND_DUEL_WINNER,
             SELL_SIDE,
             price,
-            amount
+            amount,
+            ORDER_FLAG_GTC
         );
 
         vm.prank(traderB);
@@ -201,11 +205,14 @@ contract GoldClobSettlementTest is Test {
             MARKET_KIND_DUEL_WINNER,
             BUY_SIDE,
             price,
-            amount
+            amount,
+            ORDER_FLAG_GTC
         );
     }
 
     function _resolveDuel(bytes32 duel, DuelOutcomeOracle.Side winner) private {
+        _lockDuel(duel);
+
         vm.prank(reporter);
         oracle.proposeResult(
             duel,
@@ -216,7 +223,25 @@ contract GoldClobSettlementTest is Test {
             uint64(block.timestamp + 180),
             "resolved"
         );
+
+        vm.warp(block.timestamp + 3_600);
+        vm.prank(finalizer);
         oracle.finalizeResult(duel, "finalized");
+    }
+
+    function _lockDuel(bytes32 duel) private {
+        vm.warp(block.timestamp + 61);
+        vm.prank(reporter);
+        oracle.upsertDuel(
+            duel,
+            _hashLabel("winner-payout-a"),
+            _hashLabel("winner-payout-b"),
+            uint64(block.timestamp - 61),
+            uint64(block.timestamp - 1),
+            uint64(block.timestamp + 59),
+            "locked",
+            DuelOutcomeOracle.DuelStatus.LOCKED
+        );
     }
 
     function _duelKey(string memory label) private pure returns (bytes32) {

@@ -8,18 +8,19 @@ import {
 
 describe("DuelOutcomeOracle", () => {
   async function deployFixture() {
-    const [admin, reporter, finalizer, challenger, other] =
+    const [admin, reporter, finalizer, challenger, pauser, other] =
       await ethers.getSigners();
     const oracle: DuelOutcomeOracleContract = await deployDuelOutcomeOracle(
       admin.address,
       reporter.address,
       finalizer.address,
       challenger.address,
+      pauser.address,
       3600,
       admin,
     );
     await oracle.waitForDeployment();
-    return { oracle, admin, reporter, finalizer, challenger, other };
+    return { oracle, admin, reporter, finalizer, challenger, pauser, other };
   }
 
   async function seedDuel(
@@ -38,6 +39,31 @@ describe("DuelOutcomeOracle", () => {
       3,
     );
   }
+
+  async function advanceToTimestamp(target: bigint) {
+    await ethers.provider.send("evm_setNextBlockTimestamp", [Number(target)]);
+    await ethers.provider.send("evm_mine", []);
+  }
+
+  it("rejects zero dispute windows", async () => {
+    const [admin, reporter, finalizer, challenger, pauser] =
+      await ethers.getSigners();
+
+    await expect(
+      deployDuelOutcomeOracle(
+        admin.address,
+        reporter.address,
+        finalizer.address,
+        challenger.address,
+        pauser.address,
+        0,
+        admin,
+      ),
+    ).to.be.revertedWithCustomError(
+      await ethers.getContractFactory("DuelOutcomeOracle"),
+      "InvalidDisputeWindow",
+    );
+  });
 
   it("requires proposal then finalization after dispute window", async () => {
     const { oracle, reporter, finalizer } = await deployFixture();
@@ -157,6 +183,136 @@ describe("DuelOutcomeOracle", () => {
 
     await expect(
       oracle.connect(other).finalizeResult(duelKey, "final"),
+    ).to.be.reverted;
+  });
+
+  it("rejects proposals before the duel is locked", async () => {
+    const { oracle, reporter } = await deployFixture();
+    const duelKey =
+      "0x5555555555555555555555555555555555555555555555555555555555555555";
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+
+    await oracle.connect(reporter).upsertDuel(
+      duelKey,
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      now,
+      now + 60n,
+      now + 120n,
+      "https://example.com/duels/5",
+      2,
+    );
+
+    await expect(
+      oracle.connect(reporter).proposeResult(
+        duelKey,
+        1,
+        99,
+        ethers.keccak256(ethers.toUtf8Bytes("replay-5")),
+        ethers.keccak256(ethers.toUtf8Bytes("result-5")),
+        Number(now + 180n),
+        "proposal",
+      ),
+    ).to.be.revertedWithCustomError(oracle, "DuelNotLocked");
+  });
+
+  it("rejects proposals before betting closes", async () => {
+    const { oracle, reporter } = await deployFixture();
+    const duelKey =
+      "0x6666666666666666666666666666666666666666666666666666666666666666";
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+
+    await oracle.connect(reporter).upsertDuel(
+      duelKey,
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      now,
+      now + 600n,
+      now + 660n,
+      "https://example.com/duels/6",
+      3,
+    );
+
+    await expect(
+      oracle.connect(reporter).proposeResult(
+        duelKey,
+        1,
+        99,
+        ethers.keccak256(ethers.toUtf8Bytes("replay-6")),
+        ethers.keccak256(ethers.toUtf8Bytes("result-6")),
+        Number(now + 720n),
+        "proposal",
+      ),
+    ).to.be.revertedWithCustomError(oracle, "BettingWindowActive");
+  });
+
+  it("rejects late challenges after the dispute window expires", async () => {
+    const { oracle, reporter, challenger } = await deployFixture();
+    const duelKey =
+      "0x7777777777777777777777777777777777777777777777777777777777777777";
+    await seedDuel(oracle, reporter, duelKey);
+
+    await oracle.connect(reporter).proposeResult(
+      duelKey,
+      1,
+      22,
+      ethers.keccak256(ethers.toUtf8Bytes("replay-7")),
+      ethers.keccak256(ethers.toUtf8Bytes("result-7")),
+      4_000,
+      "proposal",
+    );
+
+    await advanceToTimestamp(BigInt((await ethers.provider.getBlock("latest"))!.timestamp) + 3600n);
+
+    await expect(
+      oracle.connect(challenger).challengeResult(duelKey, "late-challenge"),
+    ).to.be.revertedWithCustomError(oracle, "ChallengeWindowExpired");
+  });
+
+  it("allows the emergency pauser to halt oracle transitions without blocking reads", async () => {
+    const { oracle, reporter, pauser } = await deployFixture();
+    const duelKey =
+      "0x4444444444444444444444444444444444444444444444444444444444444444";
+
+    await oracle.connect(pauser).setOraclePaused(true);
+    await expect(
+      oracle.connect(reporter).upsertDuel(
+        duelKey,
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        1_000,
+        2_000,
+        3_000,
+        "paused",
+        3,
+      ),
+    ).to.be.revertedWithCustomError(oracle, "OraclePaused");
+
+    const duel = await oracle.getDuel(duelKey);
+    expect(duel.status).to.equal(0n);
+  });
+
+  it("lets admin rotate pausers but rejects unauthorized pause actions", async () => {
+    const { oracle, admin, pauser, other } = await deployFixture();
+
+    await expect(
+      oracle.connect(other).setOraclePaused(true),
+    ).to.be.reverted;
+
+    await expect(oracle.connect(admin).setPauser(other.address, true))
+      .to.emit(oracle, "PauserUpdated")
+      .withArgs(other.address, true);
+
+    await expect(oracle.connect(other).setOraclePaused(true))
+      .to.emit(oracle, "OraclePauseUpdated")
+      .withArgs(true, other.address);
+
+    await expect(oracle.connect(admin).setPauser(pauser.address, false))
+      .to.emit(oracle, "PauserUpdated")
+      .withArgs(pauser.address, false);
+
+    await expect(
+      oracle.connect(pauser).setOraclePaused(false),
     ).to.be.reverted;
   });
 });

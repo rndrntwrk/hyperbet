@@ -97,6 +97,7 @@ export interface GoldClobContract extends TypedContract<GoldClobContract> {
     side: BigNumberish,
     price: BigNumberish,
     amount: BigNumberish,
+    orderFlags: BigNumberish,
     overrides?: PayableOverrides,
   ): Promise<ContractTransactionResponse>;
   syncMarketFromOracle(
@@ -129,6 +130,16 @@ export interface GoldClobContract extends TypedContract<GoldClobContract> {
     tradeTreasuryFeeBps: BigNumberish,
     tradeMarketMakerFeeBps: BigNumberish,
     winningsMarketMakerFeeBps: BigNumberish,
+  ): Promise<ContractTransactionResponse>;
+  setPauser(
+    pauser: string,
+    enabled: boolean,
+  ): Promise<ContractTransactionResponse>;
+  setMarketCreationPaused(
+    paused: boolean,
+  ): Promise<ContractTransactionResponse>;
+  setOrderPlacementPaused(
+    paused: boolean,
   ): Promise<ContractTransactionResponse>;
 }
 
@@ -173,6 +184,21 @@ export interface DuelOutcomeOracleContract
   setReporter(
     reporter: string,
     enabled: boolean,
+  ): Promise<ContractTransactionResponse>;
+  setFinalizer(
+    finalizer: string,
+    enabled: boolean,
+  ): Promise<ContractTransactionResponse>;
+  setChallenger(
+    challenger: string,
+    enabled: boolean,
+  ): Promise<ContractTransactionResponse>;
+  setPauser(
+    pauser: string,
+    enabled: boolean,
+  ): Promise<ContractTransactionResponse>;
+  setOraclePaused(
+    paused: boolean,
   ): Promise<ContractTransactionResponse>;
   getDuel(duelKey: BytesLike): Promise<{
     duelKey: string;
@@ -290,6 +316,7 @@ export async function deployGoldClob(
   oracle: string,
   treasury: string,
   marketMaker: string,
+  pauser: string,
   runner?: Signer,
 ): Promise<GoldClobContract> {
   const factory = runner
@@ -301,6 +328,7 @@ export async function deployGoldClob(
     oracle,
     treasury,
     marketMaker,
+    pauser,
   )) as unknown as GoldClobContract;
 }
 
@@ -309,6 +337,7 @@ export async function deployDuelOutcomeOracle(
   reporter: string,
   finalizer: string,
   challenger: string,
+  pauser: string,
   disputeWindowSeconds: bigint | number = 3600,
   runner?: Signer,
 ): Promise<DuelOutcomeOracleContract> {
@@ -320,6 +349,7 @@ export async function deployDuelOutcomeOracle(
     reporter,
     finalizer,
     challenger,
+    pauser,
     disputeWindowSeconds,
   )) as unknown as DuelOutcomeOracleContract;
 }
