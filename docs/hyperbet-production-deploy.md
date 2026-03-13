@@ -12,7 +12,7 @@ Operator runbooks are in [docs/runbooks/README.md](runbooks/README.md).
 - DDoS/WAF/edge cache: Cloudflare proxy in front of the betting API
 - Contracts/state: Solana + EVM (configured by env vars below, proxied server-side)
 
-AVAX now has repo-backed Pages and keeper deployment workflows, but production rollout is still blocked until canonical AVAX deployment addresses are committed to the shared chain registry and staged proof artifacts are captured for the target environment.
+AVAX now has repo-backed Pages and keeper deployment workflows, but production rollout is still blocked until canonical AVAX deployment addresses are committed to the shared chain registry, staged proof artifacts are captured for the target environment, and the real AVAX governance/operator wallets are provisioned.
 
 ## Staging Rail
 
@@ -62,7 +62,7 @@ Required staging vars are:
 - `HYPERBET_AVAX_STAGING_CHAIN_ID`
 - `HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS`
 
-AVAX rollout remains blocked until canonical deployment truth exists in the shared chain registry. The staging/prod rail is present so proof and release packaging can use one consistent contract once those addresses are committed.
+AVAX rollout remains blocked until canonical deployment truth exists in the shared chain registry and the effective AVAX wallet/signer set is in place. The staging/prod rail is present so proof and release packaging can use one consistent contract once those addresses are committed.
 
 ## 1) Deploy the keeper to Railway
 

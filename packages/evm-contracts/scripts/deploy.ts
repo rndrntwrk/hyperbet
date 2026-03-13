@@ -214,7 +214,7 @@ async function main() {
       !process.env.MARKET_MAKER_ADDRESS
     ) {
       throw new Error(
-        "Mainnet deployment requires TIMELOCK_ADDRESS, EMERGENCY_COUNCIL_ADDRESS, MULTISIG_ADDRESS or ADMIN_ADDRESS, MARKET_OPERATOR_ADDRESS, REPORTER_ADDRESS, FINALIZER_ADDRESS, CHALLENGER_ADDRESS, TREASURY_ADDRESS, and MARKET_MAKER_ADDRESS to be explicitly set",
+        "Mainnet deployment requires effective wallet setup before deploy can succeed: TIMELOCK_ADDRESS, EMERGENCY_COUNCIL_ADDRESS, MULTISIG_ADDRESS or ADMIN_ADDRESS, MARKET_OPERATOR_ADDRESS, REPORTER_ADDRESS, FINALIZER_ADDRESS, CHALLENGER_ADDRESS, TREASURY_ADDRESS, and MARKET_MAKER_ADDRESS must all be explicitly set to the real AVAX governance/operator wallets",
       );
     }
   }

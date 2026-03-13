@@ -15,8 +15,9 @@ Avalanche C-Chain focused Hyperbet package for betting, CLOB, and futures interf
 
 Production AVAX rollout is blocked until the shared chain registry contains
 canonical AVAX deployment addresses and staged-proof artifacts have been
-captured for the target environment. Local and testnet flows still work with
-explicit env overrides.
+captured for the target environment. It also depends on the real AVAX
+governance/operator wallets being provisioned. Local and testnet flows still
+work with explicit env overrides.
 
 `deployments/contracts.json` is updated after manual EVM deployment work, but it must not be treated as canonical production metadata. The app and keeper should use the shared chain registry for production defaults and only use explicit env overrides for local or testnet operation.
 

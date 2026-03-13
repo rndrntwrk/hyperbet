@@ -80,6 +80,11 @@ async function main(): Promise<void> {
   const warnings: string[] = [];
 
   console.log(`[preflight] target=${target} (hyperbet-avax EVM-only)`);
+  if (target === "mainnet") {
+    console.log(
+      "[preflight] AVAX mainnet remains blocked until the real governance/operator wallets are provisioned and wired into deploy env",
+    );
+  }
 
   const evmEnv = loadMergedEvmEnv(evmDir);
   const requiredSharedEnv = [
@@ -175,6 +180,11 @@ async function main(): Promise<void> {
     console.log(`[preflight] warnings=${warnings.length}`);
   }
   if (failures.length > 0) {
+    if (target === "mainnet") {
+      console.log(
+        "[preflight] mainnet wallet setup is incomplete; do not attempt AVAX production deploy until the signer set is fully provisioned",
+      );
+    }
     console.log(`[preflight] failures=${failures.length}`);
     process.exitCode = 1;
     return;

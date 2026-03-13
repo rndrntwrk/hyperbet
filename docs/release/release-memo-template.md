@@ -60,6 +60,7 @@ concrete repo artifacts instead of blank placeholders.
 - Current decision: not ready for unrestricted real-funds launch
 - Blocking items:
   - commit canonical AVAX mainnet registry values from deployment evidence
+  - complete effective AVAX wallet setup for governance and operator roles
   - capture AVAX staged read-only and canary artifacts
   - capture production timelock/multisig/emergency ownership transfer evidence
   - merge final audit outputs from Engineers `1`, `3`, and `4`

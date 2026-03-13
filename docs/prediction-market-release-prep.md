@@ -41,6 +41,7 @@ Current dependency state:
 - Gate 14A: proof rail implemented for Solana, BSC, and AVAX; staged
   read-only/canary execution still outstanding
 - Gate 19: AVAX production rollout blocked pending canonical registry values
+  and effective AVAX wallet setup
 - Gate 20: governance surfaces merged; live ownership-transfer evidence still
   outstanding
 - Gate 23 / 24: reviewer docs and audit-package scaffold merged; final handoff
@@ -113,6 +114,10 @@ Representative local verification entrypoints already documented elsewhere:
 - AVAX is still not canonicalized for production; the deploy/proof rails are in
   place, but the real mainnet addresses still need to be committed from
   deployment evidence.
+- AVAX mainnet also depends on effective wallet setup for timelock, multisig,
+  emergency, reporter, finalizer, challenger, market-operator, treasury, and
+  market-maker roles; without that signer set the lane is intentionally not
+  deployable.
 - Contract/security CI is now wired into the repo workflows, but local desktop
   verification can still be constrained by toolchain issues such as Hardhat
   compiler download and macOS-specific Foundry crashes.
