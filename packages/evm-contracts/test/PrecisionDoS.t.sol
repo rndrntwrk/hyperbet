@@ -28,7 +28,7 @@ contract GoldClobPrecisionDoSTest is Test {
 
     function setUp() public {
         vm.txGasPrice(0);
-        oracle = new DuelOutcomeOracle(admin, admin);
+        oracle = new DuelOutcomeOracle(admin, admin, admin, admin, 0);
 
         vm.prank(admin);
         clob = new GoldClob(admin, admin, address(oracle), admin, admin);

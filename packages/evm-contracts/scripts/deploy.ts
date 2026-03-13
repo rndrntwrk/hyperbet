@@ -177,7 +177,7 @@ async function main() {
 
   console.log("Deploying DuelOutcomeOracle...");
   const DuelOutcomeOracle = await ethers.getContractFactory("DuelOutcomeOracle");
-  const duelOracle = await DuelOutcomeOracle.deploy(adminAddress, reporterAddress);
+  const duelOracle = await DuelOutcomeOracle.deploy(adminAddress, reporterAddress, finalizerAddress, challengerAddress, 3600);
   await duelOracle.waitForDeployment();
 
   console.log("Deploying GoldClob...");
@@ -197,6 +197,8 @@ async function main() {
   console.log("- Admin:", adminAddress);
   console.log("- Market Operator:", marketOperator);
   console.log("- Reporter:", reporterAddress);
+  console.log("- Finalizer:", finalizerAddress);
+  console.log("- Challenger:", challengerAddress);
   console.log("- Treasury:", treasury);
   console.log("- Market Maker:", marketMaker);
   if (goldTokenAddress) {

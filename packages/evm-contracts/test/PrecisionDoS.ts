@@ -8,7 +8,7 @@ describe("GoldClob Precision DoS", () => {
   it("should process perfectly valid mixed-quantity matching without precision revert", async () => {
     const [admin, maker, taker] = await ethers.getSigners();
 
-    const oracle = await deployDuelOutcomeOracle(admin.address, admin.address, admin);
+    const oracle = await deployDuelOutcomeOracle(admin.address, admin.address, admin.address, admin.address, 3600, admin);
     await oracle.waitForDeployment();
 
     const clob = await deployGoldClob(

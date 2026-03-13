@@ -16,7 +16,9 @@ import {
   hashLabel,
   marketSideA,
   placeClobOrder,
-  reportDuelResult,
+  challengeDuelResult,
+  finalizeDuelResult,
+  proposeDuelResult,
   syncMarketFromDuel,
   uniqueDuelKey,
   upsertDuel,
@@ -166,6 +168,7 @@ describe("hyperbet-solana", () => {
       duelStartTs: now - 5,
       metadataUri: "https://hyperscape.gg/tests/demo/locked",
     });
+    await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(
       clobProgram,
       market.marketState,
@@ -177,12 +180,13 @@ describe("hyperbet-solana", () => {
     );
     assert.deepStrictEqual(marketState.status, { locked: {} });
 
-    await reportDuelResult(fightProgram, authority, market.duelKey, {
+    await proposeDuelResult(fightProgram, authority, market.duelKey, {
       winner: marketSideA(),
       duelEndTs: now + 5,
       seed: 777,
       metadataUri: "https://hyperscape.gg/tests/demo/resolved",
     });
+    await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(
       clobProgram,
       market.marketState,
@@ -308,6 +312,64 @@ describe("hyperbet-solana", () => {
     assert.strictEqual(vaultBalanceBeforeClaim - vaultBalanceAfterClaim, 600);
   });
 
+
+  it("keeps disputed proposals fail-closed and rejects settlement", async () => {
+    const maker = Keypair.generate();
+    const taker = Keypair.generate();
+    await Promise.all([
+      airdrop(provider.connection, maker.publicKey, 5),
+      airdrop(provider.connection, taker.publicKey, 5),
+    ]);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      { duelKey: uniqueDuelKey("disputed-claim") },
+    );
+
+    const now = Math.floor(Date.now() / 1000);
+    await upsertDuel(fightProgram, authority, market.duelKey, {
+      status: duelStatusLocked(),
+      betOpenTs: now - 120,
+      betCloseTs: now - 10,
+      duelStartTs: now - 5,
+    });
+    await proposeDuelResult(fightProgram, authority, market.duelKey, {
+      winner: marketSideA(),
+      duelEndTs: now + 5,
+    });
+    await challengeDuelResult(fightProgram, authority, market.duelKey);
+    await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
+
+    const marketState = await clobProgram.account.marketState.fetch(market.marketState);
+    assert.deepStrictEqual(marketState.status, { locked: {} });
+  });
+
+  it("rejects unauthorized finalization", async () => {
+    const outsider = Keypair.generate();
+    await airdrop(provider.connection, outsider.publicKey, 2);
+
+    const duelKey = uniqueDuelKey("unauthorized-finalize");
+    const now = Math.floor(Date.now() / 1000);
+    await upsertDuel(fightProgram, authority, duelKey, {
+      status: duelStatusLocked(),
+      betOpenTs: now - 120,
+      betCloseTs: now - 10,
+      duelStartTs: now - 5,
+    });
+    await proposeDuelResult(fightProgram, authority, duelKey, {
+      winner: marketSideA(),
+      duelEndTs: now + 5,
+    });
+
+    try {
+      await finalizeDuelResult(fightProgram, outsider, duelKey);
+      assert.fail("outsider finalization should fail");
+    } catch (error: unknown) {
+      assert.ok(hasProgramError(error, "Unauthorized"));
+    }
+  });
   it("rejects lifecycle regression after a duel is locked", async () => {
     const duelKey = uniqueDuelKey("locked-regression");
     const now = Math.floor(Date.now() / 1000);
