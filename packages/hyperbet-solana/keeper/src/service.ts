@@ -5,7 +5,10 @@ import fs_node from "node:fs";
 import path from "node:path";
 import { type Program } from "@coral-xyz/anchor";
 import {
+  normalizePredictionMarketLifecycleMetadata,
   type PredictionMarketLifecycleStatus,
+  resolveLifecycleFromSolanaDuelStatus,
+  resolveLifecycleFromSolanaMarketStatus,
   resolveLifecycleFromStreamPhase,
   toRecordedBetChain,
   type PredictionMarketLifecycleRecord,
@@ -31,6 +34,7 @@ import {
   FIGHT_ORACLE_PROGRAM_ID,
   findDuelStatePda,
   findMarketConfigPda,
+  findOracleConfigPda,
   findMarketPda,
   getSenderUrl,
   GOLD_CLOB_MARKET_PROGRAM_ID,
@@ -820,7 +824,7 @@ const GOLD_CLOB_PLACE_ORDER_DISCRIMINATOR = createHash("sha256")
   .update("global:place_order")
   .digest()
   .subarray(0, 8);
-const GOLD_CLOB_PLACE_ORDER_DATA_LENGTH = 27;
+const GOLD_CLOB_PLACE_ORDER_DATA_LENGTH = 28;
 const SOL_DISPLAY_DECIMALS = 9;
 
 function normalizeDuelKeyHex(value: string | null): string | null {
@@ -1193,22 +1197,48 @@ function enumName(value: unknown): string | null {
   return typeof key === "string" && key.length > 0 ? key : null;
 }
 
-function resolveLifecycleFromSolanaStatus(
-  status: string | null,
+const ZERO_HEX_32 =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+function toNullableTimestamp(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (value && typeof (value as { toString(): string }).toString === "function") {
+    const parsed = Number((value as { toString(): string }).toString());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeHexProposalId(value: unknown): string | null {
+  if (typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value.trim())) {
+    const normalized = value.trim().toLowerCase();
+    return normalized === ZERO_HEX_32 ? null : normalized;
+  }
+  if (
+    value instanceof Uint8Array ||
+    Buffer.isBuffer(value) ||
+    Array.isArray(value)
+  ) {
+    const normalized = `0x${Buffer.from(value).toString("hex")}`;
+    return normalized === ZERO_HEX_32 ? null : normalized;
+  }
+  return null;
+}
+
+function resolveLifecycleFromSolanaSnapshot(
+  duelStatus: string | null,
+  marketStatus: string | null,
   fallback: PredictionMarketLifecycleStatus,
 ): PredictionMarketLifecycleStatus {
-  switch (status?.toLowerCase()) {
-    case "open":
-      return "OPEN";
-    case "locked":
-      return "LOCKED";
-    case "resolved":
-      return "RESOLVED";
-    case "cancelled":
-      return "CANCELLED";
-    default:
-      return fallback;
-  }
+  const duelLifecycle = resolveLifecycleFromSolanaDuelStatus(duelStatus);
+  if (duelLifecycle !== "UNKNOWN") return duelLifecycle;
+  const marketLifecycle = resolveLifecycleFromSolanaMarketStatus(marketStatus);
+  return marketLifecycle !== "UNKNOWN" ? marketLifecycle : fallback;
 }
 
 function resolveWinnerFromSolanaState(
@@ -1227,6 +1257,24 @@ function resolveWinnerFromSolanaState(
   }
 }
 
+function resolvePhaseFromLifecycleStatus(
+  lifecycleStatus: PredictionMarketLifecycleStatus | null | undefined,
+): string | null {
+  switch (lifecycleStatus) {
+    case "OPEN":
+      return "ANNOUNCEMENT";
+    case "LOCKED":
+      return "COUNTDOWN";
+    case "PROPOSED":
+    case "CHALLENGED":
+    case "RESOLVED":
+    case "CANCELLED":
+      return "RESOLUTION";
+    default:
+      return null;
+  }
+}
+
 function buildPredictionMarketLifecycleRecords(): PredictionMarketLifecycleRecord[] {
   const snapshot = parsers.solana.snapshot as Record<string, unknown> | null;
   const duelKey = currentDuelKey();
@@ -1242,7 +1290,10 @@ function buildPredictionMarketLifecycleRecords(): PredictionMarketLifecycleRecor
         findDuelStatePda(FIGHT_ORACLE_PROGRAM_ID, duelKeyHexToBytes(duelKey)),
       ).toBase58()
       : null;
-  const solanaLifecycle = resolveLifecycleFromSolanaStatus(
+  const solanaLifecycle = resolveLifecycleFromSolanaSnapshot(
+    typeof snapshot?.currentDuelStatus === "string"
+      ? snapshot.currentDuelStatus
+      : null,
     typeof snapshot?.currentMarketStatus === "string"
       ? snapshot.currentMarketStatus
       : null,
@@ -1289,7 +1340,19 @@ function buildPredictionMarketLifecycleRecords(): PredictionMarketLifecycleRecor
           ? snapshot.recentSignature
           : null,
       syncedAt: parsers.solana.lastSuccessAt,
-      metadata: {
+      metadata: normalizePredictionMarketLifecycleMetadata({
+        proposalId: normalizeHexProposalId(snapshot?.currentProposalId),
+        challengeWindowEndsAt: (() => {
+          const proposedAt = toNullableTimestamp(snapshot?.currentProposalProposedAt);
+          const disputeWindowSeconds = toNullableTimestamp(
+            snapshot?.currentDisputeWindowSeconds,
+          );
+          return proposedAt != null && disputeWindowSeconds != null
+            ? proposedAt + disputeWindowSeconds
+            : null;
+        })(),
+        finalizedAt: null,
+        cancellationReason: null,
         fightAccountCount:
           typeof snapshot?.fightAccountCount === "number"
             ? snapshot.fightAccountCount
@@ -1298,26 +1361,37 @@ function buildPredictionMarketLifecycleRecords(): PredictionMarketLifecycleRecor
           typeof snapshot?.marketAccountCount === "number"
             ? snapshot.marketAccountCount
             : null,
-      },
+        duelStatus: snapshot?.currentDuelStatus ?? null,
+        proposalChallenged:
+          typeof snapshot?.currentProposalChallenged === "boolean"
+            ? snapshot.currentProposalChallenged
+            : null,
+      }),
     },
   ];
 }
 
 function handlePredictionMarkets(req: Request): Response {
+  const markets = buildPredictionMarketLifecycleRecords();
+  const fallbackMarket =
+    markets.find((market) => market.duelKey != null || market.duelId != null) ?? null;
   return jsonResponse(
     req,
     {
       duel: {
-        duelKey: currentDuelKey(),
-        duelId: currentDuelId(),
+        duelKey: currentDuelKey() ?? fallbackMarket?.duelKey ?? null,
+        duelId: currentDuelId() ?? fallbackMarket?.duelId ?? null,
         phase:
           typeof streamState.cycle?.phase === "string"
             ? streamState.cycle.phase
-            : null,
-        winner: currentWinnerFromCycle(),
-        betCloseTime: currentBetCloseTime(),
+            : resolvePhaseFromLifecycleStatus(fallbackMarket?.lifecycleStatus),
+        winner:
+          currentWinnerFromCycle() !== "NONE"
+            ? currentWinnerFromCycle()
+            : (fallbackMarket?.winner ?? "NONE"),
+        betCloseTime: currentBetCloseTime() ?? fallbackMarket?.betCloseTime ?? null,
       },
-      markets: buildPredictionMarketLifecycleRecords(),
+      markets,
       updatedAt: Date.now(),
     },
     200,
@@ -1866,6 +1940,24 @@ async function pollSolanaSnapshot(): Promise<void> {
         ).toBase58()
         : null;
     const currentSolanaDuelKey = currentDuelKey();
+    const oracleConfigPda = findOracleConfigPda(solanaCtx.fightProgram.programId);
+    const oracleConfig =
+      await solanaCtx.fightProgram.account.oracleConfig.fetchNullable(
+        oracleConfigPda,
+      );
+    const currentDuelPda =
+      currentSolanaDuelKey != null
+        ? findDuelStatePda(
+          solanaCtx.fightProgram.programId,
+          duelKeyHexToBytes(currentSolanaDuelKey),
+        ).toBase58()
+        : null;
+    const currentDuelAccount =
+      currentDuelPda != null
+        ? await solanaCtx.fightProgram.account.duelState.fetchNullable(
+          new PublicKey(currentDuelPda),
+        )
+        : null;
     const currentMarketPda =
       currentSolanaDuelKey != null
         ? findMarketPda(
@@ -1887,6 +1979,8 @@ async function pollSolanaSnapshot(): Promise<void> {
         recentSignatures as Array<{ signature?: string } | null>
       ).find((entry) => entry?.signature)?.signature ??
       null;
+    const currentDuelData = currentDuelAccount as Record<string, unknown> | null;
+    const oracleConfigData = oracleConfig as Record<string, unknown> | null;
 
     parsers.solana.snapshot = {
       rpc: sanitizeUrlForStatus(solanaCtx.connection.rpcEndpoint),
@@ -1897,9 +1991,24 @@ async function pollSolanaSnapshot(): Promise<void> {
       latestFightAccount,
       latestMarketAccount,
       derivedMarketPda,
+      currentDuelPda,
       currentMarketPda,
+      currentDuelStatus: enumName(currentDuelAccount?.status),
       currentMarketStatus: enumName(currentMarketAccount?.status),
       currentMarketWinner: enumName(currentMarketAccount?.winner),
+      currentProposalId: normalizeHexProposalId(
+        currentDuelData?.activeProposal,
+      ),
+      currentProposalProposedAt: toNullableTimestamp(
+        currentDuelData?.pendingProposedAt,
+      ),
+      currentProposalChallenged:
+        typeof currentDuelData?.pendingChallenged === "boolean"
+          ? currentDuelData.pendingChallenged
+          : null,
+      currentDisputeWindowSeconds: toNullableTimestamp(
+        oracleConfigData?.disputeWindowSecs,
+      ),
       recentSignature,
     };
     parsers.solana.lastSuccessAt = Date.now();

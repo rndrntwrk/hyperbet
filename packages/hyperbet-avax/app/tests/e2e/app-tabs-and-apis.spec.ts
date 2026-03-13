@@ -323,8 +323,32 @@ test.describe("app tabs and api coverage", () => {
       avaxMarket?.marketRef == null ||
         /^[0-9a-f]{64}$/i.test(normalizeHexValue(avaxMarket?.marketRef) || ""),
     ).toBe(true);
-    expect(["OPEN", "LOCKED", "RESOLVED", "CANCELLED", "PENDING", "UNKNOWN"])
-      .toContain(avaxMarket?.lifecycleStatus);
+    expect([
+      "OPEN",
+      "LOCKED",
+      "PROPOSED",
+      "CHALLENGED",
+      "RESOLVED",
+      "CANCELLED",
+      "PENDING",
+      "UNKNOWN",
+    ]).toContain(avaxMarket?.lifecycleStatus);
+    expect(
+      avaxMarket?.metadata?.proposalId == null ||
+        typeof avaxMarket.metadata.proposalId === "string",
+    ).toBe(true);
+    expect(
+      avaxMarket?.metadata?.challengeWindowEndsAt == null ||
+        typeof avaxMarket.metadata.challengeWindowEndsAt === "number",
+    ).toBe(true);
+    expect(
+      avaxMarket?.metadata?.finalizedAt == null ||
+        typeof avaxMarket.metadata.finalizedAt === "number",
+    ).toBe(true);
+    expect(
+      avaxMarket?.metadata?.cancellationReason == null ||
+        typeof avaxMarket.metadata.cancellationReason === "string",
+    ).toBe(true);
 
     await expect
       .poll(async () => {

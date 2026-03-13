@@ -2,9 +2,11 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
 import {
+  normalizePredictionMarketLifecycleMetadata,
   type BettingEvmChain,
   type PredictionMarketLifecycleRecord,
   type PredictionMarketLifecycleStatus,
+  resolveLifecycleFromEvmDuelStatus,
   resolveLifecycleFromEvmStatus,
   resolveWinnerFromEvmStatus,
   toRecordedBetChain,
@@ -268,10 +270,42 @@ function evmSourceAssetForChain(chainKey: BettingEvmChain): string {
   }
 }
 
+const ZERO_HEX_32 =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+function toNullableNumber(
+  value: bigint | number | { toString(): string } | null | undefined,
+): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (typeof value.toString === "function") {
+    const parsed = Number(value.toString());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeOptionalHex32(value: unknown): string | null {
+  const normalized = normalizeHex32(value);
+  if (!normalized || normalized === ZERO_HEX_32) {
+    return null;
+  }
+  return normalized;
+}
+
 function resolveEvmLifecycleStatus(
-  currentMatch: Record<string, any> | undefined,
+  snapshot: Record<string, any> | null,
   fallbackHealth: KeeperMarketHealthRecord | null,
 ): PredictionMarketLifecycleStatus {
+  const currentDuel = snapshot?.currentDuel as Record<string, any> | undefined;
+  const duelStatus = resolveLifecycleFromEvmDuelStatus(currentDuel?.status);
+  if (duelStatus !== "UNKNOWN") return duelStatus;
+  const currentMatch = snapshot?.currentMatch as Record<string, any> | undefined;
   const parsedStatus = resolveLifecycleFromEvmStatus(currentMatch?.status);
   if (parsedStatus !== "UNKNOWN") return parsedStatus;
   return fallbackHealth?.lifecycleStatus ?? "UNKNOWN";
@@ -302,11 +336,19 @@ export function buildEvmPredictionMarketLifecycleRecord(input: {
   const snapshotDuelId =
     typeof snapshot?.duelId === "string" ? snapshot.duelId : null;
   const currentMatch = snapshot?.currentMatch as Record<string, any> | undefined;
+  const currentDuel = snapshot?.currentDuel as Record<string, any> | undefined;
   const marketKey =
     normalizeHex32(snapshot?.marketKey) ??
     normalizeHex32(fallbackHealth?.marketRef) ??
     null;
-  const lifecycleStatus = resolveEvmLifecycleStatus(currentMatch, fallbackHealth);
+  const lifecycleStatus = resolveEvmLifecycleStatus(snapshot, fallbackHealth);
+  const proposalId = normalizeOptionalHex32(currentDuel?.activeProposalId);
+  const proposalProposedAt = toNullableNumber(currentDuel?.proposalProposedAt);
+  const disputeWindowSeconds = toNullableNumber(currentDuel?.disputeWindowSeconds);
+  const challengeWindowEndsAt =
+    proposalProposedAt != null && disputeWindowSeconds != null
+      ? proposalProposedAt + disputeWindowSeconds
+      : null;
   return {
     chainKey,
     duelKey: duelKey ?? snapshotDuelKey ?? fallbackHealth?.duelKey ?? null,
@@ -323,8 +365,17 @@ export function buildEvmPredictionMarketLifecycleRecord(input: {
     programId: null,
     txRef: null,
     syncedAt,
-    metadata: {
+    metadata: normalizePredictionMarketLifecycleMetadata({
+      proposalId,
+      challengeWindowEndsAt,
+      finalizedAt: null,
+      cancellationReason: null,
       marketKey,
+      duelStatus: currentDuel?.status ?? null,
+      proposalChallenged:
+        typeof currentDuel?.proposalChallenged === "boolean"
+          ? currentDuel.proposalChallenged
+          : null,
       yesPool: currentMatch?.yesPool ?? null,
       noPool: currentMatch?.noPool ?? null,
       recoveredFromBotHealth:
@@ -333,7 +384,7 @@ export function buildEvmPredictionMarketLifecycleRecord(input: {
           duelId == null ||
           snapshot == null ||
           lifecycleStatus === fallbackHealth?.lifecycleStatus),
-    },
+    }),
   };
 }
 
