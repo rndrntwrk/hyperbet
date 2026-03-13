@@ -559,6 +559,7 @@ export async function placeClobOrder(
   userBalance: PublicKey;
   order: PublicKey;
   restingLevel: PublicKey;
+  signature: string;
 }> {
   const userBalance = deriveUserBalancePda(
     program.programId,
@@ -597,9 +598,9 @@ export async function placeClobOrder(
     builder = builder.remainingAccounts(args.remainingAccounts);
   }
 
-  await builder.signers([args.user]).rpc();
+  const signature = await builder.signers([args.user]).rpc();
 
-  return { userBalance, order, restingLevel };
+  return { userBalance, order, restingLevel, signature };
 }
 
 export async function cancelClobOrder(

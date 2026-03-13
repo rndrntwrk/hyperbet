@@ -180,6 +180,123 @@ describe("GoldClob", function () {
     expect(takerPosition.aShares).to.equal(makerAmount);
   });
 
+  it("allows self-cross matches with explicit detection events", async function () {
+    const { clob, oracle, operator, reporter, traderA } = await deployFixture();
+    const duel = duelKey("duel-self-cross-direct");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 1000, {
+        value: quoteCost(SELL_SIDE, 600, 1000n) + 20n,
+      });
+
+    await expect(
+      clob
+        .connect(traderA)
+        .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 1000, {
+          value: quoteCost(BUY_SIDE, 600, 1000n) + 20n,
+        }),
+    )
+      .to.emit(clob, "SelfTradePolicyTriggered")
+      .withArgs(
+        await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER),
+        1n,
+        2n,
+        traderA.address,
+        traderA.address,
+        2n,
+        600n,
+        1000n,
+      );
+  });
+
+  it("emits detection only for self-cross candidates in partial fill paths", async function () {
+    const { clob, oracle, operator, reporter, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-self-cross-partial");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 700, {
+        value: quoteCost(SELL_SIDE, 600, 700n) + 20n,
+      });
+    await clob
+      .connect(traderB)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 700, {
+        value: quoteCost(SELL_SIDE, 600, 700n) + 20n,
+      });
+
+    const tx = await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 1000, {
+        value: quoteCost(BUY_SIDE, 600, 1000n) + 20n,
+      });
+    const receipt = await tx.wait();
+    const selfTradeEvents = (receipt?.logs ?? [])
+      .map((log) => {
+        try {
+          return clob.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .filter((log) => log?.name === "SelfTradePolicyTriggered");
+
+    expect(selfTradeEvents.length).to.equal(1);
+
+    const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
+    const traderAPosition = await clob.positions(marketKey, traderA.address);
+    const traderBPosition = await clob.positions(marketKey, traderB.address);
+    expect(traderAPosition.aShares).to.equal(1000n);
+    expect(traderAPosition.bShares).to.equal(700n);
+    expect(traderBPosition.bShares).to.equal(300n);
+  });
+
+  it("does not emit self-cross detection for mixed-user matches", async function () {
+    const { clob, oracle, operator, reporter, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-self-cross-mixed-users");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob
+      .connect(traderB)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 500, {
+        value: quoteCost(SELL_SIDE, 600, 500n) + 20n,
+      });
+
+    const tx = await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 500, {
+        value: quoteCost(BUY_SIDE, 600, 500n) + 20n,
+      });
+    const receipt = await tx.wait();
+    const selfTradeEvents = (receipt?.logs ?? [])
+      .map((log) => {
+        try {
+          return clob.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .filter((log) => log?.name === "SelfTradePolicyTriggered");
+
+    expect(selfTradeEvents.length).to.equal(0);
+  });
+
   it("allows unmatched resting orders to be cancelled after betting locks", async function () {
     const { clob, oracle, operator, reporter, traderA } = await deployFixture();
     const duel = duelKey("duel-locked-cancel");

@@ -335,6 +335,18 @@ pub mod gold_clob_market {
             }
 
             let fill_amount = std::cmp::min(remaining_amount, maker_remaining);
+            if maker_order.maker == ctx.accounts.user.key() {
+                msg!(
+                    "self_trade_policy_triggered policy=allow_with_detection_only market={} maker_order_id={} taker_order_id={} maker={} taker={} price={} amount={}",
+                    market_key,
+                    maker_order.id,
+                    order_id,
+                    maker_order.maker,
+                    ctx.accounts.user.key(),
+                    boundary_price,
+                    fill_amount
+                );
+            }
             maker_order.filled = maker_order
                 .filled
                 .checked_add(fill_amount)

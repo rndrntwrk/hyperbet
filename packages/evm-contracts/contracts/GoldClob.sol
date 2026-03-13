@@ -53,6 +53,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error InsufficientNativeValue();
     error CostTooLow();
 
+    uint8 public constant SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY = 2;
+
     enum MarketStatus {
         NULL,
         OPEN,
@@ -133,6 +135,16 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint64 takerOrderId,
         uint256 matchedAmount,
         uint16 price
+    );
+    event SelfTradePolicyTriggered(
+        bytes32 indexed marketKey,
+        uint64 indexed makerOrderId,
+        uint64 indexed takerOrderId,
+        address maker,
+        address taker,
+        uint8 policy,
+        uint16 price,
+        uint128 amount
     );
     event OrderCancelled(bytes32 indexed marketKey, uint64 indexed orderId);
     event FeeConfigUpdated(
@@ -460,6 +472,19 @@ contract GoldClob is AccessControl, ReentrancyGuard {
                 ? makerRemaining
                 : progress.remainingAmount;
 
+            if (makerOrder.maker == msg.sender) {
+                emit SelfTradePolicyTriggered(
+                    key,
+                    makerOrder.id,
+                    takerOrderId,
+                    makerOrder.maker,
+                    msg.sender,
+                    SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY,
+                    progress.boundaryPrice,
+                    fillAmount
+                );
+            }
+
             makerOrder.filled += fillAmount;
             progress.remainingAmount -= fillAmount;
             level.totalOpen -= fillAmount;
@@ -526,6 +551,19 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             uint128 fillAmount = makerRemaining < progress.remainingAmount
                 ? makerRemaining
                 : progress.remainingAmount;
+
+            if (makerOrder.maker == msg.sender) {
+                emit SelfTradePolicyTriggered(
+                    key,
+                    makerOrder.id,
+                    takerOrderId,
+                    makerOrder.maker,
+                    msg.sender,
+                    SELF_TRADE_POLICY_ALLOW_WITH_DETECTION_ONLY,
+                    progress.boundaryPrice,
+                    fillAmount
+                );
+            }
 
             makerOrder.filled += fillAmount;
             progress.remainingAmount -= fillAmount;

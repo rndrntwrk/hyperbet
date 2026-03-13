@@ -320,6 +320,15 @@ semantics.
 - bounded matching has deterministic continuation semantics
 - tests and exploit coverage reflect the new rules
 
+### Self-Trade Policy Decision (Cross-Chain Parity)
+
+- Selected policy: **allow with detection only**.
+- EVM and Solana must enforce identical parity behavior at match time:
+  - a taker is still allowed to match against their own resting maker order;
+  - the fill is applied normally (shares, stake accounting, fees, and queue progression are unchanged);
+  - an explicit machine-readable policy signal is emitted for every self-cross candidate that fills, so indexers can classify self-trade flow deterministically.
+- Rejection/netting semantics are out of scope for this gate; parity requires detection logs on both chains for equivalent matching paths.
+
 ### Required Checks
 
 - EVM contract tests
