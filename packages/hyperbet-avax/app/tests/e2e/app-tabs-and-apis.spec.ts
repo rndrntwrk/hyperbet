@@ -196,60 +196,6 @@ async function gotoApp(page: Page): Promise<void> {
   }
 }
 
-async function ensureWalletConnected(page: Page): Promise<void> {
-  const hasConnectedSolanaWallet = async (): Promise<boolean> => {
-    const desktopWalletChip = page
-      .getByRole("button", { name: /^SOL\s+[A-Za-z0-9].*/i })
-      .first();
-    if (await desktopWalletChip.isVisible().catch(() => false)) return true;
-
-    const mobileWalletChip = page
-      .getByRole("button", { name: /^◎\s*[A-Za-z0-9].*/i })
-      .first();
-    if (await mobileWalletChip.isVisible().catch(() => false)) return true;
-
-    return false;
-  };
-
-  const selectHeadlessWallet = async (): Promise<boolean> => {
-    const walletOption = page
-      .getByRole("button", { name: /E2E Trader/i })
-      .first();
-    if (!(await walletOption.isVisible().catch(() => false))) return false;
-    await walletOption.click({ force: true });
-    await expect(
-      page.getByRole("dialog", {
-        name: /Connect a wallet on Solana to continue/i,
-      }),
-    )
-      .toBeHidden({ timeout: 30_000 })
-      .catch(() => undefined);
-    return true;
-  };
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    if (await hasConnectedSolanaWallet()) return;
-
-    if (await selectHeadlessWallet()) {
-      await page.waitForTimeout(1_500);
-      continue;
-    }
-
-    const connectButton = page
-      .getByRole("button", {
-        name: /connect wallet|select wallet|connect|add sol wallet|connect sol/i,
-      })
-      .first();
-    if (await connectButton.isVisible().catch(() => false)) {
-      await connectButton.click();
-    }
-    await selectHeadlessWallet();
-    await page.waitForTimeout(1_500);
-  }
-
-  await expect.poll(hasConnectedSolanaWallet, { timeout: 60_000 }).toBe(true);
-}
-
 async function selectChain(
   page: Page,
   chain: "solana" | "bsc" | "base",
@@ -575,7 +521,6 @@ test.describe("app tabs and api coverage", () => {
   }) => {
     const state = loadState();
     const characterId = state.perpsCharacterId || "";
-    const marketId = Number(state.perpsMarketId || 0);
 
     const perpsMarkets = await fetchJson<PerpsMarketsResponse>(
       request,
