@@ -8,7 +8,6 @@ KEEPER_DIR="$DEMO_DIR/keeper"
 ANCHOR_BUILD_LOG="/tmp/hyperbet-solana-e2e-build.log"
 STATE_PATH="$APP_DIR/tests/e2e/state.json"
 CONTROL_PATH="$APP_DIR/tests/e2e/control.json"
-LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-$APP_DIR/.e2e-ledger}"
 VALIDATOR_LOG="$APP_DIR/.e2e-validator.log"
 APP_LOG="$APP_DIR/.e2e-app.log"
 SOLANA_PROXY_LOG="$APP_DIR/.e2e-solana-proxy.log"
@@ -32,6 +31,10 @@ KEEPER_STREAM_STATE_PATH="$KEEPER_STATUS_DIR/stream-state.json"
 SOLANA_RPC_PORT="${E2E_SOLANA_RPC_PORT:-18899}"
 SOLANA_WS_PORT="${E2E_SOLANA_WS_PORT:-18900}"
 SOLANA_FAUCET_PORT="${E2E_SOLANA_FAUCET_PORT:-18901}"
+SOLANA_GOSSIP_PORT="${E2E_SOLANA_GOSSIP_PORT:-18902}"
+SOLANA_DYNAMIC_PORT_START="${E2E_SOLANA_DYNAMIC_PORT_START:-$((SOLANA_RPC_PORT + 100))}"
+SOLANA_DYNAMIC_PORT_END="${E2E_SOLANA_DYNAMIC_PORT_END:-$((SOLANA_DYNAMIC_PORT_START + 99))}"
+LEDGER_DIR="${E2E_SOLANA_LEDGER_DIR:-$APP_DIR/.e2e-ledger-${SOLANA_RPC_PORT}}"
 SOLANA_RPC_URL="http://127.0.0.1:${SOLANA_RPC_PORT}"
 SOLANA_WS_URL="ws://127.0.0.1:${SOLANA_WS_PORT}"
 SOLANA_PROXY_PORT="${E2E_SOLANA_PROXY_PORT:-$((20000 + RANDOM % 10000))}"
@@ -225,6 +228,28 @@ wait_for_solana_ws() {
   return 1
 }
 
+read_solana_slot() {
+  curl -s -X POST "$SOLANA_RPC_URL" \
+    -H "content-type: application/json" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"getSlot","params":[{"commitment":"confirmed"}]}' \
+    | jq -r '.result // empty'
+}
+
+wait_for_solana_block_production() {
+  local previous_slot=""
+  for _ in {1..120}; do
+    local current_slot
+    if current_slot="$(read_solana_slot)"; then
+      if [[ -n "$previous_slot" && "$current_slot" -gt "$previous_slot" ]]; then
+        return 0
+      fi
+      previous_slot="$current_slot"
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 wait_for_solana_proxy() {
   for _ in {1..90}; do
     if curl -s -X POST "$SOLANA_PROXY_URL" \
@@ -298,6 +323,7 @@ kill_listeners "$GAME_API_PORT"
 kill_listeners "$SOLANA_RPC_PORT"
 kill_listeners "$SOLANA_WS_PORT"
 kill_listeners "$SOLANA_FAUCET_PORT"
+kill_listeners "$SOLANA_GOSSIP_PORT"
 pkill -f "packages/hyperbet-solana/app/scripts/solana-rpc-proxy.mjs" >/dev/null 2>&1 || true
 kill_listeners "$SOLANA_PROXY_PORT"
 rm -f "$KEEPER_DB_PATH" "${KEEPER_DB_PATH}-shm" "${KEEPER_DB_PATH}-wal"
@@ -342,6 +368,8 @@ solana-test-validator \
   --quiet \
   --rpc-port "$SOLANA_RPC_PORT" \
   --faucet-port "$SOLANA_FAUCET_PORT" \
+  --gossip-port "$SOLANA_GOSSIP_PORT" \
+  --dynamic-port-range "${SOLANA_DYNAMIC_PORT_START}-${SOLANA_DYNAMIC_PORT_END}" \
   --mint "$SOLANA_MINT_AUTHORITY" \
   --ledger "$LEDGER_DIR" \
   --upgradeable-program "$PROGRAM_ORACLE_ID" "$ANCHOR_DIR/target/deploy/fight_oracle.so" "$BOOTSTRAP_WALLET_PATH" \
@@ -361,7 +389,12 @@ if ! wait_for_solana_ws; then
   tail -n 80 "$VALIDATOR_LOG" || true
   exit 1
 fi
-sleep 2
+if ! wait_for_solana_block_production; then
+  echo "[e2e] validator did not begin producing blocks"
+  tail -n 80 "$VALIDATOR_LOG" || true
+  exit 1
+fi
+sleep 5
 
 echo "[e2e] starting local solana rpc proxy"
 write_env_file \
