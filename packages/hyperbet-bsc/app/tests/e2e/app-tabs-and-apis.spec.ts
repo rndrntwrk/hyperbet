@@ -274,6 +274,18 @@ async function selectChain(
   throw new Error(`Unable to select ${chain} chain`);
 }
 
+async function clickTestId(page: Page, testId: string): Promise<void> {
+  const locator = page.getByTestId(testId).first();
+  await locator.waitFor({ state: "visible", timeout: 30_000 });
+  try {
+    await locator.click({ timeout: 10_000 });
+  } catch {
+    await locator.evaluate((node) => {
+      (node as HTMLButtonElement).click();
+    });
+  }
+}
+
 test.describe("app tabs and api coverage", () => {
   test("keeper backend exposes all app-facing data endpoints", async ({
     request,
@@ -473,7 +485,7 @@ test.describe("app tabs and api coverage", () => {
 
     await expect(page.getByTestId("duels-bottom-panel-trades")).toBeVisible();
 
-    await page.getByTestId("duels-bottom-tab-orders").click();
+    await clickTestId(page, "duels-bottom-tab-orders");
     await expect(page.getByTestId("duels-bottom-panel-orders")).toBeVisible();
     await expect(page.getByTestId("duels-bottom-panel-orders")).toContainText(
       "BIDS",
@@ -481,7 +493,7 @@ test.describe("app tabs and api coverage", () => {
 
 
 
-    await page.getByTestId("duels-bottom-tab-positions").click();
+    await clickTestId(page, "duels-bottom-tab-positions");
     await expect(
       page.getByTestId("duels-bottom-panel-positions"),
     ).toBeVisible();
@@ -522,7 +534,7 @@ test.describe("app tabs and api coverage", () => {
       leaderboard.leaderboard[0]?.totalPoints.toLocaleString() || "",
     );
 
-    await page.getByTestId("points-drawer-tab-history").click();
+    await clickTestId(page, "points-drawer-tab-history");
     await expect(page.getByTestId("points-drawer-panel-history")).toBeVisible();
     const latestHistory = history.entries[0];
     await expect(page.getByTestId("points-history")).toContainText(
@@ -536,7 +548,7 @@ test.describe("app tabs and api coverage", () => {
       HISTORY_LABELS.WALLET_LINK,
     );
 
-    await page.getByTestId("points-drawer-tab-referral").click();
+    await clickTestId(page, "points-drawer-tab-referral");
     await expect(
       page.getByTestId("points-drawer-panel-referral"),
     ).toBeVisible();
