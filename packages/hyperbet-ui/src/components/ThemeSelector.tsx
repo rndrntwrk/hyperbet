@@ -1,6 +1,12 @@
-import { useTheme, type AvaxTheme } from "../lib/theme";
+import type { CSSProperties } from "react";
+import {
+  useHyperbetTheme,
+  useResolvedHyperbetTheme,
+  type HyperbetAppearance,
+  type HyperbetThemeId,
+} from "../lib/theme";
 
-const NEXT_THEME: Record<AvaxTheme, AvaxTheme> = {
+const NEXT_THEME: Record<HyperbetAppearance, HyperbetAppearance> = {
   dark: "light",
   light: "dark",
 };
@@ -49,18 +55,27 @@ function MoonIcon() {
   );
 }
 
-export function ThemeSelector({ compact = false }: { compact?: boolean }) {
-  const { theme, setTheme } = useTheme();
+export function ThemeSelector({
+  compact = false,
+  theme,
+}: {
+  compact?: boolean;
+  theme?: HyperbetThemeId;
+}) {
+  const { appearance, setAppearance } = useHyperbetTheme();
+  const resolvedTheme = useResolvedHyperbetTheme(theme);
 
   return (
     <button
       type="button"
       className={`hm-theme-toggle${compact ? " hm-theme-toggle--compact" : ""}`}
-      aria-label={`Switch to ${NEXT_THEME[theme]} theme`}
+      aria-label={`Switch to ${NEXT_THEME[appearance]} theme`}
       data-testid="theme-selector"
-      onClick={() => setTheme(NEXT_THEME[theme])}
+      data-hyperbet-theme={theme}
+      style={resolvedTheme.colorVariables as CSSProperties}
+      onClick={() => setAppearance(NEXT_THEME[appearance])}
     >
-      {theme === "dark" ? <MoonIcon /> : <SunIcon />}
+      {appearance === "dark" ? <MoonIcon /> : <SunIcon />}
     </button>
   );
 }

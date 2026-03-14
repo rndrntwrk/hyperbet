@@ -28,6 +28,7 @@ import {
   captureInviteCodeFromLocation,
   getStoredInviteCode,
 } from "@hyperbet/ui/lib/invite";
+import { usePredictionMarketLifecycle } from "@hyperbet/ui/lib/predictionMarkets";
 import { useAppConnection, useAppWallet, useAppWalletModal } from "./lib/appWallet";
 import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
 import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
@@ -590,7 +591,7 @@ function goldDisplay(amount: unknown): string {
   return (raw / 10 ** GOLD_DECIMALS).toFixed(6);
 }
 const SolanaClobPanel = lazy(() =>
-  import("@hyperbet/ui/components/SolanaClobPanel").then((module) => ({
+  import("./components/SolanaClobPanel").then((module) => ({
     default: module.SolanaClobPanel,
   })),
 );
@@ -707,6 +708,7 @@ export function App() {
   const { state: streamingState } = useStreamingState();
   const { context: duelContext } = useDuelContext();
   const liveCycle = streamingState?.cycle ?? null;
+  const { market: lifecycleMarket } = usePredictionMarketLifecycle("solana");
   const streamSources = STREAM_URLS;
   const activeStreamUrl = streamSources[streamSourceIndex] ?? "";
 
@@ -1002,6 +1004,7 @@ export function App() {
 
   const handleRefresh = () => {
     setRefreshNonce((value) => value + 1);
+    window.dispatchEvent(new CustomEvent("hyperbet:market-refresh"));
   };
 
   const handleSolanaClobSnapshot = useCallback(
@@ -1125,7 +1128,10 @@ export function App() {
     return "IDLE";
   })();
 
-  const marketStatusText = solanaClobSnapshot.marketStatus;
+  const marketStatusText = _getMarketStatusLabel(
+    lifecycleMarket?.lifecycleStatus ?? solanaClobSnapshot.marketStatus,
+    copy,
+  );
   const countdownText = formatCountdown(
     currentMatch ? Math.max(0, currentMatch.closeTs - nowTs) : 0,
   );

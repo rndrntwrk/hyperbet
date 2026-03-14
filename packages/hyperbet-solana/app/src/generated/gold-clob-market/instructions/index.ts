@@ -8,6 +8,7 @@
 
 export * from './cancelOrder.js';
 export * from './claim.js';
+export * from './continueOrder.js';
 export * from './initializeConfig.js';
 export * from './initializeMarket.js';
 export * from './placeOrder.js';

@@ -9,6 +9,7 @@ pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
 
 const DEFAULT_BOOTSTRAP_AUTHORITY: &str = "DfEnrzh4cgnHxfuZRxLGX69fnLd9DP41XxGuE4gtyJpn";
+const DEFAULT_DISPUTE_WINDOW_SECS: i64 = 3600;
 
 fn bootstrap_authority() -> Pubkey {
     use std::str::FromStr;
@@ -35,6 +36,9 @@ pub mod fight_oracle {
         } else {
             oracle_config.authority = ctx.accounts.authority.key();
             oracle_config.bump = ctx.bumps.oracle_config;
+            oracle_config.finalizer = reporter;
+            oracle_config.challenger = reporter;
+            oracle_config.dispute_window_secs = DEFAULT_DISPUTE_WINDOW_SECS;
         }
 
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
@@ -46,6 +50,9 @@ pub mod fight_oracle {
         ctx: Context<UpdateOracleConfig>,
         authority: Pubkey,
         reporter: Pubkey,
+        finalizer: Pubkey,
+        challenger: Pubkey,
+        dispute_window_secs: i64,
     ) -> Result<()> {
         require_keys_eq!(
             ctx.accounts.oracle_config.authority,
@@ -54,10 +61,19 @@ pub mod fight_oracle {
         );
         require!(authority != Pubkey::default(), ErrorCode::InvalidAuthority);
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
+        require!(finalizer != Pubkey::default(), ErrorCode::InvalidFinalizer);
+        require!(
+            challenger != Pubkey::default(),
+            ErrorCode::InvalidChallenger
+        );
+        require!(dispute_window_secs >= 0, ErrorCode::InvalidDisputeWindow);
 
         let oracle_config = &mut ctx.accounts.oracle_config;
         oracle_config.authority = authority;
         oracle_config.reporter = reporter;
+        oracle_config.finalizer = finalizer;
+        oracle_config.challenger = challenger;
+        oracle_config.dispute_window_secs = dispute_window_secs;
         Ok(())
     }
 
@@ -118,6 +134,7 @@ pub mod fight_oracle {
         duel_state.bet_close_ts = bet_close_ts;
         duel_state.duel_start_ts = duel_start_ts;
         duel_state.status = status;
+        duel_state.active_proposal = [0_u8; 32];
         emit!(DuelUpserted {
             duel_key,
             status,
@@ -127,7 +144,6 @@ pub mod fight_oracle {
             metadata_uri: metadata_uri.clone(),
         });
         duel_state.metadata_uri = metadata_uri;
-
         Ok(())
     }
 
@@ -138,22 +154,21 @@ pub mod fight_oracle {
     ) -> Result<()> {
         let duel_state = &mut ctx.accounts.duel_state;
         require!(
-            duel_state.status != DuelStatus::Resolved
-                && duel_state.status != DuelStatus::Cancelled,
+            duel_state.status != DuelStatus::Resolved && duel_state.status != DuelStatus::Cancelled,
             ErrorCode::DuelAlreadyFinalized
         );
         duel_state.status = DuelStatus::Cancelled;
+        duel_state.active_proposal = [0_u8; 32];
         emit!(DuelCancelled {
             duel_key: duel_state.duel_key,
             metadata_uri: metadata_uri.clone(),
         });
         duel_state.metadata_uri = metadata_uri;
-
         Ok(())
     }
 
-    pub fn report_result(
-        ctx: Context<ReportResult>,
+    pub fn propose_result(
+        ctx: Context<ProposeResult>,
         _duel_key: [u8; 32],
         winner: MarketSide,
         seed: u64,
@@ -174,22 +189,28 @@ pub mod fight_oracle {
             ErrorCode::DuelAlreadyCancelled
         );
         require!(
-            duel_state.status != DuelStatus::Resolved,
-            ErrorCode::DuelAlreadyFinalized
+            duel_state.status == DuelStatus::Locked,
+            ErrorCode::InvalidLifecycleTransition
         );
         require!(
             duel_end_ts >= duel_state.bet_close_ts,
             ErrorCode::InvalidLifecycleTransition
         );
 
-        duel_state.status = DuelStatus::Resolved;
-        duel_state.winner = winner;
-        duel_state.seed = seed;
-        duel_state.result_hash = result_hash;
-        duel_state.replay_hash = replay_hash;
-        duel_state.duel_end_ts = duel_end_ts;
-        emit!(DuelResolved {
+        let proposal_id = proposal_id_for(duel_state.duel_key, result_hash, replay_hash);
+        duel_state.status = DuelStatus::Proposed;
+        duel_state.active_proposal = proposal_id;
+        duel_state.pending_winner = winner;
+        duel_state.pending_seed = seed;
+        duel_state.pending_result_hash = result_hash;
+        duel_state.pending_replay_hash = replay_hash;
+        duel_state.pending_duel_end_ts = duel_end_ts;
+        duel_state.pending_proposed_at = Clock::get()?.unix_timestamp;
+        duel_state.pending_challenged = false;
+
+        emit!(ResultProposed {
             duel_key: duel_state.duel_key,
+            proposal_id,
             winner,
             seed,
             duel_end_ts,
@@ -198,7 +219,79 @@ pub mod fight_oracle {
             metadata_uri: metadata_uri.clone(),
         });
         duel_state.metadata_uri = metadata_uri;
+        Ok(())
+    }
 
+    pub fn challenge_result(
+        ctx: Context<ChallengeResult>,
+        _duel_key: [u8; 32],
+        metadata_uri: String,
+    ) -> Result<()> {
+        let duel_state = &mut ctx.accounts.duel_state;
+        let oracle_config = &ctx.accounts.oracle_config;
+        require!(
+            duel_state.status == DuelStatus::Proposed,
+            ErrorCode::NotProposed
+        );
+        require!(!duel_state.pending_challenged, ErrorCode::AlreadyChallenged);
+
+        let now = Clock::get()?.unix_timestamp;
+        let challenge_deadline = duel_state
+            .pending_proposed_at
+            .checked_add(oracle_config.dispute_window_secs)
+            .ok_or(ErrorCode::InvalidDisputeWindow)?;
+        require!(now < challenge_deadline, ErrorCode::ChallengeWindowExpired);
+
+        duel_state.pending_challenged = true;
+        duel_state.status = DuelStatus::Challenged;
+
+        emit!(ResultChallenged {
+            duel_key: duel_state.duel_key,
+            proposal_id: duel_state.active_proposal,
+            metadata_uri: metadata_uri.clone(),
+        });
+        duel_state.metadata_uri = metadata_uri;
+        Ok(())
+    }
+
+    pub fn finalize_result(
+        ctx: Context<FinalizeResult>,
+        _duel_key: [u8; 32],
+        metadata_uri: String,
+    ) -> Result<()> {
+        let duel_state = &mut ctx.accounts.duel_state;
+        let oracle_config = &ctx.accounts.oracle_config;
+        require!(
+            duel_state.status == DuelStatus::Proposed,
+            ErrorCode::NotProposed
+        );
+        require!(!duel_state.pending_challenged, ErrorCode::AlreadyChallenged);
+
+        let now = Clock::get()?.unix_timestamp;
+        let finalizable_at = duel_state
+            .pending_proposed_at
+            .checked_add(oracle_config.dispute_window_secs)
+            .ok_or(ErrorCode::InvalidDisputeWindow)?;
+        require!(now >= finalizable_at, ErrorCode::DisputeWindowActive);
+
+        duel_state.status = DuelStatus::Resolved;
+        duel_state.winner = duel_state.pending_winner;
+        duel_state.seed = duel_state.pending_seed;
+        duel_state.result_hash = duel_state.pending_result_hash;
+        duel_state.replay_hash = duel_state.pending_replay_hash;
+        duel_state.duel_end_ts = duel_state.pending_duel_end_ts;
+
+        emit!(DuelResolved {
+            duel_key: duel_state.duel_key,
+            proposal_id: duel_state.active_proposal,
+            winner: duel_state.winner,
+            seed: duel_state.seed,
+            duel_end_ts: duel_state.duel_end_ts,
+            result_hash: duel_state.result_hash,
+            replay_hash: duel_state.replay_hash,
+            metadata_uri: metadata_uri.clone(),
+        });
+        duel_state.metadata_uri = metadata_uri;
         Ok(())
     }
 }
@@ -208,9 +301,15 @@ fn duel_status_rank(status: DuelStatus) -> u8 {
         DuelStatus::Scheduled => 0,
         DuelStatus::BettingOpen => 1,
         DuelStatus::Locked => 2,
-        DuelStatus::Resolved => 3,
-        DuelStatus::Cancelled => 4,
+        DuelStatus::Proposed => 3,
+        DuelStatus::Challenged => 4,
+        DuelStatus::Resolved => 5,
+        DuelStatus::Cancelled => 6,
     }
+}
+
+fn proposal_id_for(duel_key: [u8; 32], result_hash: [u8; 32], replay_hash: [u8; 32]) -> [u8; 32] {
+    solana_keccak_hasher::hashv(&[&duel_key, &result_hash, &replay_hash]).to_bytes()
 }
 
 #[derive(Accounts)]
@@ -242,11 +341,7 @@ pub struct InitializeOracle<'info> {
 #[derive(Accounts)]
 pub struct UpdateOracleConfig<'info> {
     pub authority: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [ORACLE_CONFIG_SEED],
-        bump = oracle_config.bump,
-    )]
+    #[account(mut, seeds = [ORACLE_CONFIG_SEED], bump = oracle_config.bump)]
     pub oracle_config: Account<'info, OracleConfig>,
 }
 
@@ -283,17 +378,13 @@ pub struct CancelDuel<'info> {
         constraint = oracle_config.reporter == reporter.key() @ ErrorCode::Unauthorized,
     )]
     pub oracle_config: Account<'info, OracleConfig>,
-    #[account(
-        mut,
-        seeds = [DUEL_SEED, duel_key.as_ref()],
-        bump = duel_state.bump,
-    )]
+    #[account(mut, seeds = [DUEL_SEED, duel_key.as_ref()], bump = duel_state.bump)]
     pub duel_state: Account<'info, DuelState>,
 }
 
 #[derive(Accounts)]
 #[instruction(duel_key: [u8; 32])]
-pub struct ReportResult<'info> {
+pub struct ProposeResult<'info> {
     #[account(mut)]
     pub reporter: Signer<'info>,
     #[account(
@@ -302,11 +393,35 @@ pub struct ReportResult<'info> {
         constraint = oracle_config.reporter == reporter.key() @ ErrorCode::Unauthorized,
     )]
     pub oracle_config: Account<'info, OracleConfig>,
+    #[account(mut, seeds = [DUEL_SEED, duel_key.as_ref()], bump = duel_state.bump)]
+    pub duel_state: Account<'info, DuelState>,
+}
+
+#[derive(Accounts)]
+#[instruction(duel_key: [u8; 32])]
+pub struct ChallengeResult<'info> {
+    pub challenger: Signer<'info>,
     #[account(
-        mut,
-        seeds = [DUEL_SEED, duel_key.as_ref()],
-        bump = duel_state.bump,
+        seeds = [ORACLE_CONFIG_SEED],
+        bump = oracle_config.bump,
+        constraint = oracle_config.challenger == challenger.key() @ ErrorCode::Unauthorized,
     )]
+    pub oracle_config: Account<'info, OracleConfig>,
+    #[account(mut, seeds = [DUEL_SEED, duel_key.as_ref()], bump = duel_state.bump)]
+    pub duel_state: Account<'info, DuelState>,
+}
+
+#[derive(Accounts)]
+#[instruction(duel_key: [u8; 32])]
+pub struct FinalizeResult<'info> {
+    pub finalizer: Signer<'info>,
+    #[account(
+        seeds = [ORACLE_CONFIG_SEED],
+        bump = oracle_config.bump,
+        constraint = oracle_config.finalizer == finalizer.key() @ ErrorCode::Unauthorized,
+    )]
+    pub oracle_config: Account<'info, OracleConfig>,
+    #[account(mut, seeds = [DUEL_SEED, duel_key.as_ref()], bump = duel_state.bump)]
     pub duel_state: Account<'info, DuelState>,
 }
 
@@ -315,6 +430,9 @@ pub struct ReportResult<'info> {
 pub struct OracleConfig {
     pub authority: Pubkey,
     pub reporter: Pubkey,
+    pub finalizer: Pubkey,
+    pub challenger: Pubkey,
+    pub dispute_window_secs: i64,
     pub bump: u8,
 }
 
@@ -333,6 +451,14 @@ pub struct DuelState {
     pub seed: u64,
     pub result_hash: [u8; 32],
     pub replay_hash: [u8; 32],
+    pub active_proposal: [u8; 32],
+    pub pending_winner: MarketSide,
+    pub pending_seed: u64,
+    pub pending_result_hash: [u8; 32],
+    pub pending_replay_hash: [u8; 32],
+    pub pending_duel_end_ts: i64,
+    pub pending_proposed_at: i64,
+    pub pending_challenged: bool,
     #[max_len(200)]
     pub metadata_uri: String,
     pub bump: u8,
@@ -343,6 +469,8 @@ pub enum DuelStatus {
     Scheduled,
     BettingOpen,
     Locked,
+    Proposed,
+    Challenged,
     Resolved,
     Cancelled,
 }
@@ -371,8 +499,28 @@ pub struct DuelCancelled {
 }
 
 #[event]
+pub struct ResultProposed {
+    pub duel_key: [u8; 32],
+    pub proposal_id: [u8; 32],
+    pub winner: MarketSide,
+    pub seed: u64,
+    pub duel_end_ts: i64,
+    pub result_hash: [u8; 32],
+    pub replay_hash: [u8; 32],
+    pub metadata_uri: String,
+}
+
+#[event]
+pub struct ResultChallenged {
+    pub duel_key: [u8; 32],
+    pub proposal_id: [u8; 32],
+    pub metadata_uri: String,
+}
+
+#[event]
 pub struct DuelResolved {
     pub duel_key: [u8; 32],
+    pub proposal_id: [u8; 32],
     pub winner: MarketSide,
     pub seed: u64,
     pub duel_end_ts: i64,
@@ -391,6 +539,12 @@ pub enum ErrorCode {
     InvalidReporter,
     #[msg("Authority pubkey cannot be the default address")]
     InvalidAuthority,
+    #[msg("Finalizer pubkey cannot be the default address")]
+    InvalidFinalizer,
+    #[msg("Challenger pubkey cannot be the default address")]
+    InvalidChallenger,
+    #[msg("Dispute window must be non-negative")]
+    InvalidDisputeWindow,
     #[msg("Betting window is invalid")]
     InvalidBetWindow,
     #[msg("Participants must be present and distinct")]
@@ -405,4 +559,12 @@ pub enum ErrorCode {
     DuelAlreadyCancelled,
     #[msg("Winner must be side A or side B")]
     InvalidWinner,
+    #[msg("No active proposal exists")]
+    NotProposed,
+    #[msg("Proposal already challenged")]
+    AlreadyChallenged,
+    #[msg("Challenge window already expired")]
+    ChallengeWindowExpired,
+    #[msg("Dispute window still active")]
+    DisputeWindowActive,
 }

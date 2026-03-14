@@ -50,6 +50,8 @@ export type Position = {
   bStake: bigint;
 };
 
+export type TimeInForce = "gtc" | "ioc";
+
 export type OrderInfo = {
   id: bigint;
   side: number;
@@ -74,6 +76,23 @@ export const SIDE_ENUM = {
   BUY: 1,
   SELL: 2,
 } as const;
+
+export const ORDER_FLAG_GTC = 0x01;
+export const ORDER_FLAG_IOC = 0x02;
+export const ORDER_FLAG_POST_ONLY = 0x04;
+
+export function encodeOrderFlags(
+  timeInForce: TimeInForce,
+  postOnly: boolean,
+): number {
+  if (timeInForce === "ioc") {
+    if (postOnly) {
+      throw new Error("postOnly orders must use timeInForce='gtc'");
+    }
+    return ORDER_FLAG_IOC;
+  }
+  return postOnly ? ORDER_FLAG_GTC | ORDER_FLAG_POST_ONLY : ORDER_FLAG_GTC;
+}
 
 const MARKET_STATUS_MAP: Record<number, MarketStatus> = {
   0: "NULL",
@@ -199,7 +218,6 @@ export async function getMarketMeta(
   const result = rawResult as {
     exists: boolean;
     duelKey: Hex;
-    marketKind: number;
     status: number;
     winner: number;
     nextOrderId: bigint;
@@ -212,7 +230,7 @@ export async function getMarketMeta(
   return {
     exists: result.exists,
     duelKey: result.duelKey,
-    marketKind: Number(result.marketKind),
+    marketKind,
     status: MARKET_STATUS_MAP[Number(result.status)] ?? "NULL",
     winner: SIDE_MAP[Number(result.winner)] ?? "NONE",
     nextOrderId: result.nextOrderId,
@@ -443,6 +461,7 @@ export async function placeOrder(
   side: number,
   price: number,
   amount: bigint,
+  orderFlags: number,
   account: Address,
   value: bigint,
 ): Promise<Hash> {
@@ -450,7 +469,7 @@ export async function placeOrder(
     address: contractAddress,
     abi: GOLD_CLOB_ABI,
     functionName: "placeOrder",
-    args: [duelKey, marketKind, side, price, amount],
+    args: [duelKey, marketKind, side, price, amount, orderFlags],
     account,
     chain: walletClient.chain,
     value,

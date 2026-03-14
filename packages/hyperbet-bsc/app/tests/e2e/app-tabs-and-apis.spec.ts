@@ -13,6 +13,11 @@ type E2eState = {
   solanaTraderPublicKey?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
+  currentMatchId?: number;
+  currentDuelKeyHex?: string;
+  clobMatchState?: string;
+  evmMatchId?: number;
+  evmGoldClobAddress?: string;
 };
 
 type StreamingStateResponse = {
@@ -74,6 +79,46 @@ type PerpsOracleHistoryResponse = {
   snapshots: Array<{ spotIndex: number }>;
 };
 
+type PredictionMarketsResponse = {
+  duel: {
+    duelKey: string | null;
+    duelId: string | null;
+    phase: string | null;
+    winner: string;
+    betCloseTime: number | null;
+  };
+  markets: Array<{
+    chainKey: string;
+    duelKey: string | null;
+    duelId: string | null;
+    marketId: string | null;
+    marketRef: string | null;
+    lifecycleStatus: string;
+    winner: string;
+    betCloseTime: number | null;
+    contractAddress: string | null;
+    programId: string | null;
+    txRef: string | null;
+    syncedAt: number | null;
+  }>;
+  updatedAt: number | null;
+};
+
+type KeeperBotHealthResponse = {
+  ok: boolean;
+  running: boolean;
+  health: {
+    chainKey: string;
+    updatedAtMs: number;
+    running: boolean;
+    recovery: string[];
+    markets: Array<{
+      lifecycleStatus: string;
+      marketRef: string | null;
+    }>;
+  } | null;
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const statePath = path.resolve(__dirname, "./state.json");
 const GAME_API_URL = (process.env.E2E_GAME_API_URL || "http://127.0.0.1:5555")
@@ -92,6 +137,11 @@ const HISTORY_LABELS: Record<string, string> = {
 
 function loadState(): E2eState {
   return JSON.parse(fs.readFileSync(statePath, "utf8")) as E2eState;
+}
+
+function normalizeHexValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.trim().toLowerCase().replace(/^0x/, "");
 }
 
 function truncateWallet(wallet: string): string {
@@ -248,6 +298,81 @@ test.describe("app tabs and api coverage", () => {
       "/api/streaming/duel-context",
     );
     expect(duelContext.cycle.agent1?.name).toBe(streamState.cycle.agent1?.name);
+
+    const predictionMarkets = await fetchJson<PredictionMarketsResponse>(
+      request,
+      "/api/arena/prediction-markets/active",
+    );
+    expect(predictionMarkets.duel.phase).toBe(streamState.cycle.phase);
+    expect(predictionMarkets.duel.duelId).toBe(
+      state.currentMatchId != null ? String(state.currentMatchId) : null,
+    );
+    expect(predictionMarkets.duel.duelKey).toBe(state.currentDuelKeyHex || null);
+    const solanaMarket = predictionMarkets.markets.find(
+      (market) => market.chainKey === "solana",
+    );
+    const bscMarket = predictionMarkets.markets.find(
+      (market) => market.chainKey === "bsc",
+    );
+    expect(solanaMarket?.marketRef).toBe(state.clobMatchState || null);
+    expect(bscMarket).toBeTruthy();
+    expect(bscMarket?.contractAddress).toBe(
+      state.evmGoldClobAddress || null,
+    );
+    expect(
+      bscMarket?.marketRef == null ||
+        /^[0-9a-f]{64}$/i.test(normalizeHexValue(bscMarket?.marketRef) || ""),
+    ).toBe(true);
+    expect([
+      "OPEN",
+      "LOCKED",
+      "PROPOSED",
+      "CHALLENGED",
+      "RESOLVED",
+      "CANCELLED",
+      "PENDING",
+      "UNKNOWN",
+    ]).toContain(bscMarket?.lifecycleStatus);
+    expect(
+      bscMarket?.metadata?.proposalId == null ||
+        typeof bscMarket.metadata.proposalId === "string",
+    ).toBe(true);
+    expect(
+      bscMarket?.metadata?.challengeWindowEndsAt == null ||
+        typeof bscMarket.metadata.challengeWindowEndsAt === "number",
+    ).toBe(true);
+    expect(
+      bscMarket?.metadata?.finalizedAt == null ||
+        typeof bscMarket.metadata.finalizedAt === "number",
+    ).toBe(true);
+    expect(
+      bscMarket?.metadata?.cancellationReason == null ||
+        typeof bscMarket.metadata.cancellationReason === "string",
+    ).toBe(true);
+
+    await expect
+      .poll(async () => {
+        const botHealth = await fetchJson<KeeperBotHealthResponse>(
+          request,
+          "/api/keeper/bot-health",
+        );
+        return {
+          ok: botHealth.ok,
+          running: botHealth.running,
+          chainKey: botHealth.health?.chainKey ?? null,
+          updatedAtMs: Number(botHealth.health?.updatedAtMs ?? 0),
+          hasMarkets: (botHealth.health?.markets.length ?? 0) > 0,
+          recovery: Array.isArray(botHealth.health?.recovery),
+        };
+      })
+      .toEqual({
+        ok: true,
+        running: true,
+        chainKey: "bsc",
+        updatedAtMs: expect.any(Number),
+        hasMarkets: true,
+        recovery: true,
+      });
 
     const points = await fetchJson<PointsResponse>(
       request,

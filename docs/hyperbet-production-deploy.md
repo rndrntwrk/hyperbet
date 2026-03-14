@@ -2,13 +2,67 @@
 
 This is the recommended production topology for the Hyperbet stack in this repo.
 
-- Primary frontend (`/packages/hyperbet-solana/app`): Cloudflare Pages (`hyperbet.win`)
-- Secondary frontend (`/packages/hyperbet-bsc/app`): optional additional Pages project or subdomain
-- Primary betting API (`/packages/hyperbet-solana/keeper`): Railway
-- Secondary betting API (`/packages/hyperbet-bsc/keeper`): optional second Railway service if you split by chain
-- Live duel/stream source (`/packages/server` or Vast duel stack): separate upstream that the keeper polls
+Operator runbooks are in [docs/runbooks/README.md](runbooks/README.md).
+
+- Primary frontend (`packages/hyperbet-solana/app`): Cloudflare Pages (`hyperbet.win`)
+- Secondary frontends (`packages/hyperbet-bsc/app`, `packages/hyperbet-avax/app`): dedicated Pages project or subdomain per chain
+- Primary betting API (`packages/hyperbet-solana/keeper`): Railway
+- Secondary betting APIs (`packages/hyperbet-bsc/keeper`, `packages/hyperbet-avax/keeper`): dedicated Railway services if you split by chain
+- Live duel/stream source (`packages/server` or Vast duel stack): separate upstream that the keeper polls
 - DDoS/WAF/edge cache: Cloudflare proxy in front of the betting API
 - Contracts/state: Solana + EVM (configured by env vars below, proxied server-side)
+
+AVAX now has repo-backed Pages and keeper deployment workflows, but production rollout is still blocked until canonical AVAX deployment addresses are committed to the shared chain registry, staged proof artifacts are captured for the target environment, and the real AVAX governance/operator wallets are provisioned.
+
+## Staging Rail
+
+The repo also supports a manual staging rail for Solana, BSC, and AVAX without
+changing the production topology:
+
+- staged Solana Pages + staged Solana keeper
+- staged BSC Pages + staged BSC keeper
+- staged AVAX Pages + staged AVAX keeper
+- external staged duel/stream source
+
+Manual staging deploys use the same workflows as production through
+`workflow_dispatch`:
+
+- `Deploy Hyperbet Solana Pages`
+- `Deploy Hyperbet Solana Keeper`
+- `Deploy Hyperbet BSC Pages`
+- `Deploy Hyperbet BSC Keeper`
+- `Deploy Hyperbet AVAX Pages`
+- `Deploy Hyperbet AVAX Keeper`
+
+Select `environment=staging` when dispatching the relevant workflow.
+
+Required staging vars are:
+
+- `HYPERBET_SOLANA_PAGES_STAGING_PROJECT_NAME`
+- `HYPERBET_SOLANA_PAGES_STAGING_URL`
+- `HYPERBET_SOLANA_KEEPER_STAGING_URL`
+- `HYPERBET_SOLANA_KEEPER_STAGING_WS_URL`
+- `HYPERBET_SOLANA_RAILWAY_STAGING_PROJECT_ID`
+- `HYPERBET_SOLANA_RAILWAY_STAGING_ENVIRONMENT_ID`
+- `HYPERBET_SOLANA_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+- `HYPERBET_BSC_PAGES_STAGING_PROJECT_NAME`
+- `HYPERBET_BSC_PAGES_STAGING_URL`
+- `HYPERBET_BSC_KEEPER_STAGING_URL`
+- `HYPERBET_BSC_KEEPER_STAGING_WS_URL`
+- `HYPERBET_BSC_RAILWAY_STAGING_PROJECT_ID`
+- `HYPERBET_BSC_RAILWAY_STAGING_ENVIRONMENT_ID`
+- `HYPERBET_BSC_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+- `HYPERBET_AVAX_PAGES_STAGING_PROJECT_NAME`
+- `HYPERBET_AVAX_PAGES_STAGING_URL`
+- `HYPERBET_AVAX_KEEPER_STAGING_URL`
+- `HYPERBET_AVAX_KEEPER_STAGING_WS_URL`
+- `HYPERBET_AVAX_RAILWAY_STAGING_PROJECT_ID`
+- `HYPERBET_AVAX_RAILWAY_STAGING_ENVIRONMENT_ID`
+- `HYPERBET_AVAX_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+- `HYPERBET_AVAX_STAGING_CHAIN_ID`
+- `HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS`
+
+AVAX rollout remains blocked until canonical deployment truth exists in the shared chain registry and the effective AVAX wallet/signer set is in place. The staging/prod rail is present so proof and release packaging can use one consistent contract once those addresses are committed.
 
 ## 1) Deploy the keeper to Railway
 
@@ -34,7 +88,7 @@ Set these Railway variables at minimum:
 - `BSC_GOLD_CLOB_ADDRESS=...`
 - `BASE_RPC_URL=...`
 - `BASE_GOLD_CLOB_ADDRESS=...`
-- `AVAX_RPC_URL=...` if you proxy Avalanche RPC through the keeper
+- `AVAX_RPC_URL=...` for AVAX keeper/runtime support after canonical registry values exist
 - `BIRDEYE_API_KEY=...` if token-price proxying is enabled
 
 Persistence:
@@ -100,6 +154,8 @@ Frontend env vars (Cloudflare Pages):
 
 Do not set provider-keyed values in any `VITE_*RPC_URL` variable for production builds. The betting app build fails intentionally if a public RPC URL looks like a Helius / Alchemy / Infura / QuickNode / dRPC secret endpoint.
 
+Do not treat `packages/hyperbet-avax/deployments/contracts.json` as production deployment truth. The shared chain registry is the canonical production source, and AVAX rollout must stay blocked until that registry is populated with real addresses.
+
 Cloudflare Pages headers/SPA rules are already added in:
 
 - `packages/hyperbet-solana/app/public/_headers`
@@ -120,13 +176,40 @@ Health:
 - `https://api.yourdomain.com/api/proxy/evm/rpc?chain=bsc` (POST JSON-RPC smoke test)
 - `https://bet.yourdomain.com/build-info.json`
 
-End-to-end checks from repo root:
+Repo-backed checks from repo root:
 
 ```bash
-bun run duel:verify --server-url=https://your-stream-source.example --betting-url=https://bet.yourdomain.com --require-destinations=youtube
+./scripts/check-streaming-status.sh https://your-stream-source.example
+bun run --cwd packages/hyperbet-solana build:mainnet
 ```
 
-## 6) Security notes
+## 6) Run staged live proof
+
+Use the manual `Staged Live Proof` workflow or the repo wrapper:
+
+```bash
+bun run staged:proof -- --mode=read-only --target=all
+bun run staged:proof -- --mode=canary-write --target=solana
+bun run staged:proof -- --mode=canary-write --target=bsc
+bun run staged:proof -- --mode=canary-write --target=avax
+```
+
+The proof wrapper captures:
+
+- Pages `build-info.json`
+- keeper `/status`
+- `/api/arena/prediction-markets/active`
+- `/api/keeper/bot-health`
+- stream-state and duel-context payloads
+- Solana and BSC proxy proof
+- Solana, BSC, and AVAX canary tx hashes/signatures when `mode=canary-write`
+- `verify:chains` output
+- AVAX staging env-audit output
+
+This is a manual operator proof rail. It should not be treated as complete
+until a real staged run passes end to end and the artifacts are reviewed.
+
+## 7) Security notes
 
 - Do not expose `ARENA_EXTERNAL_BET_WRITE_KEY` in public frontend env vars.
 - Do not ship provider-keyed RPC URLs in public frontend env vars. Keep them on Railway and let the keeper proxy them.
