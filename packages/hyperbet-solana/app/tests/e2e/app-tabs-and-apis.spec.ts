@@ -259,7 +259,7 @@ test.describe("app tabs and api coverage", () => {
       request,
       "/api/streaming/state",
     );
-    expect(streamState.cycle.phase).toBe("FIGHTING");
+    expect(streamState.cycle.phase).toBe("ANNOUNCEMENT");
     expect(streamState.cycle.agent1?.name).toBeTruthy();
     expect(streamState.leaderboard.length).toBeGreaterThan(0);
 
