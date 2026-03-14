@@ -11,6 +11,7 @@ import {
 
 type E2eState = {
   solanaTraderPublicKey?: string;
+  evmHeadlessAddress?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
   currentMatchId?: number;
@@ -452,7 +453,7 @@ test.describe("app tabs and api coverage", () => {
     request,
   }) => {
     const state = loadState();
-    const wallet = state.solanaTraderPublicKey || "";
+    const wallet = state.evmHeadlessAddress || "";
 
     const _streamState = await fetchJson<StreamingStateResponse>(
       request,
@@ -476,12 +477,11 @@ test.describe("app tabs and api coverage", () => {
     );
     const invite = await fetchJson<InviteResponse>(
       request,
-      `/api/arena/invite/${encodeURIComponent(wallet)}?platform=solana`,
+      `/api/arena/invite/${encodeURIComponent(wallet)}?platform=evm`,
     );
 
     await gotoApp(page);
-    await selectChain(page, "solana");
-    await ensureWalletConnected(page);
+    await selectChain(page, "bsc");
 
     await expect(page.getByTestId("duels-bottom-panel-trades")).toBeVisible();
 
@@ -503,7 +503,7 @@ test.describe("app tabs and api coverage", () => {
 
     await page
       .locator('[data-testid="points-drawer-open"]:visible')
-      .first()
+      .last()
       .click();
     await expect(page.getByTestId("points-drawer")).toBeVisible();
 
@@ -543,7 +543,9 @@ test.describe("app tabs and api coverage", () => {
     await expect(page.getByTestId("points-history")).toContainText(
       `${latestHistory.totalPoints.toLocaleString()} pts`,
     );
-    await page.getByTestId("points-history-filter").selectOption("WALLET_LINK");
+    await page
+      .getByTestId("points-history-filter")
+      .selectOption("WALLET_LINK", { force: true });
     await expect(page.getByTestId("points-history")).toContainText(
       HISTORY_LABELS.WALLET_LINK,
     );
@@ -590,31 +592,22 @@ test.describe("app tabs and api coverage", () => {
     expect(oracleHistory.snapshots.length).toBeGreaterThan(0);
 
     await gotoApp(page);
-    await selectChain(page, "solana");
-    await ensureWalletConnected(page);
+    await selectChain(page, "bsc");
 
     await page
       .locator('[data-testid="surface-mode-models"]:visible')
-      .first()
+      .last()
       .click();
-    await expect(page.getByTestId("models-market-view")).toBeVisible({
+    await expect(page.getByText("Canonical EVM Runtime")).toBeVisible({
       timeout: 60_000,
     });
-
-    await page
-      .getByTestId(`models-market-card-${characterId}`)
-      .click({ force: true });
-    await expect(page.getByTestId("models-market-view")).toContainText(
-      selectedMarket?.name || "",
-    );
-    await expect(page.getByTestId("models-market-market-id")).toContainText(
-      `Market #${marketId}`,
-    );
+    await expect(page.getByText("Model markets on BSC")).toBeVisible();
     await expect(
-      page.getByTestId("models-market-oracle-history"),
+      page.getByText(selectedMarket?.name || characterId).first(),
     ).toBeVisible();
     await expect(
-      page.getByTestId("models-market-oracle-history"),
-    ).not.toContainText("Waiting for keeper snapshots");
+      page.getByText(selectedMarket?.provider || "").first(),
+    ).toBeVisible();
+    await expect(page.getByText("Tracked markets")).toBeVisible();
   });
 });

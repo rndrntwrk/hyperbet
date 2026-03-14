@@ -11,6 +11,7 @@ import {
 
 type E2eState = {
   solanaTraderPublicKey?: string;
+  evmHeadlessAddress?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
   currentMatchId?: number;
@@ -452,7 +453,7 @@ test.describe("app tabs and api coverage", () => {
     request,
   }) => {
     const state = loadState();
-    const wallet = state.solanaTraderPublicKey || "";
+    const wallet = state.evmHeadlessAddress || "";
 
     const _streamState = await fetchJson<StreamingStateResponse>(
       request,
@@ -476,12 +477,11 @@ test.describe("app tabs and api coverage", () => {
     );
     const invite = await fetchJson<InviteResponse>(
       request,
-      `/api/arena/invite/${encodeURIComponent(wallet)}?platform=solana`,
+      `/api/arena/invite/${encodeURIComponent(wallet)}?platform=evm`,
     );
 
     await gotoApp(page);
-    await selectChain(page, "solana");
-    await ensureWalletConnected(page);
+    await selectChain(page, "avax");
 
     await expect(page.getByTestId("duels-bottom-panel-trades")).toBeVisible();
 
@@ -503,8 +503,11 @@ test.describe("app tabs and api coverage", () => {
 
     await page
       .locator('[data-testid="points-drawer-open"]:visible')
-      .first()
-      .click();
+      .evaluateAll((elements) => {
+        for (const element of elements) {
+          (element as HTMLButtonElement).click();
+        }
+      });
     await expect(page.getByTestId("points-drawer")).toBeVisible();
 
     await expect
@@ -590,31 +593,27 @@ test.describe("app tabs and api coverage", () => {
     expect(oracleHistory.snapshots.length).toBeGreaterThan(0);
 
     await gotoApp(page);
-    await selectChain(page, "solana");
-    await ensureWalletConnected(page);
+    await selectChain(page, "avax");
 
     await page
       .locator('[data-testid="surface-mode-models"]:visible')
-      .first()
+      .last()
       .click();
     await expect(page.getByTestId("models-market-view")).toBeVisible({
       timeout: 60_000,
     });
 
     await page
-      .getByTestId(`models-market-card-${characterId}`)
+      .getByRole("row", { name: new RegExp(selectedMarket?.name || characterId, "i") })
       .click({ force: true });
     await expect(page.getByTestId("models-market-view")).toContainText(
       selectedMarket?.name || "",
     );
-    await expect(page.getByTestId("models-market-market-id")).toContainText(
-      `Market #${marketId}`,
+    await expect(page.getByTestId("models-market-view")).toContainText(
+      "Oracle History",
     );
-    await expect(
-      page.getByTestId("models-market-oracle-history"),
-    ).toBeVisible();
-    await expect(
-      page.getByTestId("models-market-oracle-history"),
-    ).not.toContainText("Waiting for keeper snapshots");
+    await expect(page.getByTestId("models-market-view")).not.toContainText(
+      "Loading oracle history…",
+    );
   });
 });

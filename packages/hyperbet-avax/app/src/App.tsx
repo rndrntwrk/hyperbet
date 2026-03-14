@@ -36,6 +36,7 @@ import { usePredictionMarketLifecycle } from "@hyperbet/ui/lib/predictionMarkets
 import { StreamPlayer } from "@hyperbet/ui/components/StreamPlayer";
 import { ChainSelector } from "@hyperbet/ui/components/ChainSelector";
 import { ThemeSelector } from "@hyperbet/ui/components/ThemeSelector";
+import { PointsDisplay } from "@hyperbet/ui/components/PointsDisplay";
 
 import { useChain } from "./lib/ChainContext";
 import { useStreamingState } from "@hyperbet/ui/spectator/useStreamingState";
@@ -78,6 +79,11 @@ function formatTimeAgo(ts: number, locale: UiLocale): string {
 function truncateAddr(addr: string): string {
   if (addr.length <= 12) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function normalizeEvmAddress(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return /^0x[a-fA-F0-9]{40}$/.test(trimmed) ? trimmed : null;
 }
 
 const FOOTER_SOCIALS = [
@@ -458,10 +464,25 @@ export function App() {
   const isStreamUiMode = import.meta.env.MODE === "stream-ui";
   const isE2eDebugMode =
     isE2eMode && new URLSearchParams(window.location.search).has("debug");
+  const configuredHeadlessEvmAddress = useMemo(
+    () =>
+      normalizeEvmAddress(
+        import.meta.env.VITE_E2E_EVM_ADDRESS ||
+          import.meta.env.VITE_HEADLESS_EVM_ADDRESS ||
+          "",
+      ),
+    [],
+  );
   // Only poll chain data when a wallet is connected (saves unnecessary RPC calls for spectators).
-  const shouldPollChainData = Boolean(!isStreamUiMode && (isE2eMode || evmWalletAddress));
+  const effectiveEvmWalletAddress =
+    evmWalletAddress ?? configuredHeadlessEvmAddress;
+  const shouldPollChainData = Boolean(
+    !isStreamUiMode && (isE2eMode || effectiveEvmWalletAddress),
+  );
   // In stream-ui mode treat wallet as disconnected so invite/points fetches don't fire.
-  const pointsWalletAddress = isStreamUiMode ? null : (evmWalletAddress ?? null);
+  const pointsWalletAddress = isStreamUiMode
+    ? null
+    : (effectiveEvmWalletAddress ?? null);
   const invitePlatformQuery = "evm" as const;
 
   const [surfaceMode, setSurfaceMode] = useState<"DUELS" | "MODELS">("DUELS");
@@ -954,7 +975,7 @@ const [hmBottomTab, setHmBottomTab] = useState<
                 alignItems: "center",
                 marginBottom: 16,
                 position: "relative",
-                zIndex: 1,
+                zIndex: 2,
               }}
             >
               <div
@@ -1001,7 +1022,7 @@ const [hmBottomTab, setHmBottomTab] = useState<
                 gap: 4,
                 marginBottom: 16,
                 position: "relative",
-                zIndex: 1,
+                zIndex: 2,
               }}
             >
               {(
@@ -1017,9 +1038,7 @@ const [hmBottomTab, setHmBottomTab] = useState<
                     key={tab.key}
                     type="button"
                     data-testid={`points-drawer-tab-${tab.key}`}
-                    onClick={() =>
-                      startTransition(() => setPointsDrawerTab(tab.key))
-                    }
+                    onClick={() => setPointsDrawerTab(tab.key)}
                     style={{
                       flex: 1,
                       padding: "8px 0",
@@ -1045,10 +1064,9 @@ const [hmBottomTab, setHmBottomTab] = useState<
               })}
             </div>
 
-            {/* Non-compact points summary — hidden for now */}
-            {/* <div style={{ marginBottom: 16, position: "relative", zIndex: 1 }}>
+            <div style={{ marginBottom: 16, position: "relative", zIndex: 2 }}>
               <PointsDisplay walletAddress={pointsWalletAddress} locale={locale} />
-            </div> */}
+            </div>
 
             {/* Tab Content */}
             <div
@@ -1076,7 +1094,7 @@ const [hmBottomTab, setHmBottomTab] = useState<
                 <Suspense fallback={<PanelFallback label={copy.loadingReferral} />}>
                   <ReferralPanel
                     activeChain={activeChain}
-                    evmWallet={evmWalletAddress ?? null}
+                    evmWallet={effectiveEvmWalletAddress ?? null}
                     locale={locale}
                     evmWalletPlatform={activeChainLabel}
                   />
@@ -1295,7 +1313,10 @@ const [hmBottomTab, setHmBottomTab] = useState<
                   className="hm-header-mob-icon-btn"
                   title={copy.leaderboardAndStats}
                   data-testid="points-drawer-open"
-                  onClick={() => setShowPointsDrawer(true)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowPointsDrawer(true);
+                  }}
                 >
                   🏆
                 </button>
@@ -1404,7 +1425,10 @@ const [hmBottomTab, setHmBottomTab] = useState<
                 className="dock-collapse-btn"
                 title={copy.leaderboardAndStats}
                 data-testid="points-drawer-open"
-                onClick={() => setShowPointsDrawer(true)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowPointsDrawer(true);
+                }}
                 style={{ fontSize: 16 }}
               >
                 🏆
