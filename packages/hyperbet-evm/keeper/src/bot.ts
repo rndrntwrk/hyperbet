@@ -2285,9 +2285,10 @@ async function placeManagedClobOrder(
   const marketState = await getClobMarketState(trackedMatch.marketState);
   if (!marketState || marketState.nextOrderId == null) {
     throw new Error(
-      `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
+      `Cannot seed uninitialized market ${trackedMatch.marketState.toBase58()}`,
     );
   }
+
   if (!enumIs(marketState.status, "open")) {
     throw new Error(
       `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,

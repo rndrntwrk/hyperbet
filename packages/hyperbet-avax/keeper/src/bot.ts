@@ -181,7 +181,7 @@ const DUEL_OUTCOME_ORACLE_ABI = [
   },
   {
     type: "function",
-    name: "reportResult",
+    name: "proposeResult",
     stateMutability: "nonpayable",
     inputs: [
       { type: "bytes32" },
@@ -192,6 +192,20 @@ const DUEL_OUTCOME_ORACLE_ABI = [
       { type: "uint64" },
       { type: "string" },
     ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "challengeResult",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32" }, { type: "string" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "finalizeResult",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32" }, { type: "string" }],
     outputs: [],
   },
   {
@@ -1322,7 +1336,7 @@ for (const method of [
   "updateOracleConfig",
   "upsertDuel",
   "cancelDuel",
-  "reportResult",
+  "proposeResult",
 ]) {
   if (!hasProgramMethod(fightProgram, method)) {
     missingKeeperMethods.push(`fightOracle.${method}`);
@@ -1746,11 +1760,25 @@ const ensureOracleReady = async (): Promise<void> => {
       `Bot wallet ${botKeypair.publicKey.toBase58()} is not oracle authority`,
     );
   }
-  if (!(config.reporter as PublicKey).equals(botKeypair.publicKey)) {
+  const desiredDisputeWindowSecs = 3_600;
+  const normalizedDisputeWindowSecs = config.disputeWindowSecs as { toString: () => string };
+  const oracleConfigNeedsUpdate = !(
+    (config.reporter as PublicKey).equals(botKeypair.publicKey) &&
+    (config.finalizer as PublicKey).equals(botKeypair.publicKey) &&
+    (config.challenger as PublicKey).equals(botKeypair.publicKey) &&
+    normalizedDisputeWindowSecs.toString() === String(desiredDisputeWindowSecs)
+  );
+  if (oracleConfigNeedsUpdate) {
     await runWithRecovery(
       () =>
         fightProgram.methods
-          .updateOracleConfig(botKeypair.publicKey, botKeypair.publicKey)
+          .updateOracleConfig(
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            botKeypair.publicKey,
+            new BN(desiredDisputeWindowSecs),
+          )
           .accountsPartial({
             authority: botKeypair.publicKey,
             oracleConfig: oracleConfigPda,
@@ -2262,7 +2290,12 @@ async function placeManagedClobOrder(
   amountLamports: number,
 ): Promise<ManagedClobOrder> {
   const marketState = await getClobMarketState(trackedMatch.marketState);
-  if (!enumIs(marketState?.status, "open")) {
+  if (!marketState || marketState.nextOrderId == null) {
+    throw new Error(
+      `Cannot seed uninitialized market ${trackedMatch.marketState.toBase58()}`,
+    );
+  }
+  if (!enumIs(marketState.status, "open")) {
     throw new Error(
       `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
     );
@@ -2294,6 +2327,7 @@ async function placeManagedClobOrder(
           side,
           price,
           new BN(amountLamports),
+          0,
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,
@@ -2803,7 +2837,7 @@ async function reportEvmResult(data: DuelLifecycleEvent): Promise<void> {
         chain: undefined,
         address: chain.duelOracleAddress,
         abi: DUEL_OUTCOME_ORACLE_ABI,
-        functionName: "reportResult",
+        functionName: "proposeResult",
         args: [
           duelKey,
           winner,
@@ -2896,7 +2930,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   await runWithRecovery(
     () =>
       fightProgram.methods
-        .reportResult(
+        .proposeResult(
           Array.from(duelKey),
           (winnerSide === "A"
             ? ({ a: {} } as DuelWinner)

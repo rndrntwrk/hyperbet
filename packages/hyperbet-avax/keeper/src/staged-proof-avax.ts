@@ -65,7 +65,6 @@ const goldClobAdminAbi = [
 const MARKET_KIND_DUEL_WINNER = 0;
 const EVM_SELL_SIDE = 2;
 const EVM_STATUS_BETTING_OPEN = 2;
-const ORDER_FLAG_GTC = 0x01;
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim() ?? "";
@@ -315,7 +314,7 @@ async function main(): Promise<void> {
       EVM_SELL_SIDE,
       999,
       amount,
-      ORDER_FLAG_GTC,
+      0x01,
     ],
     value: cost + fees,
   });

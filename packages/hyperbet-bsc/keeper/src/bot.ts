@@ -191,20 +191,14 @@ const DUEL_OUTCOME_ORACLE_ABI = [
     type: "function",
     name: "challengeResult",
     stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
-      { type: "string" },
-    ],
+    inputs: [{ type: "bytes32" }, { type: "string" }],
     outputs: [],
   },
   {
     type: "function",
     name: "finalizeResult",
     stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
-      { type: "string" },
-    ],
+    inputs: [{ type: "bytes32" }, { type: "string" }],
     outputs: [],
   },
   {
@@ -274,8 +268,6 @@ const EVM_GOLD_CLOB_ADMIN_ABI = [
     outputs: [{ type: "uint8" }],
   },
 ] as const;
-
-const ORDER_BEHAVIOR_GTC = 0;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1759,12 +1751,14 @@ const ensureOracleReady = async (): Promise<void> => {
     );
   }
   const desiredDisputeWindowSecs = 3_600;
-  const configNeedsUpdate =
-    !(config.reporter as PublicKey).equals(botKeypair.publicKey) ||
-    !(config.finalizer as PublicKey).equals(botKeypair.publicKey) ||
-    !(config.challenger as PublicKey).equals(botKeypair.publicKey) ||
-    asNum(config.disputeWindowSecs) !== desiredDisputeWindowSecs;
-  if (configNeedsUpdate) {
+  const normalizedDisputeWindowSecs = config.disputeWindowSecs as { toString: () => string };
+  const oracleConfigNeedsUpdate = !(
+    (config.reporter as PublicKey).equals(botKeypair.publicKey) &&
+    (config.finalizer as PublicKey).equals(botKeypair.publicKey) &&
+    (config.challenger as PublicKey).equals(botKeypair.publicKey) &&
+    normalizedDisputeWindowSecs.toString() === String(desiredDisputeWindowSecs)
+  );
+  if (oracleConfigNeedsUpdate) {
     await runWithRecovery(
       () =>
         fightProgram.methods
@@ -2284,7 +2278,12 @@ async function placeManagedClobOrder(
   amountLamports: number,
 ): Promise<ManagedClobOrder> {
   const marketState = await getClobMarketState(trackedMatch.marketState);
-  if (!enumIs(marketState?.status, "open")) {
+  if (!marketState || marketState.nextOrderId == null) {
+    throw new Error(
+      `Cannot seed uninitialized market ${trackedMatch.marketState.toBase58()}`,
+    );
+  }
+  if (!enumIs(marketState.status, "open")) {
     throw new Error(
       `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
     );
@@ -2316,7 +2315,7 @@ async function placeManagedClobOrder(
           side,
           price,
           new BN(amountLamports),
-          ORDER_BEHAVIOR_GTC,
+          0,
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,
@@ -2569,16 +2568,13 @@ function buildTrackedMatchRecovery(
   if (unresolvedOracleWarningMatches.has(trackedMatch.duelId)) {
     recovery.push("awaiting-authoritative-result");
   }
-  // NOTE: claim dispatch is not yet implemented (post-merge Gate 16 work).
-  // The partial-claim check is disabled until lastClaimAtMs is wired up,
-  // to prevent permanent false-positive recovery entries on every resolved market.
-  // if (
-  //   trackedMatch.lastResolvedAtMs != null &&
-  //   trackedMatch.lastClaimAtMs == null &&
-  //   grossExposure > 0
-  // ) {
-  //   recovery.push("partial-claim");
-  // }
+  if (
+    trackedMatch.lastResolvedAtMs != null &&
+    trackedMatch.lastClaimAtMs == null &&
+    grossExposure > 0
+  ) {
+    recovery.push("partial-claim");
+  }
   if (
     restartRecoveryObservedAtMs != null &&
     (trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null)
@@ -3155,19 +3151,6 @@ async function runMaintenance(): Promise<void> {
       unresolvedOracleWarningMatches.delete(duelId);
       activeClobMatches.delete(duelId);
     }
-  }
-
-  // Clear restart-reconcile recovery once all tracked markets have reconciled open orders.
-  // Guard: only clear if the map is non-empty (stream events have been received), to avoid
-  // a race where the maintenance loop fires before activeClobMatches is populated.
-  if (
-    restartRecoveryObservedAtMs != null &&
-    activeClobMatches.size > 0 &&
-    !Array.from(activeClobMatches.values()).some(
-      (m) => m.yesBidOrder != null || m.noAskOrder != null,
-    )
-  ) {
-    restartRecoveryObservedAtMs = null;
   }
 
   // NOTE: We do NOT create new rounds here anymore.
