@@ -41,6 +41,7 @@ Keep these secrets in a local gitignored env file (for example
 2. From repo root run:
 
 ```bash
+cd /Users/mac/Desktop/hyperbet
 AVAX_FUJI_RPC=... \
 AVAX_DUEL_ORACLE_ADDRESS=0x... \
 AVAX_GOLD_CLOB_ADDRESS=0x... \
@@ -51,20 +52,29 @@ CANARY_PRIVATE_KEY=0x... \
 node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
 ```
 
+If you keep these in a shell env file, source it first:
+
+```bash
+set -a
+source /path/to/.env.avax-fuji-bootstrap
+set +a
+node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
+```
+
 3. Confirm output includes:
    - `market is OPEN in keeper`
    - place-order tx hash
    - optional claim/cleanup log
-5. Confirm the script does not fail earlier with:
+4. Confirm the script does not fail earlier with:
    - role-check error (no configured operator key has MARKET_OPERATOR_ROLE)
    - anything-to-claim reverts when pre-claim position is zero
-6. Verify via keeper API that the market is no longer terminal after initial setup:
+5. Verify via keeper API that the market is no longer terminal after initial setup:
 
 ```bash
 curl -s http://127.0.0.1:5555/api/arena/prediction-markets/active | jq
 ```
 
-7. If the output shows `nothing to claim expected...`, run a fresh duel/retry rather than forcing claim cleanup.
+6. If the output shows `nothing to claim expected...`, run a fresh duel/retry rather than forcing claim cleanup.
 
 ## Acceptance Criteria
 
