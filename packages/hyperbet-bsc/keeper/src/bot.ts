@@ -3133,6 +3133,16 @@ async function runMaintenance(): Promise<void> {
     }
   }
 
+  // Clear restart-reconcile recovery once all tracked markets have reconciled open orders.
+  if (
+    restartRecoveryObservedAtMs != null &&
+    !Array.from(activeClobMatches.values()).some(
+      (m) => m.yesBidOrder != null || m.noAskOrder != null,
+    )
+  ) {
+    restartRecoveryObservedAtMs = null;
+  }
+
   // NOTE: We do NOT create new rounds here anymore.
 
   if (PERPS_LIQUIDATOR_ENABLED) {
