@@ -174,7 +174,7 @@ const DUEL_OUTCOME_ORACLE_ABI = [
   },
   {
     type: "function",
-    name: "reportResult",
+    name: "proposeResult",
     stateMutability: "nonpayable",
     inputs: [
       { type: "bytes32" },
@@ -183,6 +183,26 @@ const DUEL_OUTCOME_ORACLE_ABI = [
       { type: "bytes32" },
       { type: "bytes32" },
       { type: "uint64" },
+      { type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "challengeResult",
+    stateMutability: "nonpayable",
+    inputs: [
+      { type: "bytes32" },
+      { type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "finalizeResult",
+    stateMutability: "nonpayable",
+    inputs: [
+      { type: "bytes32" },
       { type: "string" },
     ],
     outputs: [],
@@ -1738,12 +1758,13 @@ const ensureOracleReady = async (): Promise<void> => {
       `Bot wallet ${botKeypair.publicKey.toBase58()} is not oracle authority`,
     );
   }
+  const desiredDisputeWindowSecs = 3_600;
   const configNeedsUpdate =
     !(config.reporter as PublicKey).equals(botKeypair.publicKey) ||
     !(config.finalizer as PublicKey).equals(botKeypair.publicKey) ||
-    !(config.challenger as PublicKey).equals(botKeypair.publicKey);
+    !(config.challenger as PublicKey).equals(botKeypair.publicKey) ||
+    asNum(config.disputeWindowSecs) !== desiredDisputeWindowSecs;
   if (configNeedsUpdate) {
-    const disputeWindowSecs = asNum(config.disputeWindowSecs);
     await runWithRecovery(
       () =>
         fightProgram.methods
@@ -1752,7 +1773,7 @@ const ensureOracleReady = async (): Promise<void> => {
             botKeypair.publicKey,
             botKeypair.publicKey,
             botKeypair.publicKey,
-            new BN(disputeWindowSecs),
+            new BN(desiredDisputeWindowSecs),
           )
           .accountsPartial({
             authority: botKeypair.publicKey,
@@ -2794,7 +2815,7 @@ async function reportEvmResult(data: DuelLifecycleEvent): Promise<void> {
         chain: undefined,
         address: chain.duelOracleAddress,
         abi: DUEL_OUTCOME_ORACLE_ABI,
-        functionName: "reportResult",
+        functionName: "proposeResult",
         args: [
           duelKey,
           winner,
