@@ -2548,13 +2548,16 @@ function buildTrackedMatchRecovery(
   if (unresolvedOracleWarningMatches.has(trackedMatch.duelId)) {
     recovery.push("awaiting-authoritative-result");
   }
-  if (
-    trackedMatch.lastResolvedAtMs != null &&
-    trackedMatch.lastClaimAtMs == null &&
-    grossExposure > 0
-  ) {
-    recovery.push("partial-claim");
-  }
+  // NOTE: claim dispatch is not yet implemented (post-merge Gate 16 work).
+  // The partial-claim check is disabled until lastClaimAtMs is wired up,
+  // to prevent permanent false-positive recovery entries on every resolved market.
+  // if (
+  //   trackedMatch.lastResolvedAtMs != null &&
+  //   trackedMatch.lastClaimAtMs == null &&
+  //   grossExposure > 0
+  // ) {
+  //   recovery.push("partial-claim");
+  // }
   if (
     restartRecoveryObservedAtMs != null &&
     (trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null)
