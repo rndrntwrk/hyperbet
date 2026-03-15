@@ -3141,8 +3141,11 @@ async function runMaintenance(): Promise<void> {
   }
 
   // Clear restart-reconcile recovery once all tracked markets have reconciled open orders.
+  // Guard: only clear if the map is non-empty (stream events have been received), to avoid
+  // a race where the maintenance loop fires before activeClobMatches is populated.
   if (
     restartRecoveryObservedAtMs != null &&
+    activeClobMatches.size > 0 &&
     !Array.from(activeClobMatches.values()).some(
       (m) => m.yesBidOrder != null || m.noAskOrder != null,
     )
