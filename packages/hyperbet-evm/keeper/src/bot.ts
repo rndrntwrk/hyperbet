@@ -2271,7 +2271,12 @@ async function placeManagedClobOrder(
   amountLamports: number,
 ): Promise<ManagedClobOrder> {
   const marketState = await getClobMarketState(trackedMatch.marketState);
-  if (!enumIs(marketState?.status, "open")) {
+  if (!marketState) {
+    throw new Error(
+      `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
+    );
+  }
+  if (!enumIs(marketState.status, "open")) {
     throw new Error(
       `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
     );
