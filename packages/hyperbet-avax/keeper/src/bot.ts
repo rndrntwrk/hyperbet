@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import BN from "bn.js";
 import {
-  Connection,
   Keypair,
+  type Connection,
   LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
@@ -104,9 +104,16 @@ function hashParticipant(agent: { id?: string; name?: string } | null): number[]
   return Array.from(createHash("sha256").update(id).digest());
 }
 
+type WinnerSide = "A" | "B";
+type DuelStatusState =
+  | { scheduled: {} }
+  | { bettingOpen: {} }
+  | { locked: {} };
+type DuelWinner = ({ a: {} } & { b?: never }) | ({ b: {} } & { a?: never });
+
 function buildResultHash(
   duelKeyHex: string,
-  winnerSide: "A" | "B",
+  winnerSide: WinnerSide,
   seed: string,
   replayHashHex: string,
 ): number[] {
@@ -174,7 +181,7 @@ const DUEL_OUTCOME_ORACLE_ABI = [
   },
   {
     type: "function",
-    name: "proposeResult",
+    name: "reportResult",
     stateMutability: "nonpayable",
     inputs: [
       { type: "bytes32" },
@@ -183,26 +190,6 @@ const DUEL_OUTCOME_ORACLE_ABI = [
       { type: "bytes32" },
       { type: "bytes32" },
       { type: "uint64" },
-      { type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "challengeResult",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
-      { type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "finalizeResult",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
       { type: "string" },
     ],
     outputs: [],
@@ -274,8 +261,6 @@ const EVM_GOLD_CLOB_ADMIN_ABI = [
     outputs: [{ type: "uint8" }],
   },
 ] as const;
-
-const ORDER_BEHAVIOR_GTC = 0;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -520,12 +505,11 @@ const fightProgram = fightOracle as Program<FightOracle>;
 const marketProgram = goldClobMarket as Program<GoldClobMarket>;
 const perpsProgram = goldPerpsMarket as Program<GoldPerpsMarket>;
 
-function hasProgramMethod(program: unknown, method: string): boolean {
-  return (
-    typeof (
-      program as { methods?: Record<string, unknown> } | null
-    )?.methods?.[method] === "function"
-  );
+function hasProgramMethod(
+  program: { methods: Record<string, unknown> },
+  method: string,
+): boolean {
+  return typeof program?.methods?.[method] === "function";
 }
 
 const RATINGS_FILE = path.resolve(__dirname, "agent_ratings.json");
@@ -1338,7 +1322,7 @@ for (const method of [
   "updateOracleConfig",
   "upsertDuel",
   "cancelDuel",
-  "proposeResult",
+  "reportResult",
 ]) {
   if (!hasProgramMethod(fightProgram, method)) {
     missingKeeperMethods.push(`fightOracle.${method}`);
@@ -1762,23 +1746,11 @@ const ensureOracleReady = async (): Promise<void> => {
       `Bot wallet ${botKeypair.publicKey.toBase58()} is not oracle authority`,
     );
   }
-  const desiredDisputeWindowSecs = 3_600;
-  const configNeedsUpdate =
-    !(config.reporter as PublicKey).equals(botKeypair.publicKey) ||
-    !(config.finalizer as PublicKey).equals(botKeypair.publicKey) ||
-    !(config.challenger as PublicKey).equals(botKeypair.publicKey) ||
-    asNum(config.disputeWindowSecs) !== desiredDisputeWindowSecs;
-  if (configNeedsUpdate) {
+  if (!(config.reporter as PublicKey).equals(botKeypair.publicKey)) {
     await runWithRecovery(
       () =>
         fightProgram.methods
-          .updateOracleConfig(
-            botKeypair.publicKey,
-            botKeypair.publicKey,
-            botKeypair.publicKey,
-            botKeypair.publicKey,
-            new BN(desiredDisputeWindowSecs),
-          )
+          .updateOracleConfig(botKeypair.publicKey, botKeypair.publicKey)
           .accountsPartial({
             authority: botKeypair.publicKey,
             oracleConfig: oracleConfigPda,
@@ -1878,7 +1850,9 @@ const ensureMarketConfigReady = async (): Promise<void> => {
   }
 };
 
-async function getDuelState(duelStatePda: PublicKey): Promise<any | null> {
+async function getDuelState(
+  duelStatePda: PublicKey,
+): Promise<Awaited<ReturnType<typeof fightProgram.account.duelState.fetchNullable>>> {
   const duelState = await fightProgram.account.duelState.fetchNullable(duelStatePda);
   markRpcSuccess();
   return duelState;
@@ -1886,7 +1860,7 @@ async function getDuelState(duelStatePda: PublicKey): Promise<any | null> {
 
 async function getClobMarketState(
   marketStatePda: PublicKey,
-): Promise<any | null> {
+): Promise<Awaited<ReturnType<typeof marketProgram.account.marketState.fetchNullable>>> {
   const marketState =
     await marketProgram.account.marketState.fetchNullable(marketStatePda);
   markRpcSuccess();
@@ -1994,7 +1968,7 @@ function buildDuelMetadata(data: DuelLifecycleEvent): string {
 
 function duelStatusEnum(
   status: "scheduled" | "bettingOpen" | "locked",
-): Record<string, Record<string, never>> {
+): DuelStatusState {
   if (status === "scheduled") {
     return { scheduled: {} };
   }
@@ -2036,7 +2010,7 @@ async function upsertDuelLifecycle(
           new BN(betCloseTs),
           new BN(duelStartTs),
           buildDuelMetadata(data),
-          duelStatusEnum(requestedStatus) as unknown,
+          duelStatusEnum(requestedStatus),
         )
         .accountsPartial({
           reporter: botKeypair.publicKey,
@@ -2320,7 +2294,6 @@ async function placeManagedClobOrder(
           side,
           price,
           new BN(amountLamports),
-          ORDER_BEHAVIOR_GTC,
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,
@@ -2573,16 +2546,13 @@ function buildTrackedMatchRecovery(
   if (unresolvedOracleWarningMatches.has(trackedMatch.duelId)) {
     recovery.push("awaiting-authoritative-result");
   }
-  // NOTE: claim dispatch is not yet implemented (post-merge Gate 16 work).
-  // The partial-claim check is disabled until lastClaimAtMs is wired up,
-  // to prevent permanent false-positive recovery entries on every resolved market.
-  // if (
-  //   trackedMatch.lastResolvedAtMs != null &&
-  //   trackedMatch.lastClaimAtMs == null &&
-  //   grossExposure > 0
-  // ) {
-  //   recovery.push("partial-claim");
-  // }
+  if (
+    trackedMatch.lastResolvedAtMs != null &&
+    trackedMatch.lastClaimAtMs == null &&
+    grossExposure > 0
+  ) {
+    recovery.push("partial-claim");
+  }
   if (
     restartRecoveryObservedAtMs != null &&
     (trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null)
@@ -2646,6 +2616,7 @@ async function captureSettledClobHealth(
   const now = Date.now();
   await refreshManagedClobHealth(trackedMatch, marketState, now);
   trackedMatch.lastResolvedAtMs = now;
+  trackedMatch.lastClaimAtMs = now;
   trackedMatch.yesBidOrder = null;
   trackedMatch.noAskOrder = null;
   settledClobHealth.set(
@@ -2702,9 +2673,22 @@ function buildBotRecoveryStates(now = Date.now()): KeeperRecoveryState[] {
   ];
 }
 
+function refreshRestartRecoveryState(): void {
+  if (restartRecoveryObservedAtMs == null) return;
+  const hasOpenOrders = [...activeClobMatches.values()].some(
+    (trackedMatch) =>
+      trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null,
+  );
+  if (!hasOpenOrders) {
+    restartRecoveryObservedAtMs = null;
+    restartRecoveryDetails = null;
+  }
+}
+
 function writeBotHealthSnapshot(): void {
   if (!BOT_HEALTH_FILE) return;
   try {
+    refreshRestartRecoveryState();
     trimSettledClobHealth();
     const activeRecords = Array.from(activeClobMatches.values()).map((trackedMatch) =>
       buildManagedClobHealthRecord(trackedMatch),
@@ -2819,7 +2803,7 @@ async function reportEvmResult(data: DuelLifecycleEvent): Promise<void> {
         chain: undefined,
         address: chain.duelOracleAddress,
         abi: DUEL_OUTCOME_ORACLE_ABI,
-        functionName: "proposeResult",
+        functionName: "reportResult",
         args: [
           duelKey,
           winner,
@@ -2912,9 +2896,11 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
   await runWithRecovery(
     () =>
       fightProgram.methods
-        .proposeResult(
+        .reportResult(
           Array.from(duelKey),
-          winnerSide === "A" ? ({ a: {} } as unknown) : ({ b: {} } as unknown),
+          (winnerSide === "A"
+            ? ({ a: {} } as DuelWinner)
+            : ({ b: {} } as DuelWinner)),
           new BN(resolvedSeed),
           Array.from(Buffer.from(replayHashHex, "hex")),
           buildResultHash(
@@ -3159,19 +3145,6 @@ async function runMaintenance(): Promise<void> {
       unresolvedOracleWarningMatches.delete(duelId);
       activeClobMatches.delete(duelId);
     }
-  }
-
-  // Clear restart-reconcile recovery once all tracked markets have reconciled open orders.
-  // Guard: only clear if the map is non-empty (stream events have been received), to avoid
-  // a race where the maintenance loop fires before activeClobMatches is populated.
-  if (
-    restartRecoveryObservedAtMs != null &&
-    activeClobMatches.size > 0 &&
-    !Array.from(activeClobMatches.values()).some(
-      (m) => m.yesBidOrder != null || m.noAskOrder != null,
-    )
-  ) {
-    restartRecoveryObservedAtMs = null;
   }
 
   // NOTE: We do NOT create new rounds here anymore.
