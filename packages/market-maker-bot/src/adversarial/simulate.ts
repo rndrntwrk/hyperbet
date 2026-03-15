@@ -50,6 +50,8 @@ function defenseStrength(input: {
     scenarioBias = chain.mempoolFriction * 0.22;
   } else if (scenario === "sybil_wash_trading") {
     scenarioBias = chain.mempoolFriction * 0.18;
+  } else if (scenario === "sybil_identity_churn") {
+    scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.17;
   } else if (scenario === "rebate_farming_ring") {
     scenarioBias = (chain.mempoolFriction + chain.mevRisk) * 0.11;
   } else if (scenario === "layering_spoof_ladder") {
@@ -141,6 +143,96 @@ function tryExploitFill(input: {
   return true;
 }
 
+function scenarioOperationalStress(input: {
+  scenario: ScenarioId;
+  chain: ChainProfile;
+  guards: GuardProfile;
+  vuln: VulnerabilityVector;
+  staleQuoteRatio: number;
+  inventoryPeak: number;
+}): {
+  staleMultiplier: number;
+  orphanBase: number;
+  lagBaseMs: number;
+  backlogBase: number;
+} {
+  const { scenario, chain, guards, vuln, staleQuoteRatio, inventoryPeak } = input;
+  const baseLag =
+    240 +
+    chain.settlementLagTicks * 120 +
+    guards.repriceDelayTicks * 90 +
+    chain.oracleLagAmplifier * 160;
+  const generic = {
+    staleMultiplier: 0.4 + vuln.stale * 0.45 + staleQuoteRatio,
+    orphanBase:
+      Math.max(0, inventoryPeak - guards.inventoryCap * 0.35) / Math.max(1, guards.inventoryCap) +
+      vuln.cancel * 0.5,
+    lagBaseMs: baseLag,
+    backlogBase: vuln.inventory * 0.4 + vuln.cancel * 0.25,
+  };
+
+  switch (scenario) {
+    case "restart_mid_fill":
+      return {
+        staleMultiplier: generic.staleMultiplier + 0.08,
+        orphanBase: generic.orphanBase + 0.55,
+        lagBaseMs: generic.lagBaseMs + 220,
+        backlogBase: generic.backlogBase + 0.45,
+      };
+    case "orphan_sweep_failure":
+      return {
+        staleMultiplier: generic.staleMultiplier + 0.04,
+        orphanBase: generic.orphanBase + 0.8,
+        lagBaseMs: generic.lagBaseMs + 180,
+        backlogBase: generic.backlogBase + 0.3,
+      };
+    case "rpc_split_brain":
+      return {
+        staleMultiplier: generic.staleMultiplier + 0.12,
+        orphanBase: generic.orphanBase + 0.25,
+        lagBaseMs: generic.lagBaseMs + 260,
+        backlogBase: generic.backlogBase + 0.35,
+      };
+    case "nonce_collision_replay":
+      return {
+        staleMultiplier: generic.staleMultiplier,
+        orphanBase: generic.orphanBase + 0.4,
+        lagBaseMs: generic.lagBaseMs + 160,
+        backlogBase: generic.backlogBase + 0.12,
+      };
+    case "reorg_finality_lag":
+      return {
+        staleMultiplier: generic.staleMultiplier + 0.1,
+        orphanBase: generic.orphanBase + 0.22,
+        lagBaseMs: generic.lagBaseMs + 300,
+        backlogBase: generic.backlogBase + 0.38,
+      };
+    case "rounding_abuse":
+      return {
+        staleMultiplier: generic.staleMultiplier - 0.08,
+        orphanBase: generic.orphanBase + 0.08,
+        lagBaseMs: generic.lagBaseMs + 90,
+        backlogBase: generic.backlogBase + 0.1,
+      };
+    case "fee_token_depletion":
+      return {
+        staleMultiplier: generic.staleMultiplier + 0.05,
+        orphanBase: generic.orphanBase + 0.12,
+        lagBaseMs: generic.lagBaseMs + 140,
+        backlogBase: generic.backlogBase + 0.65,
+      };
+    case "cross_market_inventory_bleed":
+      return {
+        staleMultiplier: generic.staleMultiplier + 0.02,
+        orphanBase: generic.orphanBase + 0.2,
+        lagBaseMs: generic.lagBaseMs + 150,
+        backlogBase: generic.backlogBase + 0.18,
+      };
+    default:
+      return generic;
+  }
+}
+
 export function simulateScenario(input: {
   scenario: ScenarioId;
   chain: ChainProfile;
@@ -157,6 +249,7 @@ export function simulateScenario(input: {
   let quotePrice = truePrice;
   let staleTicks = 0;
   let previousPrice = truePrice;
+  let staleQuoteTicks = 0;
 
   const state = createInitialState(truePrice);
   const signalUpdateInterval =
@@ -532,6 +625,46 @@ export function simulateScenario(input: {
       }
     }
 
+    if (scenario === "sybil_identity_churn") {
+      const churnSusceptibility = clamp(
+        (vuln.cancel * 0.45 + vuln.toxic * 0.35 + vuln.latency * 0.2) * (1 + chain.mevRisk * 0.12),
+        0.08,
+        1,
+      );
+      const churnWaveChance = clamp(
+        intensity * churnSusceptibility * (0.11 + chain.mempoolFriction * 0.12),
+        0,
+        0.58,
+      );
+      if (rng.next() < churnWaveChance) {
+        const walletsPerWave = 1 + Math.round(intensity * 1.4 + churnSusceptibility * 0.8);
+        for (let wallet = 0; wallet < walletsPerWave; wallet += 1) {
+          const side: "buy" | "sell" = rng.next() > 0.5 ? "buy" : "sell";
+          const qty = Math.max(
+            1,
+            Math.round(1 + intensity * 0.8 + churnSusceptibility * 0.5 + chain.mempoolFriction * 0.3),
+          );
+          tryExploitFill({
+            rng,
+            guards,
+            chain,
+            vuln,
+            scenario,
+            state,
+            divergence,
+            staleTicks,
+            quotePrice: side === "buy" ? bid : ask,
+            truePrice,
+            side,
+            qty,
+            feeBps: chain.feeBps,
+            bid,
+            ask,
+          });
+        }
+      }
+    }
+
     if (scenario === "rebate_farming_ring") {
       const rebatePressure = clamp(
         intensity *
@@ -600,6 +733,13 @@ export function simulateScenario(input: {
     }
 
     const emergencyStop = staleTicks > guards.staleQuoteHardStopTicks;
+    if (
+      emergencyStop ||
+      scenario === "rpc_split_brain" ||
+      scenario === "reorg_finality_lag"
+    ) {
+      staleQuoteTicks += 1;
+    }
     if (emergencyStop || Math.abs(state.inventory) > guards.inventoryCap) {
       const unwindSide: "buy" | "sell" = state.inventory > 0 ? "sell" : "buy";
       const unwindQty = Math.min(
@@ -633,6 +773,41 @@ export function simulateScenario(input: {
     state.toxicFills *
     (0.2 + 0.2 * vuln.toxic + 0.2 * vuln.spoof + 0.2 * vuln.cancel + 0.2 * vuln.latency);
   const finalEquity = rawEquity - exploitPenalty - inventoryPenalty - adversePenalty;
+  const operational = scenarioOperationalStress({
+    scenario,
+    chain,
+    guards,
+    vuln,
+    staleQuoteRatio: staleQuoteTicks / ticks,
+    inventoryPeak: state.inventoryPeak,
+  });
+  const staleQuoteUptimeRatio = Number(
+    clamp(
+      (staleQuoteTicks / ticks) * operational.staleMultiplier,
+      0,
+      1,
+    ).toFixed(4),
+  );
+  const orphanOrderCount = Math.max(
+    0,
+    Math.round(
+      operational.orphanBase * 2 +
+        vuln.cancel * 0.9 +
+        (guards.cancelCooldownTicks - 1) * 0.15,
+    ),
+  );
+  const reconciliationLagMs = Math.round(
+    operational.lagBaseMs + staleQuoteTicks * (20 + chain.mempoolFriction * 12),
+  );
+  const unresolvedClaimBacklog = Math.max(
+    0,
+    Math.round(
+      operational.backlogBase * 1.5 +
+        staleQuoteUptimeRatio * 2 +
+        Math.max(0, state.inventoryPeak - guards.inventoryCap * 0.5) /
+          Math.max(1, guards.inventoryCap),
+    ),
+  );
 
   return {
     mmPnl: Number(finalEquity.toFixed(6)),
@@ -646,5 +821,9 @@ export function simulateScenario(input: {
       state.toxicFills > 0
         ? Number((state.adverseSlippageBpsTotal / state.toxicFills).toFixed(2))
         : 0,
+    staleQuoteUptimeRatio,
+    orphanOrderCount,
+    reconciliationLagMs,
+    unresolvedClaimBacklog,
   };
 }

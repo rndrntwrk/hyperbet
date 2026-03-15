@@ -17,6 +17,7 @@ import {
   type AccountMeta,
   ComputeBudgetProgram,
   LAMPORTS_PER_SOL,
+  type Connection,
   PublicKey,
   SystemProgram,
   Transaction,
@@ -32,16 +33,32 @@ import {
   findPriceLevelPda,
   findUserBalancePda,
 } from "../lib/pdas";
-import { createPrograms, createReadonlyPrograms } from "../lib/programs";
+import {
+  createPrograms,
+  createReadonlyPrograms,
+  type SigningWalletLike,
+} from "../lib/programs";
 import {
   confirmSignatureViaRpc,
   fetchPriorityFeeEstimate,
   getLatestBlockhashViaRpc,
   HELIUS_SENDER_MIN_TIP_LAMPORTS,
   randomJitoTipAccount,
+  sendRawTransactionViaRpc,
   sendViaHeliusSender,
   startHeliusSenderWarmup,
 } from "../lib/solanaRpc";
+import { CONFIG } from "../lib/config";
+import {
+  normalizePredictionMarketDuelKeyHex,
+  usePredictionMarketLifecycle,
+} from "../lib/predictionMarkets";
+import {
+  derivePredictionMarketUiState,
+  EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
+  type PredictionMarketWalletSnapshot,
+} from "../lib/predictionMarketUiState";
+import { recordPredictionMarketTrade } from "../lib/predictionMarketTracking";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
   PredictionMarketPanel,
@@ -56,6 +73,8 @@ type BetSide = "YES" | "NO";
 type UserPosition = {
   aShares: bigint;
   bShares: bigint;
+  aLockedLamports: bigint;
+  bLockedLamports: bigint;
 };
 
 type MarketSnapshot = {
@@ -107,14 +126,17 @@ type BalanceAccount = {
     marketState: PublicKey;
     aShares: BN | bigint | number;
     bShares: BN | bigint | number;
+    aLockedLamports: BN | bigint | number;
+    bLockedLamports: BN | bigint | number;
   };
 };
 
 const SIDE_BID = 1;
 const SIDE_ASK = 2;
+const ORDER_BEHAVIOR_GTC = 0;
 const MAX_MATCH_ACCOUNTS = 100;
 
-function walletReady(wallet: ReturnType<typeof useWallet>): boolean {
+function walletReady(wallet: SigningWalletLike): boolean {
   return Boolean(
     wallet.publicKey && wallet.signTransaction && wallet.signAllTransactions,
   );
@@ -182,6 +204,32 @@ function isRetryableRefreshError(error: unknown): boolean {
   );
 }
 
+function getFallbackLifecycleStatus(status: string | null | undefined) {
+  switch (status?.trim().toLowerCase()) {
+    case "open":
+      return "OPEN";
+    case "locked":
+      return "LOCKED";
+    case "resolved":
+      return "RESOLVED";
+    case "cancelled":
+      return "CANCELLED";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function getFallbackWinner(winner: string | null | undefined) {
+  switch (winner?.trim().toLowerCase()) {
+    case "a":
+      return "A";
+    case "b":
+      return "B";
+    default:
+      return "NONE";
+  }
+}
+
 function getCycleDuelStatusLabel(
   phase: string | undefined,
   duelKeyHex: string | null | undefined,
@@ -217,12 +265,25 @@ function getCycleDuelStatusLabel(
   return "Preparing duel market";
 }
 
+function parsePublicKeyOrNull(
+  value: string | null | undefined,
+): PublicKey | null {
+  if (!value) return null;
+  try {
+    return new PublicKey(value);
+  } catch {
+    return null;
+  }
+}
+
 interface SolanaClobPanelProps {
   agent1Name: string;
   agent2Name: string;
   compact?: boolean;
   onMarketSnapshot?: (snapshot: SolanaClobMarketSnapshot) => void;
   locale?: UiLocale;
+  connectionOverride?: Connection;
+  walletOverride?: SigningWalletLike;
 }
 
 export interface SolanaClobMarketSnapshot {
@@ -242,11 +303,15 @@ export function SolanaClobPanel({
   compact = false,
   onMarketSnapshot,
   locale,
+  connectionOverride,
+  walletOverride,
 }: SolanaClobPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const isE2eMode = import.meta.env.MODE === "e2e";
-  const { connection } = useConnection();
-  const wallet = useWallet();
+  const { connection: adapterConnection } = useConnection();
+  const adapterWallet = useWallet();
+  const connection = connectionOverride ?? adapterConnection;
+  const wallet = walletOverride ?? adapterWallet;
   const { state: streamingState } = useStreamingState();
 
   const [status, setStatus] = useState(
@@ -259,6 +324,8 @@ export function SolanaClobPanel({
   const [position, setPosition] = useState<UserPosition>({
     aShares: 0n,
     bShares: 0n,
+    aLockedLamports: 0n,
+    bLockedLamports: 0n,
   });
   const [yesPool, setYesPool] = useState<bigint>(0n);
   const [noPool, setNoPool] = useState<bigint>(0n);
@@ -269,6 +336,7 @@ export function SolanaClobPanel({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<bigint | null>(null);
   const [lastPlaceOrderTx, setLastPlaceOrderTx] = useState("-");
+  const [lastPlaceOrderError, setLastPlaceOrderError] = useState("-");
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   const lastSnapshotRef = useRef<{ yes: bigint; no: bigint }>({
@@ -277,8 +345,13 @@ export function SolanaClobPanel({
   });
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
+  const useHeliusSender = CONFIG.cluster === "mainnet-beta";
+
   // Warm Helius Sender on mount to avoid first-transaction cold-start latency.
-  useEffect(() => startHeliusSenderWarmup(), []);
+  useEffect(() => {
+    if (!useHeliusSender) return undefined;
+    return startHeliusSenderWarmup();
+  }, [useHeliusSender]);
 
   const writablePrograms = useMemo(
     () => (walletReady(wallet) ? createPrograms(connection, wallet) : null),
@@ -290,9 +363,20 @@ export function SolanaClobPanel({
   );
 
   const cycle = streamingState?.cycle ?? null;
-  const duelKeyHex =
+  const streamedDuelKeyHex =
     typeof cycle?.duelKeyHex === "string" ? cycle.duelKeyHex : null;
-  const cycleDuelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
+  const streamedDuelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
+  const { duel: lifecycleDuel, market: lifecycleMarket } =
+    usePredictionMarketLifecycle("solana");
+  const duelKeyHex = useMemo(
+    () =>
+      normalizePredictionMarketDuelKeyHex(
+        lifecycleMarket?.duelKey ?? lifecycleDuel?.duelKey ?? streamedDuelKeyHex,
+      ),
+    [lifecycleDuel?.duelKey, lifecycleMarket?.duelKey, streamedDuelKeyHex],
+  );
+  const cycleDuelId =
+    lifecycleMarket?.duelId ?? lifecycleDuel?.duelId ?? streamedDuelId;
   const duelLabel = cycleDuelId ?? shortDuelKey(duelKeyHex);
   const effectiveAgent1 = cycle?.agent1?.name ?? agent1Name;
   const effectiveAgent2 = cycle?.agent2?.name ?? agent2Name;
@@ -309,6 +393,8 @@ export function SolanaClobPanel({
         resolved: "已结算",
         marketCancelled: "市场已取消",
         bettingLocked: "下注已锁定",
+        resolutionProposed: "结果已提交，等待挑战期结束",
+        resolutionChallenged: "结果已被挑战，结算已暂停",
         marketOpen: "市场开放中",
         refreshFailed: (message: string) => `刷新失败：${message}`,
         connectWalletToTrade: "连接钱包后即可交易",
@@ -318,7 +404,9 @@ export function SolanaClobPanel({
         connectWalletToClaim: "连接钱包后即可领取",
         claimComplete: "领取完成",
         claimFailed: (message: string) => `领取失败：${message}`,
-        claim: "领取",
+        claimReady: "可领取结算",
+        claimLocked: "暂无可领取结算",
+        claimHelp: "对局结算后，可在这里领取胜出份额或取消退款。",
         limitPrice: "限价",
         hideAdminPanel: "隐藏管理面板",
         showAdminPanel: "显示管理面板",
@@ -346,6 +434,8 @@ export function SolanaClobPanel({
         resolved: "Resolved",
         marketCancelled: "Market cancelled",
         bettingLocked: "Betting locked",
+        resolutionProposed: "Result proposed; challenge window active",
+        resolutionChallenged: "Result challenged; settlement paused",
         marketOpen: "Market open",
         refreshFailed: (message: string) => `Refresh failed: ${message}`,
         connectWalletToTrade: "Connect wallet to trade",
@@ -355,7 +445,10 @@ export function SolanaClobPanel({
         connectWalletToClaim: "Connect wallet to claim",
         claimComplete: "Claim complete",
         claimFailed: (message: string) => `Claim failed: ${message}`,
-        claim: "Claim",
+        claimReady: "Claim available",
+        claimLocked: "Nothing claimable yet",
+        claimHelp:
+          "Once the duel resolves, claim winning shares or cancelled refunds here.",
         limitPrice: "Limit price",
         hideAdminPanel: "Hide Admin Panel",
         showAdminPanel: "Show Admin Panel",
@@ -372,6 +465,59 @@ export function SolanaClobPanel({
         placingOrderContext: "placing order",
         claimingWinningsContext: "claiming winnings",
       };
+  const walletSnapshot = useMemo<PredictionMarketWalletSnapshot>(
+    () => ({
+      aShares: position.aShares,
+      bShares: position.bShares,
+      aStake: position.aLockedLamports,
+      bStake: position.bLockedLamports,
+      refundableAmount: position.aLockedLamports + position.bLockedLamports,
+    }),
+    [position],
+  );
+  const uiState = useMemo(
+    () =>
+      derivePredictionMarketUiState(
+        lifecycleMarket,
+        walletSnapshot,
+        activeMarket
+          ? {
+              lifecycleStatus: getFallbackLifecycleStatus(activeMarket.marketStatus),
+              winner: getFallbackWinner(activeMarket.winner),
+            }
+          : null,
+      ),
+    [activeMarket, lifecycleMarket, walletSnapshot],
+  );
+  const lifecycleStatusLabel = useMemo(() => {
+    switch (uiState.lifecycleStatus) {
+      case "RESOLVED":
+        if (uiState.winner === "A") return copy.resolvedFor(effectiveAgent1);
+        if (uiState.winner === "B") return copy.resolvedFor(effectiveAgent2);
+        return copy.resolved;
+      case "CANCELLED":
+        return copy.marketCancelled;
+      case "LOCKED":
+        return copy.bettingLocked;
+      case "PROPOSED":
+        return copy.resolutionProposed;
+      case "CHALLENGED":
+        return copy.resolutionChallenged;
+      case "OPEN":
+        return copy.marketOpen;
+      case "PENDING":
+      case "UNKNOWN":
+        return copy.waitingMarketOperator;
+      default:
+        return null;
+    }
+  }, [
+    copy,
+    effectiveAgent1,
+    effectiveAgent2,
+    uiState.lifecycleStatus,
+    uiState.winner,
+  ]);
 
   const updateChartAndTrades = useCallback(
     (nextYes: bigint, nextNo: bigint) => {
@@ -441,34 +587,41 @@ export function SolanaClobPanel({
         // Fetch blockhash and dynamic priority fee in parallel.
         const [latest, priorityFeeEstimate] = await Promise.all([
           getLatestBlockhashViaRpc(connection),
-          fetchPriorityFeeEstimate(connection.rpcEndpoint, [
-            wallet.publicKey.toBase58(),
-          ]),
+          useHeliusSender
+            ? fetchPriorityFeeEstimate(connection.rpcEndpoint, [
+                wallet.publicKey.toBase58(),
+              ])
+            : Promise.resolve(0),
         ]);
         transaction.recentBlockhash = latest.blockhash;
 
-        // Prepend ComputeBudget instructions so validators correctly budget CUs.
-        // setComputeUnitLimit MUST come before other instructions.
-        transaction.instructions = [
-          ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: priorityFeeEstimate,
-          }),
-          // Jito tip transfer — required by Helius Sender dual-routing.
-          SystemProgram.transfer({
-            fromPubkey: wallet.publicKey,
-            toPubkey: new PublicKey(randomJitoTipAccount()),
-            lamports: HELIUS_SENDER_MIN_TIP_LAMPORTS,
-          }),
-          ...transaction.instructions,
-        ];
+        if (useHeliusSender) {
+          // Prepend ComputeBudget instructions so validators correctly budget CUs.
+          // setComputeUnitLimit MUST come before other instructions.
+          transaction.instructions = [
+            ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+            ComputeBudgetProgram.setComputeUnitPrice({
+              microLamports: priorityFeeEstimate,
+            }),
+            // Jito tip transfer — required by Helius Sender dual-routing.
+            SystemProgram.transfer({
+              fromPubkey: wallet.publicKey,
+              toPubkey: new PublicKey(randomJitoTipAccount()),
+              lamports: HELIUS_SENDER_MIN_TIP_LAMPORTS,
+            }),
+            ...transaction.instructions,
+          ];
+        }
 
         stage = copy.stageSigning;
         const signed = await wallet.signTransaction(transaction);
 
         stage = copy.stageSending;
-        const wireBase64 = Buffer.from(signed.serialize()).toString("base64");
-        const signature = await sendViaHeliusSender(wireBase64);
+        const signature = useHeliusSender
+          ? await sendViaHeliusSender(
+              Buffer.from(signed.serialize()).toString("base64"),
+            )
+          : await sendRawTransactionViaRpc(connection, signed);
 
         stage = copy.stageConfirming;
         await confirmSignatureViaRpc(connection, signature);
@@ -485,6 +638,7 @@ export function SolanaClobPanel({
       copy.stageConfirming,
       copy.stageSending,
       copy.stageSigning,
+      useHeliusSender,
       wallet.publicKey,
       wallet.signTransaction,
     ],
@@ -540,18 +694,28 @@ export function SolanaClobPanel({
       setAsks([]);
       setYesPool(0n);
       setNoPool(0n);
-      setPosition({ aShares: 0n, bShares: 0n });
-      setStatus(getCycleDuelStatusLabel(cycle?.phase, duelKeyHex, resolvedLocale));
+      setPosition({
+        aShares: 0n,
+        bShares: 0n,
+        aLockedLamports: 0n,
+        bLockedLamports: 0n,
+      });
+      setStatus(
+        lifecycleStatusLabel ??
+          getCycleDuelStatusLabel(cycle?.phase, duelKeyHex, resolvedLocale),
+      );
       return;
     }
 
     const duelKeyBytes = duelKeyHexToBytes(duelKeyHex);
     const duelState = findDuelStatePda(oracleProgram.programId, duelKeyBytes);
-    const marketState = findMarketStatePda(
-      clobProgram.programId,
-      duelState,
-      DUEL_WINNER_MARKET_KIND,
-    );
+    const marketState =
+      parsePublicKeyOrNull(lifecycleMarket?.marketRef) ??
+      findMarketStatePda(
+        clobProgram.programId,
+        duelState,
+        DUEL_WINNER_MARKET_KIND,
+      );
     const vault = findClobVaultPda(clobProgram.programId, marketState);
 
     const [duelAccount, marketAccount, allLevels, allOrders, allBalances] =
@@ -564,13 +728,13 @@ export function SolanaClobPanel({
       ]);
 
     if (!duelAccount) {
-      setStatus(copy.waitingOracleReporter);
+      setStatus(lifecycleStatusLabel ?? copy.waitingOracleReporter);
       setActiveMarket(null);
       return;
     }
 
     if (!marketAccount) {
-      setStatus(copy.waitingMarketOperator);
+      setStatus(lifecycleStatusLabel ?? copy.waitingMarketOperator);
       setActiveMarket(null);
       return;
     }
@@ -627,17 +791,24 @@ export function SolanaClobPanel({
 
     let nextYesPool = 0n;
     let nextNoPool = 0n;
-    let userPosition: UserPosition = { aShares: 0n, bShares: 0n };
+    let userPosition: UserPosition = {
+      aShares: 0n,
+      bShares: 0n,
+      aLockedLamports: 0n,
+      bLockedLamports: 0n,
+    };
     for (const balance of balances) {
       const aShares = asBigInt(balance.account.aShares);
       const bShares = asBigInt(balance.account.bShares);
+      const aLockedLamports = asBigInt(balance.account.aLockedLamports);
+      const bLockedLamports = asBigInt(balance.account.bLockedLamports);
       nextYesPool += aShares;
       nextNoPool += bShares;
       if (
         wallet.publicKey &&
         (balance.account.user as PublicKey).equals(wallet.publicKey)
       ) {
-        userPosition = { aShares, bShares };
+        userPosition = { aShares, bShares, aLockedLamports, bLockedLamports };
       }
     }
 
@@ -663,7 +834,8 @@ export function SolanaClobPanel({
       bestBid: Number(marketAccount.bestBid ?? 0),
       bestAsk: Number(marketAccount.bestAsk ?? 1000),
       betCloseTime:
-        typeof cycle?.betCloseTime === "number" ? cycle.betCloseTime : null,
+        lifecycleDuel?.betCloseTime ??
+        (typeof cycle?.betCloseTime === "number" ? cycle.betCloseTime : null),
     });
     setPosition(userPosition);
     setYesPool(nextYesPool);
@@ -676,8 +848,47 @@ export function SolanaClobPanel({
         : null,
     );
     updateChartAndTrades(nextYesPool, nextNoPool);
-
-    if (marketStatus === "resolved") {
+    const nextUiState = derivePredictionMarketUiState(
+      lifecycleMarket,
+      {
+        aShares: userPosition.aShares,
+        bShares: userPosition.bShares,
+        aStake: userPosition.aLockedLamports,
+        bStake: userPosition.bLockedLamports,
+        refundableAmount:
+          userPosition.aLockedLamports + userPosition.bLockedLamports,
+      },
+      {
+        lifecycleStatus: getFallbackLifecycleStatus(marketStatus),
+        winner: getFallbackWinner(winner),
+      },
+    );
+    const nextStatusLabel = (() => {
+      switch (nextUiState.lifecycleStatus) {
+        case "RESOLVED":
+          if (nextUiState.winner === "A") return copy.resolvedFor(effectiveAgent1);
+          if (nextUiState.winner === "B") return copy.resolvedFor(effectiveAgent2);
+          return copy.resolved;
+        case "CANCELLED":
+          return copy.marketCancelled;
+        case "LOCKED":
+          return copy.bettingLocked;
+        case "PROPOSED":
+          return copy.resolutionProposed;
+        case "CHALLENGED":
+          return copy.resolutionChallenged;
+        case "OPEN":
+          return copy.marketOpen;
+        case "PENDING":
+        case "UNKNOWN":
+          return copy.waitingMarketOperator;
+        default:
+          return null;
+      }
+    })();
+    if (nextStatusLabel) {
+      setStatus(nextStatusLabel);
+    } else if (marketStatus === "resolved") {
       setStatus(
         winner === "a"
           ? copy.resolvedFor(effectiveAgent1)
@@ -692,7 +903,7 @@ export function SolanaClobPanel({
     } else if (marketStatus === "open") {
       setStatus(copy.marketOpen);
     } else {
-      setStatus(formatStatus(marketStatus, resolvedLocale));
+      setStatus(lifecycleStatusLabel ?? formatStatus(marketStatus, resolvedLocale));
     }
   }, [
     cycle?.betCloseTime,
@@ -702,6 +913,9 @@ export function SolanaClobPanel({
     duelKeyHex,
     effectiveAgent1,
     effectiveAgent2,
+    lifecycleDuel?.betCloseTime,
+    lifecycleMarket?.marketRef,
+    lifecycleStatusLabel,
     readonlyPrograms.fightOracle,
     readonlyPrograms.goldClobMarket,
     resolvedLocale,
@@ -887,13 +1101,16 @@ export function SolanaClobPanel({
   const handlePlaceOrder = useCallback(async () => {
     const clobProgram: any = writablePrograms?.goldClobMarket;
     if (!clobProgram || !wallet.publicKey || !activeMarket) {
+      setLastPlaceOrderError(copy.connectWalletToTrade);
       setStatus(copy.connectWalletToTrade);
       return;
     }
 
     try {
+      setLastPlaceOrderError("-");
       const amount = toBaseUnits(amountInput);
       if (amount <= 0n) {
+        setLastPlaceOrderError(copy.amountTooLow);
         setStatus(copy.amountTooLow);
         return;
       }
@@ -927,12 +1144,16 @@ export function SolanaClobPanel({
 
       await ensureVaultRentExempt(activeMarket.vault);
 
+      const configPda = findClobConfigPda(clobProgram.programId);
+      const config = await clobProgram.account.marketConfig.fetch(configPda);
+
       const tx = await clobProgram.methods
         .placeOrder(
           new BN(orderId.toString()),
           sideValue,
           price,
           new BN(amount.toString()),
+          ORDER_BEHAVIOR_GTC,
         )
         .accountsPartial({
           marketState: activeMarket.marketState,
@@ -940,17 +1161,9 @@ export function SolanaClobPanel({
           userBalance,
           newOrder,
           restingLevel,
-          config: findClobConfigPda(clobProgram.programId),
-          treasury: (
-            await clobProgram.account.marketConfig.fetch(
-              findClobConfigPda(clobProgram.programId),
-            )
-          ).treasury as PublicKey,
-          marketMaker: (
-            await clobProgram.account.marketConfig.fetch(
-              findClobConfigPda(clobProgram.programId),
-            )
-          ).marketMaker as PublicKey,
+          config: configPda,
+          treasury: config.treasury as PublicKey,
+          marketMaker: config.marketMaker as PublicKey,
           vault: activeMarket.vault,
           user: wallet.publicKey,
           systemProgram: SystemProgram.programId,
@@ -960,6 +1173,19 @@ export function SolanaClobPanel({
 
       const signature = await submitTransaction(tx, copy.placingOrderContext);
       setLastPlaceOrderTx(signature);
+      setLastPlaceOrderError("-");
+      await recordPredictionMarketTrade({
+        chainKey: "solana",
+        bettorWallet: wallet.publicKey.toBase58(),
+        sourceAsset: "SOL",
+        sourceAmount: 0,
+        goldAmount: 0,
+        feeBps: 0,
+        txSignature: signature,
+        marketRef: activeMarket.marketState.toBase58(),
+        duelKey: activeMarket.duelKeyHex,
+        duelId: activeMarket.duelId,
+      });
       setActiveMarket((current) =>
         current
           ? {
@@ -971,7 +1197,9 @@ export function SolanaClobPanel({
       setStatus(copy.orderPlaced);
       await refreshData();
     } catch (error) {
-      setStatus(copy.orderFailed((error as Error).message));
+      const message = (error as Error).message;
+      setLastPlaceOrderError(message);
+      setStatus(copy.orderFailed(message));
     }
   }, [
     activeMarket,
@@ -979,6 +1207,7 @@ export function SolanaClobPanel({
     buildPlaceOrderRemainingAccounts,
     copy,
     ensureVaultRentExempt,
+    lastPlaceOrderError,
     priceInput,
     refreshData,
     side,
@@ -1065,10 +1294,27 @@ export function SolanaClobPanel({
   const yesPercent =
     yesPool + noPool > 0n ? Number((yesPool * 100n) / (yesPool + noPool)) : 50;
   const noPercent = 100 - yesPercent;
-  const canClaim =
-    activeMarket?.marketStatus === "resolved" ||
-    activeMarket?.marketStatus === "cancelled";
+  const canClaim = uiState.canClaim;
   const marketStateText = activeMarket?.marketState.toBase58() ?? "-";
+  const lifecycleDebugText = [
+    `duelKey=${lifecycleMarket?.duelKey ?? lifecycleDuel?.duelKey ?? duelKeyHex ?? "-"}`,
+    `marketRef=${lifecycleMarket?.marketRef ?? activeMarket?.marketState.toBase58() ?? "-"}`,
+    `lifecycleStatus=${uiState.lifecycleStatus}`,
+    `winner=${uiState.winner}`,
+    `marketStatus=${activeMarket?.marketStatus ?? "-"}`,
+    `marketWinner=${activeMarket?.winner ?? "-"}`,
+    `claimKind=${uiState.claimKind}`,
+    `claimableAmount=${uiState.claimableAmount.toString()}`,
+    `canClaim=${uiState.canClaim ? "true" : "false"}`,
+  ].join("\n");
+  const walletDebugText = [
+    `wallet=${walletAddress ?? "-"}`,
+    `aShares=${position.aShares.toString()}`,
+    `bShares=${position.bShares.toString()}`,
+    `aLockedLamports=${position.aLockedLamports.toString()}`,
+    `bLockedLamports=${position.bLockedLamports.toString()}`,
+    `refundableAmount=${walletSnapshot.refundableAmount.toString()}`,
+  ].join("\n");
   const adminPanelText = [
     `${copy.adminStatus} ${status}`,
     `${copy.match} ${marketStateText}`,
@@ -1091,7 +1337,7 @@ export function SolanaClobPanel({
         setAmountInput={setAmountInput}
         onPlaceBet={() => void handlePlaceOrder()}
         isWalletReady={walletReady(wallet)}
-        programsReady={Boolean(activeMarket)}
+        programsReady={Boolean(activeMarket) && uiState.canTrade}
         agent1Name={effectiveAgent1}
         agent2Name={effectiveAgent2}
         isEvm={false}
@@ -1134,17 +1380,31 @@ export function SolanaClobPanel({
           </div>
 
           <button
+            data-testid={isE2eMode ? "solana-clob-claim-payout" : undefined}
             type="button"
             onClick={() => void handleClaim()}
             disabled={!canClaim}
             style={buttonStyle(
-              "#0f3f2b",
-              "rgba(34,197,94,0.35)",
+              canClaim
+                ? "#0f3f2b"
+                : "var(--hm-panel-claim-idle-bg, linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%))",
+              canClaim
+                ? "rgba(34,197,94,0.35)"
+                : "var(--hm-panel-claim-idle-border, rgba(255,255,255,0.08))",
               !canClaim,
             )}
           >
-            {copy.claim}
+            {canClaim ? copy.claimReady : copy.claimLocked}
           </button>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--hm-panel-subtle-text, rgba(255,255,255,0.48))",
+              lineHeight: 1.45,
+            }}
+          >
+            {copy.claimHelp}
+          </div>
         </div>
       </PredictionMarketPanel>
       <div
@@ -1203,7 +1463,40 @@ export function SolanaClobPanel({
             {copy.match}: {marketStateText}
           </div>
           <div data-testid="solana-clob-status">{status}</div>
+          <pre
+            data-testid="solana-clob-lifecycle-debug"
+            style={{
+              margin: 0,
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid rgba(148,163,184,0.22)",
+              background: "rgba(10,10,10,0.45)",
+              color: "#d4d4d8",
+              whiteSpace: "pre-wrap",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {lifecycleDebugText}
+          </pre>
+          <pre
+            data-testid="solana-clob-wallet-debug"
+            style={{
+              margin: 0,
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid rgba(148,163,184,0.22)",
+              background: "rgba(10,10,10,0.45)",
+              color: "#d4d4d8",
+              whiteSpace: "pre-wrap",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {walletDebugText}
+          </pre>
           <div data-testid="solana-clob-place-order-tx">{lastPlaceOrderTx}</div>
+          <div data-testid="solana-clob-place-order-error">{lastPlaceOrderError}</div>
           <div data-testid="solana-clob-init-config-tx">-</div>
           <div data-testid="solana-clob-create-match-tx">-</div>
           <div data-testid="solana-clob-init-orderbook-tx">-</div>

@@ -13,6 +13,9 @@ type E2eState = {
   solanaTraderPublicKey?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
+  currentDuelId?: string;
+  currentDuelKeyHex?: string;
+  clobMarketState?: string;
 };
 
 type StreamingStateResponse = {
@@ -71,6 +74,46 @@ type PerpsMarketsResponse = {
 
 type PerpsOracleHistoryResponse = {
   snapshots: Array<{ spotIndex: number }>;
+};
+
+type PredictionMarketsResponse = {
+  duel: {
+    duelKey: string | null;
+    duelId: string | null;
+    phase: string | null;
+    winner: string;
+    betCloseTime: number | null;
+  };
+  markets: Array<{
+    chainKey: string;
+    duelKey: string | null;
+    duelId: string | null;
+    marketId: string | null;
+    marketRef: string | null;
+    lifecycleStatus: string;
+    winner: string;
+    betCloseTime: number | null;
+    contractAddress: string | null;
+    programId: string | null;
+    txRef: string | null;
+    syncedAt: number | null;
+  }>;
+  updatedAt: number | null;
+};
+
+type KeeperBotHealthResponse = {
+  ok: boolean;
+  running: boolean;
+  health: {
+    chainKey: string;
+    updatedAtMs: number;
+    running: boolean;
+    recovery: string[];
+    markets: Array<{
+      lifecycleStatus: string;
+      marketRef: string | null;
+    }>;
+  } | null;
 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -216,7 +259,7 @@ test.describe("app tabs and api coverage", () => {
       request,
       "/api/streaming/state",
     );
-    expect(streamState.cycle.phase).toBe("FIGHTING");
+    expect(streamState.cycle.phase).toBe("ANNOUNCEMENT");
     expect(streamState.cycle.agent1?.name).toBeTruthy();
     expect(streamState.leaderboard.length).toBeGreaterThan(0);
 
@@ -225,6 +268,69 @@ test.describe("app tabs and api coverage", () => {
       "/api/streaming/duel-context",
     );
     expect(duelContext.cycle.agent1?.name).toBe(streamState.cycle.agent1?.name);
+
+    const predictionMarkets = await fetchJson<PredictionMarketsResponse>(
+      request,
+      "/api/arena/prediction-markets/active",
+    );
+    expect(predictionMarkets.duel.phase).toBe(streamState.cycle.phase);
+    expect(predictionMarkets.duel.duelId).toBe(state.currentDuelId || null);
+    expect(predictionMarkets.duel.duelKey).toBe(state.currentDuelKeyHex || null);
+    const solanaMarket = predictionMarkets.markets.find(
+      (market) => market.chainKey === "solana",
+    );
+    expect(solanaMarket).toBeTruthy();
+    expect(solanaMarket?.marketRef).toBe(state.clobMarketState || null);
+    expect([
+      "OPEN",
+      "LOCKED",
+      "PROPOSED",
+      "CHALLENGED",
+      "RESOLVED",
+      "CANCELLED",
+      "PENDING",
+      "UNKNOWN",
+    ]).toContain(solanaMarket?.lifecycleStatus);
+    expect(
+      solanaMarket?.metadata?.proposalId == null ||
+        typeof solanaMarket.metadata.proposalId === "string",
+    ).toBe(true);
+    expect(
+      solanaMarket?.metadata?.challengeWindowEndsAt == null ||
+        typeof solanaMarket.metadata.challengeWindowEndsAt === "number",
+    ).toBe(true);
+    expect(
+      solanaMarket?.metadata?.finalizedAt == null ||
+        typeof solanaMarket.metadata.finalizedAt === "number",
+    ).toBe(true);
+    expect(
+      solanaMarket?.metadata?.cancellationReason == null ||
+        typeof solanaMarket.metadata.cancellationReason === "string",
+    ).toBe(true);
+
+    await expect
+      .poll(async () => {
+        const botHealth = await fetchJson<KeeperBotHealthResponse>(
+          request,
+          "/api/keeper/bot-health",
+        );
+        return {
+          ok: botHealth.ok,
+          running: botHealth.running,
+          chainKey: botHealth.health?.chainKey ?? null,
+          updatedAtMs: Number(botHealth.health?.updatedAtMs ?? 0),
+          hasMarkets: (botHealth.health?.markets.length ?? 0) > 0,
+          recovery: Array.isArray(botHealth.health?.recovery),
+        };
+      })
+      .toEqual({
+        ok: true,
+        running: true,
+        chainKey: "solana",
+        updatedAtMs: expect.any(Number),
+        hasMarkets: true,
+        recovery: true,
+      });
 
     const points = await fetchJson<PointsResponse>(
       request,

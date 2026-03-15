@@ -1,14 +1,4 @@
-/**
- * HmChart — Lightweight-Charts v5 area chart for AVAX prediction market odds.
- *
- * Renders two series:
- *  - Agent A (YES): gold area fill, top of chart
- *  - Agent B (NO): derived as 100 - pct, red line
- *
- * Designed to live inside .hm-chart-container (flex: 1, width 100%, height 100%).
- */
-
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, type CSSProperties } from "react";
 import {
   createChart,
   type IChartApi,
@@ -19,14 +9,19 @@ import {
   LineSeries,
   AreaSeries,
 } from "lightweight-charts";
+import {
+  type HyperbetThemeId,
+  useResolvedHyperbetTheme,
+} from "../lib/theme";
 
 export interface HmChartPoint {
-  time: number; // unix ms
-  pct: number;  // 0–100, Agent A percentage
+  time: number;
+  pct: number;
 }
 
 interface HmChartProps {
   data: HmChartPoint[];
+  theme?: HyperbetThemeId;
 }
 
 type ChartTheme = {
@@ -45,8 +40,8 @@ type ChartTheme = {
   crosshairLabelBg: string;
 };
 
-function readChartTheme(): ChartTheme {
-  const styles = getComputedStyle(document.documentElement);
+function readChartTheme(source?: Element | null): ChartTheme {
+  const styles = getComputedStyle(source ?? document.documentElement);
   return {
     yes: styles.getPropertyValue("--hm-chart-yes").trim() || "#E84142",
     yesDim:
@@ -84,12 +79,12 @@ function readChartTheme(): ChartTheme {
   };
 }
 
-/** Convert ms timestamp to lightweight-charts UTCTimestamp (seconds) */
 function toUTC(ms: number): UTCTimestamp {
   return Math.floor(ms / 1000) as UTCTimestamp;
 }
 
-export function HmChart({ data }: HmChartProps) {
+export function HmChart({ data, theme }: HmChartProps) {
+  const themeDefinition = useResolvedHyperbetTheme(theme);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesARef = useRef<ISeriesApi<"Area"> | null>(null);
@@ -104,40 +99,40 @@ export function HmChart({ data }: HmChartProps) {
     const midSeries = midSeriesRef.current;
     if (!chart || !seriesA || !seriesB || !midSeries) return;
 
-    const theme = readChartTheme();
+    const chartTheme = readChartTheme(containerRef.current);
     const options: DeepPartial<ChartOptions> = {
       layout: {
-        background: { color: theme.bg },
-        textColor: theme.text,
+        background: { color: chartTheme.bg },
+        textColor: chartTheme.text,
         fontFamily: "var(--hm-font-mono)",
         fontSize: 11,
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: theme.grid },
-        horzLines: { color: theme.grid },
+        vertLines: { color: chartTheme.grid },
+        horzLines: { color: chartTheme.grid },
       },
       crosshair: {
         vertLine: {
-          color: theme.crosshair,
+          color: chartTheme.crosshair,
           width: 1,
           style: 3,
-          labelBackgroundColor: theme.crosshairLabelBg,
+          labelBackgroundColor: chartTheme.crosshairLabelBg,
         },
         horzLine: {
-          color: theme.crosshair,
+          color: chartTheme.crosshair,
           width: 1,
           style: 3,
-          labelBackgroundColor: theme.crosshairLabelBg,
+          labelBackgroundColor: chartTheme.crosshairLabelBg,
         },
       },
       rightPriceScale: {
-        borderColor: theme.border,
+        borderColor: chartTheme.border,
         scaleMargins: { top: 0.08, bottom: 0.08 },
         visible: true,
       },
       timeScale: {
-        borderColor: theme.border,
+        borderColor: chartTheme.border,
         timeVisible: true,
         secondsVisible: false,
         fixLeftEdge: false,
@@ -149,7 +144,7 @@ export function HmChart({ data }: HmChartProps) {
     chart.applyOptions(options);
 
     midSeries.applyOptions({
-      color: theme.fiftyLine,
+      color: chartTheme.fiftyLine,
       lineWidth: 1,
       lineStyle: 2,
       priceLineVisible: false,
@@ -158,33 +153,32 @@ export function HmChart({ data }: HmChartProps) {
     });
 
     seriesA.applyOptions({
-      lineColor: theme.yes,
-      topColor: theme.yesDim,
-      bottomColor: theme.yesZero,
+      lineColor: chartTheme.yes,
+      topColor: chartTheme.yesDim,
+      bottomColor: chartTheme.yesZero,
       lineWidth: 2,
       priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(1)}%` },
       lastValueVisible: true,
       priceLineVisible: false,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 4,
-      crosshairMarkerBackgroundColor: theme.yes,
+      crosshairMarkerBackgroundColor: chartTheme.yes,
     });
 
     seriesB.applyOptions({
-      lineColor: theme.no,
-      topColor: theme.noZero,
-      bottomColor: theme.noDim,
+      lineColor: chartTheme.no,
+      topColor: chartTheme.noZero,
+      bottomColor: chartTheme.noDim,
       lineWidth: 1,
       priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(1)}%` },
       lastValueVisible: true,
       priceLineVisible: false,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 3,
-      crosshairMarkerBackgroundColor: theme.no,
+      crosshairMarkerBackgroundColor: chartTheme.no,
     });
   }, []);
 
-  // ── Create chart once on mount ─────────────────────────────────────────────
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -194,43 +188,41 @@ export function HmChart({ data }: HmChartProps) {
       height: container.clientHeight || 180,
     });
 
-    // 50% reference line as a separate thin series
-    const theme = readChartTheme();
+    const chartTheme = readChartTheme(container);
     const midSeries = chart.addSeries(LineSeries, {
-      color: theme.fiftyLine,
+      color: chartTheme.fiftyLine,
       lineWidth: 1,
-      lineStyle: 2, // dashed
+      lineStyle: 2,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
     });
 
     const seriesA = chart.addSeries(AreaSeries, {
-      lineColor: theme.yes,
-      topColor: theme.yesDim,
-      bottomColor: theme.yesZero,
+      lineColor: chartTheme.yes,
+      topColor: chartTheme.yesDim,
+      bottomColor: chartTheme.yesZero,
       lineWidth: 2,
       priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(1)}%` },
       lastValueVisible: true,
       priceLineVisible: false,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 4,
-      crosshairMarkerBackgroundColor: theme.yes,
+      crosshairMarkerBackgroundColor: chartTheme.yes,
     });
     const seriesB = chart.addSeries(AreaSeries, {
-      lineColor: theme.no,
-      topColor: theme.noZero,
-      bottomColor: theme.noDim,
+      lineColor: chartTheme.no,
+      topColor: chartTheme.noZero,
+      bottomColor: chartTheme.noDim,
       lineWidth: 1,
       priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(1)}%` },
       lastValueVisible: true,
       priceLineVisible: false,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 3,
-      crosshairMarkerBackgroundColor: theme.no,
+      crosshairMarkerBackgroundColor: chartTheme.no,
     });
 
-    // Seed the 50% line across a wide time window so it always shows
     const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
     midSeries.setData([
       { time: (now - 7200) as UTCTimestamp, value: 50 },
@@ -243,7 +235,6 @@ export function HmChart({ data }: HmChartProps) {
     midSeriesRef.current = midSeries;
     applyThemeToChart();
 
-    // Responsive resize — track both width and height
     const ro = new ResizeObserver(() => {
       chart.applyOptions({
         width: container.clientWidth,
@@ -271,16 +262,14 @@ export function HmChart({ data }: HmChartProps) {
       attributeFilter: ["data-theme", "style", "class"],
     });
     return () => observer.disconnect();
-  }, [applyThemeToChart]);
+  }, [applyThemeToChart, theme, themeDefinition]);
 
-  // ── Push data updates efficiently ──────────────────────────────────────────
   const updateSeries = useCallback(() => {
     const seriesA = seriesARef.current;
     const seriesB = seriesBRef.current;
     if (!seriesA || !seriesB || data.length === 0) return;
 
     if (data.length !== lastLenRef.current) {
-      // Full redraw when data length changes significantly (new duel / reset)
       const aData = data.map((d) => ({ time: toUTC(d.time), value: d.pct }));
       const bData = data.map((d) => ({ time: toUTC(d.time), value: 100 - d.pct }));
       seriesA.setData(aData);
@@ -297,7 +286,12 @@ export function HmChart({ data }: HmChartProps) {
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%" }}
+      data-hyperbet-theme={theme}
+      style={{
+        width: "100%",
+        height: "100%",
+        ...(themeDefinition.colorVariables as CSSProperties),
+      }}
     />
   );
 }

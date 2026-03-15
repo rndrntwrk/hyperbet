@@ -13,7 +13,10 @@ import {
 
 import { FightOracle } from "../target/types/fight_oracle";
 import { GoldClobMarket } from "../target/types/gold_clob_market";
-import { confirmSignatureByPolling } from "./test-anchor";
+import {
+  confirmSignatureByPolling,
+  sendVersionedTransactionWithLookupTable,
+} from "./test-anchor";
 
 const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
   "BPFLoaderUpgradeab1e11111111111111111111111",
@@ -22,6 +25,9 @@ const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
 export const DUEL_WINNER_MARKET_KIND = 1;
 export const SIDE_BID = 1;
 export const SIDE_ASK = 2;
+export const ORDER_BEHAVIOR_GTC = 0;
+export const ORDER_BEHAVIOR_IOC = 1;
+export const ORDER_BEHAVIOR_POST_ONLY = 2;
 const duelKeyCounters = new Map<string, number>();
 
 function u16Le(value: number): Buffer {
@@ -194,6 +200,9 @@ export async function ensureOracleReady(
   program: Program<FightOracle>,
   authority: Keypair,
   reporter = authority.publicKey,
+  finalizer = authority.publicKey,
+  challenger = authority.publicKey,
+  disputeWindowSecs = 0,
 ): Promise<PublicKey> {
   const oracleConfig = deriveOracleConfigPda(program.programId);
   const existingConfig =
@@ -228,7 +237,13 @@ export async function ensureOracleReady(
   }
 
   await program.methods
-    .updateOracleConfig(authority.publicKey, reporter)
+    .updateOracleConfig(
+      authority.publicKey,
+      reporter,
+      finalizer,
+      challenger,
+      new BN(disputeWindowSecs),
+    )
     .accountsPartial({
       authority: authority.publicKey,
       oracleConfig,
@@ -374,7 +389,7 @@ export async function cancelDuel(
   return duelState;
 }
 
-export async function reportDuelResult(
+export async function proposeDuelResult(
   program: Program<FightOracle>,
   reporter: Keypair,
   duelKey: readonly number[],
@@ -391,7 +406,7 @@ export async function reportDuelResult(
   const duelState = deriveDuelStatePda(program.programId, duelKey);
 
   await program.methods
-    .reportResult(
+    .proposeResult(
       [...duelKey],
       options.winner,
       toBn(options.seed ?? 42),
@@ -404,7 +419,7 @@ export async function reportDuelResult(
           hashLabel(`${Buffer.from(duelKey).toString("hex")}:result`)),
       ],
       toBn(options.duelEndTs),
-      options.metadataUri ?? "https://hyperscape.gg/duels/result",
+      options.metadataUri ?? "https://hyperscape.gg/duels/proposal",
     )
     .accountsPartial({
       reporter: reporter.publicKey,
@@ -415,6 +430,63 @@ export async function reportDuelResult(
     .rpc();
 
   return duelState;
+}
+
+export async function challengeDuelResult(
+  program: Program<FightOracle>,
+  challenger: Keypair,
+  duelKey: readonly number[],
+  metadataUri = "https://hyperscape.gg/duels/challenged",
+): Promise<PublicKey> {
+  const oracleConfig = deriveOracleConfigPda(program.programId);
+  const duelState = deriveDuelStatePda(program.programId, duelKey);
+
+  await program.methods
+    .challengeResult([...duelKey], metadataUri)
+    .accountsPartial({
+      challenger: challenger.publicKey,
+      oracleConfig,
+      duelState,
+    })
+    .signers([challenger])
+    .rpc();
+
+  return duelState;
+}
+
+export async function finalizeDuelResult(
+  program: Program<FightOracle>,
+  finalizer: Keypair,
+  duelKey: readonly number[],
+  metadataUri = "https://hyperscape.gg/duels/final",
+): Promise<PublicKey> {
+  const oracleConfig = deriveOracleConfigPda(program.programId);
+  const duelState = deriveDuelStatePda(program.programId, duelKey);
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await program.methods
+        .finalizeResult([...duelKey], metadataUri)
+        .accountsPartial({
+          finalizer: finalizer.publicKey,
+          oracleConfig,
+          duelState,
+        })
+        .signers([finalizer])
+        .rpc();
+      return duelState;
+    } catch (error) {
+      lastError = error;
+      if (!hasProgramError(error, "DisputeWindowActive")) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+
+  throw lastError;
+
 }
 
 export async function initializeCanonicalMarket(
@@ -500,12 +572,14 @@ export async function placeClobOrder(
     side: number;
     price: number;
     amount: bigint | number;
+    orderBehavior?: number;
     remainingAccounts?: AccountMeta[];
   },
 ): Promise<{
   userBalance: PublicKey;
   order: PublicKey;
   restingLevel: PublicKey;
+  signature: string;
 }> {
   const userBalance = deriveUserBalancePda(
     program.programId,
@@ -525,7 +599,13 @@ export async function placeClobOrder(
   );
 
   let builder = program.methods
-    .placeOrder(toBn(args.orderId), args.side, args.price, toBn(args.amount))
+    .placeOrder(
+      toBn(args.orderId),
+      args.side,
+      args.price,
+      toBn(args.amount),
+      args.orderBehavior ?? ORDER_BEHAVIOR_GTC,
+    )
     .accountsPartial({
       marketState: args.marketState,
       duelState: args.duelState,
@@ -544,9 +624,75 @@ export async function placeClobOrder(
     builder = builder.remainingAccounts(args.remainingAccounts);
   }
 
-  await builder.signers([args.user]).rpc();
+  const instruction = await builder.instruction();
+  const uniqueAccountCount = new Set(
+    instruction.keys.map((accountMeta) => accountMeta.pubkey.toBase58()),
+  ).size;
+  const signature =
+    uniqueAccountCount > 32 || instruction.keys.length > 64
+      ? await sendVersionedTransactionWithLookupTable(
+          program.provider as anchor.AnchorProvider,
+          [instruction],
+          [args.user],
+        )
+      : await (
+          program.provider as anchor.AnchorProvider
+        ).sendAndConfirm(new anchor.web3.Transaction().add(instruction), [
+          args.user,
+        ]);
 
-  return { userBalance, order, restingLevel };
+  return { userBalance, order, restingLevel, signature };
+}
+
+export async function continueClobOrder(
+  program: Program<GoldClobMarket>,
+  args: {
+    marketState: PublicKey;
+    duelState: PublicKey;
+    vault: PublicKey;
+    user: Keypair;
+    orderId: bigint | number;
+    side: number;
+    price: number;
+    remainingAccounts?: AccountMeta[];
+  },
+): Promise<{ order: PublicKey; restingLevel: PublicKey; signature: string }> {
+  const userBalance = deriveUserBalancePda(
+    program.programId,
+    args.marketState,
+    args.user.publicKey,
+  );
+  const order = deriveOrderPda(
+    program.programId,
+    args.marketState,
+    args.orderId,
+  );
+  const restingLevel = derivePriceLevelPda(
+    program.programId,
+    args.marketState,
+    args.side,
+    args.price,
+  );
+
+  let builder = program.methods
+    .continueOrder(toBn(args.orderId))
+    .accountsPartial({
+      marketState: args.marketState,
+      duelState: args.duelState,
+      userBalance,
+      order,
+      restingLevel,
+      vault: args.vault,
+      user: args.user.publicKey,
+      systemProgram: SystemProgram.programId,
+    });
+
+  if (args.remainingAccounts && args.remainingAccounts.length > 0) {
+    builder = builder.remainingAccounts(args.remainingAccounts);
+  }
+
+  const signature = await builder.signers([args.user]).rpc();
+  return { order, restingLevel, signature };
 }
 
 export async function cancelClobOrder(

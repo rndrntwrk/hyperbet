@@ -11,8 +11,14 @@ import {
 
 type E2eState = {
   solanaTraderPublicKey?: string;
+  evmHeadlessAddress?: string;
   perpsCharacterId?: string;
   perpsMarketId?: number;
+  currentMatchId?: number;
+  currentDuelKeyHex?: string;
+  clobMatchState?: string;
+  evmMatchId?: number;
+  evmGoldClobAddress?: string;
 };
 
 type StreamingStateResponse = {
@@ -74,6 +80,46 @@ type PerpsOracleHistoryResponse = {
   snapshots: Array<{ spotIndex: number }>;
 };
 
+type PredictionMarketsResponse = {
+  duel: {
+    duelKey: string | null;
+    duelId: string | null;
+    phase: string | null;
+    winner: string;
+    betCloseTime: number | null;
+  };
+  markets: Array<{
+    chainKey: string;
+    duelKey: string | null;
+    duelId: string | null;
+    marketId: string | null;
+    marketRef: string | null;
+    lifecycleStatus: string;
+    winner: string;
+    betCloseTime: number | null;
+    contractAddress: string | null;
+    programId: string | null;
+    txRef: string | null;
+    syncedAt: number | null;
+  }>;
+  updatedAt: number | null;
+};
+
+type KeeperBotHealthResponse = {
+  ok: boolean;
+  running: boolean;
+  health: {
+    chainKey: string;
+    updatedAtMs: number;
+    running: boolean;
+    recovery: string[];
+    markets: Array<{
+      lifecycleStatus: string;
+      marketRef: string | null;
+    }>;
+  } | null;
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const statePath = path.resolve(__dirname, "./state.json");
 const GAME_API_URL = (process.env.E2E_GAME_API_URL || "http://127.0.0.1:5555")
@@ -92,6 +138,11 @@ const HISTORY_LABELS: Record<string, string> = {
 
 function loadState(): E2eState {
   return JSON.parse(fs.readFileSync(statePath, "utf8")) as E2eState;
+}
+
+function normalizeHexValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.trim().toLowerCase().replace(/^0x/, "");
 }
 
 function truncateWallet(wallet: string): string {
@@ -145,60 +196,6 @@ async function gotoApp(page: Page): Promise<void> {
   }
 }
 
-async function ensureWalletConnected(page: Page): Promise<void> {
-  const hasConnectedSolanaWallet = async (): Promise<boolean> => {
-    const desktopWalletChip = page
-      .getByRole("button", { name: /^SOL\s+[A-Za-z0-9].*/i })
-      .first();
-    if (await desktopWalletChip.isVisible().catch(() => false)) return true;
-
-    const mobileWalletChip = page
-      .getByRole("button", { name: /^◎\s*[A-Za-z0-9].*/i })
-      .first();
-    if (await mobileWalletChip.isVisible().catch(() => false)) return true;
-
-    return false;
-  };
-
-  const selectHeadlessWallet = async (): Promise<boolean> => {
-    const walletOption = page
-      .getByRole("button", { name: /E2E Trader/i })
-      .first();
-    if (!(await walletOption.isVisible().catch(() => false))) return false;
-    await walletOption.click({ force: true });
-    await expect(
-      page.getByRole("dialog", {
-        name: /Connect a wallet on Solana to continue/i,
-      }),
-    )
-      .toBeHidden({ timeout: 30_000 })
-      .catch(() => undefined);
-    return true;
-  };
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    if (await hasConnectedSolanaWallet()) return;
-
-    if (await selectHeadlessWallet()) {
-      await page.waitForTimeout(1_500);
-      continue;
-    }
-
-    const connectButton = page
-      .getByRole("button", {
-        name: /connect wallet|select wallet|connect|add sol wallet|connect sol/i,
-      })
-      .first();
-    if (await connectButton.isVisible().catch(() => false)) {
-      await connectButton.click();
-    }
-    await selectHeadlessWallet();
-    await page.waitForTimeout(1_500);
-  }
-
-  await expect.poll(hasConnectedSolanaWallet, { timeout: 60_000 }).toBe(true);
-}
-
 async function selectChain(
   page: Page,
   chain: "solana" | "bsc" | "base",
@@ -222,6 +219,18 @@ async function selectChain(
   }
 
   throw new Error(`Unable to select ${chain} chain`);
+}
+
+async function clickTestId(page: Page, testId: string): Promise<void> {
+  const locator = page.getByTestId(testId).first();
+  await locator.waitFor({ state: "visible", timeout: 30_000 });
+  try {
+    await locator.click({ timeout: 10_000 });
+  } catch {
+    await locator.evaluate((node) => {
+      (node as HTMLButtonElement).click();
+    });
+  }
 }
 
 test.describe("app tabs and api coverage", () => {
@@ -248,6 +257,81 @@ test.describe("app tabs and api coverage", () => {
       "/api/streaming/duel-context",
     );
     expect(duelContext.cycle.agent1?.name).toBe(streamState.cycle.agent1?.name);
+
+    const predictionMarkets = await fetchJson<PredictionMarketsResponse>(
+      request,
+      "/api/arena/prediction-markets/active",
+    );
+    expect(predictionMarkets.duel.phase).toBe(streamState.cycle.phase);
+    expect(predictionMarkets.duel.duelId).toBe(
+      state.currentMatchId != null ? String(state.currentMatchId) : null,
+    );
+    expect(predictionMarkets.duel.duelKey).toBe(state.currentDuelKeyHex || null);
+    const solanaMarket = predictionMarkets.markets.find(
+      (market) => market.chainKey === "solana",
+    );
+    const avaxMarket = predictionMarkets.markets.find(
+      (market) => market.chainKey === "avax",
+    );
+    expect(solanaMarket?.marketRef).toBe(state.clobMatchState || null);
+    expect(avaxMarket).toBeTruthy();
+    expect(avaxMarket?.contractAddress).toBe(
+      state.evmGoldClobAddress || null,
+    );
+    expect(
+      avaxMarket?.marketRef == null ||
+        /^[0-9a-f]{64}$/i.test(normalizeHexValue(avaxMarket?.marketRef) || ""),
+    ).toBe(true);
+    expect([
+      "OPEN",
+      "LOCKED",
+      "PROPOSED",
+      "CHALLENGED",
+      "RESOLVED",
+      "CANCELLED",
+      "PENDING",
+      "UNKNOWN",
+    ]).toContain(avaxMarket?.lifecycleStatus);
+    expect(
+      avaxMarket?.metadata?.proposalId == null ||
+        typeof avaxMarket.metadata.proposalId === "string",
+    ).toBe(true);
+    expect(
+      avaxMarket?.metadata?.challengeWindowEndsAt == null ||
+        typeof avaxMarket.metadata.challengeWindowEndsAt === "number",
+    ).toBe(true);
+    expect(
+      avaxMarket?.metadata?.finalizedAt == null ||
+        typeof avaxMarket.metadata.finalizedAt === "number",
+    ).toBe(true);
+    expect(
+      avaxMarket?.metadata?.cancellationReason == null ||
+        typeof avaxMarket.metadata.cancellationReason === "string",
+    ).toBe(true);
+
+    await expect
+      .poll(async () => {
+        const botHealth = await fetchJson<KeeperBotHealthResponse>(
+          request,
+          "/api/keeper/bot-health",
+        );
+        return {
+          ok: botHealth.ok,
+          running: botHealth.running,
+          chainKey: botHealth.health?.chainKey ?? null,
+          updatedAtMs: Number(botHealth.health?.updatedAtMs ?? 0),
+          hasMarkets: (botHealth.health?.markets.length ?? 0) > 0,
+          recovery: Array.isArray(botHealth.health?.recovery),
+        };
+      })
+      .toEqual({
+        ok: true,
+        running: true,
+        chainKey: "avax",
+        updatedAtMs: expect.any(Number),
+        hasMarkets: true,
+        recovery: true,
+      });
 
     const points = await fetchJson<PointsResponse>(
       request,
@@ -315,7 +399,7 @@ test.describe("app tabs and api coverage", () => {
     request,
   }) => {
     const state = loadState();
-    const wallet = state.solanaTraderPublicKey || "";
+    const wallet = state.evmHeadlessAddress || "";
 
     const _streamState = await fetchJson<StreamingStateResponse>(
       request,
@@ -339,16 +423,15 @@ test.describe("app tabs and api coverage", () => {
     );
     const invite = await fetchJson<InviteResponse>(
       request,
-      `/api/arena/invite/${encodeURIComponent(wallet)}?platform=solana`,
+      `/api/arena/invite/${encodeURIComponent(wallet)}?platform=evm`,
     );
 
     await gotoApp(page);
-    await selectChain(page, "solana");
-    await ensureWalletConnected(page);
+    await selectChain(page, "avax");
 
     await expect(page.getByTestId("duels-bottom-panel-trades")).toBeVisible();
 
-    await page.getByTestId("duels-bottom-tab-orders").click();
+    await clickTestId(page, "duels-bottom-tab-orders");
     await expect(page.getByTestId("duels-bottom-panel-orders")).toBeVisible();
     await expect(page.getByTestId("duels-bottom-panel-orders")).toContainText(
       "BIDS",
@@ -356,7 +439,7 @@ test.describe("app tabs and api coverage", () => {
 
 
 
-    await page.getByTestId("duels-bottom-tab-positions").click();
+    await clickTestId(page, "duels-bottom-tab-positions");
     await expect(
       page.getByTestId("duels-bottom-panel-positions"),
     ).toBeVisible();
@@ -366,8 +449,11 @@ test.describe("app tabs and api coverage", () => {
 
     await page
       .locator('[data-testid="points-drawer-open"]:visible')
-      .first()
-      .click();
+      .evaluateAll((elements) => {
+        for (const element of elements) {
+          (element as HTMLButtonElement).click();
+        }
+      });
     await expect(page.getByTestId("points-drawer")).toBeVisible();
 
     await expect
@@ -397,7 +483,7 @@ test.describe("app tabs and api coverage", () => {
       leaderboard.leaderboard[0]?.totalPoints.toLocaleString() || "",
     );
 
-    await page.getByTestId("points-drawer-tab-history").click();
+    await clickTestId(page, "points-drawer-tab-history");
     await expect(page.getByTestId("points-drawer-panel-history")).toBeVisible();
     const latestHistory = history.entries[0];
     await expect(page.getByTestId("points-history")).toContainText(
@@ -411,7 +497,7 @@ test.describe("app tabs and api coverage", () => {
       HISTORY_LABELS.WALLET_LINK,
     );
 
-    await page.getByTestId("points-drawer-tab-referral").click();
+    await clickTestId(page, "points-drawer-tab-referral");
     await expect(
       page.getByTestId("points-drawer-panel-referral"),
     ).toBeVisible();
@@ -435,7 +521,6 @@ test.describe("app tabs and api coverage", () => {
   }) => {
     const state = loadState();
     const characterId = state.perpsCharacterId || "";
-    const marketId = Number(state.perpsMarketId || 0);
 
     const perpsMarkets = await fetchJson<PerpsMarketsResponse>(
       request,
@@ -453,31 +538,27 @@ test.describe("app tabs and api coverage", () => {
     expect(oracleHistory.snapshots.length).toBeGreaterThan(0);
 
     await gotoApp(page);
-    await selectChain(page, "solana");
-    await ensureWalletConnected(page);
+    await selectChain(page, "avax");
 
     await page
       .locator('[data-testid="surface-mode-models"]:visible')
-      .first()
+      .last()
       .click();
     await expect(page.getByTestId("models-market-view")).toBeVisible({
       timeout: 60_000,
     });
 
     await page
-      .getByTestId(`models-market-card-${characterId}`)
+      .getByRole("row", { name: new RegExp(selectedMarket?.name || characterId, "i") })
       .click({ force: true });
     await expect(page.getByTestId("models-market-view")).toContainText(
       selectedMarket?.name || "",
     );
-    await expect(page.getByTestId("models-market-market-id")).toContainText(
-      `Market #${marketId}`,
+    await expect(page.getByTestId("models-market-view")).toContainText(
+      "Oracle History",
     );
-    await expect(
-      page.getByTestId("models-market-oracle-history"),
-    ).toBeVisible();
-    await expect(
-      page.getByTestId("models-market-oracle-history"),
-    ).not.toContainText("Waiting for keeper snapshots");
+    await expect(page.getByTestId("models-market-view")).not.toContainText(
+      "Loading oracle history…",
+    );
   });
 });

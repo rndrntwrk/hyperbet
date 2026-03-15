@@ -21,7 +21,7 @@ import {
   mintTo,
 } from "@solana/spl-token";
 
-import fightOracleIdl from "../../../anchor/target/idl/fight_oracle.json";
+import fightOracleIdl from "../../../../hyperbet-solana/anchor/target/idl/fight_oracle.json";
 
 type ClusterName = "mainnet-beta" | "testnet";
 type PayAsset = "GOLD" | "SOL";

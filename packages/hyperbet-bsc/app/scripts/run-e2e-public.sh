@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_DIR="$(cd "$APP_DIR/.." && pwd)"
-ANCHOR_DIR="$DEMO_DIR/anchor"
+ANCHOR_DIR="$(cd "$DEMO_DIR/../hyperbet-solana/anchor" && pwd)"
 APP_PORT="${E2E_APP_PORT:-4182}"
 APP_LOG="$APP_DIR/.e2e-app-${E2E_CLUSTER:-mainnet-beta}.log"
 CLUSTER="${E2E_CLUSTER:-mainnet-beta}"
@@ -16,6 +16,19 @@ PROGRAM_PERPS_ID="$(solana-keygen pubkey "$PERPS_KEYPAIR_PATH")"
 
 APP_PID=""
 
+has_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+grep_q() {
+  local pattern="$1"
+  if has_cmd rg; then
+    rg -q "$pattern"
+  else
+    grep -q "$pattern"
+  fi
+}
+
 cleanup() {
   if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" >/dev/null 2>&1; then
     kill "$APP_PID" >/dev/null 2>&1 || true
@@ -27,7 +40,7 @@ trap cleanup EXIT
 wait_for_app() {
   local url="$1"
   for _ in {1..120}; do
-    if curl -s -o /dev/null -w "%{http_code}" "$url" | rg -q "200"; then
+    if curl -s -o /dev/null -w "%{http_code}" "$url" | grep_q "200"; then
       return 0
     fi
     sleep 1

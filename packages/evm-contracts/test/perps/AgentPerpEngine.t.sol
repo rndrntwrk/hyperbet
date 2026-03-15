@@ -15,6 +15,7 @@ contract AgentPerpEngineTest is Test {
     address alice = address(2);
     address bob = address(3);
     address whale = address(4);
+    address reporter = address(5);
 
     bytes32 agentId = keccak256("MODEL_A");
 
@@ -46,6 +47,9 @@ contract AgentPerpEngineTest is Test {
         // Initialize Oracle for MODEL_A
         vm.prank(admin);
         oracle.updateAgentSkill(agentId, 1500, 200); // mu: 1500, sigma: 200 => cons: 1500 - 3*200 = 900
+
+        vm.prank(admin);
+        engine.createMarket(agentId);
     }
 
     function testOracleConvergenceAndPrice() public {
@@ -84,5 +88,18 @@ contract AgentPerpEngineTest is Test {
         // Bob decides to go short (fade the crowd), he gets a massive discount!
         uint256 bobExecPrice = engine.getExecutionPrice(agentId, -1e18);
         assertTrue(bobExecPrice > baseExecPrice, "Shorts sell at a premium in a heavily long-skewed market");
+    }
+
+    function testReporterRotationAllowsNonOwnerSkillUpdates() public {
+        vm.startPrank(admin);
+        oracle.setReporter(reporter, true);
+        vm.stopPrank();
+
+        vm.prank(reporter);
+        oracle.updateAgentSkill(agentId, 1600, 25);
+
+        (uint256 mu, uint256 sigma,) = oracle.agentSkills(agentId);
+        assertEq(mu, 1600);
+        assertEq(sigma, 25);
     }
 }

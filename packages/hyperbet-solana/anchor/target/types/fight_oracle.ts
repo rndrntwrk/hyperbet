@@ -94,6 +94,166 @@ export type FightOracle = {
       ]
     },
     {
+      "name": "challengeResult",
+      "discriminator": [
+        62,
+        59,
+        36,
+        3,
+        171,
+        25,
+        241,
+        163
+      ],
+      "accounts": [
+        {
+          "name": "challenger",
+          "signer": true
+        },
+        {
+          "name": "oracleConfig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "duelState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  117,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "duelKey"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "duelKey",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "metadataUri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "finalizeResult",
+      "discriminator": [
+        217,
+        193,
+        113,
+        98,
+        13,
+        191,
+        186,
+        78
+      ],
+      "accounts": [
+        {
+          "name": "finalizer",
+          "signer": true
+        },
+        {
+          "name": "oracleConfig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "duelState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  117,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "duelKey"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "duelKey",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "metadataUri",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "initializeOracle",
       "discriminator": [
         144,
@@ -157,16 +317,16 @@ export type FightOracle = {
       ]
     },
     {
-      "name": "reportResult",
+      "name": "proposeResult",
       "discriminator": [
-        195,
-        187,
-        161,
-        107,
-        75,
-        154,
-        102,
-        183
+        7,
+        96,
+        132,
+        38,
+        128,
+        145,
+        133,
+        242
       ],
       "accounts": [
         {
@@ -323,6 +483,18 @@ export type FightOracle = {
         {
           "name": "reporter",
           "type": "pubkey"
+        },
+        {
+          "name": "finalizer",
+          "type": "pubkey"
+        },
+        {
+          "name": "challenger",
+          "type": "pubkey"
+        },
+        {
+          "name": "disputeWindowSecs",
+          "type": "i64"
         }
       ]
     },
@@ -517,6 +689,32 @@ export type FightOracle = {
         240,
         120
       ]
+    },
+    {
+      "name": "resultChallenged",
+      "discriminator": [
+        221,
+        74,
+        171,
+        75,
+        157,
+        103,
+        164,
+        252
+      ]
+    },
+    {
+      "name": "resultProposed",
+      "discriminator": [
+        216,
+        229,
+        56,
+        182,
+        48,
+        192,
+        53,
+        251
+      ]
     }
   ],
   "errors": [
@@ -542,38 +740,73 @@ export type FightOracle = {
     },
     {
       "code": 6004,
+      "name": "invalidFinalizer",
+      "msg": "Finalizer pubkey cannot be the default address"
+    },
+    {
+      "code": 6005,
+      "name": "invalidChallenger",
+      "msg": "Challenger pubkey cannot be the default address"
+    },
+    {
+      "code": 6006,
+      "name": "invalidDisputeWindow",
+      "msg": "Dispute window must be non-negative"
+    },
+    {
+      "code": 6007,
       "name": "invalidBetWindow",
       "msg": "Betting window is invalid"
     },
     {
-      "code": 6005,
+      "code": 6008,
       "name": "invalidParticipants",
       "msg": "Participants must be present and distinct"
     },
     {
-      "code": 6006,
+      "code": 6009,
       "name": "invalidLifecycleTransition",
       "msg": "Duel lifecycle transition is invalid"
     },
     {
-      "code": 6007,
+      "code": 6010,
       "name": "duelKeyMismatch",
       "msg": "The provided duel key does not match the stored duel"
     },
     {
-      "code": 6008,
+      "code": 6011,
       "name": "duelAlreadyFinalized",
       "msg": "The duel is already finalized"
     },
     {
-      "code": 6009,
+      "code": 6012,
       "name": "duelAlreadyCancelled",
       "msg": "The duel was cancelled and cannot be resolved"
     },
     {
-      "code": 6010,
+      "code": 6013,
       "name": "invalidWinner",
       "msg": "Winner must be side A or side B"
+    },
+    {
+      "code": 6014,
+      "name": "notProposed",
+      "msg": "No active proposal exists"
+    },
+    {
+      "code": 6015,
+      "name": "alreadyChallenged",
+      "msg": "Proposal already challenged"
+    },
+    {
+      "code": 6016,
+      "name": "challengeWindowExpired",
+      "msg": "Challenge window already expired"
+    },
+    {
+      "code": 6017,
+      "name": "disputeWindowActive",
+      "msg": "Dispute window still active"
     }
   ],
   "types": [
@@ -605,6 +838,15 @@ export type FightOracle = {
         "fields": [
           {
             "name": "duelKey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proposalId",
             "type": {
               "array": [
                 "u8",
@@ -740,6 +982,57 @@ export type FightOracle = {
             }
           },
           {
+            "name": "activeProposal",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingWinner",
+            "type": {
+              "defined": {
+                "name": "marketSide"
+              }
+            }
+          },
+          {
+            "name": "pendingSeed",
+            "type": "u64"
+          },
+          {
+            "name": "pendingResultHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingReplayHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingDuelEndTs",
+            "type": "i64"
+          },
+          {
+            "name": "pendingProposedAt",
+            "type": "i64"
+          },
+          {
+            "name": "pendingChallenged",
+            "type": "bool"
+          },
+          {
             "name": "metadataUri",
             "type": "string"
           },
@@ -763,6 +1056,12 @@ export type FightOracle = {
           },
           {
             "name": "locked"
+          },
+          {
+            "name": "proposed"
+          },
+          {
+            "name": "challenged"
           },
           {
             "name": "resolved"
@@ -845,8 +1144,114 @@ export type FightOracle = {
             "type": "pubkey"
           },
           {
+            "name": "finalizer",
+            "type": "pubkey"
+          },
+          {
+            "name": "challenger",
+            "type": "pubkey"
+          },
+          {
+            "name": "disputeWindowSecs",
+            "type": "i64"
+          },
+          {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "resultChallenged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duelKey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proposalId",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "metadataUri",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "resultProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duelKey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proposalId",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "winner",
+            "type": {
+              "defined": {
+                "name": "marketSide"
+              }
+            }
+          },
+          {
+            "name": "seed",
+            "type": "u64"
+          },
+          {
+            "name": "duelEndTs",
+            "type": "i64"
+          },
+          {
+            "name": "resultHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "replayHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "metadataUri",
+            "type": "string"
           }
         ]
       }

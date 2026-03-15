@@ -1,0 +1,58 @@
+name: Staged Live Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Proof mode"
+        required: true
+        default: read-only
+        type: choice
+        options:
+          - read-only
+          - canary-write
+      target:
+        description: "Proof target"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - solana
+          - bsc
+          - avax
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  staged-live-proof:
+    name: Staged Live Proof
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Hyperbet toolchain
+        uses: ./.github/actions/setup-hyperbet
+        with:
+          install-foundry: "true"
+          install-rust: "true"
+          install-solana: "true"
+          install-anchor: "true"
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-verified.sh root
+
+      - name: Run staged live proof
+        run: node --import tsx scripts/staged-live-proof.ts --mode=${{ inputs.mode }} --target=${{ inputs.target }}
+
+      - name: Upload staged proof artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staged-live-proof
+          path: .ci-artifacts/staged-live-proof
+          if-no-files-found: ignore

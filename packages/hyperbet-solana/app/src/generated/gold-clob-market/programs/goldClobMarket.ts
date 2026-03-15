@@ -7,7 +7,7 @@
  */
 
 import { assertIsInstructionWithAccounts, containsBytes, fixEncoderSize, getBytesEncoder, type Address, type Instruction, type InstructionWithData, type ReadonlyUint8Array } from '@solana/kit';
-import { parseCancelOrderInstruction, parseClaimInstruction, parseInitializeConfigInstruction, parseInitializeMarketInstruction, parsePlaceOrderInstruction, parseSyncMarketFromDuelInstruction, parseUpdateConfigInstruction, type ParsedCancelOrderInstruction, type ParsedClaimInstruction, type ParsedInitializeConfigInstruction, type ParsedInitializeMarketInstruction, type ParsedPlaceOrderInstruction, type ParsedSyncMarketFromDuelInstruction, type ParsedUpdateConfigInstruction } from '../instructions/index.js';
+import { parseCancelOrderInstruction, parseClaimInstruction, parseContinueOrderInstruction, parseInitializeConfigInstruction, parseInitializeMarketInstruction, parsePlaceOrderInstruction, parseSyncMarketFromDuelInstruction, parseUpdateConfigInstruction, type ParsedCancelOrderInstruction, type ParsedClaimInstruction, type ParsedContinueOrderInstruction, type ParsedInitializeConfigInstruction, type ParsedInitializeMarketInstruction, type ParsedPlaceOrderInstruction, type ParsedSyncMarketFromDuelInstruction, type ParsedUpdateConfigInstruction } from '../instructions/index.js';
 
 export const GOLD_CLOB_MARKET_PROGRAM_ADDRESS = 'ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi' as Address<'ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi'>;
 
@@ -24,12 +24,13 @@ if (containsBytes(data, fixEncoderSize(getBytesEncoder(), 8).encode(new Uint8Arr
 throw new Error("The provided account could not be identified as a goldClobMarket account.")
 }
 
-export enum GoldClobMarketInstruction { CancelOrder, Claim, InitializeConfig, InitializeMarket, PlaceOrder, SyncMarketFromDuel, UpdateConfig }
+export enum GoldClobMarketInstruction { CancelOrder, Claim, ContinueOrder, InitializeConfig, InitializeMarket, PlaceOrder, SyncMarketFromDuel, UpdateConfig }
 
 export function identifyGoldClobMarketInstruction(instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array): GoldClobMarketInstruction {
 const data = 'data' in instruction ? instruction.data : instruction;
 if (containsBytes(data, fixEncoderSize(getBytesEncoder(), 8).encode(new Uint8Array([95, 129, 237, 240, 8, 49, 223, 132])), 0)) { return GoldClobMarketInstruction.CancelOrder; }
 if (containsBytes(data, fixEncoderSize(getBytesEncoder(), 8).encode(new Uint8Array([62, 198, 214, 193, 213, 159, 108, 210])), 0)) { return GoldClobMarketInstruction.Claim; }
+if (containsBytes(data, fixEncoderSize(getBytesEncoder(), 8).encode(new Uint8Array([52, 137, 158, 152, 162, 246, 203, 104])), 0)) { return GoldClobMarketInstruction.ContinueOrder; }
 if (containsBytes(data, fixEncoderSize(getBytesEncoder(), 8).encode(new Uint8Array([208, 127, 21, 1, 194, 190, 196, 70])), 0)) { return GoldClobMarketInstruction.InitializeConfig; }
 if (containsBytes(data, fixEncoderSize(getBytesEncoder(), 8).encode(new Uint8Array([35, 35, 189, 193, 155, 48, 170, 203])), 0)) { return GoldClobMarketInstruction.InitializeMarket; }
 if (containsBytes(data, fixEncoderSize(getBytesEncoder(), 8).encode(new Uint8Array([51, 194, 155, 175, 109, 130, 96, 106])), 0)) { return GoldClobMarketInstruction.PlaceOrder; }
@@ -41,6 +42,7 @@ throw new Error("The provided instruction could not be identified as a goldClobM
 export type ParsedGoldClobMarketInstruction<TProgram extends string = 'ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi'> =
 | { instructionType: GoldClobMarketInstruction.CancelOrder } & ParsedCancelOrderInstruction<TProgram>
 | { instructionType: GoldClobMarketInstruction.Claim } & ParsedClaimInstruction<TProgram>
+| { instructionType: GoldClobMarketInstruction.ContinueOrder } & ParsedContinueOrderInstruction<TProgram>
 | { instructionType: GoldClobMarketInstruction.InitializeConfig } & ParsedInitializeConfigInstruction<TProgram>
 | { instructionType: GoldClobMarketInstruction.InitializeMarket } & ParsedInitializeMarketInstruction<TProgram>
 | { instructionType: GoldClobMarketInstruction.PlaceOrder } & ParsedPlaceOrderInstruction<TProgram>
@@ -58,6 +60,8 @@ export type ParsedGoldClobMarketInstruction<TProgram extends string = 'ARVJNJp49
 return { instructionType: GoldClobMarketInstruction.CancelOrder, ...parseCancelOrderInstruction(instruction) }; }
 case GoldClobMarketInstruction.Claim: { assertIsInstructionWithAccounts(instruction);
 return { instructionType: GoldClobMarketInstruction.Claim, ...parseClaimInstruction(instruction) }; }
+case GoldClobMarketInstruction.ContinueOrder: { assertIsInstructionWithAccounts(instruction);
+return { instructionType: GoldClobMarketInstruction.ContinueOrder, ...parseContinueOrderInstruction(instruction) }; }
 case GoldClobMarketInstruction.InitializeConfig: { assertIsInstructionWithAccounts(instruction);
 return { instructionType: GoldClobMarketInstruction.InitializeConfig, ...parseInitializeConfigInstruction(instruction) }; }
 case GoldClobMarketInstruction.InitializeMarket: { assertIsInstructionWithAccounts(instruction);

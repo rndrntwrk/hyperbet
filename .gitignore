@@ -1,5 +1,6 @@
 node_modules
 .turbo
+.ci-artifacts
 .DS_Store
 dist
 coverage
@@ -24,6 +25,10 @@ packages/*/anchor/target/debug
 packages/*/anchor/target/release
 packages/*/anchor/target/sbf-solana-solana
 packages/*/keeper/keeper.sqlite*
+packages/*/keeper/.status/
+packages/*/keeper/workspace.package.json
+packages/*/keeper/workspace.bun.lock
+packages/*/keeper/workspace-packages/
 packages/evm-contracts/node_modules
 packages/evm-contracts/cache
 packages/evm-contracts/out

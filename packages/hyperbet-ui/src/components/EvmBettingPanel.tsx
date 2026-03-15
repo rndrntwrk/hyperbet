@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { PredictionMarketLifecycleRecord } from "@hyperbet/chain-registry";
 import { resolveUiLocale, type UiLocale } from "@hyperbet/ui/i18n";
 import { useAccount, useWalletClient } from "wagmi";
 import {
@@ -30,12 +31,26 @@ import {
   getOrderBook,
   getPosition,
   getRecentTrades,
+  ORDER_FLAG_GTC,
   placeOrder,
   toDuelKeyHex,
   type MarketMeta,
+  type MarketStatus,
   type Position,
+  type Side,
   SIDE_ENUM,
 } from "../lib/evmClient";
+import {
+  type PredictionMarketsDuelSnapshot,
+  normalizePredictionMarketDuelKeyHex,
+  usePredictionMarketLifecycle,
+} from "../lib/predictionMarkets";
+import {
+  derivePredictionMarketUiState,
+  EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
+  type PredictionMarketWalletSnapshot,
+} from "../lib/predictionMarketUiState";
+import { recordPredictionMarketTrade } from "../lib/predictionMarketTracking";
 import { useStreamingState } from "../spectator/useStreamingState";
 import {
   PredictionMarketPanel,
@@ -68,6 +83,9 @@ interface EvmBettingPanelProps {
   agent2Name: string;
   compact?: boolean;
   locale?: UiLocale;
+  lifecycleDuelOverride?: PredictionMarketsDuelSnapshot | null;
+  lifecycleMarketOverride?: PredictionMarketLifecycleRecord | null;
+  onLifecycleRefreshRequested?: (() => void | Promise<void>) | null;
 }
 
 function getEvmPanelCopy(locale: UiLocale) {
@@ -77,7 +95,10 @@ function getEvmPanelCopy(locale: UiLocale) {
       waitingForMarketOperator: "等待市场运营方开启",
       resolvedFor: (name: string) => `${name} 已结算获胜`,
       resolved: "已结算",
+      marketCancelled: "市场已取消",
       bettingLocked: "下注已锁定",
+      resolutionProposed: "结果已提交，等待挑战期结束",
+      resolutionChallenged: "结果已被挑战，结算已暂停",
       marketOpen: "市场开放中",
       refreshFailed: (message: string) => `刷新失败：${message}`,
       walletNotConnected: "钱包未连接",
@@ -105,6 +126,8 @@ function getEvmPanelCopy(locale: UiLocale) {
       claimReady: "可领取结算",
       claimLocked: "暂无可领取结算",
       claimHelp: "对局结算后，可在这里领取胜出份额或取消退款。",
+      claimCleanupReady: "清理已结算仓位",
+      claimCleanupHelp: "若本局已判定负方，可在这里清理残留仓位状态。",
       sideYes: "买入 A",
       sideNo: "买入 B",
       walletReady: "钱包已连接",
@@ -126,7 +149,10 @@ function getEvmPanelCopy(locale: UiLocale) {
     waitingForMarketOperator: "Waiting for market operator",
     resolvedFor: (name: string) => `Resolved for ${name}`,
     resolved: "Resolved",
+    marketCancelled: "Market cancelled",
     bettingLocked: "Betting locked",
+    resolutionProposed: "Result proposed; challenge window active",
+    resolutionChallenged: "Result challenged; settlement paused",
     marketOpen: "Market open",
     refreshFailed: (message: string) => `Refresh failed: ${message}`,
     walletNotConnected: "Wallet not connected",
@@ -155,6 +181,9 @@ function getEvmPanelCopy(locale: UiLocale) {
     claimLocked: "Nothing claimable yet",
     claimHelp:
       "Once the duel resolves, claim winning shares or cancelled refunds here.",
+    claimCleanupReady: "Clear resolved position",
+    claimCleanupHelp:
+      "If this market resolved against you, use this once to clear the stale position state.",
     sideYes: "Buy A",
     sideNo: "Buy B",
     walletReady: "Wallet connected",
@@ -176,11 +205,102 @@ function formatCompactTokenAmount(value: bigint, decimals: number): string {
   return Number(formatUnits(value, decimals)).toFixed(3);
 }
 
+function maxBigInt(a: bigint, b: bigint): bigint {
+  return a > b ? a : b;
+}
+
+function addPositionDelta(
+  base: Position | null,
+  delta: Position,
+): Position {
+  return {
+    aShares: (base?.aShares ?? 0n) + delta.aShares,
+    bShares: (base?.bShares ?? 0n) + delta.bShares,
+    aStake: (base?.aStake ?? 0n) + delta.aStake,
+    bStake: (base?.bStake ?? 0n) + delta.bStake,
+  };
+}
+
+function mergePositionSnapshots(
+  primary: Position | null,
+  fallback: Position | null,
+): Position | null {
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+  return {
+    aShares: maxBigInt(primary.aShares, fallback.aShares),
+    bShares: maxBigInt(primary.bShares, fallback.bShares),
+    aStake: maxBigInt(primary.aStake, fallback.aStake),
+    bStake: maxBigInt(primary.bStake, fallback.bStake),
+  };
+}
+
+function getFallbackLifecycleStatus(
+  status: MarketStatus | null | undefined,
+) {
+  switch (status) {
+    case "OPEN":
+      return "OPEN";
+    case "LOCKED":
+      return "LOCKED";
+    case "RESOLVED":
+      return "RESOLVED";
+    case "CANCELLED":
+      return "CANCELLED";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function getFallbackWinner(winner: Side | null | undefined) {
+  switch (winner) {
+    case "A":
+      return "A";
+    case "B":
+      return "B";
+    default:
+      return "NONE";
+  }
+}
+
+function getLifecycleStatusLabel(
+  lifecycleStatus: string | null | undefined,
+  winner: string | null | undefined,
+  agent1Name: string,
+  agent2Name: string,
+  copy: ReturnType<typeof getEvmPanelCopy>,
+): string | null {
+  switch (lifecycleStatus) {
+    case "RESOLVED":
+      if (winner === "A") return copy.resolvedFor(agent1Name);
+      if (winner === "B") return copy.resolvedFor(agent2Name);
+      return copy.resolved;
+    case "CANCELLED":
+      return copy.marketCancelled;
+    case "LOCKED":
+      return copy.bettingLocked;
+    case "PROPOSED":
+      return copy.resolutionProposed;
+    case "CHALLENGED":
+      return copy.resolutionChallenged;
+    case "OPEN":
+      return copy.marketOpen;
+    case "PENDING":
+    case "UNKNOWN":
+      return copy.waitingForMarketOperator;
+    default:
+      return null;
+  }
+}
+
 export function EvmBettingPanel({
   agent1Name,
   agent2Name,
   compact = false,
   locale,
+  lifecycleDuelOverride = null,
+  lifecycleMarketOverride = null,
+  onLifecycleRefreshRequested = null,
 }: EvmBettingPanelProps) {
   const resolvedLocale = resolveUiLocale(locale);
   const copy = getEvmPanelCopy(resolvedLocale);
@@ -209,6 +329,12 @@ export function EvmBettingPanel({
     (import.meta.env.VITE_HEADLESS_EVM_ADDRESS as string | undefined) ??
     "",
   );
+  const configuredE2eDuelKey = normalizePredictionMarketDuelKeyHex(
+    (import.meta.env.VITE_E2E_EVM_DUEL_KEY as string | undefined) ?? "",
+  );
+  const configuredE2eDuelId = (
+    (import.meta.env.VITE_E2E_EVM_DUEL_ID as string | undefined) ?? ""
+  ).trim() || null;
 
   const e2eAccountResult = useMemo(() => {
     if (isE2eMode && configuredHeadlessAddress) {
@@ -273,9 +399,12 @@ export function EvmBettingPanel({
   const [side, setSide] = useState<BetSide>("YES");
   const [amountInput, setAmountInput] = useState("1");
   const [priceInput, setPriceInput] = useState("500");
-  const [showAdvancedPricing, setShowAdvancedPricing] = useState(false);
+  const [showAdvancedPricing, setShowAdvancedPricing] = useState(isE2eMode);
   const [marketMeta, setMarketMeta] = useState<MarketMeta | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
+  const [optimisticPosition, setOptimisticPosition] = useState<Position | null>(
+    null,
+  );
   const [nativeBalance, setNativeBalance] = useState<bigint>(0n);
   const [tradeFeeBps, setTradeFeeBps] = useState(200);
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
@@ -284,18 +413,97 @@ export function EvmBettingPanel({
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [lastOrderTx, setLastOrderTx] = useState("-");
   const [lastClaimTx, setLastClaimTx] = useState("-");
+  const [lastRefreshError, setLastRefreshError] = useState<string | null>(null);
 
   const lastSnapshotRef = useRef<{ a: bigint; b: bigint }>({ a: 0n, b: 0n });
 
   const cycle = streamingState?.cycle ?? null;
-  const duelKeyHex =
+  const streamedDuelKeyHex =
     typeof cycle?.duelKeyHex === "string" ? cycle.duelKeyHex : null;
-  const duelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
+  const streamedDuelId = typeof cycle?.duelId === "string" ? cycle.duelId : null;
   const cycleAgent1 = cycle?.agent1?.name ?? agent1Name;
   const cycleAgent2 = cycle?.agent2?.name ?? agent2Name;
   const nativeDecimals = chainConfig?.nativeCurrency.decimals ?? 18;
   const chainNativeSymbol: Record<string, string> = { bsc: "BNB", base: "ETH", avax: "AVAX" };
   const nativeSymbol = chainConfig?.nativeCurrency.symbol ?? chainNativeSymbol[activeChain] ?? "ETH";
+  const lifecycleChainKey =
+    activeChain === "bsc" || activeChain === "base" || activeChain === "avax"
+      ? activeChain
+      : null;
+  const {
+    duel: lifecycleDuel,
+    market: lifecycleMarket,
+    refresh: refreshLifecycle,
+  } =
+    usePredictionMarketLifecycle(lifecycleChainKey, {
+      disabled:
+        !chainConfig ||
+        lifecycleDuelOverride != null ||
+        lifecycleMarketOverride != null,
+    });
+  const effectiveLifecycleDuel = lifecycleDuelOverride ?? lifecycleDuel;
+  const effectiveLifecycleMarket = lifecycleMarketOverride ?? lifecycleMarket;
+  const duelKeyHex = useMemo(
+    () =>
+      normalizePredictionMarketDuelKeyHex(
+        effectiveLifecycleMarket?.duelKey ??
+          effectiveLifecycleDuel?.duelKey ??
+          streamedDuelKeyHex ??
+          (isE2eMode ? configuredE2eDuelKey : null),
+      ),
+    [
+      configuredE2eDuelKey,
+      effectiveLifecycleDuel?.duelKey,
+      effectiveLifecycleMarket?.duelKey,
+      isE2eMode,
+      streamedDuelKeyHex,
+    ],
+  );
+  const duelId =
+    effectiveLifecycleMarket?.duelId ??
+    effectiveLifecycleDuel?.duelId ??
+    streamedDuelId ??
+    (isE2eMode ? configuredE2eDuelId : null);
+  const effectivePosition = useMemo(
+    () => mergePositionSnapshots(position, optimisticPosition),
+    [optimisticPosition, position],
+  );
+  const walletSnapshot = useMemo<PredictionMarketWalletSnapshot>(
+    () => ({
+      aShares: effectivePosition?.aShares ?? 0n,
+      bShares: effectivePosition?.bShares ?? 0n,
+      aStake: effectivePosition?.aStake ?? 0n,
+      bStake: effectivePosition?.bStake ?? 0n,
+      refundableAmount:
+        (effectivePosition?.aStake ?? 0n) + (effectivePosition?.bStake ?? 0n),
+    }),
+    [effectivePosition],
+  );
+  const uiState = useMemo(
+    () =>
+      derivePredictionMarketUiState(
+        effectiveLifecycleMarket,
+        walletSnapshot,
+        marketMeta
+          ? {
+              lifecycleStatus: getFallbackLifecycleStatus(marketMeta.status),
+              winner: getFallbackWinner(marketMeta.winner),
+            }
+          : null,
+      ),
+    [effectiveLifecycleMarket, marketMeta, walletSnapshot],
+  );
+  const lifecycleStatusLabel = useMemo(
+    () =>
+      getLifecycleStatusLabel(
+        uiState.lifecycleStatus,
+        uiState.winner,
+        cycleAgent1,
+        cycleAgent2,
+        copy,
+      ),
+    [copy, cycleAgent1, cycleAgent2, uiState.lifecycleStatus, uiState.winner],
+  );
 
   const publicClient = useMemo(() => {
     if (!chainConfig) return null;
@@ -363,11 +571,12 @@ export function EvmBettingPanel({
 
     try {
       if (!duelKeyHex) {
+        setLastRefreshError("missing-duel-key");
         setMarketMeta(null);
         setPosition(null);
         setBids([]);
         setAsks([]);
-        setStatus(copy.waitingForLiveDuel);
+        setStatus(lifecycleStatusLabel ?? copy.waitingForLiveDuel);
         return;
       }
 
@@ -382,27 +591,103 @@ export function EvmBettingPanel({
       );
 
       if (!market.exists) {
+        setLastRefreshError("missing-market");
         setMarketMeta(null);
         setPosition(null);
         setBids([]);
         setAsks([]);
-        setStatus(copy.waitingForMarketOperator);
+        setStatus(lifecycleStatusLabel ?? copy.waitingForMarketOperator);
         return;
       }
 
       setMarketMeta(market);
+      setLastRefreshError(null);
       updateChartAndTrades(market.totalAShares, market.totalBShares);
-      const [feeBpsResult, orderBookResult, tradesResult] =
-        await Promise.allSettled([
-          getFeeBps(publicClient, contractAddr),
-          getOrderBook(
+      const feeBpsPromise = getFeeBps(publicClient, contractAddr);
+      const orderBookPromise = getOrderBook(
+        publicClient,
+        contractAddr,
+        duelKey,
+        MARKET_KIND_DUEL_WINNER,
+        market,
+      );
+      const tradesPromise = getRecentTrades(
+        publicClient,
+        contractAddr,
+        market.marketKey,
+      );
+
+      if (effectiveAddress) {
+        const [userPosition, balance] = await Promise.all([
+          getPosition(
             publicClient,
             contractAddr,
-            duelKey,
-            MARKET_KIND_DUEL_WINNER,
-            market,
+            market.marketKey,
+            effectiveAddress,
           ),
-          getRecentTrades(publicClient, contractAddr, market.marketKey),
+          getNativeBalance(publicClient, effectiveAddress),
+        ]);
+        setPosition(userPosition);
+        setOptimisticPosition((current) => {
+          if (!current) return null;
+          const hasCaughtUp =
+            userPosition.aShares >= current.aShares &&
+            userPosition.bShares >= current.bShares &&
+            userPosition.aStake >= current.aStake &&
+            userPosition.bStake >= current.bStake;
+          return hasCaughtUp ? null : current;
+        });
+        setNativeBalance(balance);
+        const nextUiState = derivePredictionMarketUiState(
+          effectiveLifecycleMarket,
+          {
+            aShares: userPosition.aShares,
+            bShares: userPosition.bShares,
+            aStake: userPosition.aStake,
+            bStake: userPosition.bStake,
+            refundableAmount: userPosition.aStake + userPosition.bStake,
+          },
+          {
+            lifecycleStatus: getFallbackLifecycleStatus(market.status),
+            winner: getFallbackWinner(market.winner),
+          },
+        );
+        setStatus(
+          getLifecycleStatusLabel(
+            nextUiState.lifecycleStatus,
+            nextUiState.winner,
+            cycleAgent1,
+            cycleAgent2,
+            copy,
+          ) ?? copy.waitingForMarketOperator,
+        );
+      } else {
+        setPosition(null);
+        setNativeBalance(0n);
+        const nextUiState = derivePredictionMarketUiState(
+          effectiveLifecycleMarket,
+          EMPTY_PREDICTION_MARKET_WALLET_SNAPSHOT,
+          {
+            lifecycleStatus: getFallbackLifecycleStatus(market.status),
+            winner: getFallbackWinner(market.winner),
+          },
+        );
+        setStatus(
+          getLifecycleStatusLabel(
+            nextUiState.lifecycleStatus,
+            nextUiState.winner,
+            cycleAgent1,
+            cycleAgent2,
+            copy,
+          ) ?? copy.waitingForMarketOperator,
+        );
+      }
+
+      const [feeBpsResult, orderBookResult, tradesResult] =
+        await Promise.allSettled([
+          feeBpsPromise,
+          orderBookPromise,
+          tradesPromise,
         ]);
 
       if (feeBpsResult.status === "fulfilled") {
@@ -442,41 +727,10 @@ export function EvmBettingPanel({
       } else {
         setRecentTrades([]);
       }
-
-      if (effectiveAddress) {
-        const [userPosition, balance] = await Promise.all([
-          getPosition(
-            publicClient,
-            contractAddr,
-            market.marketKey,
-            effectiveAddress,
-          ),
-          getNativeBalance(publicClient, effectiveAddress),
-        ]);
-        setPosition(userPosition);
-        setNativeBalance(balance);
-      } else {
-        setPosition(null);
-        setNativeBalance(0n);
-      }
-
-      if (market.status === "RESOLVED") {
-        setStatus(
-          market.winner === "A"
-            ? copy.resolvedFor(cycleAgent1)
-            : market.winner === "B"
-              ? copy.resolvedFor(cycleAgent2)
-              : copy.resolved,
-        );
-      } else if (market.status === "LOCKED") {
-        setStatus(copy.bettingLocked);
-      } else if (market.status === "OPEN") {
-        setStatus(copy.marketOpen);
-      } else {
-        setStatus(copy.waitingForMarketOperator);
-      }
     } catch (error) {
-      setStatus(copy.refreshFailed((error as Error).message));
+      const message = (error as Error).message;
+      setLastRefreshError(message);
+      setStatus(copy.refreshFailed(message));
     }
   }, [
     chainConfig,
@@ -485,6 +739,7 @@ export function EvmBettingPanel({
     cycleAgent2,
     duelKeyHex,
     effectiveAddress,
+    effectiveLifecycleMarket,
     nativeDecimals,
     publicClient,
     updateChartAndTrades,
@@ -495,6 +750,23 @@ export function EvmBettingPanel({
     const id = setInterval(() => void refreshData(), 5000);
     return () => clearInterval(id);
   }, [refreshData]);
+
+  useEffect(() => {
+    const handleMarketRefresh = () => {
+      const refreshLifecycleSource =
+        onLifecycleRefreshRequested ?? refreshLifecycle;
+      void refreshLifecycleSource();
+      void refreshData();
+    };
+    window.addEventListener("hyperbet:market-refresh", handleMarketRefresh);
+    return () => {
+      window.removeEventListener("hyperbet:market-refresh", handleMarketRefresh);
+    };
+  }, [onLifecycleRefreshRequested, refreshData, refreshLifecycle]);
+
+  useEffect(() => {
+    setOptimisticPosition(null);
+  }, [activeChain, duelKeyHex, effectiveAddress]);
 
 
 
@@ -525,6 +797,20 @@ export function EvmBettingPanel({
       const cost = (amount * priceComponent) / 1000n;
       const tradeFee = (cost * BigInt(Math.max(0, tradeFeeBps))) / 10_000n;
       const totalValue = cost + tradeFee;
+      const optimisticDelta: Position =
+        side === "YES"
+          ? {
+              aShares: amount,
+              bShares: 0n,
+              aStake: cost,
+              bStake: 0n,
+            }
+          : {
+              aShares: 0n,
+              bShares: amount,
+              aStake: 0n,
+              bStake: cost,
+            };
 
       setStatus(copy.placingOrder);
       const tx = await placeOrder(
@@ -535,11 +821,31 @@ export function EvmBettingPanel({
         orderSide,
         price,
         amount,
+        ORDER_FLAG_GTC,
         effectiveAddress,
         totalValue,
       );
       setLastOrderTx(tx);
       await publicClient?.waitForTransactionReceipt({ hash: tx });
+      await recordPredictionMarketTrade({
+        chainKey: chainConfig.chainId,
+        bettorWallet: effectiveAddress,
+        sourceAsset: nativeSymbol,
+        sourceAmount: Number(formatUnits(totalValue, nativeDecimals)),
+        goldAmount: Number(formatUnits(totalValue, nativeDecimals)),
+        feeBps: tradeFeeBps,
+        txSignature: tx,
+        marketRef:
+          effectiveLifecycleMarket?.marketRef ?? marketMeta?.marketKey ?? duelKey,
+        duelKey: duelKeyHex,
+        duelId,
+      });
+      setOptimisticPosition((current) =>
+        addPositionDelta(
+          mergePositionSnapshots(position, current),
+          optimisticDelta,
+        ),
+      );
       setStatus(copy.orderPlaced);
       await refreshData();
     } catch (error) {
@@ -553,11 +859,15 @@ export function EvmBettingPanel({
     effectiveAddress,
     effectiveWalletClient,
     nativeDecimals,
+    nativeSymbol,
     priceInput,
     publicClient,
     refreshData,
     side,
     tradeFeeBps,
+    effectiveLifecycleMarket?.marketRef,
+    marketMeta?.marketKey,
+    duelId,
   ]);
 
 
@@ -585,6 +895,7 @@ export function EvmBettingPanel({
       );
       setLastClaimTx(tx);
       await publicClient?.waitForTransactionReceipt({ hash: tx });
+      setOptimisticPosition(null);
       setStatus(copy.claimComplete);
       await refreshData();
     } catch (error) {
@@ -633,32 +944,25 @@ export function EvmBettingPanel({
   const totalPool =
     (marketMeta?.totalAShares ?? 0n) + (marketMeta?.totalBShares ?? 0n);
   const selectedStake = side === "YES"
-    ? (position?.aStake ?? 0n)
-    : (position?.bStake ?? 0n);
+    ? (effectivePosition?.aStake ?? 0n)
+    : (effectivePosition?.bStake ?? 0n);
   const selectedShares = side === "YES"
-    ? (position?.aShares ?? 0n)
-    : (position?.bShares ?? 0n);
-  const claimableShares =
-    marketMeta?.status === "RESOLVED"
-      ? marketMeta.winner === "A"
-        ? (position?.aShares ?? 0n)
-        : marketMeta.winner === "B"
-          ? (position?.bShares ?? 0n)
-          : 0n
-      : marketMeta?.status === "CANCELLED"
-        ? (position?.aStake ?? 0n) + (position?.bStake ?? 0n)
-        : 0n;
-  const canClaim = claimableShares > 0n;
-  const marketOpen = marketMeta?.status === "OPEN";
-  const programsReady = Boolean(chainConfig && duelKeyHex && marketOpen);
-  const statusTone =
-    marketMeta?.status === "RESOLVED" || canClaim
-      ? "#86efac"
-      : marketMeta?.status === "LOCKED"
-        ? "#fcd34d"
-        : /failed|error/i.test(status)
-          ? "#fca5a5"
-          : "#93c5fd";
+    ? (effectivePosition?.aShares ?? 0n)
+    : (effectivePosition?.bShares ?? 0n);
+  const canClaim = uiState.canClaim;
+  const claimActionLabel =
+    uiState.claimKind === "LOSER_CLEANUP" && canClaim
+      ? copy.claimCleanupReady
+      : canClaim
+        ? copy.claimReady
+        : copy.claimLocked;
+  const claimHelpText =
+    uiState.claimKind === "LOSER_CLEANUP" && canClaim
+      ? copy.claimCleanupHelp
+      : copy.claimHelp;
+  const programsReady = Boolean(
+    chainConfig && duelKeyHex && uiState.canTrade,
+  );
   const e2eWalletDebug = isE2eMode
     ? [
       `key=${configuredHeadlessPrivateKey ? "yes" : "no"}`,
@@ -667,6 +971,27 @@ export function EvmBettingPanel({
       `wallet=${effectiveWalletClient ? "yes" : "no"}`,
       `addr=${headlessAccountAddress ?? "-"}`,
       `err=${e2eAccountResult.error ?? "-"}`,
+    ].join(" ")
+    : "";
+  const e2eLifecycleDebug = isE2eMode
+    ? [
+      `duel=${duelKeyHex ?? "-"}`,
+      `duelId=${duelId ?? "-"}`,
+      `life=${effectiveLifecycleMarket?.lifecycleStatus ?? "-"}`,
+      `winner=${effectiveLifecycleMarket?.winner ?? "-"}`,
+      `ref=${effectiveLifecycleMarket?.marketRef ?? "-"}`,
+      `meta=${marketMeta ? "yes" : "no"}`,
+      `metaStatus=${marketMeta?.status ?? "-"}`,
+      `metaWinner=${marketMeta?.winner ?? "-"}`,
+      `metaKey=${marketMeta?.marketKey ?? "-"}`,
+      `aShares=${effectivePosition?.aShares?.toString() ?? "0"}`,
+      `bShares=${effectivePosition?.bShares?.toString() ?? "0"}`,
+      `aStake=${effectivePosition?.aStake?.toString() ?? "0"}`,
+      `bStake=${effectivePosition?.bStake?.toString() ?? "0"}`,
+      `claim=${uiState.canClaim ? "yes" : "no"}`,
+      `claimKind=${uiState.claimKind}`,
+      `balance=${nativeBalance.toString()}`,
+      `refreshErr=${lastRefreshError ?? "-"}`,
     ].join(" ")
     : "";
 
@@ -972,7 +1297,7 @@ export function EvmBettingPanel({
               !canClaim,
             )}
           >
-            {canClaim ? copy.claimReady : copy.claimLocked}
+            {claimActionLabel}
           </button>
           <div
             style={{
@@ -981,10 +1306,13 @@ export function EvmBettingPanel({
               lineHeight: 1.45,
             }}
           >
-            {copy.claimHelp}
+            {claimHelpText}
           </div>
           {isE2eMode ? (
             <div data-testid="evm-wallet-debug">{e2eWalletDebug}</div>
+          ) : null}
+          {isE2eMode ? (
+            <div data-testid="evm-lifecycle-debug">{e2eLifecycleDebug}</div>
           ) : null}
         </div>
       </PredictionMarketPanel>

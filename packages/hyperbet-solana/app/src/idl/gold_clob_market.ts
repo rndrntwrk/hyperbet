@@ -215,6 +215,123 @@ export type GoldClobMarket = {
       "args": []
     },
     {
+      "name": "continueOrder",
+      "discriminator": [
+        52,
+        137,
+        158,
+        152,
+        162,
+        246,
+        203,
+        104
+      ],
+      "accounts": [
+        {
+          "name": "marketState",
+          "writable": true
+        },
+        {
+          "name": "duelState"
+        },
+        {
+          "name": "userBalance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  97,
+                  108,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "marketState"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "order",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  100,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "marketState"
+              },
+              {
+                "kind": "arg",
+                "path": "orderId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "restingLevel",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "marketState"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "orderId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "initializeConfig",
       "discriminator": [
         208,
@@ -528,6 +645,10 @@ export type GoldClobMarket = {
         {
           "name": "amount",
           "type": "u64"
+        },
+        {
+          "name": "orderBehavior",
+          "type": "u8"
         }
       ]
     },
@@ -781,76 +902,96 @@ export type GoldClobMarket = {
     },
     {
       "code": 6015,
+      "name": "invalidOrderBehavior",
+      "msg": "Order behavior must be GTC (0), IOC (1), or POST_ONLY (2)"
+    },
+    {
+      "code": 6016,
       "name": "invalidPrice",
       "msg": "Price must be between 1 and 999"
     },
     {
-      "code": 6016,
+      "code": 6017,
       "name": "invalidAmount",
       "msg": "Order amount must be greater than zero"
     },
     {
-      "code": 6017,
+      "code": 6018,
       "name": "invalidOrderId",
       "msg": "Order id does not match the next expected id"
     },
     {
-      "code": 6018,
+      "code": 6019,
+      "name": "postOnlyWouldCross",
+      "msg": "Post-only orders cannot cross the book"
+    },
+    {
+      "code": 6020,
       "name": "precisionError",
       "msg": "The precision implied by amount and price is invalid"
     },
     {
-      "code": 6019,
+      "code": 6021,
       "name": "costTooLow",
       "msg": "Order cost is too low"
     },
     {
-      "code": 6020,
+      "code": 6022,
       "name": "mathOverflow",
       "msg": "Math overflow"
     },
     {
-      "code": 6021,
+      "code": 6023,
       "name": "priceLevelMismatch",
       "msg": "The supplied price level does not match the order"
     },
     {
-      "code": 6022,
+      "code": 6024,
       "name": "orderSideMismatch",
       "msg": "The supplied order side does not match the stored order"
     },
     {
-      "code": 6023,
+      "code": 6025,
       "name": "orderPriceMismatch",
       "msg": "The supplied order price does not match the stored order"
     },
     {
-      "code": 6024,
+      "code": 6026,
       "name": "notOrderMaker",
       "msg": "Only the order maker can cancel this order"
     },
     {
-      "code": 6025,
+      "code": 6027,
       "name": "missingMatchAccounts",
       "msg": "Required maker match accounts were not supplied"
     },
     {
-      "code": 6026,
+      "code": 6028,
       "name": "missingTailOrder",
       "msg": "Required resting tail order account was not supplied"
     },
     {
-      "code": 6027,
+      "code": 6029,
       "name": "missingLinkedOrderAccount",
       "msg": "A linked prev/next order account is missing"
     },
     {
-      "code": 6028,
+      "code": 6030,
       "name": "invalidRemainingAccount",
       "msg": "Remaining account verification failed"
     },
     {
-      "code": 6029,
+      "code": 6031,
+      "name": "orderNotContinuable",
+      "msg": "Order does not require continuation"
+    },
+    {
+      "code": 6032,
+      "name": "nothingToContinue",
+      "msg": "No order remainder is left to continue"
+    },
+    {
+      "code": 6033,
       "name": "nothingToClaim",
       "msg": "Nothing to claim"
     }
@@ -943,6 +1084,57 @@ export type GoldClobMarket = {
             }
           },
           {
+            "name": "activeProposal",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingWinner",
+            "type": {
+              "defined": {
+                "name": "marketSide"
+              }
+            }
+          },
+          {
+            "name": "pendingSeed",
+            "type": "u64"
+          },
+          {
+            "name": "pendingResultHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingReplayHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pendingDuelEndTs",
+            "type": "i64"
+          },
+          {
+            "name": "pendingProposedAt",
+            "type": "i64"
+          },
+          {
+            "name": "pendingChallenged",
+            "type": "bool"
+          },
+          {
             "name": "metadataUri",
             "type": "string"
           },
@@ -966,6 +1158,12 @@ export type GoldClobMarket = {
           },
           {
             "name": "locked"
+          },
+          {
+            "name": "proposed"
+          },
+          {
+            "name": "challenged"
           },
           {
             "name": "resolved"
@@ -1072,6 +1270,18 @@ export type GoldClobMarket = {
             }
           },
           {
+            "name": "tradeTreasuryFeeBpsSnapshot",
+            "type": "u16"
+          },
+          {
+            "name": "tradeMarketMakerFeeBpsSnapshot",
+            "type": "u16"
+          },
+          {
+            "name": "winningsMarketMakerFeeBpsSnapshot",
+            "type": "u16"
+          },
+          {
             "name": "nextOrderId",
             "type": "u64"
           },
@@ -1158,6 +1368,10 @@ export type GoldClobMarket = {
             "type": "u16"
           },
           {
+            "name": "orderBehavior",
+            "type": "u8"
+          },
+          {
             "name": "maker",
             "type": "pubkey"
           },
@@ -1179,6 +1393,10 @@ export type GoldClobMarket = {
           },
           {
             "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "continuationPending",
             "type": "bool"
           },
           {

@@ -25,10 +25,16 @@ function requireString(value: string | undefined, label: string): string {
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const writeKey =
+    process.env.E2E_ARENA_WRITE_KEY?.trim() ||
+    process.env.ARENA_EXTERNAL_BET_WRITE_KEY?.trim() ||
+    process.env.VITE_ARENA_WRITE_KEY?.trim() ||
+    "";
   const response = await fetch(url, {
     ...init,
     headers: {
       "content-type": "application/json",
+      ...(writeKey ? { "x-arena-write-key": writeKey } : {}),
       ...(init?.headers || {}),
     },
   });
