@@ -880,13 +880,13 @@ describe("GoldClob", function () {
 
     await expect(
       clob.connect(traderA).claim(duel, MARKET_KIND_DUEL_WINNER),
-    ).to.be.revertedWith("nothing to claim");
+    ).to.be.revertedWithCustomError(clob, "NothingToClaim");
     await expectTxSuccess(
       clob.connect(traderB).claim(duel, MARKET_KIND_DUEL_WINNER),
     );
     await expect(
       clob.connect(traderB).claim(duel, MARKET_KIND_DUEL_WINNER),
-    ).to.be.revertedWith("nothing to claim");
+    ).to.be.revertedWithCustomError(clob, "NothingToClaim");
   });
 
   it("rejects claims before the market is settled", async function () {
@@ -993,7 +993,7 @@ describe("GoldClob", function () {
     expect(aBefore.bStake).to.equal(sellerStake);
     expect(bBefore.aStake).to.equal(buyerStake);
 
-    await oracle.connect(reporter).cancelDuel(duel, "cancelled");
+    await oracle.connect(admin).cancelDuel(duel, "cancelled");
     await clob
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);

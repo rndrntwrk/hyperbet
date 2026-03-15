@@ -34,7 +34,7 @@ record:
 | 09 | `enoomian/pm-09-solana-scenario-gates` | Complete | Yes | Validator-backed Solana exploit families now run through deterministic gate scenarios with canonical and matrix verification |
 | 10 | `enoomian/pm-10-cross-chain-e2e` | Complete | Yes | Cross-chain local E2E now covers full lifecycle, cancel/refund, and keeper restart recovery across Solana, BSC, and AVAX |
 | 11 | `enoomian/pm-11-ci-ops` | Complete | Yes | Prediction-market gates are enforced in CI, deploy envs fail closed, Base has a registry-only add-chain proof, and operator runbooks are in place |
-| 12 | `enoomian/pm-12-avax-canonicalization` | Complete | Yes | AVAX production semantics are now explicit and fail closed until canonical registry addresses exist |
+| 12 | `enoomian/pm-12-avax-canonicalization` | Complete | Yes | AVAX Fuji deployment truth is canonicalized; AVAX mainnet remains non-live until canonical mainnet addresses are committed |
 | 13 | `enoomian/pm-13-contract-ci-hardening` | Complete | Yes | EVM contract validation, proof, and security checks are promoted into stable CI workflow lanes |
 | 14 | `n/a` | In Progress | No | Manual staged live-proof rail is implemented for Solana and BSC, but the staged execution and artifact review are still outstanding |
 | 15 | `enoomian/pm-15-docs-hygiene-and-release-prep` | Complete | Yes | Release-facing docs are cleaned, reviewer handoff material is assembled, and sprint history reflects the merged post-sprint gates |
@@ -55,7 +55,7 @@ record:
   - execution still outstanding
 - Cross-chain E2E remains local-only by design until it is re-promoted as a
   stable required lane.
-- AVAX is still fail-closed and is not yet production-canonical.
+- AVAX is partially canonicalized: Fuji is canonicalized in-registry, while mainnet is intentionally non-live until canonical deployment is committed.
 
 ### Post-Sprint Hardening Already Merged
 
@@ -130,7 +130,7 @@ Today, the sprint base includes the following integrated work:
   - fast CI plus heavyweight prediction-market gates
   - verified install wrapper and env/deploy audit
   - deploy rail hardening without topology redesign
-  - AVAX fail-closed production semantics
+- AVAX mainnet-only fail-closed production semantics while Fuji is canonicalized
   - deployed-environment proof rail scaffolding
   - runbooks and release-prep documentation
 
@@ -165,7 +165,7 @@ The dominant open risks are:
 
 - privileged resolution truth
 - incomplete protocol order semantics and self-trade prevention
-- non-canonical AVAX production state
+- non-canonical AVAX mainnet production state
 - non-durable keeper/MM production storage
 - unexecuted deployed-environment proof
 
@@ -552,7 +552,7 @@ Known remaining risk:
 Delivered:
 
 - Added explicit shared chain-registry helpers for EVM canonical readiness and missing canonical address reporting.
-- Marked AVAX mainnet and Fuji as incomplete until real canonical addresses are committed, instead of letting blank production values pass implicitly.
+- Marked AVAX mainnet as intentionally non-live until canonical mainnet addresses are committed, while Fuji deployment truth is now canonicalized.
 - Added fail-closed AVAX app, keeper, and bot env-audit semantics so production-like AVAX paths reject partial config.
 - Updated CI/deploy assumptions and AVAX-facing docs/examples so AVAX is treated as local/testnet capable but intentionally production-disabled until canonical registry truth exists.
 - Disabled AVAX by default in the market-maker bot example env so copied configs do not accidentally opt into a non-canonical production lane.

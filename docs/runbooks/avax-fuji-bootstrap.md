@@ -3,6 +3,9 @@
 This runbook is for maintaining a fresh, tradable AVAX Fuji market for local and
 testnet validation.
 
+This workflow is Fuji-only sanity smoke and is not equivalent to production AVAX
+canonicalization or launch proof completion.
+
 ## Scope
 
 - validation of keeper/app/contract wiring on Fuji for the prediction-market path
@@ -17,6 +20,7 @@ testnet validation.
   - canary trader (`CANARY_PRIVATE_KEY`)
   - matcher trader (`MATCHER_PRIVATE_KEY`, required for partial/full-match scenarios)
 - reporter or operator key must hold `MARKET_OPERATOR_ROLE` on the Fuji GoldClob contract
+- the script validates this role contract-side before creating markets
 - keeper running at `http://127.0.0.1:5555`
 - script is run from the repo root
 
@@ -48,14 +52,16 @@ defaults, pass either:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
+scenario=unmatched-gtc
 AVAX_FUJI_RPC=https://avax-fuji.g.alchemy.com/... \
 AVAX_DUEL_ORACLE_ADDRESS=0x... \
 AVAX_GOLD_CLOB_ADDRESS=0x... \
+AVAX_FUJI_BOOTSTRAP_SCENARIO=$scenario \
 KEEPER_URL=http://127.0.0.1:5555 \
 REPORTER_PRIVATE_KEY=0x... \
 MARKET_OPERATOR_PRIVATE_KEY=0x... \
 CANARY_PRIVATE_KEY=0x... \
-node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
+node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs | tee "./avax-fuji-bootstrap-${scenario}.json"
 ```
 
 Use `.env` for optional publish key and scenario:
@@ -70,13 +76,15 @@ node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
 3. If testing partial/full matching cleanup paths, set scenario keys explicitly:
 
 ```bash
+scenario=partial-match-gtc
 AVAX_FUJI_BOOTSTRAP_SCENARIO=partial-match-gtc \
 MATCHER_PRIVATE_KEY=0x... \
-node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
+node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs | tee "./avax-fuji-bootstrap-${scenario}.json"
 
+scenario=full-match-gtc
 AVAX_FUJI_BOOTSTRAP_SCENARIO=full-match-gtc \
 MATCHER_PRIVATE_KEY=0x... \
-node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
+node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs | tee "./avax-fuji-bootstrap-${scenario}.json"
 ```
 
 4. Confirm output includes at least:
@@ -119,3 +127,14 @@ node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
 - if `openTs/closeTs` windows are invalid, rerun with a fresh `duelKey` (script generates new key automatically on each run)
 - if publish mode fails unexpectedly, verify `HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY` for keyed flow or rerun without the key for unkeyed flow
 - if cleanup fails (`order active` or non-zero position), rerun after a fresh market cycle and verify role + balances for involved wallets
+
+## Evidence Capture
+
+- Save final stdout JSON for each scenario:
+  - `avax-fuji-bootstrap-unmatched-gtc.json`
+  - `avax-fuji-bootstrap-partial-match-gtc.json`
+  - `avax-fuji-bootstrap-full-match-gtc.json`
+- Keep proof packets with:
+  - tx hashes for `upsertDuel`, `createMarketForDuel`, `placeOrder`, `cancelDuel`, `syncMarketFromOracle`, and optional `cancelOrder`/`claim`
+  - lifecycle snapshots for `OPEN -> CANCELLED`
+  - final `order`/`position` assertions proving cleanup
