@@ -502,6 +502,34 @@ const parsers: {
   avax: { enabled: false, lastSuccessAt: null, lastError: null, snapshot: null },
 };
 
+const bscRpcUrl = (
+  process.env.BSC_RPC_URL ||
+  process.env.BSC_TESTNET_RPC ||
+  ""
+).trim();
+const bscContractAddress = (
+  process.env.BSC_GOLD_CLOB_ADDRESS ||
+  process.env.CLOB_CONTRACT_ADDRESS_BSC ||
+  ""
+).trim();
+const baseRpcUrl = (
+  process.env.BASE_RPC_URL ||
+  process.env.BASE_SEPOLIA_RPC ||
+  ""
+).trim();
+const baseContractAddress = (
+  process.env.BASE_GOLD_CLOB_ADDRESS ||
+  process.env.CLOB_CONTRACT_ADDRESS_BASE ||
+  ""
+).trim();
+const bscClient =
+  bscRpcUrl && bscContractAddress
+    ? createPublicClient({ transport: http(bscRpcUrl) })
+    : null;
+const baseClient =
+  baseRpcUrl && baseContractAddress
+    ? createPublicClient({ transport: http(baseRpcUrl) })
+    : null;
 const avaxRpcUrl = (
   process.env.AVAX_RPC_URL ||
   process.env.AVAX_FUJI_RPC ||
@@ -522,6 +550,8 @@ const avaxClient =
     ? createPublicClient({ transport: http(avaxRpcUrl) })
     : null;
 const EVM_RPC_PROXY_TARGETS = {
+  bsc: bscRpcUrl,
+  base: baseRpcUrl,
   avax: avaxRpcUrl,
 } as const;
 type SupportedEvmRpcChain = keyof typeof EVM_RPC_PROXY_TARGETS;
@@ -1644,6 +1674,26 @@ async function authorizeExternalBetRecord(
       avaxClient,
       avaxContractAddress,
       "avax",
+      bettorWallet,
+      txSignature,
+      expected,
+    );
+  }
+  if (chainKey === "bsc") {
+    return verifyEvmRecordedBet(
+      bscClient,
+      bscContractAddress,
+      "bsc",
+      bettorWallet,
+      txSignature,
+      expected,
+    );
+  }
+  if (chainKey === "base") {
+    return verifyEvmRecordedBet(
+      baseClient,
+      baseContractAddress,
+      "base",
       bettorWallet,
       txSignature,
       expected,
