@@ -19,12 +19,6 @@ const ROOT = path.resolve(__dirname, "../../..");
 const DEFAULT_RPC = "https://avax-fuji.g.alchemy.com/v2/h85R-i8JMJTM3RRVgxLza";
 const DEFAULT_ORACLE = "0x2ab7C67D6E3c0cb2b84AA8d6f26475FDaDE0a920";
 const DEFAULT_GOLD_CLOB = "0xBc25103CfE182B67523c3159b6e3f5804dC4fA94";
-const DEFAULT_REPORTER_KEY =
-  "0x6ad8c6b2012771510d278be7f952dfd146f616e586c8f18ce047d3bf451b07c6";
-const DEFAULT_OPERATOR_KEY =
-  "0x6ad8c6b2012771510d278be7f952dfd146f616e586c8f18ce047d3bf451b07c6";
-const DEFAULT_CANARY_KEY =
-  "0x7614baa6b67069e1c9746b951aa093d3310e981782f88138082a968b34df8f79";
 const DEFAULT_KEEPER_URL = "http://127.0.0.1:5555";
 
 const MARKET_KIND_DUEL_WINNER = 0;
@@ -51,6 +45,14 @@ const chain = {
 function optionalEnv(name, fallback) {
   const value = process.env[name]?.trim();
   return value && value.length ? value : fallback;
+}
+
+function requiredEnv(name) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`required environment variable missing: ${name}`);
+  }
+  return value;
 }
 
 function readFirstExistingJson(candidates) {
@@ -281,12 +283,9 @@ async function main() {
   );
   const keeperUrl = optionalEnv("KEEPER_URL", DEFAULT_KEEPER_URL).replace(/\/$/, "");
 
-  const reporterKey = optionalEnv("REPORTER_PRIVATE_KEY", DEFAULT_REPORTER_KEY);
-  const operatorKey = optionalEnv("MARKET_OPERATOR_PRIVATE_KEY", DEFAULT_OPERATOR_KEY);
-  const canaryKey = optionalEnv(
-    "CANARY_PRIVATE_KEY",
-    optionalEnv("VITE_EVM_PRIVATE_KEY", DEFAULT_CANARY_KEY),
-  );
+  const reporterKey = requiredEnv("REPORTER_PRIVATE_KEY");
+  const operatorKey = requiredEnv("MARKET_OPERATOR_PRIVATE_KEY");
+  const canaryKey = requiredEnv("CANARY_PRIVATE_KEY");
 
   chain.rpcUrls.default.http = [rpcUrl];
   chain.rpcUrls.public.http = [rpcUrl];

@@ -34,6 +34,7 @@ Set these for the bootstrap run:
 
 Keep these secrets in a local gitignored env file (for example
 `packages/hyperbet-avax/keeper/.env.local`) and source them when invoking commands.
+All private keys are required for this path and must never be committed.
 
 ## Bootstrap Sequence
 
