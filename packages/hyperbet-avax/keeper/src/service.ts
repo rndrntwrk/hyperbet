@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -32,7 +31,7 @@ import {
   type KeeperBotHealthSnapshot,
   type KeeperMarketHealthRecord,
 } from "@hyperbet/mm-core";
-import { PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { createPublicClient, http, type Address } from "viem";
 
 import {
@@ -69,10 +68,18 @@ import {
   normalizePointsWalletInput,
 } from "./walletKeys";
 
+interface StreamCycleData {
+  [key: string]: unknown;
+}
+
+interface LeaderboardEntry {
+  [key: string]: unknown;
+}
+
 type StreamState = {
   type: "STREAMING_STATE_UPDATE";
-  cycle: Record<string, any>;
-  leaderboard: any[];
+  cycle: StreamCycleData;
+  leaderboard: LeaderboardEntry[];
   cameraTarget: string | null;
   seq: number;
   emittedAt: number;
@@ -1702,16 +1709,16 @@ async function authorizeExternalBetRecord(
   return null;
 }
 
-function toStreamState(payload: any): StreamState | null {
+function toStreamState(payload: unknown): StreamState | null {
   if (!payload || typeof payload !== "object") return null;
 
-  const candidate = payload as Record<string, any>;
+  const candidate = payload as Record<string, unknown>;
   const cycle = candidate.cycle;
   if (!cycle || typeof cycle !== "object") return null;
 
   return {
     type: "STREAMING_STATE_UPDATE",
-    cycle: cycle as Record<string, any>,
+    cycle: cycle as StreamCycleData,
     leaderboard: Array.isArray(candidate.leaderboard)
       ? candidate.leaderboard
       : [],
@@ -1909,11 +1916,21 @@ const solanaKeyRef =
   process.env.MARKET_MAKER_KEYPAIR ||
   "";
 
+interface AnchorAccountClient {
+  fetchNullable(address: PublicKey): Promise<Record<string, unknown> | null>;
+  fetch(address: PublicKey): Promise<Record<string, unknown>>;
+}
+
+interface TypedAnchorProgram {
+  programId: PublicKey;
+  account: Record<string, AnchorAccountClient>;
+}
+
 let solanaCtx: {
-  connection: any;
-  fightProgram: any;
-  marketProgram: any;
-  marketProgramId: any;
+  connection: Connection;
+  fightProgram: TypedAnchorProgram;
+  marketProgram: TypedAnchorProgram;
+  marketProgramId: PublicKey;
 } | null = null;
 
 if (solanaKeyRef) {
@@ -2010,8 +2027,9 @@ async function pollSolanaSnapshot(): Promise<void> {
           )
         : null;
     const recentSignature =
-      recentSignatures.find((entry: any) => entry?.signature)?.signature ??
-      null;
+      recentSignatures.find(
+        (entry: { signature?: string }) => entry?.signature,
+      )?.signature ?? null;
 
     parsers.solana.snapshot = {
       rpc: sanitizeUrlForStatus(solanaCtx.connection.rpcEndpoint),
@@ -2088,7 +2106,7 @@ async function pollEvmSnapshot(
       abi: GOLD_CLOB_READ_ABI,
       functionName: "getMarket",
       args: [normalizedDuelKey, 0],
-    })) as any;
+    })) as Record<string, unknown>;
 
     const status = Number(market?.status ?? 0);
     const winner = Number(market?.winner ?? 0);
@@ -2102,7 +2120,7 @@ async function pollEvmSnapshot(
           abi: DUEL_OUTCOME_READ_ABI,
           functionName: "getDuel",
           args: [normalizedDuelKey],
-        })) as any;
+        })) as Record<string, unknown>;
         const activeProposalId =
           typeof duel?.activeProposalId === "string"
             ? duel.activeProposalId
@@ -2112,18 +2130,18 @@ async function pollEvmSnapshot(
           abi: DUEL_OUTCOME_READ_ABI,
           functionName: "disputeWindowSeconds",
         });
-        let proposal: any = null;
+        let proposal: Record<string, unknown> | null = null;
         if (
           typeof activeProposalId === "string" &&
           /^0x[0-9a-fA-F]{64}$/.test(activeProposalId) &&
           activeProposalId.toLowerCase() !== ZERO_HEX_32
         ) {
-          proposal = await client.readContract({
+          proposal = (await client.readContract({
             address: duelOracleAddress as Address,
             abi: DUEL_OUTCOME_READ_ABI,
             functionName: "proposals",
             args: [activeProposalId as `0x${string}`],
-          });
+          })) as Record<string, unknown>;
         }
         currentDuel = {
           status: Number(duel?.status ?? 0),
@@ -2318,9 +2336,9 @@ function multiplierResponse(wallet: string): Record<string, any> {
 }
 
 async function handleBetRecord(req: Request): Promise<Response> {
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -2497,9 +2515,9 @@ async function handleInviteRedeem(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -2592,9 +2610,9 @@ async function handleWalletLink(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = (await req.json()) as Record<string, unknown>;
   } catch {
     return jsonResponse(req, { error: "Invalid JSON body" }, 400);
   }
@@ -2940,7 +2958,7 @@ async function handleItemManifest(
     // Fall back below.
   }
 
-  const fallback: any[] = [];
+  const fallback: unknown[] = [];
   manifestCache.set(fileName, fallback);
   return jsonResponse(req, fallback, 200, {
     "cache-control": "public, max-age=60, stale-while-revalidate=60",
@@ -2952,7 +2970,7 @@ async function handleStreamPublish(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized stream publish key" }, 401);
   }
 
-  let payload: any;
+  let payload: unknown;
   try {
     payload = await req.json();
   } catch {

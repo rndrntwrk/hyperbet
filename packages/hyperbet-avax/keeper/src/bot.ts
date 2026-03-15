@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash } from "node:crypto";
 import BN from "bn.js";
 import {
+  Connection,
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -310,7 +310,7 @@ function isRpcConnectivityError(error: unknown): boolean {
 }
 
 async function waitForTxBySignature(
-  connection: any,
+  connection: Connection,
   signature: string,
   timeoutMs = 90_000,
 ): Promise<boolean> {
@@ -331,7 +331,7 @@ async function waitForTxBySignature(
 
 async function runWithRecovery<T>(
   fn: () => Promise<T>,
-  connection: any,
+  connection: Connection,
 ): Promise<T> {
   try {
     return await fn();
@@ -500,8 +500,12 @@ const fightProgram = fightOracle as Program<FightOracle>;
 const marketProgram = goldClobMarket as Program<GoldClobMarket>;
 const perpsProgram = goldPerpsMarket as Program<GoldPerpsMarket>;
 
-function hasProgramMethod(program: any, method: string): boolean {
-  return typeof program?.methods?.[method] === "function";
+function hasProgramMethod(program: unknown, method: string): boolean {
+  return (
+    typeof (
+      program as { methods?: Record<string, unknown> } | null
+    )?.methods?.[method] === "function"
+  );
 }
 
 const RATINGS_FILE = path.resolve(__dirname, "agent_ratings.json");
@@ -2011,7 +2015,7 @@ async function upsertDuelLifecycle(
           new BN(betCloseTs),
           new BN(duelStartTs),
           buildDuelMetadata(data),
-          duelStatusEnum(requestedStatus) as any,
+          duelStatusEnum(requestedStatus) as unknown,
         )
         .accountsPartial({
           reporter: botKeypair.publicKey,
@@ -2889,7 +2893,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
       fightProgram.methods
         .proposeResult(
           Array.from(duelKey),
-          winnerSide === "A" ? ({ a: {} } as any) : ({ b: {} } as any),
+          winnerSide === "A" ? ({ a: {} } as unknown) : ({ b: {} } as unknown),
           new BN(resolvedSeed),
           Array.from(Buffer.from(replayHashHex, "hex")),
           buildResultHash(
