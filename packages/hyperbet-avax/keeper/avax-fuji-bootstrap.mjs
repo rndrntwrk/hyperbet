@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 
 import {
   createPublicClient,
   createWalletClient,
   http,
+  parseEventLogs,
   parseUnits,
   stringToHex,
   keccak256,
@@ -24,7 +25,12 @@ const DEFAULT_KEEPER_URL = "http://127.0.0.1:5555";
 const MARKET_KIND_DUEL_WINNER = 0;
 const EVM_STATUS_BETTING_OPEN = 2;
 const SIDE_SELL = 2;
+const SIDE_BUY = 1;
 const ORDER_FLAG_GTC = 0x01;
+const SCENARIO_UNMATCHED = "unmatched-gtc";
+const SCENARIO_PARTIAL_MATCH = "partial-match-gtc";
+const SCENARIO_FULL_MATCH = "full-match-gtc";
+const DEFAULT_MATCHER_AMOUNT_MODE = "unmatched-gtc";
 const PRICE = 999;
 const AMOUNT = parseUnits("0.001", 18);
 
@@ -42,9 +48,54 @@ const chain = {
   },
 };
 
+function hasArg(name) {
+  return process.argv.includes(name);
+}
+
+function normalizeOptionalBoolean(value) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function allowDefaults() {
+  return hasArg("--allow-defaults") || normalizeOptionalBoolean(process.env.AVAX_FUJI_ALLOW_DEFAULTS);
+}
+
+function parseScenario() {
+  const raw = (process.env.AVAX_FUJI_BOOTSTRAP_SCENARIO || DEFAULT_MATCHER_AMOUNT_MODE).trim();
+  if (
+    raw !== SCENARIO_UNMATCHED &&
+    raw !== SCENARIO_PARTIAL_MATCH &&
+    raw !== SCENARIO_FULL_MATCH
+  ) {
+    throw new Error(
+      `invalid AVAX_FUJI_BOOTSTRAP_SCENARIO="${raw}", expected one of ${SCENARIO_UNMATCHED}, ${SCENARIO_PARTIAL_MATCH}, ${SCENARIO_FULL_MATCH}`,
+    );
+  }
+  return raw;
+}
+
 function optionalEnv(name, fallback) {
   const value = process.env[name]?.trim();
   return value && value.length ? value : fallback;
+}
+
+function requiredEnvWithDefaults(names, fallback, allowDefaultValues) {
+  const candidateNames = Array.isArray(names) ? names : [names];
+  for (const name of candidateNames) {
+    const value = optionalEnv(name);
+    if (value) {
+      return value;
+    }
+  }
+
+  if (allowDefaultValues && fallback) {
+    return fallback;
+  }
+
+  const label = candidateNames.join(" or ");
+  const defaultHint = fallback ? " (or enable --allow-defaults / AVAX_FUJI_ALLOW_DEFAULTS)" : "";
+  throw new Error(`required environment variable missing: ${label}${defaultHint}`);
 }
 
 function requiredEnv(name) {
@@ -97,9 +148,37 @@ function quoteCost(side, price, amount) {
   return (amount * component) / 1000n;
 }
 
+function isZeroTupleValue(value) {
+  return value === 0n || value === 0;
+}
+
 function isZeroPosition(position) {
   return position.every((value) => value === 0n);
 }
+
+function tupleValue(record, name, index) {
+  if (record && typeof record === "object") {
+    if (Array.isArray(record)) {
+      return record[index];
+    }
+    if (name in record) {
+      return record[name];
+    }
+    const fallback = record[index];
+    return fallback;
+  }
+  return undefined;
+}
+
+function buildPublishHeaders(publishKey) {
+  const headers = { "content-type": "application/json" };
+  if (publishKey) {
+    headers["x-arena-write-key"] = publishKey;
+  }
+  return headers;
+}
+
+export { buildPublishHeaders, publishState };
 
 async function readMarketPosition(publicClient, abi, clobAddress, marketKey, traderAddress) {
   const position = await publicClient.readContract({
@@ -113,6 +192,53 @@ async function readMarketPosition(publicClient, abi, clobAddress, marketKey, tra
     raw: position,
     hasResidual: !isZeroPosition(position),
   };
+}
+
+async function readOrderState(publicClient, abi, clobAddress, marketKey, orderId) {
+  const order = await publicClient.readContract({
+    address: clobAddress,
+    abi,
+    functionName: "orders",
+    args: [marketKey, orderId],
+  });
+
+  return {
+    raw: order,
+    active: Boolean(tupleValue(order, "active", 8)),
+    id: tupleValue(order, "id", 0) ?? null,
+    filled: tupleValue(order, "filled", 5) ?? null,
+    amount: tupleValue(order, "amount", 4) ?? null,
+    side: tupleValue(order, "side", 1) ?? null,
+    maker: tupleValue(order, "maker", 3) ?? null,
+    isEmpty: Boolean(
+      isZeroTupleValue(tupleValue(order, "id", 0)) &&
+        isZeroTupleValue(tupleValue(order, "amount", 4)),
+    ),
+  };
+}
+
+function extractPlacedOrderId({
+  receipt,
+  abi,
+  marketKey,
+}) {
+  try {
+    const events = parseEventLogs({ abi, logs: receipt.logs });
+    for (const event of events) {
+      if (event.eventName !== "OrderPlaced") {
+        continue;
+      }
+      if (
+        (event.args.marketKey || "").toLowerCase() === marketKey.toLowerCase() &&
+        event.args.orderId != null
+      ) {
+        return event.args.orderId;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 async function pickMarketOperatorClient({
@@ -233,21 +359,22 @@ async function publishState(keeps, duelId, duelKeyHex) {
     cameraTarget: null,
   };
 
+  const publishHeaders = buildPublishHeaders(keeps.publishKey);
   await requestJson(`${keeps.keeperUrl}/api/streaming/state/publish`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: publishHeaders,
     body: JSON.stringify(payload),
   });
 }
 
-async function waitForOpen(keeps, duelKeyHex) {
+async function waitForMarketLifecycle(keeps, duelKeyHex, lifecycleStatus) {
   for (let i = 0; i < 40; i += 1) {
     const state = await requestJson(`${keeps.keeperUrl}/api/arena/prediction-markets/active`);
     const target = (state.markets || []).find(
       (entry) =>
         entry.chainKey === "avax" &&
         (entry.duelKey || "").toLowerCase() === duelKeyHex &&
-        entry.lifecycleStatus === "OPEN",
+        entry.lifecycleStatus === lifecycleStatus,
     );
     const sample = (state.markets || [])
       .filter((entry) => entry.chainKey === "avax")
@@ -262,7 +389,7 @@ async function waitForOpen(keeps, duelKeyHex) {
     }
     await sleep(2000);
   }
-  throw new Error(`timeout waiting for OPEN avax market for duel ${duelKeyHex}`);
+  throw new Error(`timeout waiting for ${lifecycleStatus} avax market for duel ${duelKeyHex}`);
 }
 
 async function waitForTx(client, hash, label) {
@@ -274,18 +401,51 @@ async function waitForTx(client, hash, label) {
 }
 
 async function main() {
-  const rpcUrl = optionalEnv("AVAX_FUJI_RPC", optionalEnv("AVAX_RPC_URL", DEFAULT_RPC));
+  const permitDefaults = allowDefaults();
+  const rpcUrl = requiredEnvWithDefaults(
+    ["AVAX_FUJI_RPC", "AVAX_RPC_URL"],
+    permitDefaults ? DEFAULT_RPC : null,
+    permitDefaults,
+  );
   const oracleAddress = normalizeAddress(
-    optionalEnv("AVAX_DUEL_ORACLE_ADDRESS", DEFAULT_ORACLE),
+    requiredEnvWithDefaults(
+      "AVAX_DUEL_ORACLE_ADDRESS",
+      permitDefaults ? DEFAULT_ORACLE : null,
+      permitDefaults,
+    ),
   );
   const goldClobAddress = normalizeAddress(
-    optionalEnv("AVAX_GOLD_CLOB_ADDRESS", DEFAULT_GOLD_CLOB),
+    requiredEnvWithDefaults(
+      "AVAX_GOLD_CLOB_ADDRESS",
+      permitDefaults ? DEFAULT_GOLD_CLOB : null,
+      permitDefaults,
+    ),
   );
-  const keeperUrl = optionalEnv("KEEPER_URL", DEFAULT_KEEPER_URL).replace(/\/$/, "");
+  const keeperUrl = requiredEnvWithDefaults(
+    "KEEPER_URL",
+    permitDefaults ? DEFAULT_KEEPER_URL : null,
+    permitDefaults,
+  ).replace(/\/$/, "");
+
+  const publishKey = optionalEnv("HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY");
+  const publishMode = publishKey ? "keyed" : "unkeyed";
+  const scenario = parseScenario();
+  const scenarioMatchAmount =
+    scenario === SCENARIO_PARTIAL_MATCH ? AMOUNT / 2n : scenario === SCENARIO_FULL_MATCH ? AMOUNT : 0n;
 
   const reporterKey = requiredEnv("REPORTER_PRIVATE_KEY");
   const operatorKey = requiredEnv("MARKET_OPERATOR_PRIVATE_KEY");
   const canaryKey = requiredEnv("CANARY_PRIVATE_KEY");
+  const matchingTraderKey =
+    scenario === SCENARIO_UNMATCHED
+      ? null
+      : (optionalEnv("MATCHER_PRIVATE_KEY") || optionalEnv("AVAX_MATCHING_TRADER_PRIVATE_KEY"));
+  const matcherKey = matchingTraderKey;
+  if ((scenario === SCENARIO_PARTIAL_MATCH || scenario === SCENARIO_FULL_MATCH) && !matcherKey) {
+    throw new Error(
+      `missing environment variable MATCHER_PRIVATE_KEY or AVAX_MATCHING_TRADER_PRIVATE_KEY for scenario=${scenario}`,
+    );
+  }
 
   chain.rpcUrls.default.http = [rpcUrl];
   chain.rpcUrls.public.http = [rpcUrl];
@@ -310,6 +470,15 @@ async function main() {
     chain,
     transport: http(rpcUrl),
   });
+  const matcherClient =
+    matcherKey != null ? createWalletClient({
+      account: privateKeyToAccount(normalizePrivateKey(matcherKey)),
+      chain,
+      transport: http(rpcUrl),
+    }) : null;
+  if (matcherClient && matcherClient.account.address.toLowerCase() === canary.address.toLowerCase()) {
+    throw new Error("matching trader must be different from canary account");
+  }
 
   const block = await publicClient.getBlock({ blockTag: "latest" });
   const openTs = block.timestamp - 15n;
@@ -323,7 +492,10 @@ async function main() {
   console.log(`using oracle=${oracleAddress}`);
   console.log(`using clob=${goldClobAddress}`);
   console.log(`using keeper=${keeperUrl}`);
+  console.log(`publishMode=${publishMode}`);
+  console.log(`scenario=${scenario}`);
   console.log(`using duel=${duelKey}`);
+  console.log(`matchingTrader=${matcherClient?.account?.address ?? "none"}`);
 
   const balances = {
     reporter: await publicClient.getBalance({ address: reporter.address }),
@@ -376,9 +548,9 @@ async function main() {
   });
   console.log("marketKey", marketKey);
 
-  await publishState({ keeperUrl }, duelId, duelKeyHex);
+  await publishState({ keeperUrl, publishKey }, duelId, duelKeyHex);
 
-  const open = await waitForOpen({ keeperUrl }, duelKeyHex);
+  const open = await waitForMarketLifecycle({ keeperUrl }, duelKeyHex, "OPEN");
   console.log("market is OPEN in keeper", {
     lifecycle: open.target.lifecycleStatus,
     marketRef: open.marketRef,
@@ -408,6 +580,55 @@ async function main() {
   });
   await waitForTx(publicClient, placeTx, "placeOrder");
 
+  const placeReceipt = await publicClient.getTransactionReceipt({ hash: placeTx });
+  let placedOrderId = extractPlacedOrderId({
+    receipt: placeReceipt,
+    abi: goldClobAbi,
+    marketKey,
+  });
+  if (!placedOrderId) {
+    const market = await publicClient.readContract({
+      address: goldClobAddress,
+      abi: goldClobAbi,
+      functionName: "getMarket",
+      args: [duelKey, MARKET_KIND_DUEL_WINNER],
+    });
+    const nextOrderId = tupleValue(market, "nextOrderId", 7);
+    if (!nextOrderId || nextOrderId <= 0n) {
+      throw new Error("could not resolve placed order id");
+    }
+    placedOrderId = nextOrderId - 1n;
+  }
+
+  const preCancelOrderState = await readOrderState(publicClient, goldClobAbi, goldClobAddress, marketKey, placedOrderId);
+  const preCleanupState = {
+    order: {
+      id: preCancelOrderState.id?.toString?.() || null,
+      active: preCancelOrderState.active,
+      filled: preCancelOrderState.filled?.toString?.() || null,
+      amount: preCancelOrderState.amount?.toString?.() || null,
+      side: preCancelOrderState.side?.toString?.() || null,
+      maker: preCancelOrderState.maker || null,
+      raw: preCancelOrderState.raw,
+    },
+  };
+
+  let matchOrderTx = null;
+  if (scenario !== SCENARIO_UNMATCHED) {
+    const matcherCost = quoteCost(SIDE_BUY, PRICE, scenarioMatchAmount);
+    const matcherFees = (matcherCost * feeBps) / 10_000n;
+    const matcherValue = matcherCost + matcherFees;
+    const matchTx = await matcherClient.writeContract({
+      address: goldClobAddress,
+      abi: goldClobAbi,
+      functionName: "placeOrder",
+      args: [duelKey, MARKET_KIND_DUEL_WINNER, SIDE_BUY, PRICE, scenarioMatchAmount, ORDER_FLAG_GTC],
+      value: matcherValue,
+    });
+    await waitForTx(publicClient, matchTx, `match-${scenario}`);
+    matchOrderTx = matchTx;
+  }
+
   const cancelTx = await reporterClient.writeContract({
     address: oracleAddress,
     abi: oracleAbi,
@@ -423,8 +644,29 @@ async function main() {
     args: [duelKey, MARKET_KIND_DUEL_WINNER],
   });
   await waitForTx(publicClient, syncTx, "syncMarketFromOracle");
+  const cancelledState = await waitForMarketLifecycle({ keeperUrl }, duelKeyHex, "CANCELLED");
 
-  const preClaimState = await readMarketPosition(
+  const canaryOrderStateBeforeClaim = await readOrderState(
+    publicClient,
+    goldClobAbi,
+    goldClobAddress,
+    marketKey,
+    placedOrderId,
+  );
+
+  let cancelOrderTx = null;
+  if (canaryOrderStateBeforeClaim.active) {
+    const cancelOrder = await canaryClient.writeContract({
+      address: goldClobAddress,
+      abi: goldClobAbi,
+      functionName: "cancelOrder",
+      args: [duelKey, MARKET_KIND_DUEL_WINNER, placedOrderId],
+    });
+    await waitForTx(publicClient, cancelOrder, "cancelOrder");
+    cancelOrderTx = cancelOrder;
+  }
+
+  let preClaimState = await readMarketPosition(
     publicClient,
     goldClobAbi,
     goldClobAddress,
@@ -446,7 +688,7 @@ async function main() {
     });
     await waitForTx(publicClient, claimTx, "claim");
   } else {
-    console.log("nothing to claim expected for this scenario; skipping claim call");
+    console.log("skip claim because canary position is already zero");
   }
 
   const finalPos = await readMarketPosition(
@@ -456,10 +698,33 @@ async function main() {
     marketKey,
     canary.address,
   );
+
+  const finalOrder = await readOrderState(publicClient, goldClobAbi, goldClobAddress, marketKey, placedOrderId);
+  const finalState = {
+    order: {
+      id: finalOrder.id?.toString?.() || null,
+      active: finalOrder.active,
+      filled: finalOrder.filled?.toString?.() || null,
+      amount: finalOrder.amount?.toString?.() || null,
+      side: finalOrder.side?.toString?.() || null,
+      maker: finalOrder.maker || null,
+      raw: finalOrder.raw,
+    },
+    position: {
+      raw: finalPos.raw.map((value) => value.toString()),
+      hasResidual: finalPos.hasResidual,
+    },
+  };
+  if (finalOrder.active) {
+    throw new Error(`order cleanup failed: orderId ${String(placedOrderId)} still active`);
+  }
   if (finalPos.hasResidual) {
     throw new Error(
       `position not cleared after cleanup: ${finalPos.raw.map((value) => value.toString()).join(":")}`,
     );
+  }
+  if (cancelledState.target.lifecycleStatus !== "CANCELLED") {
+    throw new Error(`cleanup failed: keeper lifecycle is ${cancelledState.target.lifecycleStatus}`);
   }
 
   console.log(
@@ -467,12 +732,29 @@ async function main() {
       {
         duelId,
         duelKey,
+        scenario,
+        publishMode,
+        orderId: placedOrderId.toString(),
+        marketKey,
+        preCancelOrderState: preCleanupState,
+        preClaimState: {
+          order: canaryOrderStateBeforeClaim.raw,
+          position: preClaimState.raw.map((value) => value.toString()),
+          hasResidual: preClaimState.hasResidual,
+        },
         upsertTx,
         createTx,
         placeTx,
+        matchOrderTx,
         cancelTx,
         syncTx,
+        keeperLifecycle: {
+          open: open.target.lifecycleStatus,
+          cancelled: cancelledState.target.lifecycleStatus,
+        },
+        cancelOrderTx,
         claimTx,
+        finalState,
       },
       null,
       2,
@@ -480,7 +762,9 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

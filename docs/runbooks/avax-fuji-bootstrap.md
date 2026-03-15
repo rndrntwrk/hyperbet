@@ -5,45 +5,50 @@ testnet validation.
 
 ## Scope
 
-- local validation of keeper/app/contract wiring on Fuji
-- manual smoke path for an open betting market
-- repeatable startup and cleanup sequence before operator UI checks
+- validation of keeper/app/contract wiring on Fuji for the prediction-market path
+- smoke workflow for a non-terminal open market and deterministic cleanup
+- evidence bundle for proof-facing `avax-fuji-bootstrap` runs
 
-## Prerequisites
+## Preconditions
 
 - funded Fuji wallets for:
-  - reporter (oracle writer)
-  - market operator (market creation/keeper controls)
-  - canary trader (UI/market making smoke)
-  - market operator key must have `MARKET_OPERATOR_ROLE` on the Fuji GoldClob contract
-- AVAX Fuji RPC URL
-- local keeper running at `http://127.0.0.1:5555`
-- scripts/dependencies available from repo root
+  - reporter (`REPORTER_PRIVATE_KEY`)
+  - market operator (`MARKET_OPERATOR_PRIVATE_KEY`)
+  - canary trader (`CANARY_PRIVATE_KEY`)
+  - matcher trader (`MATCHER_PRIVATE_KEY`, required for partial/full-match scenarios)
+- reporter or operator key must hold `MARKET_OPERATOR_ROLE` on the Fuji GoldClob contract
+- keeper running at `http://127.0.0.1:5555`
+- script is run from the repo root
 
-## Environment Variables
+## Required Environment Variables
 
-Set these for the bootstrap run:
-
-- `AVAX_FUJI_RPC` (or `AVAX_RPC_URL`) — Fuji JSON-RPC URL
+- `AVAX_FUJI_RPC` or `AVAX_RPC_URL` (recommended: explicit override)
 - `AVAX_DUEL_ORACLE_ADDRESS`
 - `AVAX_GOLD_CLOB_ADDRESS`
-- `KEEPER_URL` — usually `http://127.0.0.1:5555`
+- `KEEPER_URL` (default: `http://127.0.0.1:5555`, optional only when `--allow-defaults` is used)
 - `REPORTER_PRIVATE_KEY`
 - `MARKET_OPERATOR_PRIVATE_KEY`
 - `CANARY_PRIVATE_KEY`
+- `AVAX_FUJI_BOOTSTRAP_SCENARIO` (one of `unmatched-gtc`, `partial-match-gtc`, `full-match-gtc`, default: `unmatched-gtc`)
+- `MATCHER_PRIVATE_KEY` or `AVAX_MATCHING_TRADER_PRIVATE_KEY` (required for partial/full match scenarios)
+- `HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY` (optional). When set, bootstrap uses keyed publishing and sends `x-arena-write-key`.
 
-Keep these secrets in a local gitignored env file (for example
-`packages/hyperbet-avax/keeper/.env.local`) and source them when invoking commands.
-All private keys are required for this path and must never be committed.
+## Local-Only Defaults
+
+For security posture, defaults are explicit-off by default. To run with baked-in test
+defaults, pass either:
+
+- `--allow-defaults`
+- `AVAX_FUJI_ALLOW_DEFAULTS=1`
 
 ## Bootstrap Sequence
 
-1. Start the AVAX keeper and any required chain/testnet tooling.
-2. From repo root run:
+1. Start the AVAX keeper and required tooling.
+2. From repo root, run:
 
 ```bash
-cd /Users/mac/Desktop/hyperbet
-AVAX_FUJI_RPC=... \
+cd "$(git rev-parse --show-toplevel)"
+AVAX_FUJI_RPC=https://avax-fuji.g.alchemy.com/... \
 AVAX_DUEL_ORACLE_ADDRESS=0x... \
 AVAX_GOLD_CLOB_ADDRESS=0x... \
 KEEPER_URL=http://127.0.0.1:5555 \
@@ -53,7 +58,7 @@ CANARY_PRIVATE_KEY=0x... \
 node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
 ```
 
-If you keep these in a shell env file, source it first:
+Use `.env` for optional publish key and scenario:
 
 ```bash
 set -a
@@ -62,35 +67,55 @@ set +a
 node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
 ```
 
-3. Confirm output includes:
-   - `market is OPEN in keeper`
-   - place-order tx hash
-   - optional claim/cleanup log
-4. Confirm the script does not fail earlier with:
-   - role-check error (no configured operator key has MARKET_OPERATOR_ROLE)
-   - anything-to-claim reverts when pre-claim position is zero
-5. Verify via keeper API that the market is no longer terminal after initial setup:
+3. If testing partial/full matching cleanup paths, set scenario keys explicitly:
 
 ```bash
-curl -s http://127.0.0.1:5555/api/arena/prediction-markets/active | jq
+AVAX_FUJI_BOOTSTRAP_SCENARIO=partial-match-gtc \
+MATCHER_PRIVATE_KEY=0x... \
+node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
+
+AVAX_FUJI_BOOTSTRAP_SCENARIO=full-match-gtc \
+MATCHER_PRIVATE_KEY=0x... \
+node packages/hyperbet-avax/keeper/avax-fuji-bootstrap.mjs
 ```
 
-6. If the output shows `nothing to claim expected...`, run a fresh duel/retry rather than forcing claim cleanup.
+4. Confirm output includes at least:
+   - `publishMode=<keyed|unkeyed>`
+   - `scenario=...`
+   - `market is OPEN in keeper ...`
+   - `orderId` in final JSON summary
+   - `keeperLifecycle.open === "OPEN"`
+   - `keeperLifecycle.cancelled === "CANCELLED"`
+   - `finalState.order.active === false`
+   - `finalState.position.hasResidual === false`
+   - explicit `cancelOrderTx` when final active order is present
+   - explicit `claimTx` when residual position was non-zero
 
 ## Acceptance Criteria
 
-- script reaches completion without unhandled revert
-- new market appears in keeper active markets with `OPEN`
-- placeOrder succeeds on-chain and keeper sees the update
-- cancel + sync path succeeds
-- claim cleanup path is either:
-  - claimed with cleared market position, or
-  - intentionally skipped because there is no claimable residual
+- script exits successfully with no exception.
+- keeper sees the market `OPEN` after publish and `CANCELLED` after `syncMarketFromOracle`.
+- final summary includes all required proof fields:
+  - `upsertDuel`, `createMarketForDuel`, `placeOrder`
+  - `cancelDuel`, `syncMarketFromOracle`, optional `cancelOrder`, optional `claim`
+  - final `order` and `position` states
+- `orderId` is captured and included.
+- final order cleanup invariant:
+  - `orders(...).active === false`
+  - `positions(...): all fields === 0`
+- claim is only skipped when both conditions are proven:
+  - the placed order is no longer active
+  - the canary position is already zero
+
+## Scenario Matrix
+
+- `unmatched-gtc`: only canary GTC order, then duel cancel + sync. Expect no filled exposure and no residual after cleanup.
+- `partial-match-gtc`: place a 50% matching GTC maker order before cancel. Expect cancel handles residual order, then claim clears matched exposure.
+- `full-match-gtc`: place full matching GTC order before cancel. Expect matched position remains, cancel step is optional, claim clears residual.
+- `publish-mode`: set `HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY` to confirm `publishMode=keyed`.
 
 ## Failure Drill
 
-- If `openTs/closeTs` windows are rejected, re-run with a fresh `duelKey`.
-- If `claim` reverts with a valid `nothing to claim` path, treat it as expected only
-  when pre-claim position was zero.
-- If market never becomes `OPEN`, verify keeper publish endpoint is reachable and
-  stream state shape is valid.
+- if `openTs/closeTs` windows are invalid, rerun with a fresh `duelKey` (script generates new key automatically on each run)
+- if publish mode fails unexpectedly, verify `HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY` for keyed flow or rerun without the key for unkeyed flow
+- if cleanup fails (`order active` or non-zero position), rerun after a fresh market cycle and verify role + balances for involved wallets
