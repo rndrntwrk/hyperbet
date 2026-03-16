@@ -21,6 +21,17 @@ pub mod fight_oracle {
         challenger: Pubkey,
         dispute_window_secs: i64,
     ) -> Result<()> {
+        let program_data = &ctx.accounts.program_data;
+        if let Some(auth) = program_data.upgrade_authority_address {
+            if auth != Pubkey::default() {
+                require_keys_eq!(
+                    auth,
+                    ctx.accounts.authority.key(),
+                    ErrorCode::UnauthorizedInitializer
+                );
+            }
+        }
+
         let oracle_config = &mut ctx.accounts.oracle_config;
 
         if oracle_config.authority == Pubkey::default() {
@@ -331,9 +342,6 @@ pub struct InitializeOracle<'info> {
         constraint = program.programdata_address()? == Some(program_data.key()) @ ErrorCode::UnauthorizedInitializer
     )]
     pub program: Program<'info, crate::program::FightOracle>,
-    #[account(
-        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ ErrorCode::UnauthorizedInitializer
-    )]
     pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
 }

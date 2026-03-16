@@ -39,6 +39,17 @@ pub mod gold_clob_market {
         trade_market_maker_fee_bps: u16,
         winnings_market_maker_fee_bps: u16,
     ) -> Result<()> {
+        let program_data = &ctx.accounts.program_data;
+        if let Some(auth) = program_data.upgrade_authority_address {
+            if auth != Pubkey::default() {
+                require_keys_eq!(
+                    auth,
+                    ctx.accounts.authority.key(),
+                    ErrorCode::UnauthorizedInitializer
+                );
+            }
+        }
+
         validate_fee_config(
             trade_treasury_fee_bps,
             trade_market_maker_fee_bps,
@@ -737,9 +748,6 @@ pub struct InitializeConfig<'info> {
         constraint = program.programdata_address()? == Some(program_data.key()) @ ErrorCode::UnauthorizedInitializer
     )]
     pub program: Program<'info, crate::program::GoldClobMarket>,
-    #[account(
-        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ ErrorCode::UnauthorizedInitializer
-    )]
     pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
 }
