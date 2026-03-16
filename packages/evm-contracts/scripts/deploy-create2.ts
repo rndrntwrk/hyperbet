@@ -51,6 +51,8 @@ interface DeploymentReceipt {
   factoryAddress: string;
   oracleSalt: string;
   clobSalt: string;
+  oracleInitCodeHash: string;
+  clobInitCodeHash: string;
   duelOracleAddress: string;
   goldClobAddress: string;
   oracleTxHash: string | null;
@@ -94,10 +96,17 @@ async function deployViaCreate2(
   const [deployer] = await ethers.getSigners();
   console.log(`  🚀 Deploying ${label} via CREATE2...`);
 
+  // Estimate gas dynamically with 20% buffer
+  const estimatedGas = await deployer.estimateGas({
+    to: ARACHNID_PROXY,
+    data: payload,
+  });
+  const gasLimit = (estimatedGas * 120n) / 100n;
+
   const tx = await deployer.sendTransaction({
     to: ARACHNID_PROXY,
     data: payload,
-    gasLimit: 10_000_000, // High limit — actual gas depends on contract size
+    gasLimit,
   });
 
   console.log(`  ⏳ Tx submitted: ${tx.hash}`);
@@ -217,6 +226,8 @@ async function main() {
     factoryAddress: ARACHNID_PROXY,
     oracleSalt: prediction.oracleSalt,
     clobSalt: prediction.clobSalt,
+    oracleInitCodeHash: prediction.oracleInitCodeHash,
+    clobInitCodeHash: prediction.clobInitCodeHash,
     duelOracleAddress: prediction.oracleAddress,
     goldClobAddress: prediction.clobAddress,
     oracleTxHash,
