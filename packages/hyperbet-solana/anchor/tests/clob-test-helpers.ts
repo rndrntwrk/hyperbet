@@ -223,7 +223,7 @@ export async function ensureOracleReady(
     console.log("Wanted Authority:", authority.publicKey.toBase58());
 
     await program.methods
-      .initializeOracle(reporter)
+      .initializeOracle(reporter, finalizer, challenger, new BN(disputeWindowSecs))
       .accountsPartial({
         authority: authority.publicKey,
         oracleConfig,
