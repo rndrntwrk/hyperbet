@@ -8,17 +8,7 @@ declare_id!("6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD");
 pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
 
-const DEFAULT_BOOTSTRAP_AUTHORITY: &str = "DfEnrzh4cgnHxfuZRxLGX69fnLd9DP41XxGuE4gtyJpn";
 const DEFAULT_DISPUTE_WINDOW_SECS: i64 = 3600;
-
-fn bootstrap_authority() -> Pubkey {
-    use std::str::FromStr;
-    if let Some(value) = option_env!("HYPERSCAPE_BOOTSTRAP_AUTHORITY") {
-        Pubkey::from_str(value).expect("invalid HYPERSCAPE_BOOTSTRAP_AUTHORITY")
-    } else {
-        Pubkey::from_str(DEFAULT_BOOTSTRAP_AUTHORITY).expect("invalid default bootstrap authority")
-    }
-}
 
 #[program]
 pub mod fight_oracle {
@@ -27,18 +17,18 @@ pub mod fight_oracle {
     pub fn initialize_oracle(ctx: Context<InitializeOracle>, reporter: Pubkey) -> Result<()> {
         let oracle_config = &mut ctx.accounts.oracle_config;
 
-        if oracle_config.authority != Pubkey::default() {
+        if oracle_config.authority == Pubkey::default() {
+            oracle_config.authority = ctx.accounts.authority.key();
+            oracle_config.bump = ctx.bumps.oracle_config;
+            oracle_config.finalizer = ctx.accounts.authority.key();
+            oracle_config.challenger = ctx.accounts.authority.key();
+            oracle_config.dispute_window_secs = DEFAULT_DISPUTE_WINDOW_SECS;
+        } else {
             require_keys_eq!(
                 oracle_config.authority,
                 ctx.accounts.authority.key(),
                 ErrorCode::Unauthorized
             );
-        } else {
-            oracle_config.authority = ctx.accounts.authority.key();
-            oracle_config.bump = ctx.bumps.oracle_config;
-            oracle_config.finalizer = reporter;
-            oracle_config.challenger = reporter;
-            oracle_config.dispute_window_secs = DEFAULT_DISPUTE_WINDOW_SECS;
         }
 
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
@@ -66,7 +56,7 @@ pub mod fight_oracle {
             challenger != Pubkey::default(),
             ErrorCode::InvalidChallenger
         );
-        require!(dispute_window_secs >= 0, ErrorCode::InvalidDisputeWindow);
+        require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
 
         let oracle_config = &mut ctx.accounts.oracle_config;
         oracle_config.authority = authority;
@@ -329,10 +319,7 @@ pub struct InitializeOracle<'info> {
     )]
     pub program: Program<'info, crate::program::FightOracle>,
     #[account(
-        constraint = program_data.upgrade_authority_address == Some(authority.key())
-            || ((program_data.upgrade_authority_address.is_none()
-                || program_data.upgrade_authority_address == Some(Pubkey::default()))
-                && authority.key() == bootstrap_authority()) @ ErrorCode::UnauthorizedInitializer
+        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ ErrorCode::UnauthorizedInitializer
     )]
     pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
@@ -371,11 +358,11 @@ pub struct UpsertDuel<'info> {
 #[instruction(duel_key: [u8; 32])]
 pub struct CancelDuel<'info> {
     #[account(mut)]
-    pub reporter: Signer<'info>,
+    pub authority: Signer<'info>,
     #[account(
         seeds = [ORACLE_CONFIG_SEED],
         bump = oracle_config.bump,
-        constraint = oracle_config.reporter == reporter.key() @ ErrorCode::Unauthorized,
+        constraint = oracle_config.authority == authority.key() @ ErrorCode::Unauthorized,
     )]
     pub oracle_config: Account<'info, OracleConfig>,
     #[account(mut, seeds = [DUEL_SEED, duel_key.as_ref()], bump = duel_state.bump)]
@@ -543,7 +530,7 @@ pub enum ErrorCode {
     InvalidFinalizer,
     #[msg("Challenger pubkey cannot be the default address")]
     InvalidChallenger,
-    #[msg("Dispute window must be non-negative")]
+    #[msg("Dispute window must be positive")]
     InvalidDisputeWindow,
     #[msg("Betting window is invalid")]
     InvalidBetWindow,

@@ -60,6 +60,7 @@ const bootstrapKeypairPath = path.join(
 );
 const ciHome = path.join(artifactRoot, "home");
 const reservedPorts = new Set<number>();
+const MAX_SCENARIO_SERVER_STARTUP_RETRIES = 3;
 const preferredPorts =
   target === "evm"
     ? { http: 3401, ws: 3400, anvil: 18546 }
@@ -290,6 +291,26 @@ async function runScenarioViaApi(
 let stopServer: (() => Promise<void>) | null = null;
 let fatalError: unknown = null;
 
+function isStartupFailure(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+  if (!message) {
+    return false;
+  }
+  return (
+    message.includes("fetch failed") ||
+    message.includes("endpoint did not become ready") ||
+    message.includes("EADDRINUSE") ||
+    message.includes("failed to become ready") ||
+    message.includes("connection closed") ||
+    message.includes("ECONNRESET")
+  );
+}
+
 async function withSimulationServer<T>(
   execution: ScenarioExecution,
   run: (context: ScenarioServerContext) => Promise<T>,
@@ -299,58 +320,78 @@ async function withSimulationServer<T>(
     "scenarios",
     sanitizeArtifactName(execution.artifactName),
   );
-  mkdirSync(scenarioArtifactRoot, { recursive: true });
 
-  const httpPort = String(
-    await allocateDistinctPort(preferredPorts.http, reservedPorts),
-  );
-  const wsPort = String(await allocateDistinctPort(preferredPorts.ws, reservedPorts));
-  const anvilPort = String(
-    await allocateDistinctPort(preferredPorts.anvil, reservedPorts),
-  );
-  const apiBaseUrl = `http://127.0.0.1:${httpPort}`;
-  const serverLog = path.join(scenarioArtifactRoot, "simulation-server.log");
-  const historyPath = path.join(scenarioArtifactRoot, "scenario-history.json");
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    mkdirSync(scenarioArtifactRoot, { recursive: true });
 
-  writeJsonArtifact(scenarioArtifactRoot, "server.json", {
-    apiBaseUrl,
-    anvilPort,
-    httpPort,
-    wsPort,
-  });
-
-  const server = await spawnBackground(
-    "bun",
-    ["run", "--cwd", "packages/simulation-dashboard", "dev"],
-    {
-      cwd: rootDir,
-      env: {
-        SIM_HTTP_PORT: httpPort,
-        SIM_WS_PORT: wsPort,
-        SIM_ANVIL_PORT: anvilPort,
-        SIM_SCENARIO_HISTORY_PATH: historyPath,
-        ...scenarioEnv(),
-      },
-      logFile: serverLog,
-    },
-  );
-  stopServer = () => server.stop({ timeoutMs: 15_000 });
-
-  try {
-    await waitForJsonEndpoint(`${apiBaseUrl}/api/scenarios`, {
-      validate: (payload) => Array.isArray(payload?.scenarios),
-    });
-    await fetchScenarioJson(apiBaseUrl, "/api/scenarios", {
-      retries: 5,
-      backoffMs: 300,
-    });
-    return await run({
-      apiBaseUrl,
+    const httpPort = String(
+      await allocateDistinctPort(preferredPorts.http, reservedPorts),
+    );
+    const wsPort = String(await allocateDistinctPort(preferredPorts.ws, reservedPorts));
+    const anvilPort = String(
+      await allocateDistinctPort(preferredPorts.anvil, reservedPorts),
+    );
+    const apiBaseUrl = `http://127.0.0.1:${httpPort}`;
+    const serverLog = path.join(
       scenarioArtifactRoot,
+      `simulation-server${attempt > 1 ? `-retry-${attempt}` : ""}.log`,
+    );
+    const historyPath = path.join(
+      scenarioArtifactRoot,
+      `scenario-history${attempt > 1 ? `-retry-${attempt}` : ""}.json`,
+    );
+
+    writeJsonArtifact(scenarioArtifactRoot, `server${attempt > 1 ? `-retry-${attempt}` : ""}.json`, {
+      apiBaseUrl,
+      anvilPort,
+      httpPort,
+      wsPort,
+      attempt,
     });
-  } finally {
-    await server.stop({ timeoutMs: 15_000 });
-    stopServer = null;
+
+    const server = await spawnBackground(
+      "bun",
+      ["run", "--cwd", "packages/simulation-dashboard", "dev"],
+      {
+        cwd: rootDir,
+        env: {
+          SIM_HTTP_PORT: httpPort,
+          SIM_WS_PORT: wsPort,
+          SIM_ANVIL_PORT: anvilPort,
+          SIM_SCENARIO_HISTORY_PATH: historyPath,
+          ...scenarioEnv(),
+        },
+        logFile: serverLog,
+      },
+    );
+    stopServer = () => server.stop({ timeoutMs: 15_000 });
+
+    try {
+      await waitForJsonEndpoint(`${apiBaseUrl}/api/scenarios`, {
+        timeoutMs: 20_000,
+        validate: (payload) => Array.isArray(payload?.scenarios),
+      });
+      await fetchScenarioJson(apiBaseUrl, "/api/scenarios", {
+        retries: 8,
+        backoffMs: 300,
+      });
+      return await run({
+        apiBaseUrl,
+        scenarioArtifactRoot,
+      });
+    } catch (error) {
+      const shouldRetry = isStartupFailure(error);
+      if (!shouldRetry || attempt >= MAX_SCENARIO_SERVER_STARTUP_RETRIES) {
+        throw error;
+      }
+      await sleep(Math.min(500 * attempt, 2_000));
+      continue;
+    } finally {
+      await server.stop({ timeoutMs: 15_000 });
+      stopServer = null;
+    }
   }
 }
 

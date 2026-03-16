@@ -315,4 +315,28 @@ describe("DuelOutcomeOracle", () => {
       oracle.connect(pauser).setOraclePaused(false),
     ).to.be.reverted;
   });
+
+  it("restricts cancellation to emergency pausers", async () => {
+    const { oracle, reporter, pauser, other } = await deployFixture();
+    const duelKey =
+      "0x8888888888888888888888888888888888888888888888888888888888888888";
+
+    await seedDuel(oracle, reporter, duelKey);
+
+    await expect(
+      oracle.connect(other).cancelDuel(duelKey, "unauthorized-cancel"),
+    ).to.be.reverted;
+    await expect(
+      oracle.connect(reporter).cancelDuel(duelKey, "unauthorized-cancel"),
+    ).to.be.reverted;
+
+    await expect(
+      oracle.connect(pauser).cancelDuel(duelKey, "emergency-cancel"),
+    )
+      .to.emit(oracle, "DuelCancelled")
+      .withArgs(duelKey, "emergency-cancel");
+
+    const duel = await oracle.getDuel(duelKey);
+    expect(duel.status).to.equal(6n);
+  });
 });
