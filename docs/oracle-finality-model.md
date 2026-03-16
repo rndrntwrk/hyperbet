@@ -1,33 +1,98 @@
-# Hyperbet Oracle Finality Model (Canonical)
+# Oracle Finality Model
 
-## Model
-Hyperbet production finality follows a single **propose → challenge → finalize** flow across EVM and SVM.
+## Overview
 
-1. **Propose**: a reporter publishes a result proposal with immutable proposal ID:
-   - `proposal_id = keccak256(duel_key, result_hash, replay_hash)`.
-2. **Challenge Window**: a designated challenger can mark the proposal disputed while the dispute window is active.
-3. **Finalize**: only finalization authority can finalize an unchallenged proposal after dispute window expiry.
+The `DuelOutcomeOracle` manages the lifecycle of competitive duel outcomes across EVM chains. This document defines the finality semantics — how a duel reaches terminal state, what guarantees exist at each stage, and how the system prevents premature settlement.
 
-Emergency cancellation remains explicitly scoped:
-- `cancelDuel` is an emergency control path, not part of routine launch flow.
-- On EVM, cancellation is pauser-only through `PAUSER_ROLE`.
-- On SVM, cancellation is restricted to the oracle-config authority account, and is separate from reporter lifecycle publishing.
+## State Machine
 
-## Authority Constraints
-- **Reporter authority**: may upsert duel lifecycle and propose outcomes.
-- **Challenger authority**: may challenge only `PROPOSED` outcomes.
-- **Finalizer authority**: may finalize only `PROPOSED`, unchallenged outcomes after the full dispute window.
-- Authorities MUST be explicitly configured and non-zero.
+```mermaid
+stateDiagram-v2
+    [*] --> NULL
+    NULL --> SCHEDULED : upsertDuel(status=1)
+    NULL --> BETTING_OPEN : upsertDuel(status=2)
+    NULL --> LOCKED : upsertDuel(status=3)
+    SCHEDULED --> BETTING_OPEN : upsertDuel(status=2)
+    SCHEDULED --> LOCKED : upsertDuel(status=3)
+    BETTING_OPEN --> LOCKED : upsertDuel(status=3)
+    LOCKED --> PROPOSED : proposeResult()
+    PROPOSED --> CHALLENGED : challengeResult()
+    PROPOSED --> RESOLVED : finalizeResult()
 
-## Status Semantics
-- `PROPOSED`: in-flight, not settled, ineligible for payout.
-- `CHALLENGED`: disputed, fail-closed, ineligible for payout.
-- `RESOLVED`: finalized winner outcome, payout-eligible.
-- `CANCELLED`: terminal cancellation, refund-eligible.
+    SCHEDULED --> CANCELLED : cancelDuel()
+    BETTING_OPEN --> CANCELLED : cancelDuel()
+    LOCKED --> CANCELLED : cancelDuel()
+    PROPOSED --> CANCELLED : cancelDuel()
+    CHALLENGED --> CANCELLED : cancelDuel()
 
-## Settlement Rule
-Any market settlement or claim path MUST accept only:
-- `RESOLVED` finalized outcomes, or
-- `CANCELLED` cancellations.
+    RESOLVED --> [*]
+    CANCELLED --> [*]
+```
 
-All in-flight or ambiguous states (`PROPOSED`, `CHALLENGED`, non-terminal lifecycle states) MUST be rejected for settlement.
+## Terminal States
+
+| State | Code | Finality | Winner Set? | Reversible? |
+|---|---|---|---|---|
+| **RESOLVED** | 6 | ✅ Terminal | Yes | No |
+| **CANCELLED** | 7 | ✅ Terminal | No (NONE) | No |
+
+**Invariant**: Once a duel reaches RESOLVED or CANCELLED, no function can mutate its state. This is enforced by `_requireSettleable()` which reverts on both terminal states.
+
+## Dispute Window
+
+- **Type**: Immutable (`uint64 immutable disputeWindowSeconds`)
+- **Set at**: Constructor only — no setter exists
+- **Enforcement**: `finalizeResult()` requires `block.timestamp >= proposedAt + disputeWindowSeconds`
+- **Default**: 3600 seconds (1 hour)
+- **Validation**: Constructor rejects `disputeWindowSeconds == 0`
+
+### Timing Guarantees
+
+| Action | Requirement |
+|---|---|
+| `proposeResult()` | Duel must be LOCKED, betting window must be closed |
+| `challengeResult()` | Must be within dispute window (`block.timestamp < proposedAt + disputeWindowSeconds`) |
+| `finalizeResult()` | Must be after dispute window (`block.timestamp >= proposedAt + disputeWindowSeconds`) |
+
+## Settlement Ordering
+
+1. **Reporter** proposes a result → status = PROPOSED
+2. **Dispute window** opens (starts at `proposedAt`)
+3. During window: **Challenger** may challenge → status = CHALLENGED
+4. After window: **Finalizer** may finalize → status = RESOLVED
+5. At any non-terminal stage: **Pauser** may cancel → status = CANCELLED
+
+**No settlement occurs before terminal finalization.** The `winner` field on the `DuelState` struct is only populated during `finalizeResult()`. In all non-terminal states, `winner == Side.NONE (0)`.
+
+## Roles
+
+| Role | Granted To | Can Do |
+|---|---|---|
+| `DEFAULT_ADMIN_ROLE` | Admin/Timelock | Manage all other roles |
+| `REPORTER_ROLE` | Backend signer | `upsertDuel`, `proposeResult` |
+| `FINALIZER_ROLE` | Backend signer | `finalizeResult` |
+| `CHALLENGER_ROLE` | Backend/Multisig | `challengeResult` |
+| `PAUSER_ROLE` | Emergency council | `cancelDuel`, `setOraclePaused` |
+
+## Cancellation Stance
+
+`cancelDuel()` is an **emergency-only** function restricted to `PAUSER_ROLE`. It:
+- Sets status to CANCELLED
+- Clears `activeProposalId`
+- Can be called from any non-terminal state (SCHEDULED → CHALLENGED)
+- Is the only admin-side mechanism for halting a duel
+
+**Important**: Cancellation does not require a reason parameter. The `metadataUri` field can be used to document the reason off-chain.
+
+## Cross-Chain Parity (EVM vs Solana)
+
+| Feature | EVM | Solana | Parity |
+|---|---|---|---|
+| Dispute window | Immutable constructor arg | Config, admin-mutable | ⚠️ Solana more flexible |
+| Cancellation | PAUSER_ROLE | Authority | ✅ Equivalent |
+| State machine | 8 states (NULL→CANCELLED) | Equivalent enum | ✅ |
+| Winner set timing | Only at finalize | Only at finalize | ✅ |
+| Role management | AccessControl (OZ) | Authority CPI | ✅ Equivalent |
+
+> [!IMPORTANT]
+> The Solana program allows updating `dispute_window_seconds` after initialization (admin-mutable), while the EVM contract makes it immutable. This is a documented divergence — the EVM approach is stricter. Both enforce `> 0`.
