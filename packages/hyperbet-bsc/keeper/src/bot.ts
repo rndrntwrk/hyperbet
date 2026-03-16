@@ -2637,9 +2637,9 @@ function buildManagedClobHealthRecord(
   };
 }
 
-async function dispatchEvmClaim(trackedMatch: ActiveClobMatch): Promise<void> {
+async function dispatchEvmClaim(duelId: string, duelKeyHex: string): Promise<void> {
   if (evmKeeperChains.length === 0) return;
-  const duelKey = normalizeHex32(trackedMatch.duelKeyHex);
+  const duelKey = normalizeHex32(duelKeyHex);
   await Promise.allSettled(
     evmKeeperChains.map(async (chain) => {
       try {
@@ -2655,7 +2655,7 @@ async function dispatchEvmClaim(trackedMatch: ActiveClobMatch): Promise<void> {
           JSON.stringify({
             action: "evm_claim_dispatched",
             chainKey: chain.chainKey,
-            duelId: trackedMatch.duelId,
+            duelId,
             duelKey,
           }),
         );
@@ -2668,14 +2668,14 @@ async function dispatchEvmClaim(trackedMatch: ActiveClobMatch): Promise<void> {
             JSON.stringify({
               action: "evm_claim_skipped",
               chainKey: chain.chainKey,
-              duelId: trackedMatch.duelId,
+              duelId,
               reason: "NothingToClaim",
             }),
           );
           return;
         }
         console.error(
-          `[Keeper] EVM claim failed for duel ${trackedMatch.duelId} on ${chain.chainKey}: ${msg}`,
+          `[Keeper] EVM claim failed for duel ${duelId} on ${chain.chainKey}: ${msg}`,
         );
         throw err;
       }
@@ -2698,7 +2698,7 @@ async function captureSettledClobHealth(
   // partial-claim recovery signal. On unexpected failure, leave it null so
   // the partial-claim signal stays active for the next maintenance cycle.
   try {
-    await dispatchEvmClaim(trackedMatch);
+    await dispatchEvmClaim(trackedMatch.duelId, trackedMatch.duelKeyHex);
     trackedMatch.lastClaimAtMs = Date.now();
   } catch {
     // dispatchEvmClaim already logged the error; leave lastClaimAtMs null
@@ -3245,6 +3245,19 @@ async function runMaintenance(): Promise<void> {
   ) {
     restartRecoveryObservedAtMs = null;
     restartRecoveryDetails = null;
+  }
+
+  // Retry EVM claim for any settled market where the initial claim attempt failed.
+  // dispatchEvmClaim is idempotent: NothingToClaim reverts are handled gracefully.
+  for (const [, record] of settledClobHealth.entries()) {
+    if (record.lastClaimAtMs != null || record.lastResolvedAtMs == null) continue;
+    if (!record.duelKey || !record.duelId) continue;
+    try {
+      await dispatchEvmClaim(record.duelId, record.duelKey);
+      record.lastClaimAtMs = Date.now();
+    } catch {
+      // Will be retried on the next maintenance cycle.
+    }
   }
 
   // NOTE: We do NOT create new rounds here anymore.
