@@ -44,7 +44,8 @@ treated as an independent mergeable unit.
   - Base add-chain smoke
 - Cross-chain E2E is intentionally local-only until it is boring and
   deterministic again.
-- AVAX is still fail-closed, so tri-chain launch is not yet honest.
+- AVAX Fuji deployment truth is now canonicalized, but AVAX mainnet is still blocked
+  until production canonical deployment values and proof evidence are complete.
 - Additional hardening already merged after the original sprint gates:
   - external-bet auth and idempotency hardening
   - canonicalized external-bet economics
@@ -71,7 +72,7 @@ That means the branch is not launch-complete yet. The dominant open risks are:
 
 - privileged resolution
 - incomplete protocol order semantics and self-trade prevention
-- non-canonical AVAX production state
+- partially canonical AVAX production state (Fuji complete, mainnet pending)
 - non-durable keeper/MM production storage
 - unexecuted deployed-environment proof
 
@@ -112,7 +113,7 @@ The current sprint base already contains:
 - CI/deploy/proof scaffolding:
   - fast CI plus heavyweight gate workflows
   - Base add-chain proof
-  - AVAX fail-closed production posture
+  - AVAX production gate posture moved to Fuji-canonicalized + mainnet pending
   - deployed-environment proof rail and runbooks
 
 This next-phase plan therefore assumes the branch is an integration-capable
@@ -170,7 +171,7 @@ evidence from a real deployed environment.
 
 - manual read-only proof for Solana and BSC
 - manual canary-write proof for Solana and BSC
-- AVAX fail-closed verification
+- AVAX staging proof sequencing after canonicality and signer proof setup
 - artifact review
 - runbook validation against the real environment
 
@@ -189,7 +190,9 @@ evidence from a real deployed environment.
 
 - read-only proof passes for Solana and BSC
 - canary-write proof passes for Solana and BSC
-- AVAX fail-closed proof passes
+- AVAX proof lane is not treated as promotion-complete until AVAX mainnet
+  canonical addresses are committed and staged read-only + canary evidence is
+  reviewed
 - proof artifacts are captured and reviewed
 - sprint tracker and release-prep docs updated with real evidence
 
@@ -206,7 +209,7 @@ evidence from a real deployed environment.
 
 - proof was executed against a real deployed environment
 - canary writes were capped and controlled
-- AVAX remained explicitly disabled
+- AVAX remains intentionally non-production until canonical mainnet addresses and proof evidence are validated
 
 ### Risks And Traps
 
@@ -492,11 +495,11 @@ explicit persistence is attached. That is below the real-funds bar.
 
 ### Goal
 
-Move AVAX from fail-closed to production-canonical.
+Move AVAX from partially canonical (Fuji-only) to full production-canonical.
 
 ### Why This Gate Exists
 
-Tri-chain launch is mandatory, and AVAX is still intentionally disabled.
+Tri-chain launch is mandatory, and AVAX mainnet is still intentionally disabled.
 
 ### In Scope
 
@@ -517,9 +520,9 @@ Tri-chain launch is mandatory, and AVAX is still intentionally disabled.
 
 ### Merge Criteria
 
-- AVAX canonical addresses are committed
-- AVAX deploy and proof paths are valid
-- AVAX is no longer described as fail-closed
+- AVAX canonical addresses are committed in mainnet registry
+- AVAX deploy and proof paths are valid and reviewed
+- AVAX is no longer described as canonicalization-blocked
 
 ### Required Checks
 

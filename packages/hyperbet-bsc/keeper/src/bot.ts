@@ -191,20 +191,14 @@ const DUEL_OUTCOME_ORACLE_ABI = [
     type: "function",
     name: "challengeResult",
     stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
-      { type: "string" },
-    ],
+    inputs: [{ type: "bytes32" }, { type: "string" }],
     outputs: [],
   },
   {
     type: "function",
     name: "finalizeResult",
     stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32" },
-      { type: "string" },
-    ],
+    inputs: [{ type: "bytes32" }, { type: "string" }],
     outputs: [],
   },
   {
@@ -273,9 +267,14 @@ const EVM_GOLD_CLOB_ADMIN_ABI = [
     inputs: [{ type: "bytes32" }, { type: "uint8" }],
     outputs: [{ type: "uint8" }],
   },
+  {
+    type: "function",
+    name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32" }, { type: "uint8" }],
+    outputs: [],
+  },
 ] as const;
-
-const ORDER_BEHAVIOR_GTC = 0;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1759,12 +1758,14 @@ const ensureOracleReady = async (): Promise<void> => {
     );
   }
   const desiredDisputeWindowSecs = 3_600;
-  const configNeedsUpdate =
-    !(config.reporter as PublicKey).equals(botKeypair.publicKey) ||
-    !(config.finalizer as PublicKey).equals(botKeypair.publicKey) ||
-    !(config.challenger as PublicKey).equals(botKeypair.publicKey) ||
-    asNum(config.disputeWindowSecs) !== desiredDisputeWindowSecs;
-  if (configNeedsUpdate) {
+  const normalizedDisputeWindowSecs = config.disputeWindowSecs as { toString: () => string };
+  const oracleConfigNeedsUpdate = !(
+    (config.reporter as PublicKey).equals(botKeypair.publicKey) &&
+    (config.finalizer as PublicKey).equals(botKeypair.publicKey) &&
+    (config.challenger as PublicKey).equals(botKeypair.publicKey) &&
+    normalizedDisputeWindowSecs.toString() === String(desiredDisputeWindowSecs)
+  );
+  if (oracleConfigNeedsUpdate) {
     await runWithRecovery(
       () =>
         fightProgram.methods
@@ -2284,7 +2285,12 @@ async function placeManagedClobOrder(
   amountLamports: number,
 ): Promise<ManagedClobOrder> {
   const marketState = await getClobMarketState(trackedMatch.marketState);
-  if (!enumIs(marketState?.status, "open")) {
+  if (!marketState || marketState.nextOrderId == null) {
+    throw new Error(
+      `Cannot seed uninitialized market ${trackedMatch.marketState.toBase58()}`,
+    );
+  }
+  if (!enumIs(marketState.status, "open")) {
     throw new Error(
       `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
     );
@@ -2316,7 +2322,7 @@ async function placeManagedClobOrder(
           side,
           price,
           new BN(amountLamports),
-          ORDER_BEHAVIOR_GTC,
+          0,
         )
         .accountsPartial({
           marketState: trackedMatch.marketState,
@@ -2569,16 +2575,13 @@ function buildTrackedMatchRecovery(
   if (unresolvedOracleWarningMatches.has(trackedMatch.duelId)) {
     recovery.push("awaiting-authoritative-result");
   }
-  // NOTE: claim dispatch is not yet implemented (post-merge Gate 16 work).
-  // The partial-claim check is disabled until lastClaimAtMs is wired up,
-  // to prevent permanent false-positive recovery entries on every resolved market.
-  // if (
-  //   trackedMatch.lastResolvedAtMs != null &&
-  //   trackedMatch.lastClaimAtMs == null &&
-  //   grossExposure > 0
-  // ) {
-  //   recovery.push("partial-claim");
-  // }
+  if (
+    trackedMatch.lastResolvedAtMs != null &&
+    trackedMatch.lastClaimAtMs == null &&
+    grossExposure > 0
+  ) {
+    recovery.push("partial-claim");
+  }
   if (
     restartRecoveryObservedAtMs != null &&
     (trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null)
@@ -2634,6 +2637,52 @@ function buildManagedClobHealthRecord(
   };
 }
 
+async function dispatchEvmClaim(duelId: string, duelKeyHex: string): Promise<void> {
+  if (evmKeeperChains.length === 0) return;
+  const duelKey = normalizeHex32(duelKeyHex);
+  await Promise.allSettled(
+    evmKeeperChains.map(async (chain) => {
+      try {
+        await chain.walletClient.writeContract({
+          chain: undefined,
+          address: chain.goldClobAddress,
+          abi: EVM_GOLD_CLOB_ADMIN_ABI,
+          functionName: "claim",
+          args: [duelKey, DUEL_WINNER_MARKET_KIND],
+          account: chain.account,
+        });
+        console.log(
+          JSON.stringify({
+            action: "evm_claim_dispatched",
+            chainKey: chain.chainKey,
+            duelId,
+            duelKey,
+          }),
+        );
+      } catch (err) {
+        const msg = (err as Error)?.message ?? String(err);
+        // NothingToClaim is expected when the keeper wallet held no position
+        // (e.g. no orders were matched, or claim was already collected).
+        if (msg.includes("NothingToClaim")) {
+          console.log(
+            JSON.stringify({
+              action: "evm_claim_skipped",
+              chainKey: chain.chainKey,
+              duelId,
+              reason: "NothingToClaim",
+            }),
+          );
+          return;
+        }
+        console.error(
+          `[Keeper] EVM claim failed for duel ${duelId} on ${chain.chainKey}: ${msg}`,
+        );
+        throw err;
+      }
+    }),
+  );
+}
+
 async function captureSettledClobHealth(
   trackedMatch: ActiveClobMatch,
   lifecycleStatus: MarketSnapshot["lifecycleStatus"],
@@ -2644,6 +2693,17 @@ async function captureSettledClobHealth(
   trackedMatch.lastResolvedAtMs = now;
   trackedMatch.yesBidOrder = null;
   trackedMatch.noAskOrder = null;
+  // Dispatch the EVM keeper wallet claim now that the market is settled.
+  // On success (including NothingToClaim), mark lastClaimAtMs to clear the
+  // partial-claim recovery signal. On unexpected failure, leave it null so
+  // the partial-claim signal stays active for the next maintenance cycle.
+  try {
+    await dispatchEvmClaim(trackedMatch.duelId, trackedMatch.duelKeyHex);
+    trackedMatch.lastClaimAtMs = Date.now();
+  } catch {
+    // dispatchEvmClaim already logged the error; leave lastClaimAtMs null
+    // so the partial-claim recovery signal persists.
+  }
   settledClobHealth.set(
     trackedMatch.duelId,
     buildManagedClobHealthRecord(trackedMatch, lifecycleStatus),
@@ -2698,9 +2758,25 @@ function buildBotRecoveryStates(now = Date.now()): KeeperRecoveryState[] {
   ];
 }
 
+function refreshRestartRecoveryState(): void {
+  if (restartRecoveryObservedAtMs == null) return;
+  // Guard: only clear if the map is non-empty (stream events have been received), to avoid
+  // a race where this fires before activeClobMatches is populated.
+  if (activeClobMatches.size === 0) return;
+  const hasOpenOrders = [...activeClobMatches.values()].some(
+    (trackedMatch) =>
+      trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null,
+  );
+  if (!hasOpenOrders) {
+    restartRecoveryObservedAtMs = null;
+    restartRecoveryDetails = null;
+  }
+}
+
 function writeBotHealthSnapshot(): void {
   if (!BOT_HEALTH_FILE) return;
   try {
+    refreshRestartRecoveryState();
     trimSettledClobHealth();
     const activeRecords = Array.from(activeClobMatches.values()).map((trackedMatch) =>
       buildManagedClobHealthRecord(trackedMatch),
@@ -3168,6 +3244,20 @@ async function runMaintenance(): Promise<void> {
     )
   ) {
     restartRecoveryObservedAtMs = null;
+    restartRecoveryDetails = null;
+  }
+
+  // Retry EVM claim for any settled market where the initial claim attempt failed.
+  // dispatchEvmClaim is idempotent: NothingToClaim reverts are handled gracefully.
+  for (const [, record] of settledClobHealth.entries()) {
+    if (record.lastClaimAtMs != null || record.lastResolvedAtMs == null) continue;
+    if (!record.duelKey || !record.duelId) continue;
+    try {
+      await dispatchEvmClaim(record.duelId, record.duelKey);
+      record.lastClaimAtMs = Date.now();
+    } catch {
+      // Will be retried on the next maintenance cycle.
+    }
   }
 
   // NOTE: We do NOT create new rounds here anymore.

@@ -170,6 +170,7 @@ export async function spawnBackground(
   const child = spawn(command, args, {
     cwd: options.cwd ?? rootDir,
     env: { ...process.env, ...options.env },
+    detached: true,
     stdio: ["ignore", logFd, logFd],
   });
   if (!child.pid) {
@@ -201,6 +202,27 @@ export async function spawnBackground(
   let stopPromise: Promise<void> | null = null;
   const pid = child.pid;
   child.unref();
+
+  const terminateProcessGroup = (signal: NodeJS.Signals) => {
+    if (!pid) {
+      return;
+    }
+
+    const groupPid = -pid;
+    try {
+      process.kill(groupPid, signal);
+      return;
+    } catch {
+      // On some platforms/process types, negative PIDs may fail.
+    }
+
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Process already exited.
+    }
+  };
+
   return {
     pid,
     stop: async (stopOptions = {}) => {
@@ -217,7 +239,7 @@ export async function spawnBackground(
         }
 
         try {
-          process.kill(pid, "SIGTERM");
+          terminateProcessGroup("SIGTERM");
         } catch {
           await exitPromise;
           return;
@@ -232,7 +254,7 @@ export async function spawnBackground(
         }
 
         try {
-          process.kill(pid, "SIGKILL");
+          terminateProcessGroup("SIGKILL");
         } catch {
           // Process already exited between timeout and escalation.
         }

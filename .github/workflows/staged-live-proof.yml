@@ -46,6 +46,28 @@ jobs:
       - name: Install dependencies
         run: bash scripts/ci-install-verified.sh root
 
+      - name: Guard staged proof for AVAX canonical production readiness
+        if: ${{ inputs.target == 'avax' || inputs.target == 'all' }}
+        run: |
+          node --import tsx <<'NODE'
+          import {
+            BETTING_DEPLOYMENTS,
+            getMissingBettingEvmCanonicalFields,
+            isBettingEvmDeploymentCanonicalReady,
+          } from "./packages/hyperbet-chain-registry/src/index.ts";
+
+          const avax = BETTING_DEPLOYMENTS.evm.avax;
+          if (!isBettingEvmDeploymentCanonicalReady(avax)) {
+            const missing = getMissingBettingEvmCanonicalFields(avax).join(", ");
+            throw new Error(
+              `ABORT: AVAX staged proof is blocked until production canonical fields are populated in chain registry: ${missing}`,
+            );
+          }
+          console.log(
+            `AVAX staged proof precheck passed: production deployment is canonical in ${avax.label} (${avax.networkKey}).`,
+          );
+          NODE
+
       - name: Run staged live proof
         run: node --import tsx scripts/staged-live-proof.ts --mode=${{ inputs.mode }} --target=${{ inputs.target }}
 
