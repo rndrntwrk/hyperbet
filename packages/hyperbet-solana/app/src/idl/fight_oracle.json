@@ -307,6 +307,18 @@
         {
           "name": "reporter",
           "type": "pubkey"
+        },
+        {
+          "name": "finalizer",
+          "type": "pubkey"
+        },
+        {
+          "name": "challenger",
+          "type": "pubkey"
+        },
+        {
+          "name": "dispute_window_secs",
+          "type": "i64"
         }
       ]
     },

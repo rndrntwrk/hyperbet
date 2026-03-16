@@ -313,6 +313,18 @@ export type FightOracle = {
         {
           "name": "reporter",
           "type": "pubkey"
+        },
+        {
+          "name": "finalizer",
+          "type": "pubkey"
+        },
+        {
+          "name": "challenger",
+          "type": "pubkey"
+        },
+        {
+          "name": "disputeWindowSecs",
+          "type": "i64"
         }
       ]
     },
