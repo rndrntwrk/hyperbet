@@ -2694,9 +2694,25 @@ function buildBotRecoveryStates(now = Date.now()): KeeperRecoveryState[] {
   ];
 }
 
+function refreshRestartRecoveryState(): void {
+  if (restartRecoveryObservedAtMs == null) return;
+  // Guard: only clear if the map is non-empty (stream events have been received), to avoid
+  // a race where this fires before activeClobMatches is populated.
+  if (activeClobMatches.size === 0) return;
+  const hasOpenOrders = [...activeClobMatches.values()].some(
+    (trackedMatch) =>
+      trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null,
+  );
+  if (!hasOpenOrders) {
+    restartRecoveryObservedAtMs = null;
+    restartRecoveryDetails = null;
+  }
+}
+
 function writeBotHealthSnapshot(): void {
   if (!BOT_HEALTH_FILE) return;
   try {
+    refreshRestartRecoveryState();
     trimSettledClobHealth();
     const activeRecords = Array.from(activeClobMatches.values()).map((trackedMatch) =>
       buildManagedClobHealthRecord(trackedMatch),
@@ -3164,6 +3180,7 @@ async function runMaintenance(): Promise<void> {
     )
   ) {
     restartRecoveryObservedAtMs = null;
+    restartRecoveryDetails = null;
   }
 
   // NOTE: We do NOT create new rounds here anymore.
