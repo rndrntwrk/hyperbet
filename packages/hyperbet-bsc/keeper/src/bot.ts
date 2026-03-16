@@ -267,6 +267,13 @@ const EVM_GOLD_CLOB_ADMIN_ABI = [
     inputs: [{ type: "bytes32" }, { type: "uint8" }],
     outputs: [{ type: "uint8" }],
   },
+  {
+    type: "function",
+    name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32" }, { type: "uint8" }],
+    outputs: [],
+  },
 ] as const;
 
 function sleep(ms: number): Promise<void> {
@@ -2630,6 +2637,52 @@ function buildManagedClobHealthRecord(
   };
 }
 
+async function dispatchEvmClaim(trackedMatch: ActiveClobMatch): Promise<void> {
+  if (evmKeeperChains.length === 0) return;
+  const duelKey = normalizeHex32(trackedMatch.duelKeyHex);
+  await Promise.allSettled(
+    evmKeeperChains.map(async (chain) => {
+      try {
+        await chain.walletClient.writeContract({
+          chain: undefined,
+          address: chain.goldClobAddress,
+          abi: EVM_GOLD_CLOB_ADMIN_ABI,
+          functionName: "claim",
+          args: [duelKey, DUEL_WINNER_MARKET_KIND],
+          account: chain.account,
+        });
+        console.log(
+          JSON.stringify({
+            action: "evm_claim_dispatched",
+            chainKey: chain.chainKey,
+            duelId: trackedMatch.duelId,
+            duelKey,
+          }),
+        );
+      } catch (err) {
+        const msg = (err as Error)?.message ?? String(err);
+        // NothingToClaim is expected when the keeper wallet held no position
+        // (e.g. no orders were matched, or claim was already collected).
+        if (msg.includes("NothingToClaim")) {
+          console.log(
+            JSON.stringify({
+              action: "evm_claim_skipped",
+              chainKey: chain.chainKey,
+              duelId: trackedMatch.duelId,
+              reason: "NothingToClaim",
+            }),
+          );
+          return;
+        }
+        console.error(
+          `[Keeper] EVM claim failed for duel ${trackedMatch.duelId} on ${chain.chainKey}: ${msg}`,
+        );
+        throw err;
+      }
+    }),
+  );
+}
+
 async function captureSettledClobHealth(
   trackedMatch: ActiveClobMatch,
   lifecycleStatus: MarketSnapshot["lifecycleStatus"],
@@ -2640,6 +2693,17 @@ async function captureSettledClobHealth(
   trackedMatch.lastResolvedAtMs = now;
   trackedMatch.yesBidOrder = null;
   trackedMatch.noAskOrder = null;
+  // Dispatch the EVM keeper wallet claim now that the market is settled.
+  // On success (including NothingToClaim), mark lastClaimAtMs to clear the
+  // partial-claim recovery signal. On unexpected failure, leave it null so
+  // the partial-claim signal stays active for the next maintenance cycle.
+  try {
+    await dispatchEvmClaim(trackedMatch);
+    trackedMatch.lastClaimAtMs = Date.now();
+  } catch {
+    // dispatchEvmClaim already logged the error; leave lastClaimAtMs null
+    // so the partial-claim recovery signal persists.
+  }
   settledClobHealth.set(
     trackedMatch.duelId,
     buildManagedClobHealthRecord(trackedMatch, lifecycleStatus),
