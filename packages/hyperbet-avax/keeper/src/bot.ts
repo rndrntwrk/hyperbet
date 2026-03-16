@@ -2650,7 +2650,6 @@ async function captureSettledClobHealth(
   const now = Date.now();
   await refreshManagedClobHealth(trackedMatch, marketState, now);
   trackedMatch.lastResolvedAtMs = now;
-  trackedMatch.lastClaimAtMs = now;
   trackedMatch.yesBidOrder = null;
   trackedMatch.noAskOrder = null;
   settledClobHealth.set(

@@ -30,7 +30,6 @@ const ORDER_FLAG_GTC = 0x01;
 const SCENARIO_UNMATCHED = "unmatched-gtc";
 const SCENARIO_PARTIAL_MATCH = "partial-match-gtc";
 const SCENARIO_FULL_MATCH = "full-match-gtc";
-const DEFAULT_MATCHER_AMOUNT_MODE = "unmatched-gtc";
 const PRICE = 999;
 const AMOUNT = parseUnits("0.001", 18);
 
@@ -62,7 +61,7 @@ function allowDefaults() {
 }
 
 function parseScenario() {
-  const raw = (process.env.AVAX_FUJI_BOOTSTRAP_SCENARIO || DEFAULT_MATCHER_AMOUNT_MODE).trim();
+  const raw = (process.env.AVAX_FUJI_BOOTSTRAP_SCENARIO || SCENARIO_UNMATCHED).trim();
   if (
     raw !== SCENARIO_UNMATCHED &&
     raw !== SCENARIO_PARTIAL_MATCH &&
