@@ -1155,4 +1155,139 @@ describe("GoldClob", function () {
     // Test fee config reversion
     await expect(clob.connect(admin).setFeeConfig(5000, 5001, 0)).to.be.revertedWithCustomError(clob, "TotalTradeFeeTooHigh");
   });
+
+  it("rejects all invalid order flag combinations in the 3-bit space", async function () {
+    const { clob, oracle, operator, reporter, traderA } = await deployFixture();
+    const duel = duelKey("duel-flag-matrix");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    const validFlags = [ORDER_FLAG_GTC, ORDER_FLAG_IOC, ORDER_FLAGS_GTC_POST_ONLY];
+    for (let flags = 0; flags <= 0x07; flags++) {
+      const value = quoteCost(BUY_SIDE, 500, 1000n) + 20n;
+      if (validFlags.includes(flags)) {
+        await expectTxSuccess(
+          clob
+            .connect(traderA)
+            .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 500, 1000, flags, { value }),
+        );
+      } else {
+        await expect(
+          clob
+            .connect(traderA)
+            .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 500, 1000, flags, { value }),
+        ).to.be.revertedWithCustomError(clob, "InvalidOrderFlags");
+      }
+    }
+  });
+
+  it("cancels IOC taker on self-cross without resting any remainder", async function () {
+    const { clob, oracle, operator, reporter, traderA } = await deployFixture();
+    const duel = duelKey("duel-ioc-self-cross");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, 600, 1000, ORDER_FLAG_GTC, {
+        value: quoteCost(SELL_SIDE, 600, 1000n) + 20n,
+      });
+
+    const clobAddress = await clob.getAddress();
+    const contractBefore = await ethers.provider.getBalance(clobAddress);
+
+    await expect(
+      clob
+        .connect(traderA)
+        .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, 600, 2000, ORDER_FLAG_IOC, {
+          value: quoteOrderValue(BUY_SIDE, 600, 2000n),
+        }),
+    )
+      .to.emit(clob, "SelfTradePolicyTriggered");
+
+    const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
+    const takerOrder = await clob.orders(marketKey, 2);
+    expect(takerOrder.amount).to.equal(2000n);
+    expect(takerOrder.filled).to.equal(0n);
+    expect(takerOrder.active).to.equal(false);
+
+    const buyQueue = await clob.getPriceLevel(
+      duel,
+      MARKET_KIND_DUEL_WINNER,
+      BUY_SIDE,
+      600,
+    );
+    expect(buyQueue[2]).to.equal(0n);
+
+    expect(await ethers.provider.getBalance(clobAddress)).to.equal(contractBefore);
+  });
+
+  it("refunds only the unfilled portion when cancelling a partially-filled GTC order", async function () {
+    const { clob, oracle, operator, reporter, treasury, marketMaker, traderA, traderB } =
+      await deployFixture();
+    const duel = duelKey("duel-partial-cancel-refund");
+
+    await upsertOpenDuel(oracle, reporter, duel);
+    await clob
+      .connect(operator)
+      .createMarketForDuel(duel, MARKET_KIND_DUEL_WINNER);
+
+    const makerAmount = 3000n;
+    const price = 600;
+    const makerCost = quoteCost(BUY_SIDE, price, makerAmount);
+
+    await clob
+      .connect(traderA)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, BUY_SIDE, price, makerAmount, ORDER_FLAG_GTC, {
+        value: makerCost + 20n,
+      });
+
+    const takerAmount = 1000n;
+    await clob
+      .connect(traderB)
+      .placeOrder(duel, MARKET_KIND_DUEL_WINNER, SELL_SIDE, price, takerAmount, ORDER_FLAG_GTC, {
+        value: quoteOrderValue(SELL_SIDE, price, takerAmount),
+      });
+
+    const marketKey = await clob.marketKey(duel, MARKET_KIND_DUEL_WINNER);
+    const orderAfterFill = await clob.orders(marketKey, 1);
+    expect(orderAfterFill.filled).to.equal(takerAmount);
+    expect(orderAfterFill.active).to.equal(true);
+
+    const clobAddress = await clob.getAddress();
+    const contractBefore = await ethers.provider.getBalance(clobAddress);
+    const treasuryBefore = await ethers.provider.getBalance(treasury.address);
+    const mmBefore = await ethers.provider.getBalance(marketMaker.address);
+
+    await expectTxSuccess(
+      clob.connect(traderA).cancelOrder(duel, MARKET_KIND_DUEL_WINNER, 1),
+    );
+
+    const contractAfter = await ethers.provider.getBalance(clobAddress);
+    const contractDelta = contractBefore - contractAfter;
+    const unfilledAmount = makerAmount - takerAmount;
+    // _quoteCost(BUY_SIDE, 600, 2000) = 2000 * 600 / 1000 = 1200
+    expect(contractDelta).to.equal(1200n);
+    expect(await ethers.provider.getBalance(treasury.address)).to.equal(treasuryBefore);
+    expect(await ethers.provider.getBalance(marketMaker.address)).to.equal(mmBefore);
+
+    const orderAfterCancel = await clob.orders(marketKey, 1);
+    expect(orderAfterCancel.active).to.equal(false);
+    // cancel sets filled = amount to prevent re-cancellation
+    expect(orderAfterCancel.filled).to.equal(makerAmount);
+
+    const buyQueue = await clob.getPriceLevel(
+      duel,
+      MARKET_KIND_DUEL_WINNER,
+      BUY_SIDE,
+      price,
+    );
+    expect(buyQueue[2]).to.equal(0n);
+  });
 });
