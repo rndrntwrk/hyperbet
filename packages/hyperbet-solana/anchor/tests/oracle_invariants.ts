@@ -1,12 +1,9 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
-import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import * as assert from "assert";
 
 import {
-  SIDE_ASK,
-  SIDE_BID,
-  airdrop,
   cancelDuel,
   deriveDuelStatePda,
   deriveOracleConfigPda,
@@ -20,8 +17,6 @@ import {
   upsertDuel,
   duelStatusLocked,
   duelStatusBettingOpen,
-  duelStatusScheduled,
-  deriveProgramDataAddress,
   sleep,
 } from "./clob-test-helpers";
 import { configureAnchorTests } from "./test-anchor";
@@ -34,23 +29,20 @@ describe("oracle invariants (solana parity)", () => {
   const fightProgram = anchor.workspace.FightOracle as Program<FightOracle>;
   const authority = (provider.wallet as anchor.Wallet & { payer: Keypair }).payer;
 
-  const STATUS_RANK = {
-    Scheduled: 0,
-    BettingOpen: 1,
-    Locked: 2,
-    Proposed: 3,
-    Challenged: 4,
-    Resolved: 5,
-    Cancelled: 6,
-  };
+  before(async () => {
+    await ensureOracleReady(
+      fightProgram,
+      authority,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      3600,
+    );
+  });
 
   it("PM16: rejects initialize_oracle with zero addresses (bootstrap removal)", async () => {
-    const oracleConfig = deriveDuelStatePda(fightProgram.programId, uniqueDuelKey("zero-addr")); // using dummy pda for test isolation
-    // Actually config PDA is fixed seed, so we need to test initialization on a fresh localnet or assume it's already initialized and test Update
-    // But since we are on localnet and we might run this multiple times, it's better to verify the logic.
-    
-    // We can't easily re-initialize the same PDA if it exists, so we test the 'Update' gates too which share logic.
     const configPda = deriveOracleConfigPda(fightProgram.programId);
+    await ensureOracleReady(fightProgram, authority);
     
     try {
         await fightProgram.methods

@@ -30,6 +30,8 @@ import { configureAnchorTests } from "./test-anchor";
 import { FightOracle } from "../target/types/fight_oracle";
 import { GoldClobMarket } from "../target/types/gold_clob_market";
 
+const DISPUTE_WINDOW_SECS = 3600;
+
 describe("gold_clob_market security regressions", () => {
   const provider = configureAnchorTests();
   anchor.setProvider(provider);
@@ -39,6 +41,16 @@ describe("gold_clob_market security regressions", () => {
     .GoldClobMarket as Program<GoldClobMarket>;
   const authority = (provider.wallet as anchor.Wallet & { payer: Keypair })
     .payer;
+  before(async () => {
+    await ensureOracleReady(
+      fightProgram,
+      authority,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      DISPUTE_WINDOW_SECS,
+    );
+  });
 
   it("rejects unauthorized canonical market initialization", async () => {
     const outsider = Keypair.generate();
@@ -414,6 +426,14 @@ describe("gold_clob_market security regressions", () => {
         metadataUri: "https://hyperscape.gg/tests/security/non-open-mutations",
       },
     );
+    await ensureOracleReady(
+      fightProgram,
+      authority,
+      authority.publicKey,
+      authority.publicKey,
+      authority.publicKey,
+      3600,
+    );
     await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
 
     try {
@@ -557,7 +577,8 @@ describe("gold_clob_market security regressions", () => {
     const makerBalance = await clobProgram.account.userBalance.fetch(
       makerAsk.userBalance,
     );
-    assert.strictEqual(makerBalance.bShares.toString(), "1000");
+    assert.strictEqual(makerBalance.aShares.toString(), "1000");
+    assert.strictEqual(makerBalance.aLockedLamports.toString(), "600");
 
     await claimClobWinnings(clobProgram, {
       marketState: market.marketState,
