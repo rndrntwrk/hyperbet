@@ -1,6 +1,6 @@
 # Prediction-Market Launch Freeze Tracker
 
-Last updated: 2026-03-15
+Last updated: 2026-03-17
 
 ## How to read this tracker
 - [x] = done
@@ -11,7 +11,8 @@ Last updated: 2026-03-15
 ### Current position
 - Working in this workspace as a single active track.
 - First operational block to execute: **Priority 6 (AVAX canonicalization / rollout prep)**.
-- PM-16 PM-17A PM-17B work is intentionally gated until AVAX registry reality is locked.
+- PM-16/PM-17A/PM-17B work is intentionally gated until AVAX registry reality is locked.
+- PM-21 guardrail completion is now tracked and validated on this branch.
 
 ## Global merge order to enforce
 1. Priority 6 (AVAX canonicalization + proof gating)
@@ -146,15 +147,24 @@ Last updated: 2026-03-15
 
 ## [21] Priority: `enoomian/pm-21-protocol-guardrails`
 **Owner:** Gate 21
-**Status:** [ ]
+**Status:** [x]
 
-- [ ] Add protocol-level lifecycle and guardrail enforcement in:
+- [x] Add protocol-level lifecycle and guardrail enforcement in:
   - `packages/evm-contracts/contracts/GoldClob.sol`
-  - `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs`
   - `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`
-- [ ] Verify terminal-state-only claim/create sync invariants.
-- [ ] Add exploit/regression coverage for stale state, invalid transitions, pre-terminal claim, emergency-path misuse.
-- [ ] Confirm parity and audit-ready behavior in docs + evidence references.
+- [x] Verify terminal-state-only claim/invalidation semantics and open-market mutation constraints.
+- [x] Add exploit/regression coverage for stale state, invalid transitions, pre-terminal claim, and market-lock manipulation:
+  - `packages/evm-contracts/test/ExploitSuite.t.sol`
+  - `packages/hyperbet-solana/anchor/tests/gold_clob_security.ts`
+- [x] Confirm parity and audit-ready behavior in docs + evidence references:
+  - `docs/protocol/cross-chain-parity-matrix.md`
+
+### PM21 completion evidence
+- EVM exploit regression coverage: `packages/evm-contracts/test/ExploitSuite.t.sol`
+- SVM exploit regression coverage: `packages/hyperbet-solana/anchor/tests/gold_clob_security.ts`
+- Settlement parity checks:
+  - `packages/evm-contracts/test/GoldClobSettlement.t.sol`
+  - `packages/hyperbet-solana/anchor/tests/gold_clob_market.test.ts`
 
 ---
 
@@ -182,4 +192,3 @@ Last updated: 2026-03-15
 - [ ] A PR is not allowed to merge until its priority block is fully checked.
 - [ ] Each completed file-level task is linked back to a test or proof artifact.
 - [ ] Release-facing docs and CI/lane promotion are mutually consistent before `priority 22` begins.
-

@@ -20,9 +20,9 @@
 | Report duel result | `proposeResult(...)` | `propose_result(...)` | Requires winner `A/B`; end timestamp validity checks. |
 | Create market | `createMarketForDuel(duelKey, marketKind)` | `initialize_market(duel_key, market_kind)` | Allowed when duel is marketable (`BETTING_OPEN/LOCKED`). |
 | Sync market lifecycle from oracle | `syncMarketFromOracle(duelKey, marketKind)` | `sync_market_from_duel()` | Winner propagation on resolve; winner reset on cancel. |
-| Place order | `placeOrder(duelKey, marketKind, side, price, amount)` | `place_order(order_id, side, price, amount)` | Both validate side, price, status OPEN, and betting window. |
-| Cancel order | `cancelOrder(duelKey, marketKind, orderId)` | `cancel_order(order_id, side, price)` | Maker-only cancellation of active remainder. |
-| Claim settlement | `claim(duelKey, marketKind)` | `claim()` | Resolved = winner payout less fee; Cancelled = refund locked stake. |
+| Place order | `placeOrder(duelKey, marketKind, side, price, amount)` | `place_order(order_id, side, price, amount)` | Both validate side, price, status OPEN, and betting window before accepting matches. |
+| Cancel order | `cancelOrder(duelKey, marketKind, orderId)` | `cancel_order(order_id, side, price)` | Maker-only cancellation of active remainder; cancellation is now restricted to `OPEN` markets on both chains. |
+| Claim settlement | `claim(duelKey, marketKind)` | `claim()` | Resolved = winner payout less fee; Cancelled = refund locked stake; nonterminal claims must revert. |
 | Update fee config | `setFeeConfig(...)` | `update_config(...trade/winnings fee bps...)` | Both enforce BPS bounds. |
 | Update treasury | `setTreasury(address)` | `update_config(...treasury...)` | SVM packed into config update. |
 | Update market maker fee account | `setMarketMaker(address)` | `update_config(...market_maker...)` | SVM packed into config update. |
@@ -71,6 +71,18 @@ contracts.
 | Cancel duel / market cancellation | `bun run --cwd packages/hyperbet-solana anchor:test` | `bun run ci:contracts:proof` | `bun run ci:contracts:proof` |
 | Claim resolved winner | `node --import tsx scripts/ci-gate-e2e.ts --chain=solana` | `node --import tsx scripts/ci-gate-e2e.ts --chain=bsc` | `node --import tsx scripts/ci-gate-e2e.ts --chain=avax` |
 | Refund cancelled market | `node --import tsx scripts/ci-gate-e2e.ts --chain=solana` | `node --import tsx scripts/ci-gate-e2e.ts --chain=bsc` | `node --import tsx scripts/ci-gate-e2e.ts --chain=avax` |
+
+## PM21 Guardrail Evidence
+
+- EVM guardrail regression suite: `packages/evm-contracts/test/ExploitSuite.t.sol`
+- SVM guardrail regression suite: `packages/hyperbet-solana/anchor/tests/gold_clob_security.ts`
+- Settlement parity references:
+  - `packages/evm-contracts/test/GoldClobSettlement.t.sol`
+  - `packages/hyperbet-solana/anchor/tests/gold_clob_market.test.ts`
+
+Both sides enforce the same lifecycle restrictions:
+- Non-open markets (LOCKED/PROPOSED/CHALLENGED/RESOLVED/CANCELLED) reject order mutations with `MarketNotOpen` equivalents.
+- Only terminal states permit settlement claims; settled behavior is exact and symmetric (`resolved` payout, `cancelled` refund).
 
 ## API Contract Checks
 
