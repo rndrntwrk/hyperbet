@@ -400,7 +400,7 @@ describe("gold_clob_market security regressions", () => {
       side: SIDE_ASK,
       price: 600,
       amount: 1000,
-    );
+    });
 
     await upsertDuel(
       fightProgram,

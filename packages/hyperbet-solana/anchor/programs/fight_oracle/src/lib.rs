@@ -43,7 +43,7 @@ pub mod fight_oracle {
             require_keys_eq!(
                 oracle_config.authority,
                 upgrade_authority,
-                ErrorCode::UnauthorizedConfigAuthority
+                ErrorCode::ConfigAuthorityImmutable
             );
         }
 
