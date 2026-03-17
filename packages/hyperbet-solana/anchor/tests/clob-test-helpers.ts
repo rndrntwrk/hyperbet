@@ -42,6 +42,8 @@ function u64Le(value: bigint | number): Buffer {
   return buffer;
 }
 
+export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function toBn(value: bigint | number): BN {
   return new BN(BigInt(value).toString());
 }
@@ -49,8 +51,9 @@ function toBn(value: bigint | number): BN {
 export function uniqueDuelKey(label: string): number[] {
   const next = (duelKeyCounters.get(label) ?? 0) + 1;
   duelKeyCounters.set(label, next);
+  const salt = Date.now();
   return Array.from(
-    crypto.createHash("sha256").update(`${label}:${next}`).digest(),
+    crypto.createHash("sha256").update(`${label}:${next}:${salt}`).digest(),
   );
 }
 
@@ -202,7 +205,7 @@ export async function ensureOracleReady(
   reporter = authority.publicKey,
   finalizer = authority.publicKey,
   challenger = authority.publicKey,
-  disputeWindowSecs = 3600,
+  disputeWindowSecs = 1,
 ): Promise<PublicKey> {
   const oracleConfig = deriveOracleConfigPda(program.programId);
   const existingConfig =

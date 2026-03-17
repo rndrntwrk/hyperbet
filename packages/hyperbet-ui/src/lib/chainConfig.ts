@@ -149,14 +149,16 @@ export function getWagmiChains(): [Chain, ...Chain[]] {
   return wagmiChains as [Chain, ...Chain[]];
 }
 
-export const CHAIN_DISPLAY = {
+type ChainDisplayEntry = { name: string; shortName: string; icon: string; color: string };
+
+export const CHAIN_DISPLAY: Record<ChainId, ChainDisplayEntry> = {
   solana: {
     name: "Solana",
     shortName: "SOL",
     icon: "☀️",
     color: "#9945FF",
   },
-  ...Object.fromEntries(
+  ...(Object.fromEntries(
     BETTING_EVM_CHAIN_ORDER.map((chainKey) => {
       const runtime = getRuntimeChainConfig(chainKey);
       const meta = uiMetaForEvmChain(chainKey);
@@ -170,7 +172,7 @@ export const CHAIN_DISPLAY = {
         },
       ];
     }),
-  ),
-} as Record<ChainId, { name: string; shortName: string; icon: string; color: string }>;
+  ) as Record<Exclude<ChainId, "solana">, ChainDisplayEntry>),
+};
 
 export const LARGEST_MARKET_CACHE_KEY = "goldArena_largestMarketChain";

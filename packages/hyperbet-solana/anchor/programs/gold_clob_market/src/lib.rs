@@ -7,7 +7,7 @@ use fight_oracle::{
     self, DuelState as OracleDuelState, DuelStatus as OracleDuelStatus, MarketSide,
 };
 
-declare_id!("ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi");
+declare_id!("DYtd7AoyTX2tbmZ8vpC3mxZgqTpyaDei4TFXZukWBJEf");
 
 const CONFIG_SEED: &[u8] = b"config";
 const MARKET_SEED: &[u8] = b"market";
@@ -167,14 +167,22 @@ pub mod gold_clob_market {
         market_state.next_order_id = 1;
         market_state.best_ask = 1000;
         market_state.authority = ctx.accounts.operator.key();
+        emit!(MarketCreated {
+            duel_key,
+            market_key: market_state.key(),
+            market_kind,
+        });
         Ok(())
     }
 
     pub fn sync_market_from_duel(ctx: Context<SyncMarketFromDuel>) -> Result<()> {
+        let market_key = ctx.accounts.market_state.key();
+        let duel_key = ctx.accounts.duel_state.key();
         sync_market_status(
             &mut ctx.accounts.market_state,
             &ctx.accounts.duel_state,
-            ctx.accounts.duel_state.key(),
+            market_key,
+            duel_key,
         )
     }
 
@@ -189,13 +197,16 @@ pub mod gold_clob_market {
         validate_side(side)?;
         validate_order_behavior(order_behavior)?;
         require!(price > 0 && price < 1000, ErrorCode::InvalidPrice);
-        require!(amount > 0, ErrorCode::InvalidAmount);
+        require!(amount > 0 && amount % 1000 == 0, ErrorCode::InvalidAmount);
 
+        let market_key = ctx.accounts.market_state.key();
+        let duel_key = ctx.accounts.duel_state.key();
         let market_state = &mut ctx.accounts.market_state;
         sync_market_status(
             market_state,
             &ctx.accounts.duel_state,
-            ctx.accounts.duel_state.key(),
+            market_key,
+            duel_key,
         )?;
         require!(
             market_state.status == MarketStatus::Open,
@@ -219,6 +230,15 @@ pub mod gold_clob_market {
             .next_order_id
             .checked_add(1)
             .ok_or(ErrorCode::MathOverflow)?;
+
+        emit!(OrderPlaced {
+            market_key: market_state.key(),
+            order_id,
+            maker: ctx.accounts.user.key(),
+            side,
+            price,
+            amount,
+        });
 
         let cost = quote_cost(side, price, amount)?;
         let user_balance = &mut ctx.accounts.user_balance;
@@ -391,10 +411,13 @@ pub mod gold_clob_market {
         order_id: u64,
     ) -> Result<()> {
         let market_state = &mut ctx.accounts.market_state;
+        let market_key = market_state.key();
+        let duel_key = ctx.accounts.duel_state.key();
         sync_market_status(
             market_state,
             &ctx.accounts.duel_state,
-            ctx.accounts.duel_state.key(),
+            market_key,
+            duel_key,
         )?;
         require!(
             market_state.status == MarketStatus::Open,
@@ -560,11 +583,14 @@ pub mod gold_clob_market {
         validate_side(side)?;
         require!(price > 0 && price < 1000, ErrorCode::InvalidPrice);
 
+        let market_key = ctx.accounts.market_state.key();
+        let duel_key = ctx.accounts.duel_state.key();
         let market_state = &mut ctx.accounts.market_state;
         sync_market_status(
             market_state,
             &ctx.accounts.duel_state,
-            ctx.accounts.duel_state.key(),
+            market_key,
+            duel_key,
         )?;
 
         let order = &mut ctx.accounts.order;
@@ -646,15 +672,22 @@ pub mod gold_clob_market {
         order.prev_order_id = 0;
         order.next_order_id = 0;
         order.filled = order.amount;
+        emit!(OrderCancelled {
+            market_key: market_state.key(),
+            order_id,
+        });
         Ok(())
     }
 
     pub fn claim(ctx: Context<Claim>) -> Result<()> {
+        let market_key = ctx.accounts.market_state.key();
+        let duel_key = ctx.accounts.duel_state.key();
         let market_state = &mut ctx.accounts.market_state;
         sync_market_status(
             market_state,
             &ctx.accounts.duel_state,
-            ctx.accounts.duel_state.key(),
+            market_key,
+            duel_key,
         )?;
 
         let user_balance = &mut ctx.accounts.user_balance;
@@ -1140,6 +1173,7 @@ fn map_duel_status(status: OracleDuelStatus) -> MarketStatus {
 fn sync_market_status(
     market_state: &mut MarketState,
     duel_state: &OracleDuelState,
+    market_pubkey: Pubkey,
     duel_pubkey: Pubkey,
 ) -> Result<()> {
     require_keys_eq!(
@@ -1154,6 +1188,12 @@ fn sync_market_status(
     if duel_state.status == OracleDuelStatus::Cancelled {
         market_state.winner = MarketSide::None;
     }
+    emit!(MarketSynced {
+        duel_key: market_state.duel_key,
+        market_key: market_pubkey,
+        status: market_state.status,
+        winner: market_state.winner,
+    });
     Ok(())
 }
 
@@ -1400,16 +1440,14 @@ fn execute_matches<'info>(
 
         let fill_amount = std::cmp::min(remaining_amount, maker_remaining);
         if maker_order.maker == taker {
-            msg!(
-                "self_trade_policy_triggered marketRef={} makerAuthority={} takerAuthority={} makerOrderId={} takerOrderId={} policy=cancel-taker prevented=true price={} amount={}",
-                market_key,
-                maker_order.maker,
-                taker,
-                maker_order.id,
+            msg!("policy=cancel-taker prevented=true");
+            emit!(SelfTradePolicyTriggered {
+                market_ref: market_key,
+                maker_authority: maker_order.maker,
+                taker_authority: taker,
+                maker_order_id: maker_order.id,
                 taker_order_id,
-                current_boundary,
-                fill_amount
-            );
+            });
             self_trade_prevented = true;
             break;
         }
@@ -1489,6 +1527,14 @@ fn execute_matches<'info>(
                     .ok_or(ErrorCode::MathOverflow)?;
             }
         }
+
+        emit!(OrderMatched {
+            market_key,
+            maker_order_id: maker_order.id,
+            taker_order_id,
+            matched_amount: fill_amount,
+            price: current_boundary,
+        });
 
         if maker_order.filled >= maker_order.amount {
             unlink_head_order(market_state, &mut level, &mut maker_order);
@@ -1747,4 +1793,53 @@ pub enum ErrorCode {
     NothingToContinue,
     #[msg("Nothing to claim")]
     NothingToClaim,
+}
+
+#[event]
+pub struct MarketCreated {
+    pub duel_key: [u8; 32],
+    pub market_key: Pubkey,
+    pub market_kind: u8,
+}
+
+#[event]
+pub struct MarketSynced {
+    pub duel_key: [u8; 32],
+    pub market_key: Pubkey,
+    pub status: MarketStatus,
+    pub winner: MarketSide,
+}
+
+#[event]
+pub struct OrderPlaced {
+    pub market_key: Pubkey,
+    pub order_id: u64,
+    pub maker: Pubkey,
+    pub side: u8,
+    pub price: u16,
+    pub amount: u64,
+}
+
+#[event]
+pub struct OrderMatched {
+    pub market_key: Pubkey,
+    pub maker_order_id: u64,
+    pub taker_order_id: u64,
+    pub matched_amount: u64,
+    pub price: u16,
+}
+
+#[event]
+pub struct SelfTradePolicyTriggered {
+    pub market_ref: Pubkey,
+    pub maker_authority: Pubkey,
+    pub taker_authority: Pubkey,
+    pub maker_order_id: u64,
+    pub taker_order_id: u64,
+}
+
+#[event]
+pub struct OrderCancelled {
+    pub market_key: Pubkey,
+    pub order_id: u64,
 }

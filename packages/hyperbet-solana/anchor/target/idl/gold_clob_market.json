@@ -1,5 +1,5 @@
 {
-  "address": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi",
+  "address": "DYtd7AoyTX2tbmZ8vpC3mxZgqTpyaDei4TFXZukWBJEf",
   "metadata": {
     "name": "gold_clob_market",
     "version": "0.1.0",
@@ -364,7 +364,7 @@
         },
         {
           "name": "program",
-          "address": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi"
+          "address": "DYtd7AoyTX2tbmZ8vpC3mxZgqTpyaDei4TFXZukWBJEf"
         },
         {
           "name": "program_data"
@@ -818,6 +818,86 @@
       ]
     }
   ],
+  "events": [
+    {
+      "name": "MarketCreated",
+      "discriminator": [
+        88,
+        184,
+        130,
+        231,
+        226,
+        84,
+        6,
+        58
+      ]
+    },
+    {
+      "name": "MarketSynced",
+      "discriminator": [
+        12,
+        197,
+        233,
+        97,
+        244,
+        67,
+        27,
+        33
+      ]
+    },
+    {
+      "name": "OrderCancelled",
+      "discriminator": [
+        108,
+        56,
+        128,
+        68,
+        168,
+        113,
+        168,
+        239
+      ]
+    },
+    {
+      "name": "OrderMatched",
+      "discriminator": [
+        211,
+        0,
+        178,
+        174,
+        61,
+        245,
+        45,
+        250
+      ]
+    },
+    {
+      "name": "OrderPlaced",
+      "discriminator": [
+        96,
+        130,
+        204,
+        234,
+        169,
+        219,
+        216,
+        227
+      ]
+    },
+    {
+      "name": "SelfTradePolicyTriggered",
+      "discriminator": [
+        83,
+        88,
+        117,
+        16,
+        191,
+        232,
+        1,
+        86
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -1209,6 +1289,31 @@
       }
     },
     {
+      "name": "MarketCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_key",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "market_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_kind",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "MarketSide",
       "type": {
         "kind": "enum",
@@ -1341,6 +1446,43 @@
       }
     },
     {
+      "name": "MarketSynced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_key",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "market_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "MarketStatus"
+              }
+            }
+          },
+          {
+            "name": "winner",
+            "type": {
+              "defined": {
+                "name": "MarketSide"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "Order",
       "type": {
         "kind": "struct",
@@ -1401,6 +1543,82 @@
       }
     },
     {
+      "name": "OrderCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderMatched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker_order_id",
+            "type": "u64"
+          },
+          {
+            "name": "taker_order_id",
+            "type": "u64"
+          },
+          {
+            "name": "matched_amount",
+            "type": "u64"
+          },
+          {
+            "name": "price",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderPlaced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
+          },
+          {
+            "name": "maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": "u8"
+          },
+          {
+            "name": "price",
+            "type": "u16"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "PriceLevel",
       "type": {
         "kind": "struct",
@@ -1432,6 +1650,34 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SelfTradePolicyTriggered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_ref",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "taker_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker_order_id",
+            "type": "u64"
+          },
+          {
+            "name": "taker_order_id",
+            "type": "u64"
           }
         ]
       }
