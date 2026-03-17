@@ -963,7 +963,7 @@ describe("GoldClob", function () {
   });
 
   it("refunds recorded stake on duel cancellation", async function () {
-    const { clob, oracle, operator, reporter, finalizer, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, pauser, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-4");
 
@@ -993,7 +993,7 @@ describe("GoldClob", function () {
     expect(aBefore.bStake).to.equal(sellerStake);
     expect(bBefore.aStake).to.equal(buyerStake);
 
-    await oracle.connect(admin).cancelDuel(duel, "cancelled");
+    await oracle.connect(pauser).cancelDuel(duel, "cancelled");
     await clob
       .connect(operator)
       .syncMarketFromOracle(duel, MARKET_KIND_DUEL_WINNER);
