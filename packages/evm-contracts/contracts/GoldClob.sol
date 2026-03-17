@@ -385,7 +385,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         if (!market.exists) revert MarketMissing();
 
         DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
-        _syncMarketFromOracle(duelKey, key, market, duel);
+        if (_syncMarketFromOracle(duelKey, key, market, duel) != MarketStatus.OPEN) revert MarketNotOpen();
 
         Order storage order = orders[key][orderId];
         if (order.maker != msg.sender) revert NotMaker();
