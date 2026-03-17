@@ -337,6 +337,6 @@ describe("DuelOutcomeOracle", () => {
       .withArgs(duelKey, "emergency-cancel");
 
     const duel = await oracle.getDuel(duelKey);
-    expect(duel.status).to.equal(6n);
+    expect(duel.status).to.equal(7n); // CANCELLED
   });
 });
