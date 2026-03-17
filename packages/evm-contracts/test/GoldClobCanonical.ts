@@ -610,7 +610,7 @@ describe("GoldClob", function () {
     expect(takerOrder.active).to.equal(true);
   });
 
-  it("allows unmatched resting orders to be cancelled after betting locks", async function () {
+  it("rejects order cancellation after betting locks (PM21 guardrail)", async function () {
     const { clob, oracle, operator, reporter, traderA } = await deployFixture();
     const duel = duelKey("duel-locked-cancel");
 
@@ -639,19 +639,9 @@ describe("GoldClob", function () {
         DUEL_STATUS_LOCKED,
       );
 
-    await expectTxSuccess(
+    await expect(
       clob.connect(traderA).cancelOrder(duel, MARKET_KIND_DUEL_WINNER, 1),
-    );
-
-    const queue = await clob.getPriceLevel(
-      duel,
-      MARKET_KIND_DUEL_WINNER,
-      BUY_SIDE,
-      500,
-    );
-    expect(queue[0]).to.equal(0n);
-    expect(queue[1]).to.equal(0n);
-    expect(queue[2]).to.equal(0n);
+    ).to.be.revertedWithCustomError(clob, "MarketNotOpen");
   });
 
   it("tracks sparse best bid and ask levels after cancellations", async function () {

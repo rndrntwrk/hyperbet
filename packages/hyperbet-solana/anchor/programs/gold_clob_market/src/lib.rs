@@ -592,6 +592,10 @@ pub mod gold_clob_market {
             market_key,
             duel_key,
         )?;
+        require!(
+            market_state.status == MarketStatus::Open,
+            ErrorCode::MarketNotOpen
+        );
 
         let order = &mut ctx.accounts.order;
         require!(order.id == order_id, ErrorCode::InvalidOrderId);

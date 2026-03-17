@@ -20,12 +20,12 @@
 | Report duel result | `proposeResult(...)` | `propose_result(...)` | Requires winner `A/B`; end timestamp validity checks. |
 | Create market | `createMarketForDuel(duelKey, marketKind)` | `initialize_market(duel_key, market_kind)` | Allowed when duel is marketable (`BETTING_OPEN/LOCKED`). |
 | Sync market lifecycle from oracle | `syncMarketFromOracle(duelKey, marketKind)` | `sync_market_from_duel()` | Winner propagation on resolve; winner reset on cancel. |
-| Place order | `placeOrder(duelKey, marketKind, side, price, amount)` | `place_order(order_id, side, price, amount)` | Both validate side, price, status OPEN, and betting window. |
+| Place order | `placeOrder(duelKey, marketKind, side, price, amount)` | `place_order(order_id, side, price, amount)` | Both validate side, price, status OPEN, and betting window before accepting matches. |
 | Order flags (IOC / Post-Only / GTC) | `placeOrder` enforces IOC/post-only semantics and bounded GTC continuation | `place_order` enforces IOC/post-only semantics and bounded GTC continuation | Both enforce rejection-correctness and explicit continuation behavior. |
 | Bounded matching / continuation | Matching loop bound enforced via bounded iterations in `GoldClob` | Matching loop bound enforced via bounded iterations in `gold_clob_market` | Both require explicit continuation when matching bounds are reached in GTC flows. |
 | Self-trade policy | Matching path emits deterministic self-trade policy handling | Matching path emits deterministic self-trade policy handling | Both preserve bookkeeping and policy signals for self-cross candidates. |
-| Cancel order | `cancelOrder(duelKey, marketKind, orderId)` | `cancel_order(order_id, side, price)` | Maker-only cancellation of active remainder. |
-| Claim settlement | `claim(duelKey, marketKind)` | `claim()` | Resolved = winner payout less fee; Cancelled = refund locked stake. |
+| Cancel order | `cancelOrder(duelKey, marketKind, orderId)` | `cancel_order(order_id, side, price)` | Maker-only cancellation of active remainder; cancellation is now restricted to `OPEN` markets on both chains. |
+| Claim settlement | `claim(duelKey, marketKind)` | `claim()` | Resolved = winner payout less fee; Cancelled = refund locked stake; nonterminal claims must revert. |
 | Update fee config | `setFeeConfig(...)` | `update_config(...trade/winnings fee bps...)` | Both enforce BPS bounds. |
 | Update treasury | `setTreasury(address)` | `update_config(...treasury...)` | SVM packed into config update. |
 | Update market maker fee account | `setMarketMaker(address)` | `update_config(...market_maker...)` | SVM packed into config update. |
@@ -76,6 +76,18 @@ contracts.
 | Refund cancelled market | `node --import tsx scripts/ci-gate-e2e.ts --chain=solana` | `node --import tsx scripts/ci-gate-e2e.ts --chain=bsc` | `node --import tsx scripts/ci-gate-e2e.ts --chain=avax` |
 | PM17 order semantics | `bun run --cwd packages/hyperbet-solana/anchor test -- tests/gold_clob_market.test.ts tests/gold_clob_security.ts` | `forge test --match-path 'test/GoldClobSettlement.t.sol'`; `forge test --match-path 'test/fuzz/GoldClobFuzz.t.sol'`; `forge test --match-path 'test/PrecisionDoS.t.sol'` | `forge test --match-path 'test/GoldClobSettlement.t.sol'`; `forge test --match-path 'test/fuzz/GoldClobFuzz.t.sol'`; `forge test --match-path 'test/PrecisionDoS.t.sol'` |
 | PM17 claim parity | `bun run --cwd packages/hyperbet-solana/anchor test -- tests/hyperbet.ts` | `forge test --match-path 'test/GoldClobSettlement.t.sol'` | `forge test --match-path 'test/GoldClobSettlement.t.sol'` |
+
+## PM21 Guardrail Evidence
+
+- EVM guardrail regression suite: `packages/evm-contracts/test/ExploitSuite.t.sol`
+- SVM guardrail regression suite: `packages/hyperbet-solana/anchor/tests/gold_clob_security.ts`
+- Settlement parity references:
+  - `packages/evm-contracts/test/GoldClobSettlement.t.sol`
+  - `packages/hyperbet-solana/anchor/tests/gold_clob_market.test.ts`
+
+Both sides enforce the same lifecycle restrictions:
+- Non-open markets (LOCKED/PROPOSED/CHALLENGED/RESOLVED/CANCELLED) reject order mutations with `MarketNotOpen` equivalents.
+- Only terminal states permit settlement claims; settled behavior is exact and symmetric (`resolved` payout, `cancelled` refund).
 
 ## API Contract Checks
 
