@@ -26,7 +26,7 @@ export type FightOracle = {
       ],
       "accounts": [
         {
-          "name": "reporter",
+          "name": "authority",
           "writable": true,
           "signer": true
         },
@@ -751,7 +751,7 @@ export type FightOracle = {
     {
       "code": 6006,
       "name": "invalidDisputeWindow",
-      "msg": "Dispute window must be non-negative"
+      "msg": "Dispute window must be positive"
     },
     {
       "code": 6007,

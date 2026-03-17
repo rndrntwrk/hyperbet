@@ -596,7 +596,7 @@ const SolanaClobPanel = lazy(() =>
   })),
 );
 const ModelsMarketView = lazy(() =>
-  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
+  import("./components/ModelsMarketView").then((module) => ({
     default: module.ModelsMarketView,
   })),
 );

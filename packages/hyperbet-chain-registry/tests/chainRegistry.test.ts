@@ -54,9 +54,14 @@ describe("chain registry", () => {
   });
 
   test("resolves deployments by chain without package-local branching", () => {
-    const avax = resolveBettingEvmDeploymentForChain("avax", "mainnet-beta");
-    expect(avax.chainId).toBe(BETTING_DEPLOYMENTS.evm.avax.chainId);
-    expect(defaultRpcUrlForEvmNetwork(avax.networkKey)).toContain("avax");
+    const avaxMainnet = resolveBettingEvmDeploymentForChain("avax", "mainnet-beta");
+    expect(avaxMainnet.chainId).toBe(BETTING_DEPLOYMENTS.evm.avax.chainId);
+    expect(avaxMainnet.networkKey).toBe("avax");
+    expect(defaultRpcUrlForEvmNetwork(avaxMainnet.networkKey)).toContain("avax");
+
+    const avaxFuji = resolveBettingEvmDeploymentForChain("avax", "testnet");
+    expect(avaxFuji.networkKey).toBe("avaxFuji");
+    expect(defaultRpcUrlForEvmNetwork(avaxFuji.networkKey)).toContain("avax");
   });
 
   test("reports canonical readiness for shared mainnet EVM deployments", () => {
@@ -122,11 +127,22 @@ describe("chain registry", () => {
     expect(getMissingBettingEvmGovernanceFields(fujiReady)).toEqual([]);
   });
 
-  test("reports AVAX Fuji as incomplete until canonical values exist", () => {
+  test("tracks AVAX mainnet as pending and AVAX Fuji as canonicalized", () => {
     expect(
       isBettingEvmDeploymentCanonicalReady(BETTING_DEPLOYMENTS.evm.avaxFuji),
-    ).toBe(false);
+    ).toBe(true);
     expect(getMissingBettingEvmCanonicalFields(BETTING_DEPLOYMENTS.evm.avaxFuji))
+      .toEqual([]);
+    expect(
+      isBettingEvmDeploymentGovernanceReady(BETTING_DEPLOYMENTS.evm.avaxFuji),
+    ).toBe(true);
+    expect(
+      getMissingBettingEvmGovernanceFields(BETTING_DEPLOYMENTS.evm.avaxFuji),
+    ).toEqual([]);
+    expect(
+      isBettingEvmDeploymentCanonicalReady(BETTING_DEPLOYMENTS.evm.avax),
+    ).toBe(false);
+    expect(getMissingBettingEvmCanonicalFields(BETTING_DEPLOYMENTS.evm.avax))
       .toEqual([
         "duelOracleAddress",
         "goldClobAddress",

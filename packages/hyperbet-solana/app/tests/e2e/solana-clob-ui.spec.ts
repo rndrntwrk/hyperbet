@@ -338,6 +338,24 @@ test("prediction market loads the current duel and mints YES shares on-chain", a
   )) as UserBalanceAccount | null;
   const beforeYes = bnLikeToBigInt(beforeBalance?.aShares);
 
+  await expect
+    .poll(
+      async () => ({
+        submitDisabled: await page.getByTestId("prediction-submit").isDisabled(),
+        status: await readText(page, "solana-clob-status"),
+        marketStatus: await readText(page, "market-status"),
+      }),
+      {
+        timeout: 60_000,
+        intervals: [1_000, 2_000, 5_000],
+      },
+    )
+    .toEqual({
+      submitDisabled: false,
+      status: "Market open",
+      marketStatus: "Market: OPEN",
+    });
+
   await page.getByTestId("prediction-select-yes").click({ force: true });
   await page
     .getByTestId("prediction-amount-input")

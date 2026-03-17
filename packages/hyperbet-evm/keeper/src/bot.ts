@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash } from "node:crypto";
 import BN from "bn.js";
 import {
   Keypair,
+  type Connection,
   LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
@@ -105,9 +105,16 @@ function hashParticipant(agent: { id?: string; name?: string } | null): number[]
   return Array.from(createHash("sha256").update(id).digest());
 }
 
+type WinnerSide = "A" | "B";
+type DuelStatusState =
+  | { scheduled: {} }
+  | { bettingOpen: {} }
+  | { locked: {} };
+type DuelWinner = ({ a: {} } & { b?: never }) | ({ b: {} } & { a?: never });
+
 function buildResultHash(
   duelKeyHex: string,
-  winnerSide: "A" | "B",
+  winnerSide: WinnerSide,
   seed: string,
   replayHashHex: string,
 ): number[] {
@@ -316,7 +323,7 @@ function isRpcConnectivityError(error: unknown): boolean {
 }
 
 async function waitForTxBySignature(
-  connection: any,
+  connection: Connection,
   signature: string,
   timeoutMs = 90_000,
 ): Promise<boolean> {
@@ -337,7 +344,7 @@ async function waitForTxBySignature(
 
 async function runWithRecovery<T>(
   fn: () => Promise<T>,
-  connection: any,
+  connection: Connection,
 ): Promise<T> {
   try {
     return await fn();
@@ -506,7 +513,10 @@ const fightProgram = fightOracle as Program<FightOracle>;
 const marketProgram = goldClobMarket as Program<GoldClobMarket>;
 const perpsProgram = goldPerpsMarket as Program<GoldPerpsMarket>;
 
-function hasProgramMethod(program: any, method: string): boolean {
+function hasProgramMethod(
+  program: { methods: Record<string, unknown> },
+  method: string,
+): boolean {
   return typeof program?.methods?.[method] === "function";
 }
 
@@ -1861,7 +1871,9 @@ const ensureMarketConfigReady = async (): Promise<void> => {
   }
 };
 
-async function getDuelState(duelStatePda: PublicKey): Promise<any | null> {
+async function getDuelState(
+  duelStatePda: PublicKey,
+): Promise<Awaited<ReturnType<typeof fightProgram.account.duelState.fetchNullable>>> {
   const duelState = await fightProgram.account.duelState.fetchNullable(duelStatePda);
   markRpcSuccess();
   return duelState;
@@ -1869,7 +1881,7 @@ async function getDuelState(duelStatePda: PublicKey): Promise<any | null> {
 
 async function getClobMarketState(
   marketStatePda: PublicKey,
-): Promise<any | null> {
+): Promise<Awaited<ReturnType<typeof marketProgram.account.marketState.fetchNullable>>> {
   const marketState =
     await marketProgram.account.marketState.fetchNullable(marketStatePda);
   markRpcSuccess();
@@ -1977,7 +1989,7 @@ function buildDuelMetadata(data: DuelLifecycleEvent): string {
 
 function duelStatusEnum(
   status: "scheduled" | "bettingOpen" | "locked",
-): Record<string, Record<string, never>> {
+): DuelStatusState {
   if (status === "scheduled") {
     return { scheduled: {} };
   }
@@ -2019,7 +2031,7 @@ async function upsertDuelLifecycle(
           new BN(betCloseTs),
           new BN(duelStartTs),
           buildDuelMetadata(data),
-          duelStatusEnum(requestedStatus) as any,
+          duelStatusEnum(requestedStatus),
         )
         .accountsPartial({
           reporter: botKeypair.publicKey,
@@ -2271,7 +2283,13 @@ async function placeManagedClobOrder(
   amountLamports: number,
 ): Promise<ManagedClobOrder> {
   const marketState = await getClobMarketState(trackedMatch.marketState);
-  if (!enumIs(marketState?.status, "open")) {
+  if (!marketState || marketState.nextOrderId == null) {
+    throw new Error(
+      `Cannot seed uninitialized market ${trackedMatch.marketState.toBase58()}`,
+    );
+  }
+
+  if (!enumIs(marketState.status, "open")) {
     throw new Error(
       `Cannot seed closed market ${trackedMatch.marketState.toBase58()}`,
     );
@@ -2626,6 +2644,7 @@ async function captureSettledClobHealth(
   const now = Date.now();
   await refreshManagedClobHealth(trackedMatch, marketState, now);
   trackedMatch.lastResolvedAtMs = now;
+  trackedMatch.lastClaimAtMs = now;
   trackedMatch.yesBidOrder = null;
   trackedMatch.noAskOrder = null;
   settledClobHealth.set(
@@ -2682,9 +2701,22 @@ function buildBotRecoveryStates(now = Date.now()): KeeperRecoveryState[] {
   ];
 }
 
+function refreshRestartRecoveryState(): void {
+  if (restartRecoveryObservedAtMs == null) return;
+  const hasOpenOrders = [...activeClobMatches.values()].some(
+    (trackedMatch) =>
+      trackedMatch.yesBidOrder != null || trackedMatch.noAskOrder != null,
+  );
+  if (!hasOpenOrders) {
+    restartRecoveryObservedAtMs = null;
+    restartRecoveryDetails = null;
+  }
+}
+
 function writeBotHealthSnapshot(): void {
   if (!BOT_HEALTH_FILE) return;
   try {
+    refreshRestartRecoveryState();
     trimSettledClobHealth();
     const activeRecords = Array.from(activeClobMatches.values()).map((trackedMatch) =>
       buildManagedClobHealthRecord(trackedMatch),
@@ -2903,7 +2935,7 @@ async function reportRoundResult(data: DuelLifecycleEvent): Promise<void> {
       fightProgram.methods
         .proposeResult(
           Array.from(duelKey),
-          winnerSide === "A" ? ({ a: {} } as any) : ({ b: {} } as any),
+          winnerSide === "A" ? ({ a: {} } as DuelWinner) : ({ b: {} } as DuelWinner),
           new BN(resolvedSeed),
           Array.from(Buffer.from(replayHashHex, "hex")),
           buildResultHash(
