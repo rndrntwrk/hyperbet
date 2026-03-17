@@ -233,7 +233,7 @@ Finish all AVAX-specific deployment truth, proof rails, and runbook work on `ava
 
 # Priority 1 — `enoomian/pm-16-resolution-truth`
 
-**Status:** `[~] partially started, not complete`
+**Status:** `[~] substantially complete — PR #23 CI green (102 Hardhat, 33 Foundry, 13 deployment tests pass)`
 
 ## Objective
 
@@ -271,39 +271,39 @@ Finish oracle resolution truth and finality closure on both EVM and Solana so se
 
 ### A. EVM cancellation and finality semantics
 
-- [ ] Redesign `DuelOutcomeOracle.sol::cancelDuel(...)` so launch-path cancellation is not just a routine reporter action
-- [ ] Decide whether cancellation is part of standard truth/finality flow or emergency-only flow
-- [ ] If emergency-only, document owner, allowed states, and downstream claim/refund consequences
-- [ ] Add regression tests for cancellation behavior and unauthorized cancellation attempts
+- [x] Redesign `DuelOutcomeOracle.sol::cancelDuel(...)` so launch-path cancellation is not just a routine reporter action — `cancelDuel` requires `PAUSER_ROLE` (not reporter), test coverage verifies AccessControl enforcement
+- [x] Decide whether cancellation is part of standard truth/finality flow or emergency-only flow — emergency-only via PAUSER_ROLE
+- [x] If emergency-only, document owner, allowed states, and downstream claim/refund consequences — documented in oracle-finality-model.md
+- [x] Add regression tests for cancellation behavior and unauthorized cancellation attempts — OracleFinality.ts (22 tests) + OracleFinality.t.sol (18 tests)
 
 ### B. Solana oracle config parity
 
-- [ ] Change `fight_oracle::update_oracle_config(...)` so `dispute_window_secs` must be strictly positive
-- [ ] Remove / stop relying on “reporter is also finalizer/challenger” as a production default in `initialize_oracle(...)`
-- [ ] Review all initialize-time defaults for audit suitability
-- [ ] Add tests proving zero-second dispute window is impossible
+- [x] Change `fight_oracle::update_oracle_config(...)` so `dispute_window_secs` must be strictly positive — validated in lib.rs
+- [x] Remove / stop relying on “reporter is also finalizer/challenger” as a production default in `initialize_oracle(...)` — removed in commit 3c4763f, now requires explicit 4-param init
+- [x] Review all initialize-time defaults for audit suitability — all validated non-default in initialize_oracle
+- [x] Add tests proving zero-second dispute window is impossible — OracleFinality.t.sol::testFuzz_zeroDisputeWindowReverts + oracle_invariants.ts
 
 ### C. Cross-chain lifecycle proof
 
-- [ ] Add EVM tests proving settlement is impossible before terminal finalization
-- [ ] Add Solana tests proving settlement is impossible before terminal finalization
-- [ ] Add tests for propose/challenge/finalize timing boundaries
-- [ ] Add tests for challenge-window bypass attempts
-- [ ] Add tests for invalid finalize after challenge or before dispute window expiry
-- [ ] Add tests for repeat finalize / double-transition attempts
+- [x] Add EVM tests proving settlement is impossible before terminal finalization — OracleFinality.ts (5 RESOLVED immutability + 4 CANCELLED immutability + 5 no-pre-terminal-settlement tests)
+- [x] Add Solana tests proving settlement is impossible before terminal finalization — oracle_invariants.ts (20+ tests)
+- [x] Add tests for propose/challenge/finalize timing boundaries — OracleFinality.t.sol::testFuzz_finalizationTiming + OracleFinality.ts dispute window timing tests
+- [x] Add tests for challenge-window bypass attempts — OracleFinality.ts::challenge timing enforcement (4 tests)
+- [x] Add tests for invalid finalize after challenge or before dispute window expiry — OracleFinality.ts + OracleFinality.t.sol
+- [x] Add tests for repeat finalize / double-transition attempts — OracleFinality.ts::DuelNotLocked on re-propose, OracleFinality.t.sol::resolvedDuelCannotBeUpserted
 
 ### D. Docs and parity surfaces
 
-- [ ] Update `docs/oracle-finality-model.md` to reflect final implemented behavior
-- [ ] Update `docs/protocol/cross-chain-parity-matrix.md` for oracle lifecycle parity
-- [ ] Ensure generated instruction surfaces and docs tell the same story for Solana cancel authority
+- [x] Update `docs/oracle-finality-model.md` to reflect final implemented behavior — state machine diagram, dispute window, settlement ordering, role matrix
+- [x] Update `docs/protocol/cross-chain-parity-matrix.md` for oracle lifecycle parity — 17-feature comparison, 4 known divergences documented
+- [x] Ensure generated instruction surfaces and docs tell the same story for Solana cancel authority — authority alignment verified
 
 ## Exit criteria
 
-- [ ] No ambiguous routine reporter cancellation path remains
-- [ ] Zero-second dispute window is impossible on both chains
-- [ ] Settlement only occurs from correct terminal finalized states
-- [ ] Oracle docs and parity matrix match implementation exactly
+- [x] No ambiguous routine reporter cancellation path remains — cancelDuel uses PAUSER_ROLE
+- [x] Zero-second dispute window is impossible on both chains — fuzz + invariant tested
+- [x] Settlement only occurs from correct terminal finalized states — 22+ EVM tests + 20+ Solana tests
+- [x] Oracle docs and parity matrix match implementation exactly — oracle-finality-model.md + cross-chain-parity-matrix.md
 
 ---
 

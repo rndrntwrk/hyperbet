@@ -14,7 +14,7 @@ const ARACHNID_PROXY = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
 
 // Arachnid proxy deployed bytecode (for injection into local hardhat network)
 const ARACHNID_PROXY_DEPLOYED_BYTECODE =
-  "0x60003681823780368234f58015156014578182fd5b80825250506014600cf3";
+  "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3";
 
 const ORACLE_SALT = ethers.keccak256(
   ethers.toUtf8Bytes("hyperbet/v3/DuelOutcomeOracle"),
@@ -311,7 +311,7 @@ describe("CREATE2 Parity", function () {
           1,
         );
 
-      const tx = await oracle.connect(admin).cancelDuel(duelKey, "");
+      const tx = await oracle.connect(pauser).cancelDuel(duelKey, "");
       await expect(tx).to.emit(oracle, "DuelCancelled");
 
       const duel = await oracle.getDuel(duelKey);

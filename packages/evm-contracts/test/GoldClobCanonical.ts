@@ -963,7 +963,7 @@ describe("GoldClob", function () {
   });
 
   it("refunds recorded stake on duel cancellation", async function () {
-    const { clob, oracle, operator, reporter, finalizer, admin, pauser, traderA, traderB } =
+    const { clob, oracle, operator, reporter, finalizer, pauser, traderA, traderB } =
       await deployFixture();
     const duel = duelKey("duel-4");
 
@@ -991,7 +991,6 @@ describe("GoldClob", function () {
     const aBefore = await clob.positions(marketKey, traderA.address);
     const bBefore = await clob.positions(marketKey, traderB.address);
     expect(bBefore.aStake).to.equal(buyerStake);
-    console.log("DEBUG: admin defined?", !!admin);
 
     await oracle.connect(pauser).cancelDuel(duel, "cancelled");
     await clob

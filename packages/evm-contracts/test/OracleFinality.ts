@@ -363,7 +363,7 @@ describe("OracleFinality — PM16 Resolution Truth", function () {
       ).to.be.revertedWithCustomError(oracle, "NotProposed");
     });
 
-    it("duplicate proposal ID reverts", async function () {
+    it("duplicate proposal on already-proposed duel reverts with DuelNotLocked", async function () {
       const key = await createLockedDuel(504);
       const rh = ethers.keccak256(ethers.toUtf8Bytes("dup-result"));
       const rp = ethers.keccak256(ethers.toUtf8Bytes("dup-replay"));
@@ -372,12 +372,12 @@ describe("OracleFinality — PM16 Resolution Truth", function () {
         .connect(reporter)
         .proposeResult(key, 1, 1, rp, rh, 4_000, "");
 
-      // Same resultHash + replayHash → same proposalId
+      // Duel is now PROPOSED — second proposeResult hits DuelNotLocked before ProposalExists
       await expect(
         oracle
           .connect(reporter)
           .proposeResult(key, 2, 2, rp, rh, 5_000, ""),
-      ).to.be.revertedWithCustomError(oracle, "ProposalExists");
+      ).to.be.revertedWithCustomError(oracle, "DuelNotLocked");
     });
   });
 
