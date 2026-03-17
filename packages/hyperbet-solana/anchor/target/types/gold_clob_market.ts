@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/gold_clob_market.json`.
  */
 export type GoldClobMarket = {
-  "address": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi",
+  "address": "DYtd7AoyTX2tbmZ8vpC3mxZgqTpyaDei4TFXZukWBJEf",
   "metadata": {
     "name": "goldClobMarket",
     "version": "0.1.0",
@@ -370,7 +370,7 @@ export type GoldClobMarket = {
         },
         {
           "name": "program",
-          "address": "ARVJNJp49VZnkB8QBYZAAFJmufvtVSPhnuuenwwSLwpi"
+          "address": "DYtd7AoyTX2tbmZ8vpC3mxZgqTpyaDei4TFXZukWBJEf"
         },
         {
           "name": "programData"
@@ -824,6 +824,86 @@ export type GoldClobMarket = {
       ]
     }
   ],
+  "events": [
+    {
+      "name": "marketCreated",
+      "discriminator": [
+        88,
+        184,
+        130,
+        231,
+        226,
+        84,
+        6,
+        58
+      ]
+    },
+    {
+      "name": "marketSynced",
+      "discriminator": [
+        12,
+        197,
+        233,
+        97,
+        244,
+        67,
+        27,
+        33
+      ]
+    },
+    {
+      "name": "orderCancelled",
+      "discriminator": [
+        108,
+        56,
+        128,
+        68,
+        168,
+        113,
+        168,
+        239
+      ]
+    },
+    {
+      "name": "orderMatched",
+      "discriminator": [
+        211,
+        0,
+        178,
+        174,
+        61,
+        245,
+        45,
+        250
+      ]
+    },
+    {
+      "name": "orderPlaced",
+      "discriminator": [
+        96,
+        130,
+        204,
+        234,
+        169,
+        219,
+        216,
+        227
+      ]
+    },
+    {
+      "name": "selfTradePolicyTriggered",
+      "discriminator": [
+        83,
+        88,
+        117,
+        16,
+        191,
+        232,
+        1,
+        86
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -1215,6 +1295,31 @@ export type GoldClobMarket = {
       }
     },
     {
+      "name": "marketCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duelKey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "marketKey",
+            "type": "pubkey"
+          },
+          {
+            "name": "marketKind",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "marketSide",
       "type": {
         "kind": "enum",
@@ -1347,6 +1452,43 @@ export type GoldClobMarket = {
       }
     },
     {
+      "name": "marketSynced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duelKey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "marketKey",
+            "type": "pubkey"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "marketStatus"
+              }
+            }
+          },
+          {
+            "name": "winner",
+            "type": {
+              "defined": {
+                "name": "marketSide"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "order",
       "type": {
         "kind": "struct",
@@ -1407,6 +1549,82 @@ export type GoldClobMarket = {
       }
     },
     {
+      "name": "orderCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "marketKey",
+            "type": "pubkey"
+          },
+          {
+            "name": "orderId",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "orderMatched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "marketKey",
+            "type": "pubkey"
+          },
+          {
+            "name": "makerOrderId",
+            "type": "u64"
+          },
+          {
+            "name": "takerOrderId",
+            "type": "u64"
+          },
+          {
+            "name": "matchedAmount",
+            "type": "u64"
+          },
+          {
+            "name": "price",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "orderPlaced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "marketKey",
+            "type": "pubkey"
+          },
+          {
+            "name": "orderId",
+            "type": "u64"
+          },
+          {
+            "name": "maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": "u8"
+          },
+          {
+            "name": "price",
+            "type": "u16"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "priceLevel",
       "type": {
         "kind": "struct",
@@ -1438,6 +1656,34 @@ export type GoldClobMarket = {
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "selfTradePolicyTriggered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "marketRef",
+            "type": "pubkey"
+          },
+          {
+            "name": "makerAuthority",
+            "type": "pubkey"
+          },
+          {
+            "name": "takerAuthority",
+            "type": "pubkey"
+          },
+          {
+            "name": "makerOrderId",
+            "type": "u64"
+          },
+          {
+            "name": "takerOrderId",
+            "type": "u64"
           }
         ]
       }

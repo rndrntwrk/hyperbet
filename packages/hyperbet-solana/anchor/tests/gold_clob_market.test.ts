@@ -27,6 +27,7 @@ import {
   uniqueDuelKey,
   upsertDuel,
   writableAccount,
+  sleep,
 } from "./clob-test-helpers";
 import { configureAnchorTests } from "./test-anchor";
 import { FightOracle } from "../target/types/fight_oracle";
@@ -306,7 +307,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 1,
       side: SIDE_ASK,
       price: 600,
-      amount: 400,
+      amount: 4000,
     });
 
     const selfAsk = await placeClobOrder(clobProgram, {
@@ -320,7 +321,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 2,
       side: SIDE_ASK,
       price: 600,
-      amount: 700,
+      amount: 7000,
       remainingAccounts: [writableAccount(externalAsk.order)],
     });
 
@@ -335,7 +336,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 3,
       side: SIDE_BID,
       price: 600,
-      amount: 800,
+      amount: 8000,
       remainingAccounts: [
         writableAccount(externalAsk.restingLevel),
         writableAccount(externalAsk.order),
@@ -358,11 +359,11 @@ describe("gold_clob_market (native SOL settlement)", () => {
     const externalOrderState = await clobProgram.account.order.fetch(externalAsk.order);
     const selfOrderState = await clobProgram.account.order.fetch(selfAsk.order);
     const takerBalance = await clobProgram.account.userBalance.fetch(bid.userBalance);
-    assert.strictEqual(externalOrderState.filled.toString(), "400");
+    assert.strictEqual(externalOrderState.filled.toString(), "4000");
     assert.strictEqual(externalOrderState.active, false);
     assert.strictEqual(selfOrderState.filled.toString(), "0");
     assert.strictEqual(selfOrderState.active, true);
-    assert.strictEqual(takerBalance.aShares.toString(), "400");
+    assert.strictEqual(takerBalance.aShares.toString(), "4000");
   });
 
   it("keeps mixed-user fills free of self-trade policy logs", async () => {
@@ -391,7 +392,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 1,
       side: SIDE_ASK,
       price: 600,
-      amount: 500,
+      amount: 5000,
     });
 
     const bid = await placeClobOrder(clobProgram, {
@@ -405,7 +406,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 2,
       side: SIDE_BID,
       price: 600,
-      amount: 500,
+      amount: 5000,
       remainingAccounts: [
         writableAccount(ask.restingLevel),
         writableAccount(ask.order),
@@ -793,6 +794,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       duelEndTs: Math.floor(Date.now() / 1000) - 10,
       metadataUri: "https://hyperscape.gg/duels/resolved-fee-snapshot",
     });
+    await sleep(2100);
     await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
 

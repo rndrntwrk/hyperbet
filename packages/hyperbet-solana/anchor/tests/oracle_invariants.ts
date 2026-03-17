@@ -22,6 +22,7 @@ import {
   duelStatusBettingOpen,
   duelStatusScheduled,
   deriveProgramDataAddress,
+  sleep,
 } from "./clob-test-helpers";
 import { configureAnchorTests } from "./test-anchor";
 import { FightOracle } from "../target/types/fight_oracle";
@@ -131,6 +132,7 @@ describe("oracle invariants (solana parity)", () => {
             winner: marketSideA(),
             duelEndTs: now - 10,
         });
+        await sleep(2100);
         // Short dispute window for test
         await finalizeDuelResult(fightProgram, authority, terminalDuelKey);
     });
