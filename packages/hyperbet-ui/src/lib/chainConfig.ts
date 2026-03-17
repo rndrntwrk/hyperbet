@@ -149,10 +149,7 @@ export function getWagmiChains(): [Chain, ...Chain[]] {
   return wagmiChains as [Chain, ...Chain[]];
 }
 
-export const CHAIN_DISPLAY: Record<
-  ChainId,
-  { name: string; shortName: string; icon: string; color: string }
-> = {
+export const CHAIN_DISPLAY = {
   solana: {
     name: "Solana",
     shortName: "SOL",
@@ -174,6 +171,6 @@ export const CHAIN_DISPLAY: Record<
       ];
     }),
   ),
-};
+} as Record<ChainId, { name: string; shortName: string; icon: string; color: string }>;
 
 export const LARGEST_MARKET_CACHE_KEY = "goldArena_largestMarketChain";

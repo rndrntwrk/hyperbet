@@ -60,6 +60,7 @@ contract OracleFinalityTest is Test {
         bytes32 resultHash = keccak256(abi.encode("result", key));
         bytes32 replayHash = keccak256(abi.encode("replay", key));
 
+        if (block.timestamp < 2_001) vm.warp(2_001);
         vm.prank(reporter);
         oracle.proposeResult(key, DuelOutcomeOracle.Side.A, 42, replayHash, resultHash, 4_000, "");
 
@@ -106,6 +107,7 @@ contract OracleFinalityTest is Test {
 
         bytes32 rh = keccak256("r");
         bytes32 rp = keccak256("p");
+        vm.warp(2_001);
         vm.prank(reporter);
         o.proposeResult(key, DuelOutcomeOracle.Side.A, 1, rp, rh, 4_000, "");
 
@@ -195,6 +197,7 @@ contract OracleFinalityTest is Test {
 
     function test_noWinnerInProposed() public {
         bytes32 key = _createLockedDuel(302);
+        vm.warp(2_001);
         vm.prank(reporter);
         oracle.proposeResult(key, DuelOutcomeOracle.Side.B, 99,
             keccak256("rp"), keccak256("rh"), 4_000, "");
@@ -204,6 +207,7 @@ contract OracleFinalityTest is Test {
 
     function test_noWinnerInChallenged() public {
         bytes32 key = _createLockedDuel(303);
+        vm.warp(2_001);
         vm.prank(reporter);
         oracle.proposeResult(key, DuelOutcomeOracle.Side.A, 1,
             keccak256("rp2"), keccak256("rh2"), 4_000, "");
@@ -251,6 +255,7 @@ contract OracleFinalityTest is Test {
 
     function test_onlyReporterCanPropose() public {
         bytes32 key = _createLockedDuel(501);
+        vm.warp(2_001);
         vm.prank(other);
         vm.expectRevert();
         oracle.proposeResult(key, DuelOutcomeOracle.Side.A, 1,
@@ -259,6 +264,7 @@ contract OracleFinalityTest is Test {
 
     function test_onlyFinalizerCanFinalize() public {
         bytes32 key = _createLockedDuel(502);
+        vm.warp(2_001);
         vm.prank(reporter);
         oracle.proposeResult(key, DuelOutcomeOracle.Side.A, 1,
             keccak256("r3"), keccak256("h3"), 4_000, "");
@@ -271,6 +277,7 @@ contract OracleFinalityTest is Test {
 
     function test_onlyChallengerCanChallenge() public {
         bytes32 key = _createLockedDuel(503);
+        vm.warp(2_001);
         vm.prank(reporter);
         oracle.proposeResult(key, DuelOutcomeOracle.Side.B, 1,
             keccak256("r4"), keccak256("h4"), 4_000, "");
