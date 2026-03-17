@@ -23,7 +23,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint8 public constant ORDER_FLAG_GTC = 0x01;
     uint8 public constant ORDER_FLAG_IOC = 0x02;
     uint8 public constant ORDER_FLAG_POST_ONLY = 0x04;
-    uint8 public constant MAX_MATCH_ITERATIONS = 100;
+    uint8 public constant MAX_MATCH_ITERATIONS = 50;
     uint8 private constant ORDER_FLAGS_GTC_POST_ONLY = ORDER_FLAG_GTC | ORDER_FLAG_POST_ONLY;
 
     DuelOutcomeOracle public duelOracle;
@@ -152,6 +152,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 matchedAmount,
         uint16 price
     );
+    /// @notice Raised when a taker would match their own resting order
+    /// @dev Strict "Cancel Taker" policy ensures taker order is cancelled if a self-match is detected
     event SelfTradePolicyTriggered(
         bytes32 indexed marketRef,
         address indexed makerAuthority,
@@ -350,7 +352,16 @@ contract GoldClob is AccessControl, ReentrancyGuard {
 
         uint256 restingCost = 0;
         if (progress.remainingAmount > 0 && _isGoodTilCancelled(orderFlags) && !progress.selfTradePrevented) {
-            _restOrder(key, market, side, price, uint128(progress.remainingAmount), takerOrderId);
+            _restOrder(
+                key,
+                market,
+                side,
+                price,
+                msg.sender,
+                amount,
+                amount - uint128(progress.remainingAmount),
+                takerOrderId
+            );
             restingCost = _quoteCost(side, price, uint128(progress.remainingAmount));
         } else {
             _persistInactiveTakerOrder(key, side, price, amount, amount - progress.remainingAmount, takerOrderId);
@@ -636,7 +647,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         Market storage market,
         uint8 side,
         uint16 price,
+        address maker,
         uint128 amount,
+        uint128 filled,
         uint64 orderId
     ) internal {
         Order storage newOrder = orders[key][orderId];
@@ -645,8 +658,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         newOrder.id = orderId;
         newOrder.side = side;
         newOrder.price = price;
-        newOrder.maker = msg.sender;
+        newOrder.maker = maker;
         newOrder.amount = amount;
+        newOrder.filled = filled;
         newOrder.prevOrderId = level.tailOrderId;
         newOrder.active = true;
 
@@ -656,7 +670,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             level.headOrderId = orderId;
         }
         level.tailOrderId = orderId;
-        level.totalOpen += amount;
+        level.totalOpen += (amount - filled);
 
         _activatePrice(key, market, side, price);
     }
@@ -723,8 +737,6 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             level.tailOrderId = 0;
             level.totalOpen = 0;
             _deactivatePrice(key, market, order.side, order.price);
-        } else {
-            _refreshBestPrices(key, market);
         }
     }
 

@@ -49,7 +49,7 @@ wait_for_rpc() {
   for _ in {1..90}; do
     if curl -s -X POST "$RPC_URL" \
       -H "content-type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' | rg -q '"result":"ok"'; then
+      -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' | grep -q '"result":"ok"'; then
       return 0
     fi
     sleep 1

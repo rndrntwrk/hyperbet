@@ -73,6 +73,12 @@ export interface BettingSolanaDeployment {
   usdcMint: string;
 }
 
+export interface EvmChainUiMeta {
+  shortName: string;
+  color: string;
+  icon: string;
+}
+
 export interface BettingEvmDeployment {
   networkKey: BettingEvmNetwork;
   chain: BettingEvmChain;
@@ -97,6 +103,14 @@ export interface BettingEvmDeployment {
   nativeCurrency: NativeCurrencyConfig;
   blockExplorerUrl: string;
   featureFlags: ChainFeatureFlags;
+  /** Aliases used by normalizeChainKey / normalizePredictionMarketChainKey */
+  aliases: readonly string[];
+  /** The native asset symbol for this chain (e.g. "BNB", "ETH", "AVAX") */
+  nativeAsset: string;
+  /** Default public RPC URL (no API key required) */
+  defaultRpcUrl: string;
+  /** UI display metadata */
+  uiMeta: EvmChainUiMeta;
 }
 
 export interface BettingDeploymentManifest {
@@ -266,6 +280,10 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
     blockExplorerUrl: "https://testnet.bscscan.com",
     featureFlags: DEFAULT_FEATURE_FLAGS,
+    aliases: ["bsc", "bnb"],
+    nativeAsset: "BNB",
+    defaultRpcUrl: "https://data-seed-prebsc-1-s1.binance.org:8545",
+    uiMeta: { shortName: "BSC", color: "#F0B90B", icon: "💎" },
   },
   bsc: {
     networkKey: "bsc",
@@ -291,6 +309,10 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
     blockExplorerUrl: "https://bscscan.com",
     featureFlags: DEFAULT_FEATURE_FLAGS,
+    aliases: ["bsc", "bnb"],
+    nativeAsset: "BNB",
+    defaultRpcUrl: "https://bsc-dataseed.binance.org",
+    uiMeta: { shortName: "BSC", color: "#F0B90B", icon: "💎" },
   },
   baseSepolia: {
     networkKey: "baseSepolia",
@@ -316,6 +338,10 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     blockExplorerUrl: "https://sepolia.basescan.org",
     featureFlags: DEFAULT_FEATURE_FLAGS,
+    aliases: ["base"],
+    nativeAsset: "ETH",
+    defaultRpcUrl: "https://sepolia.base.org",
+    uiMeta: { shortName: "Base", color: "#0052FF", icon: "🔵" },
   },
   base: {
     networkKey: "base",
@@ -341,6 +367,10 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     blockExplorerUrl: "https://basescan.org",
     featureFlags: DEFAULT_FEATURE_FLAGS,
+    aliases: ["base"],
+    nativeAsset: "ETH",
+    defaultRpcUrl: "https://mainnet.base.org",
+    uiMeta: { shortName: "Base", color: "#0052FF", icon: "🔵" },
   },
   avaxFuji: {
     networkKey: "avaxFuji",
@@ -366,6 +396,10 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
     blockExplorerUrl: "https://testnet.snowtrace.io",
     featureFlags: DEFAULT_FEATURE_FLAGS,
+    aliases: ["avax", "avalanche"],
+    nativeAsset: "AVAX",
+    defaultRpcUrl: "https://api.avax-test.network/ext/bc/C/rpc",
+    uiMeta: { shortName: "AVAX", color: "#E84142", icon: "🔺" },
   },
   avax: {
     networkKey: "avax",
@@ -391,8 +425,23 @@ const EVM_DEPLOYMENTS: Record<BettingEvmNetwork, BettingEvmDeployment> = {
     nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
     blockExplorerUrl: "https://snowtrace.io",
     featureFlags: DEFAULT_FEATURE_FLAGS,
+    aliases: ["avax", "avalanche"],
+    nativeAsset: "AVAX",
+    defaultRpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+    uiMeta: { shortName: "AVAX", color: "#E84142", icon: "🔺" },
   },
 };
+
+/** Alias → BettingEvmChain lookup table, built from deployment data. */
+const EVM_CHAIN_ALIAS_MAP: ReadonlyMap<string, BettingEvmChain> = (() => {
+  const map = new Map<string, BettingEvmChain>();
+  for (const deployment of Object.values(EVM_DEPLOYMENTS)) {
+    for (const alias of deployment.aliases) {
+      map.set(alias.toLowerCase(), deployment.chain);
+    }
+  }
+  return map;
+})();
 
 export const BETTING_DEPLOYMENTS: BettingDeploymentManifest = {
   solana: SOLANA_DEPLOYMENTS,
@@ -463,20 +512,7 @@ export function resolveBettingEvmDeployment(
 }
 
 export function defaultRpcUrlForEvmNetwork(network: BettingEvmNetwork): string {
-  switch (network) {
-    case "bsc":
-      return "https://bsc-dataseed.binance.org";
-    case "bscTestnet":
-      return "https://data-seed-prebsc-1-s1.binance.org:8545";
-    case "base":
-      return "https://mainnet.base.org";
-    case "baseSepolia":
-      return "https://sepolia.base.org";
-    case "avax":
-      return "https://api.avax.network/ext/bc/C/rpc";
-    case "avaxFuji":
-      return "https://api.avax-test.network/ext/bc/C/rpc";
-  }
+  return EVM_DEPLOYMENTS[network].defaultRpcUrl;
 }
 
 export function resolveBettingEvmDefaults(environment: BettingAppEnvironment): {
@@ -602,21 +638,9 @@ export function normalizeChainKey(
   fallback: BettingChainKey = "solana",
 ): BettingChainKey {
   const normalized = value?.trim().toLowerCase();
-  switch (normalized) {
-    case "sol":
-    case "solana":
-      return "solana";
-    case "bsc":
-    case "bnb":
-      return "bsc";
-    case "base":
-      return "base";
-    case "avax":
-    case "avalanche":
-      return "avax";
-    default:
-      return fallback;
-  }
+  if (!normalized) return fallback;
+  if (normalized === "sol" || normalized === "solana") return "solana";
+  return EVM_CHAIN_ALIAS_MAP.get(normalized) ?? fallback;
 }
 
 export function isEvmChainKey(
@@ -638,35 +662,35 @@ export function normalizePredictionMarketChainKey(
 ): BettingChainKey | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
-  switch (normalized) {
-    case "sol":
-    case "solana":
-      return "solana";
-    case "bsc":
-    case "bnb":
-      return "bsc";
-    case "base":
-      return "base";
-    case "avax":
-    case "avalanche":
-      return "avax";
-    default:
-      return null;
-  }
+  if (normalized === "sol" || normalized === "solana") return "solana";
+  return EVM_CHAIN_ALIAS_MAP.get(normalized) ?? null;
 }
 
 export function toRecordedBetChain(chainKey: BettingChainKey): RecordedBetChain {
-  switch (chainKey) {
-    case "bsc":
-      return "BSC";
-    case "base":
-      return "BASE";
-    case "avax":
-      return "AVAX";
-    case "solana":
-    default:
-      return "SOLANA";
-  }
+  if (chainKey === "solana") return "SOLANA";
+  return chainKey.toUpperCase() as RecordedBetChain;
+}
+
+/**
+ * Returns the native asset symbol for the given EVM chain.
+ * Data-driven: reads from deployment entry, no chain-specific switch.
+ */
+export function nativeAssetForEvmChain(chainKey: BettingEvmChain): string {
+  const mainnet = Object.values(EVM_DEPLOYMENTS).find(
+    (d) => d.chain === chainKey && d.targetKind === "mainnet",
+  );
+  return mainnet?.nativeAsset ?? chainKey.toUpperCase();
+}
+
+/**
+ * Returns UI metadata for the given EVM chain.
+ * Data-driven: reads from deployment entry, no chain-specific switch.
+ */
+export function uiMetaForEvmChain(chainKey: BettingEvmChain): EvmChainUiMeta {
+  const mainnet = Object.values(EVM_DEPLOYMENTS).find(
+    (d) => d.chain === chainKey && d.targetKind === "mainnet",
+  );
+  return mainnet?.uiMeta ?? { shortName: chainKey.toUpperCase(), color: "#71717A", icon: "◌" };
 }
 
 export function isPredictionMarketLifecycleStatus(

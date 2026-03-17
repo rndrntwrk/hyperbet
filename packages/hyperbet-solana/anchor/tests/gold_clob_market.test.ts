@@ -27,6 +27,7 @@ import {
   uniqueDuelKey,
   upsertDuel,
   writableAccount,
+  sleep,
 } from "./clob-test-helpers";
 import { configureAnchorTests } from "./test-anchor";
 import { FightOracle } from "../target/types/fight_oracle";
@@ -306,7 +307,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 1,
       side: SIDE_ASK,
       price: 600,
-      amount: 400,
+      amount: 4000,
     });
 
     const selfAsk = await placeClobOrder(clobProgram, {
@@ -320,7 +321,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 2,
       side: SIDE_ASK,
       price: 600,
-      amount: 700,
+      amount: 7000,
       remainingAccounts: [writableAccount(externalAsk.order)],
     });
 
@@ -335,7 +336,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 3,
       side: SIDE_BID,
       price: 600,
-      amount: 800,
+      amount: 8000,
       remainingAccounts: [
         writableAccount(externalAsk.restingLevel),
         writableAccount(externalAsk.order),
@@ -358,11 +359,11 @@ describe("gold_clob_market (native SOL settlement)", () => {
     const externalOrderState = await clobProgram.account.order.fetch(externalAsk.order);
     const selfOrderState = await clobProgram.account.order.fetch(selfAsk.order);
     const takerBalance = await clobProgram.account.userBalance.fetch(bid.userBalance);
-    assert.strictEqual(externalOrderState.filled.toString(), "400");
+    assert.strictEqual(externalOrderState.filled.toString(), "4000");
     assert.strictEqual(externalOrderState.active, false);
     assert.strictEqual(selfOrderState.filled.toString(), "0");
     assert.strictEqual(selfOrderState.active, true);
-    assert.strictEqual(takerBalance.aShares.toString(), "400");
+    assert.strictEqual(takerBalance.aShares.toString(), "4000");
   });
 
   it("keeps mixed-user fills free of self-trade policy logs", async () => {
@@ -391,7 +392,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 1,
       side: SIDE_ASK,
       price: 600,
-      amount: 500,
+      amount: 5000,
     });
 
     const bid = await placeClobOrder(clobProgram, {
@@ -405,7 +406,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       orderId: 2,
       side: SIDE_BID,
       price: 600,
-      amount: 500,
+      amount: 5000,
       remainingAccounts: [
         writableAccount(ask.restingLevel),
         writableAccount(ask.order),
@@ -793,6 +794,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       duelEndTs: Math.floor(Date.now() / 1000) - 10,
       metadataUri: "https://hyperscape.gg/duels/resolved-fee-snapshot",
     });
+    await sleep(2100);
     await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
 
@@ -910,5 +912,274 @@ describe("gold_clob_market (native SOL settlement)", () => {
     assert.strictEqual(takerBalanceAfter.bShares.toString(), "0");
     assert.strictEqual(takerBalanceAfter.aLockedLamports.toString(), "0");
     assert.strictEqual(takerBalanceAfter.bLockedLamports.toString(), "0");
+  });
+
+  it("pays winning claim with market-maker fee and clears winner and loser state", async () => {
+    const maker = Keypair.generate();
+    const taker = Keypair.generate();
+    await Promise.all([
+      airdrop(provider.connection, maker.publicKey, 5),
+      airdrop(provider.connection, taker.publicKey, 5),
+    ]);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      { duelKey: uniqueDuelKey("resolved-state-clear") },
+    );
+
+    const makerAsk = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: maker,
+      orderId: 1,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 1000,
+    });
+
+    const takerBid = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+      orderId: 2,
+      side: SIDE_BID,
+      price: 600,
+      amount: 1000,
+      remainingAccounts: [
+        writableAccount(makerAsk.restingLevel),
+        writableAccount(makerAsk.order),
+        writableAccount(makerAsk.userBalance),
+      ],
+    });
+
+    const now = Math.floor(Date.now() / 1000);
+    await upsertDuel(fightProgram, authority, market.duelKey, {
+      status: duelStatusLocked(),
+      betOpenTs: now - 120,
+      betCloseTs: now - 10,
+      duelStartTs: now - 5,
+      metadataUri: "https://hyperscape.gg/duels/resolved-state",
+    });
+    await syncMarketFromDuel(
+      clobProgram,
+      market.marketState,
+      market.duelState,
+    );
+
+    await proposeDuelResult(fightProgram, authority, market.duelKey, {
+      winner: { a: {} },
+      duelEndTs: now + 10,
+      metadataUri: "https://hyperscape.gg/duels/resolved-state-proposed",
+    });
+    await sleep(2100);
+    await finalizeDuelResult(fightProgram, authority, market.duelKey);
+    await syncMarketFromDuel(
+      clobProgram,
+      market.marketState,
+      market.duelState,
+    );
+
+    const losingPositionBefore = await clobProgram.account.userBalance.fetch(
+      makerAsk.userBalance,
+    );
+    await claimClobWinnings(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+    });
+
+    const winningPositionAfter = await clobProgram.account.userBalance.fetch(
+      takerBid.userBalance,
+    );
+    assert.strictEqual(winningPositionAfter.aShares.toString(), "0");
+    assert.strictEqual(winningPositionAfter.bShares.toString(), "0");
+    assert.strictEqual(winningPositionAfter.aLockedLamports.toString(), "0");
+    assert.strictEqual(winningPositionAfter.bLockedLamports.toString(), "0");
+
+    const losingPositionAfter = await clobProgram.account.userBalance.fetch(
+      makerAsk.userBalance,
+    );
+    assert.strictEqual(
+      losingPositionAfter.aShares.toString(),
+      losingPositionBefore.aShares.toString(),
+    );
+    assert.strictEqual(
+      losingPositionAfter.bShares.toString(),
+      losingPositionBefore.bShares.toString(),
+    );
+    assert.strictEqual(
+      losingPositionAfter.aLockedLamports.toString(),
+      losingPositionBefore.aLockedLamports.toString(),
+    );
+    assert.strictEqual(
+      losingPositionAfter.bLockedLamports.toString(),
+      losingPositionBefore.bLockedLamports.toString(),
+    );
+    assert.ok(
+      !(
+        losingPositionAfter.aShares.toString() === "0" &&
+        losingPositionAfter.bShares.toString() === "0"
+      ),
+      "loser still holding position should remain non-zero",
+    );
+
+    try {
+      await claimClobWinnings(clobProgram, {
+        marketState: market.marketState,
+        duelState: market.duelState,
+        config: market.config,
+        marketMaker: market.marketMaker,
+        vault: market.vault,
+        user: taker,
+      });
+      assert.fail("winner repeat claim succeeded");
+    } catch (error: unknown) {
+      assert.ok(
+        hasProgramError(error, "NothingToClaim"),
+        `expected NothingToClaim, got ${String(error)}`,
+      );
+    }
+
+    try {
+      await claimClobWinnings(clobProgram, {
+        marketState: market.marketState,
+        duelState: market.duelState,
+        config: market.config,
+        marketMaker: market.marketMaker,
+        vault: market.vault,
+        user: maker,
+      });
+      assert.fail("loser claim succeeded");
+    } catch (error: unknown) {
+      assert.ok(
+        hasProgramError(error, "NothingToClaim"),
+        `expected NothingToClaim, got ${String(error)}`,
+      );
+    }
+  });
+
+  it("rejects claim before resolution and preserves lockup", async () => {
+    const maker = Keypair.generate();
+    const taker = Keypair.generate();
+    await Promise.all([
+      airdrop(provider.connection, maker.publicKey, 5),
+      airdrop(provider.connection, taker.publicKey, 5),
+    ]);
+
+    const market = await createOpenMarketFixture(
+      fightProgram,
+      clobProgram,
+      authority,
+      { duelKey: uniqueDuelKey("unsettled-claim") },
+    );
+
+    const makerAsk = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: maker,
+      orderId: 1,
+      side: SIDE_ASK,
+      price: 600,
+      amount: 1000,
+    });
+
+    const takerBid = await placeClobOrder(clobProgram, {
+      marketState: market.marketState,
+      duelState: market.duelState,
+      config: market.config,
+      treasury: market.treasury,
+      marketMaker: market.marketMaker,
+      vault: market.vault,
+      user: taker,
+      orderId: 2,
+      side: SIDE_BID,
+      price: 600,
+      amount: 1000,
+      remainingAccounts: [
+        writableAccount(makerAsk.restingLevel),
+        writableAccount(makerAsk.order),
+        writableAccount(makerAsk.userBalance),
+      ],
+    });
+
+    const makerAskBalanceBefore = await clobProgram.account.userBalance.fetch(
+      makerAsk.userBalance,
+    );
+    const takerBidBalanceBefore = await clobProgram.account.userBalance.fetch(
+      takerBid.userBalance,
+    );
+
+    try {
+      await claimClobWinnings(clobProgram, {
+        marketState: market.marketState,
+        duelState: market.duelState,
+        config: market.config,
+        marketMaker: market.marketMaker,
+        vault: market.vault,
+        user: taker,
+      });
+      assert.fail("claim succeeded before settlement");
+    } catch (error: unknown) {
+      assert.ok(
+        hasProgramError(error, "MarketNotResolved"),
+        `expected MarketNotResolved, got ${String(error)}`,
+      );
+    }
+
+    const takerBidPositionAfter = await clobProgram.account.userBalance.fetch(
+      takerBid.userBalance,
+    );
+    const makerAskPositionAfter = await clobProgram.account.userBalance.fetch(
+      makerAsk.userBalance,
+    );
+    assert.strictEqual(
+      takerBidPositionAfter.aShares.toString(),
+      takerBidBalanceBefore.aShares.toString(),
+    );
+    assert.strictEqual(
+      takerBidPositionAfter.aLockedLamports.toString(),
+      takerBidBalanceBefore.aLockedLamports.toString(),
+    );
+    assert.strictEqual(
+      takerBidPositionAfter.bShares.toString(),
+      takerBidBalanceBefore.bShares.toString(),
+    );
+    assert.strictEqual(
+      takerBidPositionAfter.bLockedLamports.toString(),
+      takerBidBalanceBefore.bLockedLamports.toString(),
+    );
+    assert.strictEqual(
+      makerAskPositionAfter.bShares.toString(),
+      makerAskBalanceBefore.bShares.toString(),
+    );
+    assert.strictEqual(
+      makerAskPositionAfter.bLockedLamports.toString(),
+      makerAskBalanceBefore.bLockedLamports.toString(),
+    );
+    assert.strictEqual(
+      makerAskPositionAfter.aShares.toString(),
+      makerAskBalanceBefore.aShares.toString(),
+    );
+    assert.strictEqual(
+      makerAskPositionAfter.aLockedLamports.toString(),
+      makerAskBalanceBefore.aLockedLamports.toString(),
+    );
   });
 });

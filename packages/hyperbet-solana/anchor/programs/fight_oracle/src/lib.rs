@@ -3,7 +3,7 @@
 
 use anchor_lang::prelude::*;
 
-declare_id!("6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD");
+declare_id!("B5mRCRDJk9BrnH7regMWW5mpTQ8QG1CcCGSnDxMt8hmo");
 
 pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
@@ -14,15 +14,29 @@ const DEFAULT_DISPUTE_WINDOW_SECS: i64 = 3600;
 pub mod fight_oracle {
     use super::*;
 
-    pub fn initialize_oracle(ctx: Context<InitializeOracle>, reporter: Pubkey) -> Result<()> {
+    pub fn initialize_oracle(
+        ctx: Context<InitializeOracle>,
+        reporter: Pubkey,
+        finalizer: Pubkey,
+        challenger: Pubkey,
+        dispute_window_secs: i64,
+    ) -> Result<()> {
+        let program_data = &ctx.accounts.program_data;
+        if let Some(auth) = program_data.upgrade_authority_address {
+            if auth != Pubkey::default() {
+                require_keys_eq!(
+                    auth,
+                    ctx.accounts.authority.key(),
+                    ErrorCode::UnauthorizedInitializer
+                );
+            }
+        }
+
         let oracle_config = &mut ctx.accounts.oracle_config;
 
         if oracle_config.authority == Pubkey::default() {
             oracle_config.authority = ctx.accounts.authority.key();
             oracle_config.bump = ctx.bumps.oracle_config;
-            oracle_config.finalizer = ctx.accounts.authority.key();
-            oracle_config.challenger = ctx.accounts.authority.key();
-            oracle_config.dispute_window_secs = DEFAULT_DISPUTE_WINDOW_SECS;
         } else {
             require_keys_eq!(
                 oracle_config.authority,
@@ -32,7 +46,17 @@ pub mod fight_oracle {
         }
 
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
+        require!(finalizer != Pubkey::default(), ErrorCode::InvalidFinalizer);
+        require!(
+            challenger != Pubkey::default(),
+            ErrorCode::InvalidChallenger
+        );
+        require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
+
         oracle_config.reporter = reporter;
+        oracle_config.finalizer = finalizer;
+        oracle_config.challenger = challenger;
+        oracle_config.dispute_window_secs = dispute_window_secs;
         Ok(())
     }
 
@@ -318,9 +342,6 @@ pub struct InitializeOracle<'info> {
         constraint = program.programdata_address()? == Some(program_data.key()) @ ErrorCode::UnauthorizedInitializer
     )]
     pub program: Program<'info, crate::program::FightOracle>,
-    #[account(
-        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ ErrorCode::UnauthorizedInitializer
-    )]
     pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
 }

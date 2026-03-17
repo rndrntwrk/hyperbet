@@ -1,18 +1,11 @@
 export {
   BETTING_DEPLOYMENTS,
   normalizeSolanaCluster,
-  resolveBettingEvmDeployment,
   resolveBettingEvmDefaults,
   resolveBettingSolanaDeployment,
-} from "../../hyperbet-deployments";
-
-export type {
-  BettingAppEnvironment,
-  BettingDeploymentManifest,
-  BettingEvmChain,
-  BettingEvmDeployment,
-  BettingEvmNetwork,
-  BettingSolanaCluster,
-  BettingSolanaDeployment,
-  BettingTargetKind,
-} from "../../hyperbet-deployments";
+  type BettingAppEnvironment,
+  type BettingDeploymentManifest,
+  type BettingEvmNetwork,
+  type BettingSolanaCluster,
+  type BettingSolanaDeployment,
+} from "@hyperbet/chain-registry";
