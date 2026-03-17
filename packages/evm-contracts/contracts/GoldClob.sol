@@ -23,7 +23,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint8 public constant ORDER_FLAG_GTC = 0x01;
     uint8 public constant ORDER_FLAG_IOC = 0x02;
     uint8 public constant ORDER_FLAG_POST_ONLY = 0x04;
-    uint8 public constant MAX_MATCH_ITERATIONS = 100;
+    uint8 public constant MAX_MATCH_ITERATIONS = 50;
     uint8 private constant ORDER_FLAGS_GTC_POST_ONLY = ORDER_FLAG_GTC | ORDER_FLAG_POST_ONLY;
 
     DuelOutcomeOracle public duelOracle;
@@ -152,6 +152,8 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 matchedAmount,
         uint16 price
     );
+    /// @notice Raised when a taker would match their own resting order
+    /// @dev Strict "Cancel Taker" policy ensures taker order is cancelled if a self-match is detected
     event SelfTradePolicyTriggered(
         bytes32 indexed marketRef,
         address indexed makerAuthority,
@@ -723,8 +725,6 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             level.tailOrderId = 0;
             level.totalOpen = 0;
             _deactivatePrice(key, market, order.side, order.price);
-        } else {
-            _refreshBestPrices(key, market);
         }
     }
 
