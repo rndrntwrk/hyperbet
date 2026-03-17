@@ -35,6 +35,7 @@ contract GoldClobPrecisionDoSTest is Test {
         clob = new GoldClob(admin, admin, address(oracle), admin, admin, admin);
 
         vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(GoldClob.GovernanceSurfaceFrozen.selector));
         clob.setFeeConfig(0, 0, 0);
 
         vm.deal(maker, 10 ether);
