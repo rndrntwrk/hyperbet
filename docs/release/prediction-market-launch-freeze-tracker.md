@@ -88,21 +88,21 @@ Last updated: 2026-03-17
 
 ## [17A] Priority: `enoomian/pm-17a-evm-order-semantics`
 **Owner:** Gate 17A
-**Status:** [ ]
+**Status:** [x]
 
-- [ ] Confirm/cement canonical order model in `packages/evm-contracts/contracts/GoldClob.sol`:
+- [x] Confirm/cement canonical order model in `packages/evm-contracts/contracts/GoldClob.sol`:
   - explicit flags
   - post-only rejection
   - bounded matching
   - STP cancel-taker behavior
-- [ ] Replace string revert in `claim(...)` with `NothingToClaim()`.
-- [ ] Expand regression coverage:
+- [x] Replace string revert in `claim(...)` with `NothingToClaim()`.
+- [x] Expand regression coverage:
   - `packages/evm-contracts/test/GoldClob.ts`
   - `packages/evm-contracts/test/GoldClobSettlement.t.sol`
   - `packages/evm-contracts/test/PrecisionDoS.t.sol`
   - `packages/evm-contracts/test/PrecisionDoS.ts`
   - `packages/evm-contracts/test/fuzz/*`
-- [ ] Update docs:
+- [x] Update docs:
   - `docs/enoomian-next-phase-gates.md`
   - `docs/protocol/cross-chain-parity-matrix.md`
 
@@ -110,22 +110,29 @@ Last updated: 2026-03-17
 
 ## [17B] Priority: `enoomian/pm-17b-solana-order-semantics`
 **Owner:** Gate 17B
-**Status:** [ ]
+**Status:** [x]
 
-- [ ] Freeze Solana order semantics in `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`:
+- [x] Freeze Solana order semantics in `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`:
   - post-only fail on crossing
   - GTC/IOC continuation rules
   - `execute_matches(...)` cancel-taker STP parity
-- [ ] Make self-trade policy explicit in tests and docs:
+- [x] Make self-trade policy explicit in tests and docs:
   - `packages/hyperbet-solana/anchor/tests/gold_clob_market.test.ts`
   - `packages/hyperbet-solana/anchor/tests/black_hat_exploits.ts`
   - `packages/hyperbet-solana/anchor/tests/gold_clob_security.ts`
   - `docs/protocol/cross-chain-parity-matrix.md`
-- [ ] Lock claim parity in tests:
+- [x] Lock claim parity in tests:
   - cancelled => refund-only
   - resolved => winner payout less MM fee
   - nonterminal => revert
-- [ ] Add EVM/Solana differential parity cases (order flags, self-cross, claim/refund).
+- [x] Add EVM/Solana differential parity cases (order flags, self-cross, claim/refund).
+
+## Shared PM17 parity evidence section
+
+Parity checks for this gate are now covered in:
+
+- EVM: `packages/evm-contracts/test/GoldClobSettlement.t.sol`, `packages/evm-contracts/test/fuzz/GoldClobFuzz.t.sol`, `packages/evm-contracts/test/PrecisionDoS.ts`, `packages/evm-contracts/test/PrecisionDoS.t.sol`
+- Solana: `packages/hyperbet-solana/anchor/tests/gold_clob_market.test.ts`, `packages/hyperbet-solana/anchor/tests/gold_clob_security.ts`
 
 ---
 
