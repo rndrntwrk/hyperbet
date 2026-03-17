@@ -36,6 +36,7 @@ contract DuelOutcomeOracle is AccessControl {
     error BettingWindowActive();
     error ChallengeWindowExpired();
     error OraclePaused();
+    error GovernanceSurfaceFrozen();
 
     enum DuelStatus {
         NULL,
@@ -145,30 +146,15 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
     function setReporter(address reporter, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (reporter == address(0)) revert InvalidReporter();
-        if (enabled) {
-            _grantRole(REPORTER_ROLE, reporter);
-        } else {
-            _revokeRole(REPORTER_ROLE, reporter);
-        }
+        revert GovernanceSurfaceFrozen();
     }
 
     function setFinalizer(address finalizer, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (finalizer == address(0)) revert InvalidFinalizer();
-        if (enabled) {
-            _grantRole(FINALIZER_ROLE, finalizer);
-        } else {
-            _revokeRole(FINALIZER_ROLE, finalizer);
-        }
+        revert GovernanceSurfaceFrozen();
     }
 
     function setChallenger(address challenger, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (challenger == address(0)) revert InvalidChallenger();
-        if (enabled) {
-            _grantRole(CHALLENGER_ROLE, challenger);
-        } else {
-            _revokeRole(CHALLENGER_ROLE, challenger);
-        }
+        revert GovernanceSurfaceFrozen();
     }
 
     function setPauser(address pauser, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {

@@ -40,15 +40,18 @@ pub mod gold_clob_market {
         winnings_market_maker_fee_bps: u16,
     ) -> Result<()> {
         let program_data = &ctx.accounts.program_data;
-        if let Some(auth) = program_data.upgrade_authority_address {
-            if auth != Pubkey::default() {
-                require_keys_eq!(
-                    auth,
-                    ctx.accounts.authority.key(),
-                    ErrorCode::UnauthorizedInitializer
-                );
-            }
-        }
+        let upgrade_authority = program_data
+            .upgrade_authority_address
+            .ok_or(ErrorCode::UnauthorizedInitializer)?;
+        require!(
+            upgrade_authority != Pubkey::default(),
+            ErrorCode::UnauthorizedInitializer
+        );
+        require_keys_eq!(
+            upgrade_authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::UnauthorizedInitializer
+        );
 
         validate_fee_config(
             trade_treasury_fee_bps,
@@ -66,15 +69,15 @@ pub mod gold_clob_market {
         );
 
         let config = &mut ctx.accounts.config;
-        if config.authority != Pubkey::default() {
+        if config.authority == Pubkey::default() {
+            config.authority = upgrade_authority;
+            config.bump = ctx.bumps.config;
+        } else {
             require_keys_eq!(
                 config.authority,
-                ctx.accounts.authority.key(),
+                upgrade_authority,
                 ErrorCode::UnauthorizedConfigAuthority
             );
-        } else {
-            config.authority = ctx.accounts.authority.key();
-            config.bump = ctx.bumps.config;
         }
 
         config.market_operator = market_operator;
@@ -101,6 +104,7 @@ pub mod gold_clob_market {
             ctx.accounts.authority.key(),
             ErrorCode::UnauthorizedConfigAuthority
         );
+        require!(authority == ctx.accounts.config.authority, ErrorCode::ConfigAuthorityImmutable);
         validate_fee_config(
             trade_treasury_fee_bps,
             trade_market_maker_fee_bps,
@@ -118,7 +122,6 @@ pub mod gold_clob_market {
         );
 
         let config = &mut ctx.accounts.config;
-        config.authority = authority;
         config.market_operator = market_operator;
         config.treasury = treasury;
         config.market_maker = market_maker;
@@ -1733,6 +1736,8 @@ pub enum ErrorCode {
     UnauthorizedInitializer,
     #[msg("Config authority is required for this action")]
     UnauthorizedConfigAuthority,
+    #[msg("Config authority is immutable")]
+    ConfigAuthorityImmutable,
     #[msg("Market operator is not authorized")]
     UnauthorizedMarketOperator,
     #[msg("Market operator pubkey is invalid")]
