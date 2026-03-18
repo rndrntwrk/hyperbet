@@ -460,8 +460,8 @@ export class SolanaProgramRuntime {
                 [...hashLabel(`${Buffer.from(duelKey).toString("hex")}:a`)],
                 [...hashLabel(`${Buffer.from(duelKey).toString("hex")}:b`)],
                 toBn(now - 30),
-                toBn(now + 3_600),
-                toBn(now + 3_660),
+                toBn(now + 10),
+                toBn(now + 70),
                 metadataUri,
                 duelStatusBettingOpen(),
             )
