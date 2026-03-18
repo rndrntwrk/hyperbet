@@ -26,9 +26,9 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint8 public constant MAX_MATCH_ITERATIONS = 50;
     uint8 private constant ORDER_FLAGS_GTC_POST_ONLY = ORDER_FLAG_GTC | ORDER_FLAG_POST_ONLY;
 
-    DuelOutcomeOracle public duelOracle;
-    address public treasury;
-    address public marketMaker;
+    DuelOutcomeOracle public immutable duelOracle;
+    address public immutable treasury;
+    address public immutable marketMaker;
     uint256 public tradeTreasuryFeeBps;
     uint256 public tradeMarketMakerFeeBps;
     uint256 public winningsMarketMakerFeeBps;
