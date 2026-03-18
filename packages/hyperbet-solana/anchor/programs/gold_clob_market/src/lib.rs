@@ -104,6 +104,7 @@ pub mod gold_clob_market {
             ctx.accounts.authority.key(),
             ErrorCode::UnauthorizedConfigAuthority
         );
+        require!(!ctx.accounts.config.config_frozen, ErrorCode::ConfigFrozen);
         require!(authority == ctx.accounts.config.authority, ErrorCode::ConfigAuthorityImmutable);
         validate_fee_config(
             trade_treasury_fee_bps,
@@ -131,11 +132,43 @@ pub mod gold_clob_market {
         Ok(())
     }
 
+    /// One-way config freeze — after calling, update_config reverts permanently.
+    /// Pause controls remain functional.
+    pub fn freeze_config(ctx: Context<UpdateConfig>) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.config.authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::UnauthorizedConfigAuthority
+        );
+        require!(!ctx.accounts.config.config_frozen, ErrorCode::ConfigFrozen);
+        ctx.accounts.config.config_frozen = true;
+        Ok(())
+    }
+
+    /// Emergency pause/unpause for market creation and order placement.
+    /// Remains functional even after config freeze.
+    pub fn set_market_paused(
+        ctx: Context<UpdateConfig>,
+        order_placement_paused: bool,
+        market_creation_paused: bool,
+    ) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.config.authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::UnauthorizedConfigAuthority
+        );
+        let config = &mut ctx.accounts.config;
+        config.order_placement_paused = order_placement_paused;
+        config.market_creation_paused = market_creation_paused;
+        Ok(())
+    }
+
     pub fn initialize_market(
         ctx: Context<InitializeMarket>,
         duel_key: [u8; 32],
         market_kind: u8,
     ) -> Result<()> {
+        require!(!ctx.accounts.config.market_creation_paused, ErrorCode::MarketCreationPaused);
         require!(
             market_kind == MARKET_KIND_DUEL_WINNER,
             ErrorCode::InvalidMarketKind
@@ -198,6 +231,7 @@ pub mod gold_clob_market {
         amount: u64,
         order_behavior: u8,
     ) -> Result<()> {
+        require!(!ctx.accounts.config.order_placement_paused, ErrorCode::OrderPlacementPaused);
         validate_side(side)?;
         validate_order_behavior(order_behavior)?;
         require!(price > 0 && price < 1000, ErrorCode::InvalidPrice);
@@ -1021,6 +1055,9 @@ pub struct MarketConfig {
     pub trade_treasury_fee_bps: u16,
     pub trade_market_maker_fee_bps: u16,
     pub winnings_market_maker_fee_bps: u16,
+    pub order_placement_paused: bool,
+    pub market_creation_paused: bool,
+    pub config_frozen: bool,
     pub bump: u8,
 }
 
@@ -1805,6 +1842,12 @@ pub enum ErrorCode {
     NothingToContinue,
     #[msg("Nothing to claim")]
     NothingToClaim,
+    #[msg("Order placement is paused")]
+    OrderPlacementPaused,
+    #[msg("Market creation is paused")]
+    MarketCreationPaused,
+    #[msg("Config is permanently frozen")]
+    ConfigFrozen,
 }
 
 #[event]

@@ -75,6 +75,7 @@ pub mod fight_oracle {
             ctx.accounts.authority.key(),
             ErrorCode::Unauthorized
         );
+        require!(!ctx.accounts.oracle_config.config_frozen, ErrorCode::ConfigFrozen);
         require!(authority == ctx.accounts.oracle_config.authority, ErrorCode::ConfigAuthorityImmutable);
         require!(authority != Pubkey::default(), ErrorCode::InvalidAuthority);
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
@@ -93,6 +94,30 @@ pub mod fight_oracle {
         Ok(())
     }
 
+    /// One-way config freeze — after calling, update_oracle_config reverts permanently.
+    /// Pause controls remain functional.
+    pub fn freeze_oracle_config(ctx: Context<UpdateOracleConfig>) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.oracle_config.authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::Unauthorized
+        );
+        require!(!ctx.accounts.oracle_config.config_frozen, ErrorCode::ConfigFrozen);
+        ctx.accounts.oracle_config.config_frozen = true;
+        Ok(())
+    }
+
+    /// Emergency pause/unpause — remains functional even after config freeze.
+    pub fn set_oracle_paused(ctx: Context<UpdateOracleConfig>, paused: bool) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.oracle_config.authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::Unauthorized
+        );
+        ctx.accounts.oracle_config.paused = paused;
+        Ok(())
+    }
+
     pub fn upsert_duel(
         ctx: Context<UpsertDuel>,
         duel_key: [u8; 32],
@@ -104,6 +129,7 @@ pub mod fight_oracle {
         metadata_uri: String,
         status: DuelStatus,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         require!(
             status == DuelStatus::Scheduled
                 || status == DuelStatus::BettingOpen
@@ -176,6 +202,7 @@ pub mod fight_oracle {
         _duel_key: [u8; 32],
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         let duel_state = &mut ctx.accounts.duel_state;
         require!(
             duel_state.status != DuelStatus::Resolved && duel_state.status != DuelStatus::Cancelled,
@@ -201,6 +228,7 @@ pub mod fight_oracle {
         duel_end_ts: i64,
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         require!(
             winner == MarketSide::A || winner == MarketSide::B,
             ErrorCode::InvalidWinner
@@ -258,6 +286,7 @@ pub mod fight_oracle {
         _duel_key: [u8; 32],
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         let duel_state = &mut ctx.accounts.duel_state;
         let oracle_config = &ctx.accounts.oracle_config;
         require!(
@@ -296,6 +325,7 @@ pub mod fight_oracle {
         duel_end_ts: i64,
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         let duel_state = &mut ctx.accounts.duel_state;
         require!(
             duel_state.status == DuelStatus::Challenged,
@@ -355,6 +385,7 @@ pub mod fight_oracle {
         _duel_key: [u8; 32],
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         let duel_state = &mut ctx.accounts.duel_state;
         let oracle_config = &ctx.accounts.oracle_config;
         require!(
@@ -539,6 +570,8 @@ pub struct OracleConfig {
     pub finalizer: Pubkey,
     pub challenger: Pubkey,
     pub dispute_window_secs: i64,
+    pub paused: bool,
+    pub config_frozen: bool,
     pub bump: u8,
 }
 
@@ -683,4 +716,8 @@ pub enum ErrorCode {
     ParticipantHashImmutable,
     #[msg("Bet timing is immutable after betting opens")]
     TimingImmutable,
+    #[msg("Oracle operations are paused")]
+    OraclePaused,
+    #[msg("Config is permanently frozen")]
+    ConfigFrozen,
 }
