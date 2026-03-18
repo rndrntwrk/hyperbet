@@ -75,7 +75,7 @@ contract OracleFinalityTest is Test {
     // ── Fuzz: Dispute Window Range ──────────────────────────────
 
     function testFuzz_disputeWindowConstructor(uint64 window) public {
-        vm.assume(window > 0);
+        vm.assume(window >= 60);
         vm.assume(window <= 365 days); // reasonable upper bound
 
         DuelOutcomeOracle o = new DuelOutcomeOracle(
@@ -84,8 +84,8 @@ contract OracleFinalityTest is Test {
         assertEq(o.disputeWindowSeconds(), window);
     }
 
-    function testFuzz_zeroDisputeWindowReverts(uint64 window) public {
-        vm.assume(window == 0);
+    function testFuzz_tooSmallDisputeWindowReverts(uint64 window) public {
+        vm.assume(window < 60);
         vm.expectRevert(DuelOutcomeOracle.InvalidDisputeWindow.selector);
         new DuelOutcomeOracle(
             admin, reporter, finalizer, challenger, pauser, window
@@ -95,7 +95,7 @@ contract OracleFinalityTest is Test {
     // ── Fuzz: Finalization Timing ───────────────────────────────
 
     function testFuzz_finalizationTiming(uint64 window, uint64 delay) public {
-        vm.assume(window > 0 && window <= 30 days);
+        vm.assume(window >= 60 && window <= 30 days);
         vm.assume(delay <= 365 days);
 
         DuelOutcomeOracle o = new DuelOutcomeOracle(

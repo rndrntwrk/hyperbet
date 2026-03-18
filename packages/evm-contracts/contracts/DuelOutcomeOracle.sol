@@ -139,7 +139,7 @@ contract DuelOutcomeOracle is AccessControl {
         if (finalizer == address(0)) revert InvalidFinalizer();
         if (challenger == address(0)) revert InvalidChallenger();
         if (pauser == address(0)) revert InvalidPauser();
-        if (disputeWindowSeconds_ == 0) revert InvalidDisputeWindow();
+        if (disputeWindowSeconds_ < 60) revert InvalidDisputeWindow();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REPORTER_ROLE, reporter);
         _grantRole(FINALIZER_ROLE, finalizer);

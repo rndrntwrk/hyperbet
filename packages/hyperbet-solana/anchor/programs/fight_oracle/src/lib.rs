@@ -53,7 +53,7 @@ pub mod fight_oracle {
             challenger != Pubkey::default(),
             ErrorCode::InvalidChallenger
         );
-        require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
+        require!(dispute_window_secs >= 60, ErrorCode::InvalidDisputeWindow);
 
         oracle_config.reporter = reporter;
         oracle_config.finalizer = finalizer;
@@ -84,7 +84,7 @@ pub mod fight_oracle {
             challenger != Pubkey::default(),
             ErrorCode::InvalidChallenger
         );
-        require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
+        require!(dispute_window_secs >= 60, ErrorCode::InvalidDisputeWindow);
 
         let oracle_config = &mut ctx.accounts.oracle_config;
         oracle_config.reporter = reporter;
