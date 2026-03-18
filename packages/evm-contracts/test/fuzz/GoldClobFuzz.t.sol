@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
-import "../../contracts/DuelOutcomeOracle.sol";
-import "../../contracts/GoldClob.sol";
+import {DuelOutcomeOracle} from "../../contracts/DuelOutcomeOracle.sol";
+import {GoldClob} from "../../contracts/GoldClob.sol";
 
 contract GoldClobFuzzTest is Test {
     uint8 private constant MARKET_KIND_DUEL_WINNER = 0;
@@ -71,7 +71,9 @@ contract GoldClobFuzzTest is Test {
         bytes32 duel = _createOpenMarket("cancel-refund");
         uint16 price = _boundPrice(rawPrice);
         uint256 makerUnits = bound(uint256(rawMakerUnits), 2, 200);
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint128 makerAmount = uint128(makerUnits * 1_000);
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint128 fillAmount = uint128(bound(uint256(rawFillUnits), 1, makerUnits - 1) * 1_000);
 
         vm.prank(traderA);

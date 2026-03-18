@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
-import "../contracts/DuelOutcomeOracle.sol";
+import {Test} from "forge-std/Test.sol";
+import {DuelOutcomeOracle} from "../contracts/DuelOutcomeOracle.sol";
 
 /**
  * @title OracleFinality Foundry Tests
@@ -42,6 +42,7 @@ contract OracleFinalityTest is Test {
 
     function _createLockedDuel(uint256 id) internal returns (bytes32) {
         bytes32 key = _duelKey(id);
+        if (block.timestamp < 2_001) vm.warp(2_001);
         vm.prank(reporter);
         oracle.upsertDuel(
             key,
@@ -103,6 +104,7 @@ contract OracleFinalityTest is Test {
         );
 
         bytes32 key = _duelKey(1);
+        if (block.timestamp < 2_001) vm.warp(2_001);
         vm.prank(reporter);
         o.upsertDuel(key, PART_A, PART_B, 1_000, 2_000, 3_000, "",
             DuelOutcomeOracle.DuelStatus.LOCKED);
@@ -236,6 +238,9 @@ contract OracleFinalityTest is Test {
         vm.assume(attempted < initial); // regression
 
         bytes32 key = _duelKey(400 + uint256(initial) * 10 + attempted);
+        if (initial == uint8(DuelOutcomeOracle.DuelStatus.LOCKED) && block.timestamp < 2_001) {
+            vm.warp(2_001);
+        }
         vm.prank(reporter);
         oracle.upsertDuel(key, PART_A, PART_B, 1_000, 2_000, 3_000, "",
             DuelOutcomeOracle.DuelStatus(initial));
@@ -254,6 +259,30 @@ contract OracleFinalityTest is Test {
         vm.expectRevert();
         oracle.upsertDuel(key, PART_A, PART_B, 1_000, 2_000, 3_000, "",
             DuelOutcomeOracle.DuelStatus.LOCKED);
+    }
+
+    function test_lockedUpsertBeforeBetCloseReverts() public {
+        bytes32 key = _duelKey(505);
+        uint64 nowTs = uint64(block.timestamp);
+
+        vm.prank(reporter);
+        vm.expectRevert(DuelOutcomeOracle.BettingWindowActive.selector);
+        oracle.upsertDuel(key, PART_A, PART_B, nowTs, nowTs + 60, nowTs + 120, "",
+            DuelOutcomeOracle.DuelStatus.LOCKED);
+    }
+
+    function test_lockedUpsertAtBetCloseSucceeds() public {
+        bytes32 key = _duelKey(506);
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 betCloseTs = nowTs + 60;
+
+        vm.warp(betCloseTs);
+        vm.prank(reporter);
+        oracle.upsertDuel(key, PART_A, PART_B, nowTs, betCloseTs, nowTs + 120, "",
+            DuelOutcomeOracle.DuelStatus.LOCKED);
+
+        DuelOutcomeOracle.DuelState memory duel = oracle.getDuel(key);
+        assertEq(uint8(duel.status), uint8(DuelOutcomeOracle.DuelStatus.LOCKED));
     }
 
     function test_onlyReporterCanPropose() public {

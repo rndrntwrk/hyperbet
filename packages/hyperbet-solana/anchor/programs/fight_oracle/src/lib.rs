@@ -8,8 +8,6 @@ declare_id!("B5mRCRDJk9BrnH7regMWW5mpTQ8QG1CcCGSnDxMt8hmo");
 pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
 
-const DEFAULT_DISPUTE_WINDOW_SECS: i64 = 3600;
-
 #[program]
 pub mod fight_oracle {
     use super::*;
@@ -147,6 +145,12 @@ pub mod fight_oracle {
             duel_start_ts >= bet_close_ts,
             ErrorCode::InvalidLifecycleTransition
         );
+        if status == DuelStatus::Locked {
+            require!(
+                Clock::get()?.unix_timestamp >= bet_close_ts,
+                ErrorCode::BettingWindowActive
+            );
+        }
 
         let duel_state = &mut ctx.accounts.duel_state;
         let is_initialized = duel_state.bump != 0;

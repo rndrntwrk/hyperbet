@@ -356,7 +356,12 @@ export function SolanaClobPanel({
   const [lastOrderId, setLastOrderId] = useState<bigint | null>(null);
   const [lastPlaceOrderTx, setLastPlaceOrderTx] = useState("-");
   const [lastPlaceOrderError, setLastPlaceOrderError] = useState("-");
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug, setShowDebug] = useState(
+    () =>
+      isE2eMode &&
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("debug"),
+  );
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   const lastSnapshotRef = useRef<{ yes: bigint; no: bigint }>({

@@ -280,36 +280,6 @@ pub mod gold_clob_market {
         user_balance.user = ctx.accounts.user.key();
         user_balance.market_state = market_state.key();
 
-        // FIX-5: Use snapshotted fees from market creation, not live config
-        let trade_treasury_fee = bps_fee(cost, market_state.trade_treasury_fee_bps_snapshot)?;
-        let trade_market_maker_fee = bps_fee(cost, market_state.trade_market_maker_fee_bps_snapshot)?;
-
-        if trade_treasury_fee > 0 {
-            system_program::transfer(
-                CpiContext::new(
-                    ctx.accounts.system_program.to_account_info(),
-                    system_program::Transfer {
-                        from: ctx.accounts.user.to_account_info(),
-                        to: ctx.accounts.treasury.to_account_info(),
-                    },
-                ),
-                trade_treasury_fee,
-            )?;
-        }
-
-        if trade_market_maker_fee > 0 {
-            system_program::transfer(
-                CpiContext::new(
-                    ctx.accounts.system_program.to_account_info(),
-                    system_program::Transfer {
-                        from: ctx.accounts.user.to_account_info(),
-                        to: ctx.accounts.market_maker.to_account_info(),
-                    },
-                ),
-                trade_market_maker_fee,
-            )?;
-        }
-
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -333,6 +303,16 @@ pub mod gold_clob_market {
             side,
             price,
             amount,
+        )?;
+
+        charge_trade_fees(
+            &ctx.accounts.system_program,
+            &ctx.accounts.user.to_account_info(),
+            &ctx.accounts.treasury.to_account_info(),
+            &ctx.accounts.market_maker.to_account_info(),
+            match_outcome.executed_cost,
+            market_state.trade_treasury_fee_bps_snapshot,
+            market_state.trade_market_maker_fee_bps_snapshot,
         )?;
 
         if match_outcome.total_improvement > 0 {
@@ -506,6 +486,16 @@ pub mod gold_clob_market {
             remaining,
         )?;
 
+        charge_trade_fees(
+            &ctx.accounts.system_program,
+            &ctx.accounts.user.to_account_info(),
+            &ctx.accounts.treasury.to_account_info(),
+            &ctx.accounts.market_maker.to_account_info(),
+            match_outcome.executed_cost,
+            market_state.trade_treasury_fee_bps_snapshot,
+            market_state.trade_market_maker_fee_bps_snapshot,
+        )?;
+
         if match_outcome.total_improvement > 0 {
             transfer_from_vault(
                 &ctx.accounts.system_program,
@@ -657,9 +647,6 @@ pub mod gold_clob_market {
             require!(price_level.price == price, ErrorCode::PriceLevelMismatch);
 
             if order.continuation_pending {
-                if should_close_price_level(price_level) {
-                    price_level.close(ctx.accounts.user.to_account_info())?;
-                }
             } else {
                 let mut cursor = 0_usize;
                 let mut prev_order = load_adjacent_order(
@@ -690,9 +677,6 @@ pub mod gold_clob_market {
                 if let Some(next) = next_order.as_mut() {
                     next.exit(&crate::ID)?;
                 }
-                if should_close_price_level(price_level) {
-                    price_level.close(ctx.accounts.user.to_account_info())?;
-                }
             }
         }
 
@@ -713,6 +697,108 @@ pub mod gold_clob_market {
         order.next_order_id = 0;
         order.filled = order.amount;
         emit!(OrderCancelled {
+            market_key: market_state.key(),
+            order_id,
+        });
+        Ok(())
+    }
+
+    pub fn reclaim_resting_order<'info>(
+        ctx: Context<'_, '_, 'info, 'info, ReclaimRestingOrder<'info>>,
+        order_id: u64,
+        side: u8,
+        price: u16,
+    ) -> Result<()> {
+        validate_side(side)?;
+        require!(price > 0 && price < 1000, ErrorCode::InvalidPrice);
+
+        let market_key = ctx.accounts.market_state.key();
+        let duel_key = ctx.accounts.duel_state.key();
+        let market_state = &mut ctx.accounts.market_state;
+        sync_market_status(
+            market_state,
+            &ctx.accounts.duel_state,
+            market_key,
+            duel_key,
+        )?;
+        require!(
+            market_state.status != MarketStatus::Open,
+            ErrorCode::MarketStillOpen
+        );
+
+        let order = &mut ctx.accounts.order;
+        require!(order.id == order_id, ErrorCode::InvalidOrderId);
+        require!(order.side == side, ErrorCode::OrderSideMismatch);
+        require!(order.price == price, ErrorCode::OrderPriceMismatch);
+        require!(
+            order.maker == ctx.accounts.user.key(),
+            ErrorCode::NotOrderMaker
+        );
+        require!(order.active, ErrorCode::NothingToReclaim);
+
+        let remaining = order
+            .amount
+            .checked_sub(order.filled)
+            .ok_or(ErrorCode::MathOverflow)?;
+        require!(remaining > 0, ErrorCode::NothingToReclaim);
+
+        let price_level = &mut ctx.accounts.price_level;
+        require_keys_eq!(
+            price_level.market_state,
+            market_state.key(),
+            ErrorCode::PriceLevelMismatch
+        );
+        require!(price_level.side == side, ErrorCode::PriceLevelMismatch);
+        require!(price_level.price == price, ErrorCode::PriceLevelMismatch);
+
+        if order.continuation_pending {
+        } else {
+            let mut cursor = 0_usize;
+            let mut prev_order = load_adjacent_order(
+                ctx.remaining_accounts,
+                &mut cursor,
+                market_state.key(),
+                order.prev_order_id,
+            )?;
+            let mut next_order = load_adjacent_order(
+                ctx.remaining_accounts,
+                &mut cursor,
+                market_state.key(),
+                order.next_order_id,
+            )?;
+
+            unlink_order(
+                market_state,
+                price_level,
+                order,
+                prev_order.as_mut(),
+                next_order.as_mut(),
+                remaining,
+            )?;
+
+            if let Some(prev) = prev_order.as_mut() {
+                prev.exit(&crate::ID)?;
+            }
+            if let Some(next) = next_order.as_mut() {
+                next.exit(&crate::ID)?;
+            }
+        }
+
+        transfer_from_vault(
+            &ctx.accounts.system_program,
+            &ctx.accounts.vault.to_account_info(),
+            &ctx.accounts.user.to_account_info(),
+            &market_state.key(),
+            market_state.vault_bump,
+            quote_cost(side, price, remaining)?,
+        )?;
+
+        order.active = false;
+        order.continuation_pending = false;
+        order.prev_order_id = 0;
+        order.next_order_id = 0;
+        order.filled = order.amount;
+        emit!(RestingOrderReclaimed {
             market_key: market_state.key(),
             order_id,
         });
@@ -963,6 +1049,23 @@ pub struct ContinueOrder<'info> {
         bump,
     )]
     pub resting_level: Box<Account<'info, PriceLevel>>,
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+    )]
+    pub config: Box<Account<'info, MarketConfig>>,
+    /// CHECK: Treasury wallet for trade fees
+    #[account(
+        mut,
+        address = config.treasury @ ErrorCode::InvalidFeeAccount,
+    )]
+    pub treasury: UncheckedAccount<'info>,
+    /// CHECK: Market maker wallet for trade fees
+    #[account(
+        mut,
+        address = config.market_maker @ ErrorCode::InvalidFeeAccount,
+    )]
+    pub market_maker: UncheckedAccount<'info>,
     /// CHECK: Native SOL vault PDA
     #[account(
         mut,
@@ -986,7 +1089,37 @@ pub struct CancelOrder<'info> {
         mut,
         seeds = [ORDER_SEED, market_state.key().as_ref(), &order_id.to_le_bytes()],
         bump = order.bump,
-        close = user,
+    )]
+    pub order: Box<Account<'info, Order>>,
+    #[account(
+        mut,
+        seeds = [LEVEL_SEED, market_state.key().as_ref(), &[side], &price.to_le_bytes()],
+        bump = price_level.bump,
+    )]
+    pub price_level: Box<Account<'info, PriceLevel>>,
+    /// CHECK: Native SOL vault PDA
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, market_state.key().as_ref()],
+        bump = market_state.vault_bump,
+    )]
+    pub vault: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(order_id: u64, side: u8, price: u16)]
+pub struct ReclaimRestingOrder<'info> {
+    #[account(mut)]
+    pub market_state: Box<Account<'info, MarketState>>,
+    #[account(address = market_state.duel_state @ ErrorCode::DuelMismatch)]
+    pub duel_state: Box<Account<'info, OracleDuelState>>,
+    #[account(
+        mut,
+        seeds = [ORDER_SEED, market_state.key().as_ref(), &order_id.to_le_bytes()],
+        bump = order.bump,
     )]
     pub order: Box<Account<'info, Order>>,
     #[account(
@@ -1139,6 +1272,7 @@ enum MatchStopReason {
 
 struct MatchOutcome {
     remaining_amount: u64,
+    executed_cost: u64,
     total_improvement: u64,
     account_idx: usize,
     stop_reason: MatchStopReason,
@@ -1370,6 +1504,47 @@ fn transfer_from_vault<'info>(
     Ok(())
 }
 
+fn charge_trade_fees<'info>(
+    system_program: &Program<'info, System>,
+    user: &AccountInfo<'info>,
+    treasury: &AccountInfo<'info>,
+    market_maker: &AccountInfo<'info>,
+    executed_cost: u64,
+    treasury_fee_bps: u16,
+    market_maker_fee_bps: u16,
+) -> Result<()> {
+    let trade_treasury_fee = bps_fee(executed_cost, treasury_fee_bps)?;
+    let trade_market_maker_fee = bps_fee(executed_cost, market_maker_fee_bps)?;
+
+    if trade_treasury_fee > 0 {
+        system_program::transfer(
+            CpiContext::new(
+                system_program.to_account_info(),
+                system_program::Transfer {
+                    from: user.clone(),
+                    to: treasury.clone(),
+                },
+            ),
+            trade_treasury_fee,
+        )?;
+    }
+
+    if trade_market_maker_fee > 0 {
+        system_program::transfer(
+            CpiContext::new(
+                system_program.to_account_info(),
+                system_program::Transfer {
+                    from: user.clone(),
+                    to: market_maker.clone(),
+                },
+            ),
+            trade_market_maker_fee,
+        )?;
+    }
+
+    Ok(())
+}
+
 fn execute_matches<'info>(
     market_state: &mut MarketState,
     market_key: Pubkey,
@@ -1383,6 +1558,7 @@ fn execute_matches<'info>(
 ) -> Result<MatchOutcome> {
     let opposite_side = if side == SIDE_BID { SIDE_ASK } else { SIDE_BID };
     let mut remaining_amount = amount;
+    let mut executed_cost = 0_u64;
     let mut total_improvement = 0_u64;
     let mut matches_count = 0_u32;
     let mut account_idx = 0_usize;
@@ -1527,6 +1703,9 @@ fn execute_matches<'info>(
                 .a_locked_lamports
                 .checked_add(taker_locked)
                 .ok_or(ErrorCode::MathOverflow)?;
+            executed_cost = executed_cost
+                .checked_add(taker_locked)
+                .ok_or(ErrorCode::MathOverflow)?;
 
             if price > current_boundary {
                 total_improvement = total_improvement
@@ -1556,6 +1735,9 @@ fn execute_matches<'info>(
                 .ok_or(ErrorCode::MathOverflow)?;
             user_balance.b_locked_lamports = user_balance
                 .b_locked_lamports
+                .checked_add(taker_locked)
+                .ok_or(ErrorCode::MathOverflow)?;
+            executed_cost = executed_cost
                 .checked_add(taker_locked)
                 .ok_or(ErrorCode::MathOverflow)?;
 
@@ -1604,6 +1786,7 @@ fn execute_matches<'info>(
 
     Ok(MatchOutcome {
         remaining_amount,
+        executed_cost,
         total_improvement,
         account_idx,
         stop_reason,
@@ -1847,6 +2030,10 @@ pub enum ErrorCode {
     MarketCreationPaused,
     #[msg("Config is permanently frozen")]
     ConfigFrozen,
+    #[msg("Market is still open")]
+    MarketStillOpen,
+    #[msg("Nothing to reclaim")]
+    NothingToReclaim,
 }
 
 #[event]
@@ -1894,6 +2081,12 @@ pub struct SelfTradePolicyTriggered {
 
 #[event]
 pub struct OrderCancelled {
+    pub market_key: Pubkey,
+    pub order_id: u64,
+}
+
+#[event]
+pub struct RestingOrderReclaimed {
     pub market_key: Pubkey,
     pub order_id: u64,
 }

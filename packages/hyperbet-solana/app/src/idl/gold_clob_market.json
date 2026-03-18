@@ -287,6 +287,32 @@
           "writable": true
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "market_maker",
+          "writable": true
+        },
+        {
           "name": "vault",
           "writable": true,
           "pda": {
@@ -690,6 +716,103 @@
       ]
     },
     {
+      "name": "reclaim_resting_order",
+      "discriminator": [
+        6,
+        69,
+        10,
+        23,
+        16,
+        193,
+        161,
+        163
+      ],
+      "accounts": [
+        {
+          "name": "market_state",
+          "writable": true
+        },
+        {
+          "name": "duel_state"
+        },
+        {
+          "name": "order",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  100,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market_state"
+              },
+              {
+                "kind": "arg",
+                "path": "order_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "price_level",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market_state"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "order_id",
+          "type": "u64"
+        },
+        {
+          "name": "side",
+          "type": "u8"
+        },
+        {
+          "name": "price",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "set_market_paused",
       "docs": [
         "Emergency pause/unpause for market creation and order placement.",
@@ -980,6 +1103,19 @@
       ]
     },
     {
+      "name": "RestingOrderReclaimed",
+      "discriminator": [
+        119,
+        79,
+        122,
+        108,
+        115,
+        169,
+        15,
+        78
+      ]
+    },
+    {
       "name": "SelfTradePolicyTriggered",
       "discriminator": [
         83,
@@ -1188,6 +1324,16 @@
       "code": 6038,
       "name": "ConfigFrozen",
       "msg": "Config is permanently frozen"
+    },
+    {
+      "code": 6039,
+      "name": "MarketStillOpen",
+      "msg": "Market is still open"
+    },
+    {
+      "code": 6040,
+      "name": "NothingToReclaim",
+      "msg": "Nothing to reclaim"
     }
   ],
   "types": [
@@ -1786,6 +1932,22 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RestingOrderReclaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
           }
         ]
       }

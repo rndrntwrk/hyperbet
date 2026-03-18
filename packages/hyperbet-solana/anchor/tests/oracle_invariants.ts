@@ -154,6 +154,40 @@ describe("oracle invariants (solana parity)", () => {
   });
 
   describe("state regression prevention", () => {
+    it("prevents moving into Locked before bet close time", async () => {
+        const duelKey = uniqueDuelKey("early-lock");
+        const now = Math.floor(Date.now() / 1000);
+
+        try {
+            await upsertDuel(fightProgram, authority, duelKey, {
+                status: duelStatusLocked(),
+                betOpenTs: now - 30,
+                betCloseTs: now + 300,
+                duelStartTs: now + 360,
+            });
+            assert.fail("allowed early transition into Locked");
+        } catch (e) {
+            assert.ok(hasProgramError(e, "BettingWindowActive"));
+        }
+    });
+
+    it("allows moving into Locked once bet close time has passed", async () => {
+        const duelKey = uniqueDuelKey("on-time-lock");
+        const now = Math.floor(Date.now() / 1000);
+
+        await upsertDuel(fightProgram, authority, duelKey, {
+            status: duelStatusLocked(),
+            betOpenTs: now - 120,
+            betCloseTs: now - 10,
+            duelStartTs: now - 5,
+        });
+
+        const duelState = await fightProgram.account.duelState.fetch(
+            deriveDuelStatePda(fightProgram.programId, duelKey)
+        );
+        assert.ok(duelState.status.locked !== undefined);
+    });
+
     it("prevents moving from Locked back to BettingOpen", async () => {
         const duelKey = uniqueDuelKey("regression-test");
         const now = Math.floor(Date.now() / 1000);

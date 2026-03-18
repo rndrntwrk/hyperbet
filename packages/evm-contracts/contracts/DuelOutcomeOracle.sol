@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract DuelOutcomeOracle is AccessControl {
     bytes32 public constant REPORTER_ROLE = keccak256("REPORTER_ROLE");
@@ -87,6 +87,7 @@ contract DuelOutcomeOracle is AccessControl {
         string metadataUri;
     }
 
+    // forge-lint: disable-next-line(screaming-snake-case-immutable)
     uint64 public immutable disputeWindowSeconds;
     bool public oracleActionsPaused;
 
@@ -148,15 +149,27 @@ contract DuelOutcomeOracle is AccessControl {
         disputeWindowSeconds = disputeWindowSeconds_;
     }
 
-    function setReporter(address reporter, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setReporter(address /* reporter */, bool /* enabled */)
+        external
+        view
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         revert GovernanceSurfaceFrozen();
     }
 
-    function setFinalizer(address finalizer, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setFinalizer(address /* finalizer */, bool /* enabled */)
+        external
+        view
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         revert GovernanceSurfaceFrozen();
     }
 
-    function setChallenger(address challenger, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setChallenger(address /* challenger */, bool /* enabled */)
+        external
+        view
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         revert GovernanceSurfaceFrozen();
     }
 
@@ -197,6 +210,7 @@ contract DuelOutcomeOracle is AccessControl {
     }
 
     function proposalId(bytes32 duelKey, bytes32 resultHash, bytes32 replayHash) public pure returns (bytes32) {
+        // forge-lint: disable-next-line(asm-keccak256)
         return keccak256(abi.encode(duelKey, resultHash, replayHash));
     }
 
@@ -222,6 +236,7 @@ contract DuelOutcomeOracle is AccessControl {
         ) revert InvalidStatus();
         if (betOpenTs == 0 || betCloseTs <= betOpenTs) revert InvalidBettingWindow();
         if (duelStartTs < betCloseTs) revert InvalidDuelStart();
+        if (status == DuelStatus.LOCKED && block.timestamp < betCloseTs) revert BettingWindowActive();
 
         DuelState storage duel = duels[duelKey];
         _requireSettleable(duel);

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import "./DuelOutcomeOracle.sol";
+import {DuelOutcomeOracle} from "./DuelOutcomeOracle.sol";
 
 contract GoldClob is AccessControl, ReentrancyGuard {
     using Address for address payable;
@@ -26,8 +26,11 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     uint8 public constant MAX_MATCH_ITERATIONS = 50;
     uint8 private constant ORDER_FLAGS_GTC_POST_ONLY = ORDER_FLAG_GTC | ORDER_FLAG_POST_ONLY;
 
+    // forge-lint: disable-next-line(screaming-snake-case-immutable)
     DuelOutcomeOracle public immutable duelOracle;
+    // forge-lint: disable-next-line(screaming-snake-case-immutable)
     address public immutable treasury;
+    // forge-lint: disable-next-line(screaming-snake-case-immutable)
     address public immutable marketMaker;
     uint256 public tradeTreasuryFeeBps;
     uint256 public tradeMarketMakerFeeBps;
@@ -204,6 +207,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     }
 
     function marketKey(bytes32 duelKey, uint8 marketKind) public pure returns (bytes32) {
+        // forge-lint: disable-next-line(asm-keccak256)
         return keccak256(abi.encode(duelKey, marketKind));
     }
 
@@ -221,15 +225,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         return (level.headOrderId, level.tailOrderId, level.totalOpen);
     }
 
-    function setOracle(address oracle) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setOracle(address /* oracle */) external view onlyRole(DEFAULT_ADMIN_ROLE) {
         revert GovernanceSurfaceFrozen();
     }
 
-    function setTreasury(address treasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setTreasury(address /* treasury_ */) external view onlyRole(DEFAULT_ADMIN_ROLE) {
         revert GovernanceSurfaceFrozen();
     }
 
-    function setMarketMaker(address marketMaker_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setMarketMaker(address /* marketMaker_ */) external view onlyRole(DEFAULT_ADMIN_ROLE) {
         revert GovernanceSurfaceFrozen();
     }
 
@@ -271,10 +275,10 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     }
 
     function setFeeConfig(
-        uint256 tradeTreasuryFeeBps_,
-        uint256 tradeMarketMakerFeeBps_,
-        uint256 winningsMarketMakerFeeBps_
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 /* tradeTreasuryFeeBps_ */,
+        uint256 /* tradeMarketMakerFeeBps_ */,
+        uint256 /* winningsMarketMakerFeeBps_ */
+    ) external view onlyRole(DEFAULT_ADMIN_ROLE) {
         revert GovernanceSurfaceFrozen();
     }
 
@@ -302,8 +306,11 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         market.exists = true;
         market.duelKey = duelKey;
         market.status = _mapDuelStatus(duel.status);
+        // forge-lint: disable-next-line(unsafe-typecast)
         market.tradeTreasuryFeeBpsSnapshot = uint16(tradeTreasuryFeeBps);
+        // forge-lint: disable-next-line(unsafe-typecast)
         market.tradeMarketMakerFeeBpsSnapshot = uint16(tradeMarketMakerFeeBps);
+        // forge-lint: disable-next-line(unsafe-typecast)
         market.winningsMarketMakerFeeBpsSnapshot = uint16(winningsMarketMakerFeeBps);
         market.nextOrderId = 1;
         market.bestAsk = MAX_PRICE;
@@ -825,6 +832,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
             if (word == 0) continue;
 
             uint256 price = (wordIndex * 256) + Math.log2(word);
+            // forge-lint: disable-next-line(unsafe-typecast)
             if (price < MAX_PRICE) return uint16(price);
         }
 
@@ -840,6 +848,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
 
             uint256 isolatedBit = word & (~word + 1);
             uint256 price = (wordIndex * 256) + Math.log2(isolatedBit);
+            // forge-lint: disable-next-line(unsafe-typecast)
             if (price > 0 && price < MAX_PRICE) return uint16(price);
         }
 

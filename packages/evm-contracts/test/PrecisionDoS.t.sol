@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
-import "../contracts/DuelOutcomeOracle.sol";
-import "../contracts/GoldClob.sol";
+import {DuelOutcomeOracle} from "../contracts/DuelOutcomeOracle.sol";
+import {GoldClob} from "../contracts/GoldClob.sol";
 
 contract GoldClobPrecisionDoSTest is Test {
     uint8 private constant MARKET_KIND_DUEL_WINNER = 0;
