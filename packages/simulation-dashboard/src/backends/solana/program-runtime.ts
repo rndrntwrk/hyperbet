@@ -365,7 +365,7 @@ export class SolanaProgramRuntime {
 
         if (!existingConfig) {
             await this.fightProgram.methods
-                .initializeOracle(reporter)
+                .initializeOracle(reporter, reporter, reporter, new BN(3600))
                 .accountsPartial({
                     authority: this.authority.publicKey,
                     oracleConfig,
