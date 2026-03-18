@@ -239,8 +239,8 @@ describe("CREATE2 Parity", function () {
         .connect(reporter)
         .upsertDuel(
           duelKey,
-          ethers.hexlify(ethers.randomBytes(32)),
-          ethers.hexlify(ethers.randomBytes(32)),
+          ethers.keccak256(ethers.toUtf8Bytes("create2-participant-a")),
+          ethers.keccak256(ethers.toUtf8Bytes("create2-participant-b")),
           now + 60,
           now + 3600,
           now + 3660,
@@ -251,21 +251,25 @@ describe("CREATE2 Parity", function () {
     });
 
     it("should propose a result", async function () {
-      // Advance to LOCKED status first
-      const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+      // Read the stored duel to use its immutable participant hashes and timing
+      const duel = await oracle.getDuel(duelKey);
+      // Advance past betCloseTs so we can propose
+      await ethers.provider.send("evm_increaseTime", [3601]);
+      await ethers.provider.send("evm_mine", []);
       await oracle
         .connect(reporter)
         .upsertDuel(
           duelKey,
-          ethers.hexlify(ethers.randomBytes(32)),
-          ethers.hexlify(ethers.randomBytes(32)),
-          now - 3600,
-          now - 60,
-          now,
+          duel.participantAHash,
+          duel.participantBHash,
+          duel.betOpenTs,
+          duel.betCloseTs,
+          duel.duelStartTs,
           "",
           3,
         );
 
+      const nowAfterLock = (await ethers.provider.getBlock("latest"))!.timestamp;
       const tx = await oracle
         .connect(reporter)
         .proposeResult(
@@ -274,7 +278,7 @@ describe("CREATE2 Parity", function () {
           42,
           ethers.hexlify(ethers.randomBytes(32)),
           ethers.hexlify(ethers.randomBytes(32)),
-          now + 1,
+          nowAfterLock + 1,
           "",
         );
       await expect(tx).to.emit(oracle, "ResultProposed");

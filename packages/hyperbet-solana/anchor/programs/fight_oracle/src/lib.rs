@@ -143,6 +143,14 @@ pub mod fight_oracle {
             duel_state.winner = MarketSide::None;
         }
 
+        // FIX-4: Lock participant identity and bet timing once betting opens
+        if is_initialized && duel_status_rank(duel_state.status) >= duel_status_rank(DuelStatus::BettingOpen) {
+            require!(participant_a_hash == duel_state.participant_a_hash, ErrorCode::ParticipantHashImmutable);
+            require!(participant_b_hash == duel_state.participant_b_hash, ErrorCode::ParticipantHashImmutable);
+            require!(bet_open_ts == duel_state.bet_open_ts, ErrorCode::TimingImmutable);
+            require!(bet_close_ts == duel_state.bet_close_ts, ErrorCode::TimingImmutable);
+        }
+
         duel_state.duel_key = duel_key;
         duel_state.participant_a_hash = participant_a_hash;
         duel_state.participant_b_hash = participant_b_hash;
@@ -213,6 +221,13 @@ pub mod fight_oracle {
             ErrorCode::InvalidLifecycleTransition
         );
 
+        // FIX-6: Parity with EVM — block proposals while betting window is still active
+        let clock = Clock::get()?;
+        require!(
+            clock.unix_timestamp >= duel_state.bet_close_ts,
+            ErrorCode::BettingWindowActive
+        );
+
         let proposal_id = proposal_id_for(duel_state.duel_key, result_hash, replay_hash);
         duel_state.status = DuelStatus::Proposed;
         duel_state.active_proposal = proposal_id;
@@ -264,6 +279,71 @@ pub mod fight_oracle {
         emit!(ResultChallenged {
             duel_key: duel_state.duel_key,
             proposal_id: duel_state.active_proposal,
+            metadata_uri: metadata_uri.clone(),
+        });
+        duel_state.metadata_uri = metadata_uri;
+        Ok(())
+    }
+
+    // FIX-3: Resolution path for challenged duels — reporter submits new proposal
+    pub fn repropose_result(
+        ctx: Context<ReproposeResult>,
+        _duel_key: [u8; 32],
+        winner: MarketSide,
+        seed: u64,
+        replay_hash: [u8; 32],
+        result_hash: [u8; 32],
+        duel_end_ts: i64,
+        metadata_uri: String,
+    ) -> Result<()> {
+        let duel_state = &mut ctx.accounts.duel_state;
+        require!(
+            duel_state.status == DuelStatus::Challenged,
+            ErrorCode::NotChallenged
+        );
+        require!(
+            duel_state.status != DuelStatus::Resolved,
+            ErrorCode::DuelAlreadyFinalized
+        );
+        require!(
+            duel_state.status != DuelStatus::Cancelled,
+            ErrorCode::DuelAlreadyCancelled
+        );
+        require!(
+            winner == MarketSide::A || winner == MarketSide::B,
+            ErrorCode::InvalidWinner
+        );
+        require!(duel_end_ts > 0, ErrorCode::InvalidLifecycleTransition);
+        require!(
+            duel_end_ts >= duel_state.bet_close_ts,
+            ErrorCode::InvalidLifecycleTransition
+        );
+
+        let clock = Clock::get()?;
+        require!(
+            clock.unix_timestamp >= duel_state.bet_close_ts,
+            ErrorCode::BettingWindowActive
+        );
+
+        let proposal_id = proposal_id_for(duel_state.duel_key, result_hash, replay_hash);
+        duel_state.status = DuelStatus::Proposed;
+        duel_state.active_proposal = proposal_id;
+        duel_state.pending_winner = winner;
+        duel_state.pending_seed = seed;
+        duel_state.pending_result_hash = result_hash;
+        duel_state.pending_replay_hash = replay_hash;
+        duel_state.pending_duel_end_ts = duel_end_ts;
+        duel_state.pending_proposed_at = clock.unix_timestamp;
+        duel_state.pending_challenged = false;
+
+        emit!(ResultProposed {
+            duel_key: duel_state.duel_key,
+            proposal_id,
+            winner,
+            seed,
+            duel_end_ts,
+            result_hash,
+            replay_hash,
             metadata_uri: metadata_uri.clone(),
         });
         duel_state.metadata_uri = metadata_uri;
@@ -395,6 +475,22 @@ pub struct CancelDuel<'info> {
 #[derive(Accounts)]
 #[instruction(duel_key: [u8; 32])]
 pub struct ProposeResult<'info> {
+    #[account(mut)]
+    pub reporter: Signer<'info>,
+    #[account(
+        seeds = [ORACLE_CONFIG_SEED],
+        bump = oracle_config.bump,
+        constraint = oracle_config.reporter == reporter.key() @ ErrorCode::Unauthorized,
+    )]
+    pub oracle_config: Account<'info, OracleConfig>,
+    #[account(mut, seeds = [DUEL_SEED, duel_key.as_ref()], bump = duel_state.bump)]
+    pub duel_state: Account<'info, DuelState>,
+}
+
+// FIX-3: Accounts for reproposing after a challenge
+#[derive(Accounts)]
+#[instruction(duel_key: [u8; 32])]
+pub struct ReproposeResult<'info> {
     #[account(mut)]
     pub reporter: Signer<'info>,
     #[account(
@@ -579,4 +675,12 @@ pub enum ErrorCode {
     DisputeWindowActive,
     #[msg("Config authority is immutable")]
     ConfigAuthorityImmutable,
+    #[msg("Cannot propose result while betting window is still active")]
+    BettingWindowActive,
+    #[msg("Duel must be in Challenged status for reproposal")]
+    NotChallenged,
+    #[msg("Participant hashes are immutable after betting opens")]
+    ParticipantHashImmutable,
+    #[msg("Bet timing is immutable after betting opens")]
+    TimingImmutable,
 }

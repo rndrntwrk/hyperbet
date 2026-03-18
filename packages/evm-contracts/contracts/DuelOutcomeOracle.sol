@@ -37,6 +37,9 @@ contract DuelOutcomeOracle is AccessControl {
     error ChallengeWindowExpired();
     error OraclePaused();
     error GovernanceSurfaceFrozen();
+    error NotChallenged();
+    error ParticipantHashImmutable();
+    error TimingImmutable();
 
     enum DuelStatus {
         NULL,
@@ -167,6 +170,23 @@ contract DuelOutcomeOracle is AccessControl {
         emit PauserUpdated(pauser, enabled);
     }
 
+    // ── PM20 governance freeze: block inherited AccessControl role mutations ──
+
+    function grantRole(bytes32 role, address account) public override onlyRole(getRoleAdmin(role)) {
+        if (role != PAUSER_ROLE) revert GovernanceSurfaceFrozen();
+        _grantRole(role, account);
+    }
+
+    function revokeRole(bytes32 role, address account) public override onlyRole(getRoleAdmin(role)) {
+        if (role != PAUSER_ROLE) revert GovernanceSurfaceFrozen();
+        _revokeRole(role, account);
+    }
+
+    function renounceRole(bytes32 role, address callerConfirmation) public override {
+        if (role != PAUSER_ROLE) revert GovernanceSurfaceFrozen();
+        super.renounceRole(role, callerConfirmation);
+    }
+
     function setOraclePaused(bool paused) external onlyRole(PAUSER_ROLE) {
         oracleActionsPaused = paused;
         emit OraclePauseUpdated(paused, msg.sender);
@@ -206,6 +226,14 @@ contract DuelOutcomeOracle is AccessControl {
         DuelState storage duel = duels[duelKey];
         _requireSettleable(duel);
         if (uint8(status) < uint8(duel.status)) revert InvalidTransition();
+
+        // FIX-4: Lock participant identity and bet timing once betting opens
+        if (duel.status >= DuelStatus.BETTING_OPEN) {
+            if (participantAHash != duel.participantAHash) revert ParticipantHashImmutable();
+            if (participantBHash != duel.participantBHash) revert ParticipantHashImmutable();
+            if (betOpenTs != duel.betOpenTs) revert TimingImmutable();
+            if (betCloseTs != duel.betCloseTs) revert TimingImmutable();
+        }
 
         duel.duelKey = duelKey;
         duel.participantAHash = participantAHash;
@@ -284,6 +312,47 @@ contract DuelOutcomeOracle is AccessControl {
         duel.status = DuelStatus.CHALLENGED;
         duel.metadataUri = metadataUri;
         emit ResultChallenged(duelKey, id, metadataUri);
+    }
+
+    // FIX-3: Resolution path for challenged duels — allows reporter to submit a new proposal
+    function reproposeResult(
+        bytes32 duelKey,
+        Side winner,
+        uint64 seed,
+        bytes32 replayHash,
+        bytes32 resultHash,
+        uint64 duelEndTs,
+        string calldata metadataUri
+    ) external onlyRole(REPORTER_ROLE) returns (bytes32 id) {
+        if (oracleActionsPaused) revert OraclePaused();
+        DuelState storage duel = duels[duelKey];
+        _requireSettleable(duel);
+        if (duel.status != DuelStatus.CHALLENGED) revert NotChallenged();
+        if (winner != Side.A && winner != Side.B) revert InvalidWinner();
+        if (duelEndTs < duel.betCloseTs) revert InvalidDuelEnd();
+
+        delete proposals[duel.activeProposalId];
+
+        id = proposalId(duelKey, resultHash, replayHash);
+        if (proposals[id].exists) revert ProposalExists();
+
+        proposals[id] = ResultProposal({
+            id: id,
+            resultHash: resultHash,
+            replayHash: replayHash,
+            winner: winner,
+            seed: seed,
+            duelEndTs: duelEndTs,
+            proposedAt: uint64(block.timestamp),
+            challenged: false,
+            exists: true
+        });
+
+        duel.status = DuelStatus.PROPOSED;
+        duel.activeProposalId = id;
+        duel.metadataUri = metadataUri;
+
+        emit ResultProposed(duelKey, id, winner, seed, duelEndTs, resultHash, replayHash, metadataUri);
     }
 
     function finalizeResult(bytes32 duelKey, string calldata metadataUri) external onlyRole(FINALIZER_ROLE) {

@@ -66,6 +66,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error CostTooLow();
     error MarketCreationIsPaused();
     error OrderPlacementIsPaused();
+    error MarketStillOpen();
 
     enum MarketStatus {
         NULL,
@@ -242,6 +243,23 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         emit PauserUpdated(pauser, enabled);
     }
 
+    // ── PM20 governance freeze: block inherited AccessControl role mutations ──
+
+    function grantRole(bytes32 role, address account) public override onlyRole(getRoleAdmin(role)) {
+        if (role != PAUSER_ROLE) revert GovernanceSurfaceFrozen();
+        _grantRole(role, account);
+    }
+
+    function revokeRole(bytes32 role, address account) public override onlyRole(getRoleAdmin(role)) {
+        if (role != PAUSER_ROLE) revert GovernanceSurfaceFrozen();
+        _revokeRole(role, account);
+    }
+
+    function renounceRole(bytes32 role, address callerConfirmation) public override {
+        if (role != PAUSER_ROLE) revert GovernanceSurfaceFrozen();
+        super.renounceRole(role, callerConfirmation);
+    }
+
     function setMarketCreationPaused(bool paused) external onlyRole(PAUSER_ROLE) {
         marketCreationPaused = paused;
         emit MarketCreationPauseUpdated(paused, msg.sender);
@@ -388,6 +406,36 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         if (refund > 0) payable(msg.sender).sendValue(refund);
 
         emit OrderCancelled(key, orderId);
+    }
+
+    // FIX-2: Allow resting order collateral recovery once market leaves OPEN status
+    function reclaimRestingOrder(bytes32 duelKey, uint8 marketKind, uint64 orderId) external nonReentrant {
+        bytes32 key = marketKey(duelKey, marketKind);
+        Market storage market = markets[key];
+        if (!market.exists) revert MarketMissing();
+
+        DuelOutcomeOracle.DuelState memory duel = duelOracle.getDuel(duelKey);
+        MarketStatus status = _syncMarketFromOracle(duelKey, key, market, duel);
+        if (status == MarketStatus.OPEN) revert MarketStillOpen();
+
+        Order storage order = orders[key][orderId];
+        if (order.maker != msg.sender) revert NotMaker();
+        if (!order.active) revert OrderInactive();
+
+        uint128 remaining = order.amount - order.filled;
+        if (remaining == 0) revert AlreadyFilled();
+
+        PriceLevel storage level = priceLevels[key][order.side][order.price];
+        _unlinkOrder(key, market, level, order, remaining);
+
+        uint256 refund = _quoteCost(order.side, order.price, remaining);
+        order.filled = order.amount;
+        order.active = false;
+        order.prevOrderId = 0;
+        order.nextOrderId = 0;
+
+        emit OrderCancelled(key, orderId);
+        if (refund > 0) payable(msg.sender).sendValue(refund);
     }
 
     function claim(bytes32 duelKey, uint8 marketKind) external nonReentrant {

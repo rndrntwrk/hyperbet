@@ -230,15 +230,16 @@ contract GoldClobSettlementTest is Test {
     }
 
     function _lockDuel(bytes32 duel) private {
-        vm.warp(block.timestamp + 61);
+        DuelOutcomeOracle.DuelState memory d = oracle.getDuel(duel);
+        vm.warp(d.betCloseTs + 1);
         vm.prank(reporter);
         oracle.upsertDuel(
             duel,
-            _hashLabel("winner-payout-a"),
-            _hashLabel("winner-payout-b"),
-            uint64(block.timestamp - 61),
-            uint64(block.timestamp - 1),
-            uint64(block.timestamp + 59),
+            d.participantAHash,
+            d.participantBHash,
+            d.betOpenTs,
+            d.betCloseTs,
+            d.duelStartTs,
             "locked",
             DuelOutcomeOracle.DuelStatus.LOCKED
         );

@@ -170,6 +170,7 @@ pub mod gold_clob_market {
         market_state.next_order_id = 1;
         market_state.best_ask = 1000;
         market_state.authority = ctx.accounts.operator.key();
+        market_state.market_maker = ctx.accounts.config.market_maker; // FIX-7
         emit!(MarketCreated {
             duel_key,
             market_key: market_state.key(),
@@ -248,8 +249,9 @@ pub mod gold_clob_market {
         user_balance.user = ctx.accounts.user.key();
         user_balance.market_state = market_state.key();
 
-        let trade_treasury_fee = bps_fee(cost, ctx.accounts.config.trade_treasury_fee_bps)?;
-        let trade_market_maker_fee = bps_fee(cost, ctx.accounts.config.trade_market_maker_fee_bps)?;
+        // FIX-5: Use snapshotted fees from market creation, not live config
+        let trade_treasury_fee = bps_fee(cost, market_state.trade_treasury_fee_bps_snapshot)?;
+        let trade_market_maker_fee = bps_fee(cost, market_state.trade_market_maker_fee_bps_snapshot)?;
 
         if trade_treasury_fee > 0 {
             system_program::transfer(
@@ -991,10 +993,10 @@ pub struct Claim<'info> {
         bump = config.bump,
     )]
     pub config: Box<Account<'info, MarketConfig>>,
-    /// CHECK: Market maker wallet for winnings fee
+    /// CHECK: Market maker wallet for winnings fee — validated against snapshot, not live config
     #[account(
         mut,
-        address = config.market_maker @ ErrorCode::InvalidFeeAccount,
+        address = market_state.market_maker @ ErrorCode::InvalidFeeAccount, // FIX-7: Use snapshot
     )]
     pub market_maker: UncheckedAccount<'info>,
     /// CHECK: Native SOL vault PDA
@@ -1037,6 +1039,7 @@ pub struct MarketState {
     pub best_bid: u16,
     pub best_ask: u16,
     pub authority: Pubkey,
+    pub market_maker: Pubkey, // FIX-7: Snapshot for claim fee routing
     pub bid_bitmap: [u64; BITMAP_WORDS],
     pub ask_bitmap: [u64; BITMAP_WORDS],
     pub vault_bump: u8,
