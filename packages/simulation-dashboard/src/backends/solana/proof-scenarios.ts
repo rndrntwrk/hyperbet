@@ -1167,7 +1167,7 @@ export async function runSolanaProofScenario(
                     orderId: 3,
                     side: SIDE_BID,
                     price: 600,
-                    amount: 500n,
+                    amount: 1000n,
                 });
                 traces.push(
                     buildTrace("post_lock_order", market, {
