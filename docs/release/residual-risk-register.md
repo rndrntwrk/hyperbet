@@ -62,12 +62,6 @@ Risks that have been assessed, accepted, and documented. These are NOT bugs — 
 
 ## Tracking (Not Yet Mitigated)
 
-### T-1: No Minimum Dispute Window Enforcement
-
-**Description:** Both chains accept `dispute_window_secs = 1`, which is vulnerable to clock drift.
-
-**Recommendation:** Add a minimum (e.g., 60 seconds) in a future hardening pass. Currently mitigated by operational policy.
-
 ### T-2: Missing Reentrancy Exploit Test
 
 **Description:** No test deploys a malicious contract that re-enters `claim()` via the ETH receive callback. While `nonReentrant` guard is applied, explicit test verification is missing.

@@ -36,18 +36,13 @@ pub mod fight_oracle {
         );
 
         let oracle_config = &mut ctx.accounts.oracle_config;
-        if oracle_config.authority == Pubkey::default() {
-            oracle_config.authority = upgrade_authority;
-            oracle_config.bump = ctx.bumps.oracle_config;
-        } else {
-            require_keys_eq!(
-                oracle_config.authority,
-                upgrade_authority,
-                ErrorCode::ConfigAuthorityImmutable
-            );
-            // P1 fix: block re-initialization after config freeze
-            require!(!oracle_config.config_frozen, ErrorCode::ConfigFrozen);
-        }
+        // WS2: One-time initialization only. No bootstrap fallback pattern.
+        require!(
+            oracle_config.authority == Pubkey::default(),
+            ErrorCode::AlreadyInitialized
+        );
+        oracle_config.authority = upgrade_authority;
+        oracle_config.bump = ctx.bumps.oracle_config;
 
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
         require!(finalizer != Pubkey::default(), ErrorCode::InvalidFinalizer);
@@ -718,6 +713,8 @@ pub enum ErrorCode {
     ParticipantHashImmutable,
     #[msg("Bet timing is immutable after betting opens")]
     TimingImmutable,
+    #[msg("Config is already initialized")]
+    AlreadyInitialized,
     #[msg("Oracle operations are paused")]
     OraclePaused,
     #[msg("Config is permanently frozen")]

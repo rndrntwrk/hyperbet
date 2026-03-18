@@ -1,6 +1,6 @@
 # Prediction Market Audit Readiness Tracker
 
-_Last updated: 2026-03-17_
+_Last updated: 2026-03-18_
 
 ## Purpose
 
@@ -440,7 +440,7 @@ Freeze Solana order semantics so they intentionally mirror the EVM model where p
 
 # Priority 4 — `enoomian/pm-20-governance-controls`
 
-**Status:** `[ ] not started as a full workstream`
+**Status:** `[x] complete — EVM governance freeze (grantRole/revokeRole override), Solana config freeze + pause, one-time initializer (no bootstrap fallback)`
 
 ## Objective
 
@@ -513,7 +513,7 @@ Freeze privileged surfaces and remove bootstrap-authority escape hatches so the 
 
 # Priority 5 — `enoomian/pm-21-protocol-guardrails`
 
-**Status:** `[ ] not started as a full workstream`
+**Status:** `[x] complete — terminal-state lifecycle guardrails, MarketNotOpen on non-OPEN markets, reclaimRestingOrder, ExploitSuite coverage`
 
 ## Objective
 

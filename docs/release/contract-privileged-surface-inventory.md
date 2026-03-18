@@ -19,16 +19,21 @@ This document tracks mutable privileged surfaces for the prediction-market launc
 
 ## SVM: `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs`
 
-- `initializeOracle`: upgrade-authority constrained initializer for `OracleConfig` (no bootstrap fallback)
-- `updateOracleConfig`: `authority` signer; authority key is immutable in PM20 and cannot be reassigned
+- `initializeOracle`: upgrade-authority constrained, one-time only (`AlreadyInitialized` on re-call). No bootstrap fallback — `init_if_needed` pattern removed.
+- `updateOracleConfig`: `authority` signer; authority key is immutable; blocked by `config_frozen` after `freeze_oracle_config`
+- `freezeOracleConfig`: `authority` signer; one-way permanent freeze of all config updates
+- `setOraclePaused`: `authority` signer; emergency pause/unpause (functional even after freeze)
+- `reproposeResult`: `reporter` signer; resolution path for challenged duels
 - `upsert_duel`: oracle `reporter`
 - `challenge_result`: oracle `challenger`
 - `cancel_duel` / `finalize_result`: oracle `authority` / `finalizer` as configured
 
 ## SVM: `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`
 
-- `initialize_config`: upgrade-authority constrained initializer for `MarketConfig` (no bootstrap fallback)
-- `update_config`: `authority` signer; authority key is immutable in PM20 and cannot be reassigned
+- `initialize_config`: upgrade-authority constrained, one-time only (`AlreadyInitialized` on re-call). No bootstrap fallback — `init_if_needed` pattern removed.
+- `update_config`: `authority` signer; authority key is immutable; blocked by `config_frozen` after `freeze_config`
+- `freezeConfig`: `authority` signer; one-way permanent freeze of all config updates
+- `setMarketPaused`: `authority` signer; emergency pause/unpause for order placement and market creation (functional even after freeze)
 - `initialize_market`: market operator or config authority
 - `place_order`, `cancel_order`, `claim`, `sync_market_from_duel`, `initialize_market`: state-transition guards and policy checks on each invocation
 

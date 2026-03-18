@@ -69,18 +69,13 @@ pub mod gold_clob_market {
         );
 
         let config = &mut ctx.accounts.config;
-        if config.authority == Pubkey::default() {
-            config.authority = upgrade_authority;
-            config.bump = ctx.bumps.config;
-        } else {
-            require_keys_eq!(
-                config.authority,
-                upgrade_authority,
-                ErrorCode::UnauthorizedConfigAuthority
-            );
-            // P1 fix: block re-initialization after config freeze
-            require!(!config.config_frozen, ErrorCode::ConfigFrozen);
-        }
+        // WS2: One-time initialization only. No bootstrap fallback pattern.
+        require!(
+            config.authority == Pubkey::default(),
+            ErrorCode::AlreadyInitialized
+        );
+        config.authority = upgrade_authority;
+        config.bump = ctx.bumps.config;
 
         config.market_operator = market_operator;
         config.treasury = treasury;
@@ -1844,6 +1839,8 @@ pub enum ErrorCode {
     NothingToContinue,
     #[msg("Nothing to claim")]
     NothingToClaim,
+    #[msg("Config is already initialized")]
+    AlreadyInitialized,
     #[msg("Order placement is paused")]
     OrderPlacementPaused,
     #[msg("Market creation is paused")]

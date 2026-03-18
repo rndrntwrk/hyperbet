@@ -67,22 +67,22 @@ Last updated: 2026-03-17
 
 ## [16] Priority: `enoomian/pm-16-resolution-truth`
 **Owner:** Gate 16
-**Status:** [ ]
+**Status:** [x]
 
-- [ ] Redesign EVM cancellation path in `packages/evm-contracts/contracts/DuelOutcomeOracle.sol`.
-- [ ] Make Solana dispute window updates require strictly positive seconds (`fight_oracle/src/lib.rs`).
-- [ ] Remove default reporter=finalizer=challenger bootstrap assumption in Solana initializer (`fight_oracle/src/lib.rs`).
-- [ ] Add invariant tests proving no settlement before terminal finalization:
-  - `packages/evm-contracts/test/DuelOutcomeOracle.ts`
-  - new `packages/hyperbet-solana/keeper`/`anchor/tests` oracle scenario file
-- [ ] Update oracle documentation:
-  - `docs/oracle-finality-model.md`
-  - `docs/protocol/cross-chain-parity-matrix.md`
+- [x] Redesign EVM cancellation path — `cancelDuel` requires `PAUSER_ROLE`, not reporter. `reproposeResult` added for challenge resolution.
+- [x] Minimum 60-second dispute window enforced on both chains (EVM constructor + Solana initialize/update).
+- [x] Bootstrap fallback removed — `initialize_oracle` is one-time only (`AlreadyInitialized` on re-call). Explicit 4-param init (reporter, finalizer, challenger, dispute_window).
+- [x] Invariant tests proving no settlement before terminal finalization:
+  - EVM: `OracleFinality.ts` (22 tests), `OracleFinality.t.sol` (21 tests), `ExploitSuite.t.sol` (10 tests)
+  - Solana: `oracle_invariants.ts`, `oracle-finality.test.ts`
+- [x] Oracle documentation updated:
+  - `docs/oracle-finality-model.md` — state machine, dispute window, role matrix
+  - `docs/protocol/cross-chain-parity-matrix.md` — 17-feature parity comparison
 
 ### Acceptance checkpoints
-- [ ] Finality is trust-minimized and non-privileged.
-- [ ] Dispute window parity exact on both chains (`> 0` only).
-- [ ] Launch path has no reporter-only emergency closure that is not explicitly documented as emergency-only.
+- [x] Finality is trust-minimized: propose/challenge/finalize with separate keys.
+- [x] Dispute window minimum 60 seconds on both chains.
+- [x] Emergency cancellation is PAUSER_ROLE only (EVM) / authority only (Solana), documented.
 
 ---
 
@@ -140,7 +140,7 @@ Parity checks for this gate are now covered in:
 **Owner:** Gate 20
 **Status:** [x]
 
-- [x] Remove Solana bootstrap-authority fallbacks in both initializers:
+- [x] Remove Solana bootstrap-authority fallbacks in both initializers — `initialize_oracle` and `initialize_config` now reject re-initialization (`AlreadyInitialized`) instead of using `init_if_needed` + default-authority bootstrap:
   - `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs`
   - `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`
 - [x] Freeze EVM setter surface in `packages/evm-contracts/contracts/DuelOutcomeOracle.sol` and `packages/evm-contracts/contracts/GoldClob.sol`.
