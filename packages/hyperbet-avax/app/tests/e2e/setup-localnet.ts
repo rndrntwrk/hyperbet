@@ -593,7 +593,7 @@ async function main(): Promise<void> {
       authority.publicKey,
       authority.publicKey,
       authority.publicKey,
-      new BN(0),
+      new BN(60),
     )
     .accountsPartial({
       authority: authority.publicKey,
@@ -609,7 +609,7 @@ async function main(): Promise<void> {
       authority.publicKey,
       authority.publicKey,
       authority.publicKey,
-      new BN(0),
+      new BN(60),
     )
     .accountsPartial({
       authority: authority.publicKey,
