@@ -1,5 +1,7 @@
 # Prediction Market Audit Readiness Tracker
 
+> **TL;DR:** PM16 (resolution truth), PM17A/B (order semantics), PM20 (governance), PM21 (guardrails) are code-complete with all audit remediations applied. AVAX canonicalization and audit packet assembly (Gates 6 + 22) remain open. All EVM tests pass (46 Foundry + 106 Hardhat). Solana initializer bootstrap fallback removed. Config freeze + pause added on both chains.
+
 _Last updated: 2026-03-18_
 
 ## Purpose

@@ -1,5 +1,7 @@
 # Oracle Finality Model
 
+> **TL;DR:** 7-state lifecycle (SCHEDULED -> BETTING_OPEN -> LOCKED -> PROPOSED -> CHALLENGED -> RESOLVED/CANCELLED). Settlement only from terminal states. Minimum 60s dispute window. PAUSER-only cancellation. Challenge triggers re-proposal path (not a dead end). 4 known cross-chain divergences documented (dispute window mutability, cancel authority model, global pause, multi-holder roles).
+
 ## Overview
 
 The `DuelOutcomeOracle` manages the lifecycle of competitive duel outcomes across EVM chains. This document defines the finality semantics — how a duel reaches terminal state, what guarantees exist at each stage, and how the system prevents premature settlement.

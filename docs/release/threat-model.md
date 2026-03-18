@@ -1,5 +1,7 @@
 # Threat Model — Prediction Market Protocol
 
+> **TL;DR:** 8 actors, 3 trust boundaries, 7 attack surfaces analyzed. Key mitigations: 3-key oracle separation (reporter/challenger/finalizer), PM20 governance freeze (EVM + Solana), bounded matching (50 iterations), cancel-taker STP, minimum 60s dispute window. Highest residual risk: reporter+finalizer collusion can finalize fraudulent results after dispute window.
+
 ## Actors
 
 | Actor | Trust Level | Capabilities |

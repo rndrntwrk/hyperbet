@@ -1,5 +1,7 @@
 # Auditor Build & Test Guide
 
+> **TL;DR:** `bun install && cd packages/evm-contracts && forge test && bun x hardhat test` runs 152 EVM tests. Solidity 0.8.33, Foundry, Hardhat 2.28.x, Anchor 0.31.x. No secrets needed for local testing. Entry points: `DuelOutcomeOracle.sol`, `GoldClob.sol` (EVM); `fight_oracle/lib.rs`, `gold_clob_market/lib.rs` (Solana).
+
 ## Toolchain Requirements
 
 | Tool | Version | Purpose |

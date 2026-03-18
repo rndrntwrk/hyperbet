@@ -1,5 +1,7 @@
 # Residual Risk Register
 
+> **TL;DR:** 7 accepted risks, 1 tracking item. Highest accepted: MEV/front-running (mitigated by betting context), PAUSER griefing (mitigated by timelock/multisig). Tracking: missing reentrancy exploit test coverage (nonReentrant guard verified present but explicit malicious-contract test now added).
+
 Risks that have been assessed, accepted, and documented. These are NOT bugs — they are known design trade-offs or environmental constraints.
 
 ## Accepted Risks

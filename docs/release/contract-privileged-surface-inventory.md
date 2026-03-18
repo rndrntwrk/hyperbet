@@ -1,5 +1,7 @@
 # Contract Privileged Surface Inventory
 
+> **TL;DR:** EVM governance permanently frozen via `GovernanceSurfaceFrozen` on all setters + `grantRole`/`revokeRole` override (only PAUSER_ROLE mutable). Solana config freezable one-way via `freeze_oracle_config`/`freeze_config`. Both initializers are one-time only (`AlreadyInitialized` on re-call). Pause controls remain functional after freeze on both chains.
+
 This document tracks mutable privileged surfaces for the prediction-market launch scope and their current guardrails.
 
 ## EVM: `packages/evm-contracts/contracts/DuelOutcomeOracle.sol`

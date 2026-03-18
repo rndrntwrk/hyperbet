@@ -1,6 +1,8 @@
 # Prediction-Market Launch Freeze Tracker
 
-Last updated: 2026-03-17
+> **TL;DR:** Gates 16, 17A, 17B, 20, 21 are complete. Gate 6 (AVAX canonicalization) is blocked on deployment evidence. Gate 22 (audit packet) is not started — depends on WS3 (AVAX) completion. All code-level work is done; remaining items are ops (deploy, populate registry, attach evidence).
+
+Last updated: 2026-03-18
 
 ## How to read this tracker
 - [x] = done

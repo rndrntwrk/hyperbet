@@ -1,5 +1,7 @@
 # Cross-Chain Parity Matrix (EVM vs SVM)
 
+> **TL;DR:** Full parity on state machine (7 states), matching (50-iteration bound, cancel-taker STP), settlement (snapshotted fees, terminal-only claims), and validation (price 1-999, amount % 1000). 14 divergences catalogued — 12 intentional/documented, 2 were bugs now fixed (Solana trade fee source, missing betting-window guard). Known intentional differences: dispute window mutability, continuation model, cancel authority model, global pause (EVM-only).
+
 ## Runtime Surfaces
 
 - EVM contracts:

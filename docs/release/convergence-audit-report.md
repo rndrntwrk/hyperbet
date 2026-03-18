@@ -1,5 +1,7 @@
 # Convergence Branch Audit Report
 
+> **TL;DR:** 6-workstream internal audit found 4 critical + 9 high findings. All 7 code-level fixes implemented (grantRole override, resting order recovery, challenge resolution, participant lock, Solana fee/betting-window/market_maker snapshots). Remaining blockers are ops-only (timelock deploy, upgrade authority transfer, AVAX registry population).
+
 **Branch:** `enoomian/pm16-17-20-21`
 **Date:** 2026-03-17
 **Scope:** DuelOutcomeOracle.sol, GoldClob.sol, fight_oracle/lib.rs, gold_clob_market/lib.rs, cross-chain parity, governance model, test coverage, documentation
