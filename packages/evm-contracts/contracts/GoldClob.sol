@@ -799,12 +799,6 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         }
     }
 
-    function _refreshBestPrices(bytes32 key, Market storage market) internal {
-        market.bestBid = _highestSetPrice(key, BUY_SIDE);
-        uint16 bestAsk = _lowestSetPrice(key, SELL_SIDE);
-        market.bestAsk = bestAsk == 0 ? MAX_PRICE : bestAsk;
-    }
-
     function _syncMarketFromOracle(
         bytes32 duelKey,
         bytes32 key,
