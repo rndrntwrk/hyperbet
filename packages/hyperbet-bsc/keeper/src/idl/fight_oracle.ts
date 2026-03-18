@@ -1,13 +1,19 @@
-{
+/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/fight_oracle.json`.
+ */
+export type FightOracle = {
   "address": "B5mRCRDJk9BrnH7regMWW5mpTQ8QG1CcCGSnDxMt8hmo",
   "metadata": {
-    "name": "fight_oracle",
+    "name": "fightOracle",
     "version": "0.1.0",
     "spec": "0.1.0"
   },
   "instructions": [
     {
-      "name": "cancel_duel",
+      "name": "cancelDuel",
       "discriminator": [
         83,
         124,
@@ -25,7 +31,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "pda": {
             "seeds": [
               {
@@ -50,7 +56,7 @@
           }
         },
         {
-          "name": "duel_state",
+          "name": "duelState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -65,7 +71,7 @@
               },
               {
                 "kind": "arg",
-                "path": "duel_key"
+                "path": "duelKey"
               }
             ]
           }
@@ -73,7 +79,7 @@
       ],
       "args": [
         {
-          "name": "_duel_key",
+          "name": "duelKey",
           "type": {
             "array": [
               "u8",
@@ -82,13 +88,13 @@
           }
         },
         {
-          "name": "metadata_uri",
+          "name": "metadataUri",
           "type": "string"
         }
       ]
     },
     {
-      "name": "challenge_result",
+      "name": "challengeResult",
       "discriminator": [
         62,
         59,
@@ -105,7 +111,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "pda": {
             "seeds": [
               {
@@ -130,7 +136,7 @@
           }
         },
         {
-          "name": "duel_state",
+          "name": "duelState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -145,7 +151,7 @@
               },
               {
                 "kind": "arg",
-                "path": "duel_key"
+                "path": "duelKey"
               }
             ]
           }
@@ -153,7 +159,7 @@
       ],
       "args": [
         {
-          "name": "_duel_key",
+          "name": "duelKey",
           "type": {
             "array": [
               "u8",
@@ -162,13 +168,13 @@
           }
         },
         {
-          "name": "metadata_uri",
+          "name": "metadataUri",
           "type": "string"
         }
       ]
     },
     {
-      "name": "finalize_result",
+      "name": "finalizeResult",
       "discriminator": [
         217,
         193,
@@ -185,7 +191,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "pda": {
             "seeds": [
               {
@@ -210,7 +216,7 @@
           }
         },
         {
-          "name": "duel_state",
+          "name": "duelState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -225,7 +231,7 @@
               },
               {
                 "kind": "arg",
-                "path": "duel_key"
+                "path": "duelKey"
               }
             ]
           }
@@ -233,7 +239,7 @@
       ],
       "args": [
         {
-          "name": "_duel_key",
+          "name": "duelKey",
           "type": {
             "array": [
               "u8",
@@ -242,13 +248,13 @@
           }
         },
         {
-          "name": "metadata_uri",
+          "name": "metadataUri",
           "type": "string"
         }
       ]
     },
     {
-      "name": "freeze_oracle_config",
+      "name": "freezeOracleConfig",
       "docs": [
         "One-way config freeze — after calling, update_oracle_config reverts permanently.",
         "Pause controls remain functional."
@@ -269,7 +275,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "writable": true,
           "pda": {
             "seeds": [
@@ -298,7 +304,7 @@
       "args": []
     },
     {
-      "name": "initialize_oracle",
+      "name": "initializeOracle",
       "discriminator": [
         144,
         223,
@@ -316,7 +322,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "writable": true,
           "pda": {
             "seeds": [
@@ -346,10 +352,10 @@
           "address": "B5mRCRDJk9BrnH7regMWW5mpTQ8QG1CcCGSnDxMt8hmo"
         },
         {
-          "name": "program_data"
+          "name": "programData"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -367,13 +373,13 @@
           "type": "pubkey"
         },
         {
-          "name": "dispute_window_secs",
+          "name": "disputeWindowSecs",
           "type": "i64"
         }
       ]
     },
     {
-      "name": "propose_result",
+      "name": "proposeResult",
       "discriminator": [
         7,
         96,
@@ -391,7 +397,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "pda": {
             "seeds": [
               {
@@ -416,7 +422,7 @@
           }
         },
         {
-          "name": "duel_state",
+          "name": "duelState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -431,7 +437,7 @@
               },
               {
                 "kind": "arg",
-                "path": "duel_key"
+                "path": "duelKey"
               }
             ]
           }
@@ -439,7 +445,7 @@
       ],
       "args": [
         {
-          "name": "_duel_key",
+          "name": "duelKey",
           "type": {
             "array": [
               "u8",
@@ -451,7 +457,7 @@
           "name": "winner",
           "type": {
             "defined": {
-              "name": "MarketSide"
+              "name": "marketSide"
             }
           }
         },
@@ -460,7 +466,7 @@
           "type": "u64"
         },
         {
-          "name": "replay_hash",
+          "name": "replayHash",
           "type": {
             "array": [
               "u8",
@@ -469,7 +475,7 @@
           }
         },
         {
-          "name": "result_hash",
+          "name": "resultHash",
           "type": {
             "array": [
               "u8",
@@ -478,17 +484,17 @@
           }
         },
         {
-          "name": "duel_end_ts",
+          "name": "duelEndTs",
           "type": "i64"
         },
         {
-          "name": "metadata_uri",
+          "name": "metadataUri",
           "type": "string"
         }
       ]
     },
     {
-      "name": "repropose_result",
+      "name": "reproposeResult",
       "discriminator": [
         67,
         248,
@@ -506,7 +512,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "pda": {
             "seeds": [
               {
@@ -531,7 +537,7 @@
           }
         },
         {
-          "name": "duel_state",
+          "name": "duelState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -546,7 +552,7 @@
               },
               {
                 "kind": "arg",
-                "path": "duel_key"
+                "path": "duelKey"
               }
             ]
           }
@@ -554,7 +560,7 @@
       ],
       "args": [
         {
-          "name": "_duel_key",
+          "name": "duelKey",
           "type": {
             "array": [
               "u8",
@@ -566,7 +572,7 @@
           "name": "winner",
           "type": {
             "defined": {
-              "name": "MarketSide"
+              "name": "marketSide"
             }
           }
         },
@@ -575,7 +581,7 @@
           "type": "u64"
         },
         {
-          "name": "replay_hash",
+          "name": "replayHash",
           "type": {
             "array": [
               "u8",
@@ -584,7 +590,7 @@
           }
         },
         {
-          "name": "result_hash",
+          "name": "resultHash",
           "type": {
             "array": [
               "u8",
@@ -593,17 +599,17 @@
           }
         },
         {
-          "name": "duel_end_ts",
+          "name": "duelEndTs",
           "type": "i64"
         },
         {
-          "name": "metadata_uri",
+          "name": "metadataUri",
           "type": "string"
         }
       ]
     },
     {
-      "name": "set_oracle_paused",
+      "name": "setOraclePaused",
       "docs": [
         "Emergency pause/unpause — remains functional even after config freeze."
       ],
@@ -623,7 +629,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "writable": true,
           "pda": {
             "seeds": [
@@ -657,7 +663,7 @@
       ]
     },
     {
-      "name": "update_oracle_config",
+      "name": "updateOracleConfig",
       "discriminator": [
         83,
         16,
@@ -674,7 +680,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "writable": true,
           "pda": {
             "seeds": [
@@ -718,13 +724,13 @@
           "type": "pubkey"
         },
         {
-          "name": "dispute_window_secs",
+          "name": "disputeWindowSecs",
           "type": "i64"
         }
       ]
     },
     {
-      "name": "upsert_duel",
+      "name": "upsertDuel",
       "discriminator": [
         174,
         7,
@@ -742,7 +748,7 @@
           "signer": true
         },
         {
-          "name": "oracle_config",
+          "name": "oracleConfig",
           "pda": {
             "seeds": [
               {
@@ -767,7 +773,7 @@
           }
         },
         {
-          "name": "duel_state",
+          "name": "duelState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -782,19 +788,19 @@
               },
               {
                 "kind": "arg",
-                "path": "duel_key"
+                "path": "duelKey"
               }
             ]
           }
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "duel_key",
+          "name": "duelKey",
           "type": {
             "array": [
               "u8",
@@ -803,7 +809,7 @@
           }
         },
         {
-          "name": "participant_a_hash",
+          "name": "participantAHash",
           "type": {
             "array": [
               "u8",
@@ -812,7 +818,7 @@
           }
         },
         {
-          "name": "participant_b_hash",
+          "name": "participantBHash",
           "type": {
             "array": [
               "u8",
@@ -821,26 +827,26 @@
           }
         },
         {
-          "name": "bet_open_ts",
+          "name": "betOpenTs",
           "type": "i64"
         },
         {
-          "name": "bet_close_ts",
+          "name": "betCloseTs",
           "type": "i64"
         },
         {
-          "name": "duel_start_ts",
+          "name": "duelStartTs",
           "type": "i64"
         },
         {
-          "name": "metadata_uri",
+          "name": "metadataUri",
           "type": "string"
         },
         {
           "name": "status",
           "type": {
             "defined": {
-              "name": "DuelStatus"
+              "name": "duelStatus"
             }
           }
         }
@@ -849,7 +855,7 @@
   ],
   "accounts": [
     {
-      "name": "DuelState",
+      "name": "duelState",
       "discriminator": [
         149,
         213,
@@ -862,7 +868,7 @@
       ]
     },
     {
-      "name": "OracleConfig",
+      "name": "oracleConfig",
       "discriminator": [
         133,
         196,
@@ -877,7 +883,7 @@
   ],
   "events": [
     {
-      "name": "DuelCancelled",
+      "name": "duelCancelled",
       "discriminator": [
         138,
         79,
@@ -890,7 +896,7 @@
       ]
     },
     {
-      "name": "DuelResolved",
+      "name": "duelResolved",
       "discriminator": [
         224,
         245,
@@ -903,7 +909,7 @@
       ]
     },
     {
-      "name": "DuelUpserted",
+      "name": "duelUpserted",
       "discriminator": [
         37,
         241,
@@ -916,7 +922,7 @@
       ]
     },
     {
-      "name": "ResultChallenged",
+      "name": "resultChallenged",
       "discriminator": [
         221,
         74,
@@ -929,7 +935,7 @@
       ]
     },
     {
-      "name": "ResultProposed",
+      "name": "resultProposed",
       "discriminator": [
         216,
         229,
@@ -945,143 +951,143 @@
   "errors": [
     {
       "code": 6000,
-      "name": "Unauthorized",
+      "name": "unauthorized",
       "msg": "Unauthorized oracle action"
     },
     {
       "code": 6001,
-      "name": "UnauthorizedInitializer",
+      "name": "unauthorizedInitializer",
       "msg": "Only the current upgrade authority can initialize the oracle"
     },
     {
       "code": 6002,
-      "name": "InvalidReporter",
+      "name": "invalidReporter",
       "msg": "Reporter pubkey cannot be the default address"
     },
     {
       "code": 6003,
-      "name": "InvalidAuthority",
+      "name": "invalidAuthority",
       "msg": "Authority pubkey cannot be the default address"
     },
     {
       "code": 6004,
-      "name": "InvalidFinalizer",
+      "name": "invalidFinalizer",
       "msg": "Finalizer pubkey cannot be the default address"
     },
     {
       "code": 6005,
-      "name": "InvalidChallenger",
+      "name": "invalidChallenger",
       "msg": "Challenger pubkey cannot be the default address"
     },
     {
       "code": 6006,
-      "name": "InvalidDisputeWindow",
+      "name": "invalidDisputeWindow",
       "msg": "Dispute window must be positive"
     },
     {
       "code": 6007,
-      "name": "InvalidBetWindow",
+      "name": "invalidBetWindow",
       "msg": "Betting window is invalid"
     },
     {
       "code": 6008,
-      "name": "InvalidParticipants",
+      "name": "invalidParticipants",
       "msg": "Participants must be present and distinct"
     },
     {
       "code": 6009,
-      "name": "InvalidLifecycleTransition",
+      "name": "invalidLifecycleTransition",
       "msg": "Duel lifecycle transition is invalid"
     },
     {
       "code": 6010,
-      "name": "DuelKeyMismatch",
+      "name": "duelKeyMismatch",
       "msg": "The provided duel key does not match the stored duel"
     },
     {
       "code": 6011,
-      "name": "DuelAlreadyFinalized",
+      "name": "duelAlreadyFinalized",
       "msg": "The duel is already finalized"
     },
     {
       "code": 6012,
-      "name": "DuelAlreadyCancelled",
+      "name": "duelAlreadyCancelled",
       "msg": "The duel was cancelled and cannot be resolved"
     },
     {
       "code": 6013,
-      "name": "InvalidWinner",
+      "name": "invalidWinner",
       "msg": "Winner must be side A or side B"
     },
     {
       "code": 6014,
-      "name": "NotProposed",
+      "name": "notProposed",
       "msg": "No active proposal exists"
     },
     {
       "code": 6015,
-      "name": "AlreadyChallenged",
+      "name": "alreadyChallenged",
       "msg": "Proposal already challenged"
     },
     {
       "code": 6016,
-      "name": "ChallengeWindowExpired",
+      "name": "challengeWindowExpired",
       "msg": "Challenge window already expired"
     },
     {
       "code": 6017,
-      "name": "DisputeWindowActive",
+      "name": "disputeWindowActive",
       "msg": "Dispute window still active"
     },
     {
       "code": 6018,
-      "name": "ConfigAuthorityImmutable",
+      "name": "configAuthorityImmutable",
       "msg": "Config authority is immutable"
     },
     {
       "code": 6019,
-      "name": "BettingWindowActive",
+      "name": "bettingWindowActive",
       "msg": "Cannot propose result while betting window is still active"
     },
     {
       "code": 6020,
-      "name": "NotChallenged",
+      "name": "notChallenged",
       "msg": "Duel must be in Challenged status for reproposal"
     },
     {
       "code": 6021,
-      "name": "ParticipantHashImmutable",
+      "name": "participantHashImmutable",
       "msg": "Participant hashes are immutable after betting opens"
     },
     {
       "code": 6022,
-      "name": "TimingImmutable",
+      "name": "timingImmutable",
       "msg": "Bet timing is immutable after betting opens"
     },
     {
       "code": 6023,
-      "name": "AlreadyInitialized",
+      "name": "alreadyInitialized",
       "msg": "Config is already initialized"
     },
     {
       "code": 6024,
-      "name": "OraclePaused",
+      "name": "oraclePaused",
       "msg": "Oracle operations are paused"
     },
     {
       "code": 6025,
-      "name": "ConfigFrozen",
+      "name": "configFrozen",
       "msg": "Config is permanently frozen"
     }
   ],
   "types": [
     {
-      "name": "DuelCancelled",
+      "name": "duelCancelled",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1090,19 +1096,19 @@
             }
           },
           {
-            "name": "metadata_uri",
+            "name": "metadataUri",
             "type": "string"
           }
         ]
       }
     },
     {
-      "name": "DuelResolved",
+      "name": "duelResolved",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1111,7 +1117,7 @@
             }
           },
           {
-            "name": "proposal_id",
+            "name": "proposalId",
             "type": {
               "array": [
                 "u8",
@@ -1123,7 +1129,7 @@
             "name": "winner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           },
@@ -1132,11 +1138,11 @@
             "type": "u64"
           },
           {
-            "name": "duel_end_ts",
+            "name": "duelEndTs",
             "type": "i64"
           },
           {
-            "name": "result_hash",
+            "name": "resultHash",
             "type": {
               "array": [
                 "u8",
@@ -1145,7 +1151,7 @@
             }
           },
           {
-            "name": "replay_hash",
+            "name": "replayHash",
             "type": {
               "array": [
                 "u8",
@@ -1154,19 +1160,19 @@
             }
           },
           {
-            "name": "metadata_uri",
+            "name": "metadataUri",
             "type": "string"
           }
         ]
       }
     },
     {
-      "name": "DuelState",
+      "name": "duelState",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1175,7 +1181,7 @@
             }
           },
           {
-            "name": "participant_a_hash",
+            "name": "participantAHash",
             "type": {
               "array": [
                 "u8",
@@ -1184,7 +1190,7 @@
             }
           },
           {
-            "name": "participant_b_hash",
+            "name": "participantBHash",
             "type": {
               "array": [
                 "u8",
@@ -1196,7 +1202,7 @@
             "name": "status",
             "type": {
               "defined": {
-                "name": "DuelStatus"
+                "name": "duelStatus"
               }
             }
           },
@@ -1204,24 +1210,24 @@
             "name": "winner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           },
           {
-            "name": "bet_open_ts",
+            "name": "betOpenTs",
             "type": "i64"
           },
           {
-            "name": "bet_close_ts",
+            "name": "betCloseTs",
             "type": "i64"
           },
           {
-            "name": "duel_start_ts",
+            "name": "duelStartTs",
             "type": "i64"
           },
           {
-            "name": "duel_end_ts",
+            "name": "duelEndTs",
             "type": "i64"
           },
           {
@@ -1229,7 +1235,7 @@
             "type": "u64"
           },
           {
-            "name": "result_hash",
+            "name": "resultHash",
             "type": {
               "array": [
                 "u8",
@@ -1238,7 +1244,7 @@
             }
           },
           {
-            "name": "replay_hash",
+            "name": "replayHash",
             "type": {
               "array": [
                 "u8",
@@ -1247,7 +1253,7 @@
             }
           },
           {
-            "name": "active_proposal",
+            "name": "activeProposal",
             "type": {
               "array": [
                 "u8",
@@ -1256,19 +1262,19 @@
             }
           },
           {
-            "name": "pending_winner",
+            "name": "pendingWinner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           },
           {
-            "name": "pending_seed",
+            "name": "pendingSeed",
             "type": "u64"
           },
           {
-            "name": "pending_result_hash",
+            "name": "pendingResultHash",
             "type": {
               "array": [
                 "u8",
@@ -1277,7 +1283,7 @@
             }
           },
           {
-            "name": "pending_replay_hash",
+            "name": "pendingReplayHash",
             "type": {
               "array": [
                 "u8",
@@ -1286,19 +1292,19 @@
             }
           },
           {
-            "name": "pending_duel_end_ts",
+            "name": "pendingDuelEndTs",
             "type": "i64"
           },
           {
-            "name": "pending_proposed_at",
+            "name": "pendingProposedAt",
             "type": "i64"
           },
           {
-            "name": "pending_challenged",
+            "name": "pendingChallenged",
             "type": "bool"
           },
           {
-            "name": "metadata_uri",
+            "name": "metadataUri",
             "type": "string"
           },
           {
@@ -1309,41 +1315,41 @@
       }
     },
     {
-      "name": "DuelStatus",
+      "name": "duelStatus",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Scheduled"
+            "name": "scheduled"
           },
           {
-            "name": "BettingOpen"
+            "name": "bettingOpen"
           },
           {
-            "name": "Locked"
+            "name": "locked"
           },
           {
-            "name": "Proposed"
+            "name": "proposed"
           },
           {
-            "name": "Challenged"
+            "name": "challenged"
           },
           {
-            "name": "Resolved"
+            "name": "resolved"
           },
           {
-            "name": "Cancelled"
+            "name": "cancelled"
           }
         ]
       }
     },
     {
-      "name": "DuelUpserted",
+      "name": "duelUpserted",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1355,48 +1361,48 @@
             "name": "status",
             "type": {
               "defined": {
-                "name": "DuelStatus"
+                "name": "duelStatus"
               }
             }
           },
           {
-            "name": "bet_open_ts",
+            "name": "betOpenTs",
             "type": "i64"
           },
           {
-            "name": "bet_close_ts",
+            "name": "betCloseTs",
             "type": "i64"
           },
           {
-            "name": "duel_start_ts",
+            "name": "duelStartTs",
             "type": "i64"
           },
           {
-            "name": "metadata_uri",
+            "name": "metadataUri",
             "type": "string"
           }
         ]
       }
     },
     {
-      "name": "MarketSide",
+      "name": "marketSide",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "None"
+            "name": "none"
           },
           {
-            "name": "A"
+            "name": "a"
           },
           {
-            "name": "B"
+            "name": "b"
           }
         ]
       }
     },
     {
-      "name": "OracleConfig",
+      "name": "oracleConfig",
       "type": {
         "kind": "struct",
         "fields": [
@@ -1417,7 +1423,7 @@
             "type": "pubkey"
           },
           {
-            "name": "dispute_window_secs",
+            "name": "disputeWindowSecs",
             "type": "i64"
           },
           {
@@ -1425,7 +1431,7 @@
             "type": "bool"
           },
           {
-            "name": "config_frozen",
+            "name": "configFrozen",
             "type": "bool"
           },
           {
@@ -1436,12 +1442,12 @@
       }
     },
     {
-      "name": "ResultChallenged",
+      "name": "resultChallenged",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1450,7 +1456,7 @@
             }
           },
           {
-            "name": "proposal_id",
+            "name": "proposalId",
             "type": {
               "array": [
                 "u8",
@@ -1459,19 +1465,19 @@
             }
           },
           {
-            "name": "metadata_uri",
+            "name": "metadataUri",
             "type": "string"
           }
         ]
       }
     },
     {
-      "name": "ResultProposed",
+      "name": "resultProposed",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1480,7 +1486,7 @@
             }
           },
           {
-            "name": "proposal_id",
+            "name": "proposalId",
             "type": {
               "array": [
                 "u8",
@@ -1492,7 +1498,7 @@
             "name": "winner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           },
@@ -1501,11 +1507,11 @@
             "type": "u64"
           },
           {
-            "name": "duel_end_ts",
+            "name": "duelEndTs",
             "type": "i64"
           },
           {
-            "name": "result_hash",
+            "name": "resultHash",
             "type": {
               "array": [
                 "u8",
@@ -1514,7 +1520,7 @@
             }
           },
           {
-            "name": "replay_hash",
+            "name": "replayHash",
             "type": {
               "array": [
                 "u8",
@@ -1523,11 +1529,11 @@
             }
           },
           {
-            "name": "metadata_uri",
+            "name": "metadataUri",
             "type": "string"
           }
         ]
       }
     }
   ]
-}
+};

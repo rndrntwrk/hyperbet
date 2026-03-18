@@ -1,14 +1,20 @@
-{
+/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/gold_clob_market.json`.
+ */
+export type GoldClobMarket = {
   "address": "DYtd7AoyTX2tbmZ8vpC3mxZgqTpyaDei4TFXZukWBJEf",
   "metadata": {
-    "name": "gold_clob_market",
+    "name": "goldClobMarket",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
   "instructions": [
     {
-      "name": "cancel_order",
+      "name": "cancelOrder",
       "discriminator": [
         95,
         129,
@@ -21,11 +27,11 @@
       ],
       "accounts": [
         {
-          "name": "market_state",
+          "name": "marketState",
           "writable": true
         },
         {
-          "name": "duel_state"
+          "name": "duelState"
         },
         {
           "name": "order",
@@ -44,17 +50,17 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               },
               {
                 "kind": "arg",
-                "path": "order_id"
+                "path": "orderId"
               }
             ]
           }
         },
         {
-          "name": "price_level",
+          "name": "priceLevel",
           "writable": true
         },
         {
@@ -74,7 +80,7 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               }
             ]
           }
@@ -85,13 +91,13 @@
           "signer": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "order_id",
+          "name": "orderId",
           "type": "u64"
         },
         {
@@ -118,14 +124,14 @@
       ],
       "accounts": [
         {
-          "name": "market_state",
+          "name": "marketState",
           "writable": true
         },
         {
-          "name": "duel_state"
+          "name": "duelState"
         },
         {
-          "name": "user_balance",
+          "name": "userBalance",
           "writable": true,
           "pda": {
             "seeds": [
@@ -143,7 +149,7 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               },
               {
                 "kind": "account",
@@ -171,7 +177,7 @@
           }
         },
         {
-          "name": "market_maker",
+          "name": "marketMaker",
           "writable": true
         },
         {
@@ -191,7 +197,7 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               }
             ]
           }
@@ -202,14 +208,14 @@
           "signer": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "continue_order",
+      "name": "continueOrder",
       "discriminator": [
         52,
         137,
@@ -222,14 +228,14 @@
       ],
       "accounts": [
         {
-          "name": "market_state",
+          "name": "marketState",
           "writable": true
         },
         {
-          "name": "duel_state"
+          "name": "duelState"
         },
         {
-          "name": "user_balance",
+          "name": "userBalance",
           "writable": true,
           "pda": {
             "seeds": [
@@ -247,7 +253,7 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               },
               {
                 "kind": "account",
@@ -273,17 +279,17 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               },
               {
                 "kind": "arg",
-                "path": "order_id"
+                "path": "orderId"
               }
             ]
           }
         },
         {
-          "name": "resting_level",
+          "name": "restingLevel",
           "writable": true
         },
         {
@@ -303,7 +309,7 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               }
             ]
           }
@@ -314,19 +320,19 @@
           "signer": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "order_id",
+          "name": "orderId",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "freeze_config",
+      "name": "freezeConfig",
       "docs": [
         "One-way config freeze — after calling, update_config reverts permanently.",
         "Pause controls remain functional."
@@ -369,7 +375,7 @@
       "args": []
     },
     {
-      "name": "initialize_config",
+      "name": "initializeConfig",
       "discriminator": [
         208,
         127,
@@ -410,16 +416,16 @@
           "address": "DYtd7AoyTX2tbmZ8vpC3mxZgqTpyaDei4TFXZukWBJEf"
         },
         {
-          "name": "program_data"
+          "name": "programData"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "market_operator",
+          "name": "marketOperator",
           "type": "pubkey"
         },
         {
@@ -427,25 +433,25 @@
           "type": "pubkey"
         },
         {
-          "name": "market_maker",
+          "name": "marketMaker",
           "type": "pubkey"
         },
         {
-          "name": "trade_treasury_fee_bps",
+          "name": "tradeTreasuryFeeBps",
           "type": "u16"
         },
         {
-          "name": "trade_market_maker_fee_bps",
+          "name": "tradeMarketMakerFeeBps",
           "type": "u16"
         },
         {
-          "name": "winnings_market_maker_fee_bps",
+          "name": "winningsMarketMakerFeeBps",
           "type": "u16"
         }
       ]
     },
     {
-      "name": "initialize_market",
+      "name": "initializeMarket",
       "discriminator": [
         35,
         35,
@@ -481,10 +487,10 @@
           }
         },
         {
-          "name": "duel_state"
+          "name": "duelState"
         },
         {
-          "name": "market_state",
+          "name": "marketState",
           "writable": true
         },
         {
@@ -504,19 +510,19 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               }
             ]
           }
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "duel_key",
+          "name": "duelKey",
           "type": {
             "array": [
               "u8",
@@ -525,13 +531,13 @@
           }
         },
         {
-          "name": "market_kind",
+          "name": "marketKind",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "place_order",
+      "name": "placeOrder",
       "discriminator": [
         51,
         194,
@@ -544,14 +550,14 @@
       ],
       "accounts": [
         {
-          "name": "market_state",
+          "name": "marketState",
           "writable": true
         },
         {
-          "name": "duel_state"
+          "name": "duelState"
         },
         {
-          "name": "user_balance",
+          "name": "userBalance",
           "writable": true,
           "pda": {
             "seeds": [
@@ -569,7 +575,7 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               },
               {
                 "kind": "account",
@@ -579,7 +585,7 @@
           }
         },
         {
-          "name": "new_order",
+          "name": "newOrder",
           "writable": true,
           "pda": {
             "seeds": [
@@ -595,17 +601,17 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               },
               {
                 "kind": "arg",
-                "path": "order_id"
+                "path": "orderId"
               }
             ]
           }
         },
         {
-          "name": "resting_level",
+          "name": "restingLevel",
           "writable": true
         },
         {
@@ -631,7 +637,7 @@
           "writable": true
         },
         {
-          "name": "market_maker",
+          "name": "marketMaker",
           "writable": true
         },
         {
@@ -651,7 +657,7 @@
               },
               {
                 "kind": "account",
-                "path": "market_state"
+                "path": "marketState"
               }
             ]
           }
@@ -662,13 +668,13 @@
           "signer": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "order_id",
+          "name": "orderId",
           "type": "u64"
         },
         {
@@ -684,13 +690,13 @@
           "type": "u64"
         },
         {
-          "name": "order_behavior",
+          "name": "orderBehavior",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "set_market_paused",
+      "name": "setMarketPaused",
       "docs": [
         "Emergency pause/unpause for market creation and order placement.",
         "Remains functional even after config freeze."
@@ -732,17 +738,17 @@
       ],
       "args": [
         {
-          "name": "order_placement_paused",
+          "name": "orderPlacementPaused",
           "type": "bool"
         },
         {
-          "name": "market_creation_paused",
+          "name": "marketCreationPaused",
           "type": "bool"
         }
       ]
     },
     {
-      "name": "sync_market_from_duel",
+      "name": "syncMarketFromDuel",
       "discriminator": [
         235,
         180,
@@ -755,17 +761,17 @@
       ],
       "accounts": [
         {
-          "name": "market_state",
+          "name": "marketState",
           "writable": true
         },
         {
-          "name": "duel_state"
+          "name": "duelState"
         }
       ],
       "args": []
     },
     {
-      "name": "update_config",
+      "name": "updateConfig",
       "discriminator": [
         29,
         158,
@@ -807,7 +813,7 @@
           "type": "pubkey"
         },
         {
-          "name": "market_operator",
+          "name": "marketOperator",
           "type": "pubkey"
         },
         {
@@ -815,19 +821,19 @@
           "type": "pubkey"
         },
         {
-          "name": "market_maker",
+          "name": "marketMaker",
           "type": "pubkey"
         },
         {
-          "name": "trade_treasury_fee_bps",
+          "name": "tradeTreasuryFeeBps",
           "type": "u16"
         },
         {
-          "name": "trade_market_maker_fee_bps",
+          "name": "tradeMarketMakerFeeBps",
           "type": "u16"
         },
         {
-          "name": "winnings_market_maker_fee_bps",
+          "name": "winningsMarketMakerFeeBps",
           "type": "u16"
         }
       ]
@@ -835,7 +841,7 @@
   ],
   "accounts": [
     {
-      "name": "DuelState",
+      "name": "duelState",
       "discriminator": [
         149,
         213,
@@ -848,7 +854,7 @@
       ]
     },
     {
-      "name": "MarketConfig",
+      "name": "marketConfig",
       "discriminator": [
         119,
         255,
@@ -861,7 +867,7 @@
       ]
     },
     {
-      "name": "MarketState",
+      "name": "marketState",
       "discriminator": [
         0,
         125,
@@ -874,7 +880,7 @@
       ]
     },
     {
-      "name": "Order",
+      "name": "order",
       "discriminator": [
         134,
         173,
@@ -887,7 +893,7 @@
       ]
     },
     {
-      "name": "PriceLevel",
+      "name": "priceLevel",
       "discriminator": [
         236,
         106,
@@ -900,7 +906,7 @@
       ]
     },
     {
-      "name": "UserBalance",
+      "name": "userBalance",
       "discriminator": [
         187,
         237,
@@ -915,7 +921,7 @@
   ],
   "events": [
     {
-      "name": "MarketCreated",
+      "name": "marketCreated",
       "discriminator": [
         88,
         184,
@@ -928,7 +934,7 @@
       ]
     },
     {
-      "name": "MarketSynced",
+      "name": "marketSynced",
       "discriminator": [
         12,
         197,
@@ -941,7 +947,7 @@
       ]
     },
     {
-      "name": "OrderCancelled",
+      "name": "orderCancelled",
       "discriminator": [
         108,
         56,
@@ -954,7 +960,7 @@
       ]
     },
     {
-      "name": "OrderMatched",
+      "name": "orderMatched",
       "discriminator": [
         211,
         0,
@@ -967,7 +973,7 @@
       ]
     },
     {
-      "name": "OrderPlaced",
+      "name": "orderPlaced",
       "discriminator": [
         96,
         130,
@@ -980,7 +986,7 @@
       ]
     },
     {
-      "name": "SelfTradePolicyTriggered",
+      "name": "selfTradePolicyTriggered",
       "discriminator": [
         83,
         88,
@@ -996,208 +1002,208 @@
   "errors": [
     {
       "code": 6000,
-      "name": "UnauthorizedInitializer",
+      "name": "unauthorizedInitializer",
       "msg": "Only the upgrade authority can initialize config"
     },
     {
       "code": 6001,
-      "name": "UnauthorizedConfigAuthority",
+      "name": "unauthorizedConfigAuthority",
       "msg": "Config authority is required for this action"
     },
     {
       "code": 6002,
-      "name": "ConfigAuthorityImmutable",
+      "name": "configAuthorityImmutable",
       "msg": "Config authority is immutable"
     },
     {
       "code": 6003,
-      "name": "UnauthorizedMarketOperator",
+      "name": "unauthorizedMarketOperator",
       "msg": "Market operator is not authorized"
     },
     {
       "code": 6004,
-      "name": "InvalidOperator",
+      "name": "invalidOperator",
       "msg": "Market operator pubkey is invalid"
     },
     {
       "code": 6005,
-      "name": "InvalidAuthority",
+      "name": "invalidAuthority",
       "msg": "Authority pubkey is invalid"
     },
     {
       "code": 6006,
-      "name": "InvalidFeeAccount",
+      "name": "invalidFeeAccount",
       "msg": "The provided fee account is invalid"
     },
     {
       "code": 6007,
-      "name": "FeeTooHigh",
+      "name": "feeTooHigh",
       "msg": "Fee configuration exceeds 100%"
     },
     {
       "code": 6008,
-      "name": "InvalidMarketKind",
+      "name": "invalidMarketKind",
       "msg": "Only duel-winner markets are currently supported"
     },
     {
       "code": 6009,
-      "name": "DuelMismatch",
+      "name": "duelMismatch",
       "msg": "The duel account does not match the market"
     },
     {
       "code": 6010,
-      "name": "MarketCreationClosed",
+      "name": "marketCreationClosed",
       "msg": "Markets can only be created while betting is open or locked"
     },
     {
       "code": 6011,
-      "name": "MarketNotOpen",
+      "name": "marketNotOpen",
       "msg": "Market is not open for new orders"
     },
     {
       "code": 6012,
-      "name": "MarketNotResolved",
+      "name": "marketNotResolved",
       "msg": "Market is not resolved"
     },
     {
       "code": 6013,
-      "name": "MarketAlreadyResolved",
+      "name": "marketAlreadyResolved",
       "msg": "Market is already resolved or cancelled"
     },
     {
       "code": 6014,
-      "name": "BettingClosed",
+      "name": "bettingClosed",
       "msg": "Betting is closed"
     },
     {
       "code": 6015,
-      "name": "InvalidSide",
+      "name": "invalidSide",
       "msg": "Side must be bid (1) or ask (2)"
     },
     {
       "code": 6016,
-      "name": "InvalidOrderBehavior",
+      "name": "invalidOrderBehavior",
       "msg": "Order behavior must be GTC (0), IOC (1), or POST_ONLY (2)"
     },
     {
       "code": 6017,
-      "name": "InvalidPrice",
+      "name": "invalidPrice",
       "msg": "Price must be between 1 and 999"
     },
     {
       "code": 6018,
-      "name": "InvalidAmount",
+      "name": "invalidAmount",
       "msg": "Order amount must be greater than zero"
     },
     {
       "code": 6019,
-      "name": "InvalidOrderId",
+      "name": "invalidOrderId",
       "msg": "Order id does not match the next expected id"
     },
     {
       "code": 6020,
-      "name": "PostOnlyWouldCross",
+      "name": "postOnlyWouldCross",
       "msg": "Post-only orders cannot cross the book"
     },
     {
       "code": 6021,
-      "name": "PrecisionError",
+      "name": "precisionError",
       "msg": "The precision implied by amount and price is invalid"
     },
     {
       "code": 6022,
-      "name": "CostTooLow",
+      "name": "costTooLow",
       "msg": "Order cost is too low"
     },
     {
       "code": 6023,
-      "name": "MathOverflow",
+      "name": "mathOverflow",
       "msg": "Math overflow"
     },
     {
       "code": 6024,
-      "name": "PriceLevelMismatch",
+      "name": "priceLevelMismatch",
       "msg": "The supplied price level does not match the order"
     },
     {
       "code": 6025,
-      "name": "OrderSideMismatch",
+      "name": "orderSideMismatch",
       "msg": "The supplied order side does not match the stored order"
     },
     {
       "code": 6026,
-      "name": "OrderPriceMismatch",
+      "name": "orderPriceMismatch",
       "msg": "The supplied order price does not match the stored order"
     },
     {
       "code": 6027,
-      "name": "NotOrderMaker",
+      "name": "notOrderMaker",
       "msg": "Only the order maker can cancel this order"
     },
     {
       "code": 6028,
-      "name": "MissingMatchAccounts",
+      "name": "missingMatchAccounts",
       "msg": "Required maker match accounts were not supplied"
     },
     {
       "code": 6029,
-      "name": "MissingTailOrder",
+      "name": "missingTailOrder",
       "msg": "Required resting tail order account was not supplied"
     },
     {
       "code": 6030,
-      "name": "MissingLinkedOrderAccount",
+      "name": "missingLinkedOrderAccount",
       "msg": "A linked prev/next order account is missing"
     },
     {
       "code": 6031,
-      "name": "InvalidRemainingAccount",
+      "name": "invalidRemainingAccount",
       "msg": "Remaining account verification failed"
     },
     {
       "code": 6032,
-      "name": "OrderNotContinuable",
+      "name": "orderNotContinuable",
       "msg": "Order does not require continuation"
     },
     {
       "code": 6033,
-      "name": "NothingToContinue",
+      "name": "nothingToContinue",
       "msg": "No order remainder is left to continue"
     },
     {
       "code": 6034,
-      "name": "NothingToClaim",
+      "name": "nothingToClaim",
       "msg": "Nothing to claim"
     },
     {
       "code": 6035,
-      "name": "AlreadyInitialized",
+      "name": "alreadyInitialized",
       "msg": "Config is already initialized"
     },
     {
       "code": 6036,
-      "name": "OrderPlacementPaused",
+      "name": "orderPlacementPaused",
       "msg": "Order placement is paused"
     },
     {
       "code": 6037,
-      "name": "MarketCreationPaused",
+      "name": "marketCreationPaused",
       "msg": "Market creation is paused"
     },
     {
       "code": 6038,
-      "name": "ConfigFrozen",
+      "name": "configFrozen",
       "msg": "Config is permanently frozen"
     }
   ],
   "types": [
     {
-      "name": "DuelState",
+      "name": "duelState",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1206,7 +1212,7 @@
             }
           },
           {
-            "name": "participant_a_hash",
+            "name": "participantAHash",
             "type": {
               "array": [
                 "u8",
@@ -1215,7 +1221,7 @@
             }
           },
           {
-            "name": "participant_b_hash",
+            "name": "participantBHash",
             "type": {
               "array": [
                 "u8",
@@ -1227,7 +1233,7 @@
             "name": "status",
             "type": {
               "defined": {
-                "name": "DuelStatus"
+                "name": "duelStatus"
               }
             }
           },
@@ -1235,24 +1241,24 @@
             "name": "winner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           },
           {
-            "name": "bet_open_ts",
+            "name": "betOpenTs",
             "type": "i64"
           },
           {
-            "name": "bet_close_ts",
+            "name": "betCloseTs",
             "type": "i64"
           },
           {
-            "name": "duel_start_ts",
+            "name": "duelStartTs",
             "type": "i64"
           },
           {
-            "name": "duel_end_ts",
+            "name": "duelEndTs",
             "type": "i64"
           },
           {
@@ -1260,7 +1266,7 @@
             "type": "u64"
           },
           {
-            "name": "result_hash",
+            "name": "resultHash",
             "type": {
               "array": [
                 "u8",
@@ -1269,7 +1275,7 @@
             }
           },
           {
-            "name": "replay_hash",
+            "name": "replayHash",
             "type": {
               "array": [
                 "u8",
@@ -1278,7 +1284,7 @@
             }
           },
           {
-            "name": "active_proposal",
+            "name": "activeProposal",
             "type": {
               "array": [
                 "u8",
@@ -1287,19 +1293,19 @@
             }
           },
           {
-            "name": "pending_winner",
+            "name": "pendingWinner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           },
           {
-            "name": "pending_seed",
+            "name": "pendingSeed",
             "type": "u64"
           },
           {
-            "name": "pending_result_hash",
+            "name": "pendingResultHash",
             "type": {
               "array": [
                 "u8",
@@ -1308,7 +1314,7 @@
             }
           },
           {
-            "name": "pending_replay_hash",
+            "name": "pendingReplayHash",
             "type": {
               "array": [
                 "u8",
@@ -1317,19 +1323,19 @@
             }
           },
           {
-            "name": "pending_duel_end_ts",
+            "name": "pendingDuelEndTs",
             "type": "i64"
           },
           {
-            "name": "pending_proposed_at",
+            "name": "pendingProposedAt",
             "type": "i64"
           },
           {
-            "name": "pending_challenged",
+            "name": "pendingChallenged",
             "type": "bool"
           },
           {
-            "name": "metadata_uri",
+            "name": "metadataUri",
             "type": "string"
           },
           {
@@ -1340,36 +1346,36 @@
       }
     },
     {
-      "name": "DuelStatus",
+      "name": "duelStatus",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Scheduled"
+            "name": "scheduled"
           },
           {
-            "name": "BettingOpen"
+            "name": "bettingOpen"
           },
           {
-            "name": "Locked"
+            "name": "locked"
           },
           {
-            "name": "Proposed"
+            "name": "proposed"
           },
           {
-            "name": "Challenged"
+            "name": "challenged"
           },
           {
-            "name": "Resolved"
+            "name": "resolved"
           },
           {
-            "name": "Cancelled"
+            "name": "cancelled"
           }
         ]
       }
     },
     {
-      "name": "MarketConfig",
+      "name": "marketConfig",
       "type": {
         "kind": "struct",
         "fields": [
@@ -1378,7 +1384,7 @@
             "type": "pubkey"
           },
           {
-            "name": "market_operator",
+            "name": "marketOperator",
             "type": "pubkey"
           },
           {
@@ -1386,31 +1392,31 @@
             "type": "pubkey"
           },
           {
-            "name": "market_maker",
+            "name": "marketMaker",
             "type": "pubkey"
           },
           {
-            "name": "trade_treasury_fee_bps",
+            "name": "tradeTreasuryFeeBps",
             "type": "u16"
           },
           {
-            "name": "trade_market_maker_fee_bps",
+            "name": "tradeMarketMakerFeeBps",
             "type": "u16"
           },
           {
-            "name": "winnings_market_maker_fee_bps",
+            "name": "winningsMarketMakerFeeBps",
             "type": "u16"
           },
           {
-            "name": "order_placement_paused",
+            "name": "orderPlacementPaused",
             "type": "bool"
           },
           {
-            "name": "market_creation_paused",
+            "name": "marketCreationPaused",
             "type": "bool"
           },
           {
-            "name": "config_frozen",
+            "name": "configFrozen",
             "type": "bool"
           },
           {
@@ -1421,12 +1427,12 @@
       }
     },
     {
-      "name": "MarketCreated",
+      "name": "marketCreated",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1435,44 +1441,44 @@
             }
           },
           {
-            "name": "market_key",
+            "name": "marketKey",
             "type": "pubkey"
           },
           {
-            "name": "market_kind",
+            "name": "marketKind",
             "type": "u8"
           }
         ]
       }
     },
     {
-      "name": "MarketSide",
+      "name": "marketSide",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "None"
+            "name": "none"
           },
           {
-            "name": "A"
+            "name": "a"
           },
           {
-            "name": "B"
+            "name": "b"
           }
         ]
       }
     },
     {
-      "name": "MarketState",
+      "name": "marketState",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_state",
+            "name": "duelState",
             "type": "pubkey"
           },
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1481,14 +1487,14 @@
             }
           },
           {
-            "name": "market_kind",
+            "name": "marketKind",
             "type": "u8"
           },
           {
             "name": "status",
             "type": {
               "defined": {
-                "name": "MarketStatus"
+                "name": "marketStatus"
               }
             }
           },
@@ -1496,32 +1502,32 @@
             "name": "winner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           },
           {
-            "name": "trade_treasury_fee_bps_snapshot",
+            "name": "tradeTreasuryFeeBpsSnapshot",
             "type": "u16"
           },
           {
-            "name": "trade_market_maker_fee_bps_snapshot",
+            "name": "tradeMarketMakerFeeBpsSnapshot",
             "type": "u16"
           },
           {
-            "name": "winnings_market_maker_fee_bps_snapshot",
+            "name": "winningsMarketMakerFeeBpsSnapshot",
             "type": "u16"
           },
           {
-            "name": "next_order_id",
+            "name": "nextOrderId",
             "type": "u64"
           },
           {
-            "name": "best_bid",
+            "name": "bestBid",
             "type": "u16"
           },
           {
-            "name": "best_ask",
+            "name": "bestAsk",
             "type": "u16"
           },
           {
@@ -1529,11 +1535,11 @@
             "type": "pubkey"
           },
           {
-            "name": "market_maker",
+            "name": "marketMaker",
             "type": "pubkey"
           },
           {
-            "name": "bid_bitmap",
+            "name": "bidBitmap",
             "type": {
               "array": [
                 "u64",
@@ -1542,7 +1548,7 @@
             }
           },
           {
-            "name": "ask_bitmap",
+            "name": "askBitmap",
             "type": {
               "array": [
                 "u64",
@@ -1551,7 +1557,7 @@
             }
           },
           {
-            "name": "vault_bump",
+            "name": "vaultBump",
             "type": "u8"
           },
           {
@@ -1562,32 +1568,32 @@
       }
     },
     {
-      "name": "MarketStatus",
+      "name": "marketStatus",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Open"
+            "name": "open"
           },
           {
-            "name": "Locked"
+            "name": "locked"
           },
           {
-            "name": "Resolved"
+            "name": "resolved"
           },
           {
-            "name": "Cancelled"
+            "name": "cancelled"
           }
         ]
       }
     },
     {
-      "name": "MarketSynced",
+      "name": "marketSynced",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "duel_key",
+            "name": "duelKey",
             "type": {
               "array": [
                 "u8",
@@ -1596,14 +1602,14 @@
             }
           },
           {
-            "name": "market_key",
+            "name": "marketKey",
             "type": "pubkey"
           },
           {
             "name": "status",
             "type": {
               "defined": {
-                "name": "MarketStatus"
+                "name": "marketStatus"
               }
             }
           },
@@ -1611,7 +1617,7 @@
             "name": "winner",
             "type": {
               "defined": {
-                "name": "MarketSide"
+                "name": "marketSide"
               }
             }
           }
@@ -1619,12 +1625,12 @@
       }
     },
     {
-      "name": "Order",
+      "name": "order",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "market_state",
+            "name": "marketState",
             "type": "pubkey"
           },
           {
@@ -1640,7 +1646,7 @@
             "type": "u16"
           },
           {
-            "name": "order_behavior",
+            "name": "orderBehavior",
             "type": "u8"
           },
           {
@@ -1656,11 +1662,11 @@
             "type": "u64"
           },
           {
-            "name": "prev_order_id",
+            "name": "prevOrderId",
             "type": "u64"
           },
           {
-            "name": "next_order_id",
+            "name": "nextOrderId",
             "type": "u64"
           },
           {
@@ -1668,7 +1674,7 @@
             "type": "bool"
           },
           {
-            "name": "continuation_pending",
+            "name": "continuationPending",
             "type": "bool"
           },
           {
@@ -1679,40 +1685,40 @@
       }
     },
     {
-      "name": "OrderCancelled",
+      "name": "orderCancelled",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "market_key",
+            "name": "marketKey",
             "type": "pubkey"
           },
           {
-            "name": "order_id",
+            "name": "orderId",
             "type": "u64"
           }
         ]
       }
     },
     {
-      "name": "OrderMatched",
+      "name": "orderMatched",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "market_key",
+            "name": "marketKey",
             "type": "pubkey"
           },
           {
-            "name": "maker_order_id",
+            "name": "makerOrderId",
             "type": "u64"
           },
           {
-            "name": "taker_order_id",
+            "name": "takerOrderId",
             "type": "u64"
           },
           {
-            "name": "matched_amount",
+            "name": "matchedAmount",
             "type": "u64"
           },
           {
@@ -1723,16 +1729,16 @@
       }
     },
     {
-      "name": "OrderPlaced",
+      "name": "orderPlaced",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "market_key",
+            "name": "marketKey",
             "type": "pubkey"
           },
           {
-            "name": "order_id",
+            "name": "orderId",
             "type": "u64"
           },
           {
@@ -1755,12 +1761,12 @@
       }
     },
     {
-      "name": "PriceLevel",
+      "name": "priceLevel",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "market_state",
+            "name": "marketState",
             "type": "pubkey"
           },
           {
@@ -1772,15 +1778,15 @@
             "type": "u16"
           },
           {
-            "name": "head_order_id",
+            "name": "headOrderId",
             "type": "u64"
           },
           {
-            "name": "tail_order_id",
+            "name": "tailOrderId",
             "type": "u64"
           },
           {
-            "name": "total_open",
+            "name": "totalOpen",
             "type": "u64"
           },
           {
@@ -1791,35 +1797,35 @@
       }
     },
     {
-      "name": "SelfTradePolicyTriggered",
+      "name": "selfTradePolicyTriggered",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "market_ref",
+            "name": "marketRef",
             "type": "pubkey"
           },
           {
-            "name": "maker_authority",
+            "name": "makerAuthority",
             "type": "pubkey"
           },
           {
-            "name": "taker_authority",
+            "name": "takerAuthority",
             "type": "pubkey"
           },
           {
-            "name": "maker_order_id",
+            "name": "makerOrderId",
             "type": "u64"
           },
           {
-            "name": "taker_order_id",
+            "name": "takerOrderId",
             "type": "u64"
           }
         ]
       }
     },
     {
-      "name": "UserBalance",
+      "name": "userBalance",
       "type": {
         "kind": "struct",
         "fields": [
@@ -1828,27 +1834,27 @@
             "type": "pubkey"
           },
           {
-            "name": "market_state",
+            "name": "marketState",
             "type": "pubkey"
           },
           {
-            "name": "a_shares",
+            "name": "aShares",
             "type": "u64"
           },
           {
-            "name": "b_shares",
+            "name": "bShares",
             "type": "u64"
           },
           {
-            "name": "a_locked_lamports",
+            "name": "aLockedLamports",
             "type": "u64"
           },
           {
-            "name": "b_locked_lamports",
+            "name": "bLockedLamports",
             "type": "u64"
           }
         ]
       }
     }
   ]
-}
+};
