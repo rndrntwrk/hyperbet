@@ -794,7 +794,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       duelEndTs: Math.floor(Date.now() / 1000) - 10,
       metadataUri: "https://hyperscape.gg/duels/resolved-fee-snapshot",
     });
-    await sleep(2100);
+    await sleep(61_000);
     await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
 
@@ -981,7 +981,7 @@ describe("gold_clob_market (native SOL settlement)", () => {
       duelEndTs: now + 10,
       metadataUri: "https://hyperscape.gg/duels/resolved-state-proposed",
     });
-    await sleep(2100);
+    await sleep(61_000);
     await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(
       clobProgram,

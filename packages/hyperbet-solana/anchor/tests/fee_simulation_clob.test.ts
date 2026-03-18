@@ -201,7 +201,7 @@ describe("fee_simulation (stress test)", () => {
       winner: marketSideA(),
       duelEndTs: now + 4000, // past betCloseTs
     });
-    await sleep(2100);
+    await sleep(61_000);
     await finalizeDuelResult(fightProgram, authority, market.duelKey);
     await syncMarketFromDuel(clobProgram, market.marketState, market.duelState);
 

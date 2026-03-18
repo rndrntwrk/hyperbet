@@ -124,8 +124,8 @@ describe("oracle invariants (solana parity)", () => {
             winner: marketSideA(),
             duelEndTs: now - 10,
         });
-        await sleep(2100);
-        // Short dispute window for test
+        // Wait for dispute window (60s minimum) to expire
+        await sleep(61_000);
         await finalizeDuelResult(fightProgram, authority, terminalDuelKey);
     });
 

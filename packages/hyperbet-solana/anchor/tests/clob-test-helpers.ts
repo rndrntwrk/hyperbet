@@ -205,7 +205,7 @@ export async function ensureOracleReady(
   reporter = authority.publicKey,
   finalizer = authority.publicKey,
   challenger = authority.publicKey,
-  disputeWindowSecs = 1,
+  disputeWindowSecs = 60,
 ): Promise<PublicKey> {
   const oracleConfig = deriveOracleConfigPda(program.programId);
   const existingConfig =
