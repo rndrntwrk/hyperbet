@@ -383,7 +383,7 @@ export class SolanaProgramRuntime {
                 reporter,
                 finalizer,
                 challenger,
-                toBn(0),
+                toBn(3600),
             )
             .accountsPartial({
                 authority: this.authority.publicKey,
