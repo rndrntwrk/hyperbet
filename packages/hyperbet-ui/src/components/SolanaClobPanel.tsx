@@ -246,8 +246,17 @@ function getCycleDuelStatusLabel(
     if (phase === "COUNTDOWN" || phase === "FIGHTING") {
       return marketStatus === "open" ? "交易进行中" : "下注已锁定";
     }
+    if (phase === "PROPOSED") {
+      return "结果已提议 — 争议窗口开放中";
+    }
+    if (phase === "CHALLENGED") {
+      return "结果已被质疑 — 等待重新提议";
+    }
     if (phase === "RESOLUTION") {
-      return "等待结果结算";
+      return "结果已确认";
+    }
+    if (phase === "CANCELLED") {
+      return "对决已取消 — 可申请退款";
     }
     return "正在准备对决市场";
   }
@@ -260,8 +269,17 @@ function getCycleDuelStatusLabel(
   if (phase === "COUNTDOWN" || phase === "FIGHTING") {
     return marketStatus === "open" ? "Trading Live" : "Betting locked";
   }
+  if (phase === "PROPOSED") {
+    return "Result proposed — dispute window open";
+  }
+  if (phase === "CHALLENGED") {
+    return "Result challenged — awaiting re-proposal";
+  }
   if (phase === "RESOLUTION") {
-    return "Awaiting result settlement";
+    return "Result finalized";
+  }
+  if (phase === "CANCELLED") {
+    return "Duel cancelled — refunds available";
   }
   return "Preparing duel market";
 }
@@ -865,8 +883,19 @@ export function SolanaClobPanel({
         winner: getFallbackWinner(winner),
       },
     );
+    const resolvedPhase = (() => {
+      if (nextUiState.lifecycleStatus === "OPEN") {
+        return lifecycleDuel?.phase === "FIGHTING" ? "FIGHTING" : "ANNOUNCEMENT";
+      }
+      if (nextUiState.lifecycleStatus === "LOCKED") return "FIGHTING";
+      if (nextUiState.lifecycleStatus === "PROPOSED") return "PROPOSED";
+      if (nextUiState.lifecycleStatus === "CHALLENGED") return "CHALLENGED";
+      if (nextUiState.lifecycleStatus === "RESOLVED") return "RESOLUTION";
+      if (nextUiState.lifecycleStatus === "CANCELLED") return "CANCELLED";
+      return "RESOLUTION";
+    })();
     const nextStatusLabel = getCycleDuelStatusLabel(
-      nextUiState.lifecycleStatus === "OPEN" ? (lifecycleDuel?.phase === "FIGHTING" ? "FIGHTING" : "ANNOUNCEMENT") : "RESOLUTION",
+      resolvedPhase,
       duelKeyHex,
       resolvedLocale,
       marketStatus,

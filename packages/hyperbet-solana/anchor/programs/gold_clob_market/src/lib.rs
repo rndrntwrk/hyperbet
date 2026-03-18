@@ -78,6 +78,8 @@ pub mod gold_clob_market {
                 upgrade_authority,
                 ErrorCode::UnauthorizedConfigAuthority
             );
+            // P1 fix: block re-initialization after config freeze
+            require!(!config.config_frozen, ErrorCode::ConfigFrozen);
         }
 
         config.market_operator = market_operator;

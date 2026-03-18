@@ -45,6 +45,8 @@ pub mod fight_oracle {
                 upgrade_authority,
                 ErrorCode::ConfigAuthorityImmutable
             );
+            // P1 fix: block re-initialization after config freeze
+            require!(!oracle_config.config_frozen, ErrorCode::ConfigFrozen);
         }
 
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
