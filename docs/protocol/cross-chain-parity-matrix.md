@@ -14,7 +14,7 @@
 | Behavior | EVM surface | SVM surface | Notes |
 |---|---|---|---|
 | Initialize oracle authority/config | `DuelOutcomeOracle.constructor(admin, reporter)` | `fight_oracle::initialize_oracle(reporter)` | EVM uses AccessControl bootstrap; SVM uses upgrade-authority-only PDA init, with no bootstrap-authority fallback. |
-| Rotate reporter | `setReporter(reporter, enabled)` | `update_oracle_config(authority, reporter)` | Both privileged. |
+| Rotate reporter | `setReporter(reporter, enabled)` | `update_oracle_config(authority, reporter)` | PM20 froze EVM mutator calls (`GovernanceSurfaceFrozen`); SVM updates remain via config authority checks. |
 | Upsert duel lifecycle | `upsertDuel(...)` | `upsert_duel(...)` | Monotonic lifecycle progression enforced on both. |
 | Cancel duel | `cancelDuel(duelKey, metadataUri)` | `cancel_duel(duel_key, metadata_uri)` | Finalization guard on both. |
 | Report duel result | `proposeResult(...)` | `propose_result(...)` | Requires winner `A/B`; end timestamp validity checks. |
@@ -24,12 +24,13 @@
 | Order flags (IOC / Post-Only / GTC) | `placeOrder` enforces IOC/post-only semantics and bounded GTC continuation | `place_order` enforces IOC/post-only semantics and bounded GTC continuation | Both enforce rejection-correctness and explicit continuation behavior. |
 | Bounded matching / continuation | Matching loop bound enforced via bounded iterations in `GoldClob` | Matching loop bound enforced via bounded iterations in `gold_clob_market` | Both require explicit continuation when matching bounds are reached in GTC flows. |
 | Self-trade policy | Matching path emits deterministic self-trade policy handling | Matching path emits deterministic self-trade policy handling | Both preserve bookkeeping and policy signals for self-cross candidates. |
+| PM20 governance freeze | `setReporter/setFinalizer/setChallenger` and `setOracle/setTreasury/setMarketMaker/setFeeConfig` | `initialize_oracle` + `update_oracle_config` / `initialize_config` + `update_config` | EVM privileged setters now revert (`GovernanceSurfaceFrozen`) after deploy; SVM config authority is upgrade-authority derived, then immutable during updates. |
 | Cancel order | `cancelOrder(duelKey, marketKind, orderId)` | `cancel_order(order_id, side, price)` | Maker-only cancellation of active remainder; cancellation is now restricted to `OPEN` markets on both chains. |
 | Claim settlement | `claim(duelKey, marketKind)` | `claim()` | Resolved = winner payout less fee; Cancelled = refund locked stake; nonterminal claims must revert. |
 | Update fee config | `setFeeConfig(...)` | `update_config(...trade/winnings fee bps...)` | Both enforce BPS bounds. |
 | Update treasury | `setTreasury(address)` | `update_config(...treasury...)` | SVM packed into config update. |
 | Update market maker fee account | `setMarketMaker(address)` | `update_config(...market_maker...)` | SVM packed into config update. |
-| Update oracle pointer | `setOracle(address)` | N/A (oracle account wired by account constraints) | EVM explicit mutable oracle address; SVM uses account graph checks. |
+| Update oracle pointer | `setOracle(address)` | N/A (oracle account wired by account constraints) | EVM setter is PM20-frozen; SVM uses account graph checks. |
 | Market status mapping | `_mapDuelStatus(...)` | `map_duel_status(...)` | SVM maps `Scheduled -> Locked`; EVM duel market creation avoids scheduled markets. |
 | Quote/lock arithmetic | `_quoteCost(...)` | `quote_cost(...)` | Same 1000-tick economics. |
 
@@ -37,23 +38,32 @@
 
 | Chain | Surface | Privilege gate |
 |---|---|---|
-| EVM | `DuelOutcomeOracle.setReporter` | `DEFAULT_ADMIN_ROLE` |
+| EVM | `DuelOutcomeOracle.setReporter` / `setFinalizer` / `setChallenger` | `DEFAULT_ADMIN_ROLE` (PM20 frozen; setter calls revert with `GovernanceSurfaceFrozen`) |
 | EVM | `DuelOutcomeOracle.upsertDuel` | `REPORTER_ROLE` |
 | EVM | `DuelOutcomeOracle.cancelDuel` | `PAUSER_ROLE` |
 | EVM | `DuelOutcomeOracle.proposeResult` | `REPORTER_ROLE` |
+| EVM | `GoldClob.setOracle` / `GoldClob.setTreasury` / `GoldClob.setMarketMaker` / `GoldClob.setFeeConfig` | `DEFAULT_ADMIN_ROLE` (PM20 frozen; setter calls revert with `GovernanceSurfaceFrozen`) |
 | EVM | `GoldClob.createMarketForDuel` | `MARKET_OPERATOR_ROLE` |
-| EVM | `GoldClob.setOracle` | `DEFAULT_ADMIN_ROLE` |
-| EVM | `GoldClob.setTreasury` | `DEFAULT_ADMIN_ROLE` |
-| EVM | `GoldClob.setMarketMaker` | `DEFAULT_ADMIN_ROLE` |
-| EVM | `GoldClob.setFeeConfig` | `DEFAULT_ADMIN_ROLE` |
 | SVM | `fight_oracle::initialize_oracle` | upgrade authority only |
-| SVM | `fight_oracle::update_oracle_config` | oracle config `authority` signer |
+| SVM | `fight_oracle::update_oracle_config` | oracle config `authority` signer; authority itself is immutable for PM20 |
 | SVM | `fight_oracle::upsert_duel` | oracle config `reporter` signer |
 | SVM | `fight_oracle::cancel_duel` | oracle config `authority` signer |
 | SVM | `fight_oracle::propose_result` | oracle config `reporter` signer |
 | SVM | `gold_clob_market::initialize_config` | upgrade authority only |
-| SVM | `gold_clob_market::update_config` | market config `authority` signer |
+| SVM | `gold_clob_market::update_config` | market config `authority` signer; authority itself is immutable for PM20 |
 | SVM | `gold_clob_market::initialize_market` | config `authority` or `market_operator` signer |
+
+## PM20 Governance Controls Evidence
+
+- EVM governance mutator freeze surfaces:
+  - `packages/evm-contracts/contracts/DuelOutcomeOracle.sol`
+  - `packages/evm-contracts/contracts/GoldClob.sol`
+- SVM authority freeze and bootstrap removal:
+  - `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs`
+  - `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`
+- Policy documentation:
+  - `docs/runbooks/prediction-market-governance-and-emergency-controls.md`
+  - `docs/release/contract-privileged-surface-inventory.md`
 
 ## Trace Coverage
 

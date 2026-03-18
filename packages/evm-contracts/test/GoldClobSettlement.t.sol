@@ -78,6 +78,7 @@ contract GoldClobSettlementTest is Test {
         GoldClob.Market memory marketBefore = clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
         assertEq(marketBefore.winningsMarketMakerFeeBpsSnapshot, 200, "market should snapshot initial winnings fee");
 
+        vm.expectRevert(GoldClob.GovernanceSurfaceFrozen.selector);
         vm.prank(admin);
         clob.setFeeConfig(0, 0, 5_000);
 

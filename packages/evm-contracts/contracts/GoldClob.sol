@@ -41,6 +41,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     error InvalidTreasury();
     error InvalidMarketMaker();
     error InvalidPauser();
+    error GovernanceSurfaceFrozen();
     error TreasuryFeeTooHigh();
     error MarketMakerFeeTooHigh();
     error TotalTradeFeeTooHigh();
@@ -220,21 +221,15 @@ contract GoldClob is AccessControl, ReentrancyGuard {
     }
 
     function setOracle(address oracle) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (oracle == address(0)) revert InvalidOracle();
-        duelOracle = DuelOutcomeOracle(oracle);
-        emit OracleUpdated(oracle);
+        revert GovernanceSurfaceFrozen();
     }
 
     function setTreasury(address treasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (treasury_ == address(0)) revert InvalidTreasury();
-        treasury = treasury_;
-        emit TreasuryUpdated(treasury_);
+        revert GovernanceSurfaceFrozen();
     }
 
     function setMarketMaker(address marketMaker_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (marketMaker_ == address(0)) revert InvalidMarketMaker();
-        marketMaker = marketMaker_;
-        emit MarketMakerUpdated(marketMaker_);
+        revert GovernanceSurfaceFrozen();
     }
 
     function setPauser(address pauser, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -262,20 +257,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         uint256 tradeMarketMakerFeeBps_,
         uint256 winningsMarketMakerFeeBps_
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (tradeTreasuryFeeBps_ > MAX_FEE_BPS) revert TreasuryFeeTooHigh();
-        if (tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert MarketMakerFeeTooHigh();
-        if (tradeTreasuryFeeBps_ + tradeMarketMakerFeeBps_ > MAX_FEE_BPS) revert TotalTradeFeeTooHigh();
-        if (winningsMarketMakerFeeBps_ > MAX_FEE_BPS) revert WinningsFeeTooHigh();
-
-        tradeTreasuryFeeBps = tradeTreasuryFeeBps_;
-        tradeMarketMakerFeeBps = tradeMarketMakerFeeBps_;
-        winningsMarketMakerFeeBps = winningsMarketMakerFeeBps_;
-
-        emit FeeConfigUpdated(
-            tradeTreasuryFeeBps_,
-            tradeMarketMakerFeeBps_,
-            winningsMarketMakerFeeBps_
-        );
+        revert GovernanceSurfaceFrozen();
     }
 
     function feeBps() external view returns (uint256) {

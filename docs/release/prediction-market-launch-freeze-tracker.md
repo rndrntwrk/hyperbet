@@ -138,17 +138,30 @@ Parity checks for this gate are now covered in:
 
 ## [20] Priority: `enoomian/pm-20-governance-controls`
 **Owner:** Gate 20
-**Status:** [ ]
+**Status:** [x]
 
-- [ ] Remove Solana bootstrap-authority fallbacks in both initializers:
+- [x] Remove Solana bootstrap-authority fallbacks in both initializers:
   - `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs`
   - `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`
-- [ ] Freeze EVM setter surface in `packages/evm-contracts/contracts/DuelOutcomeOracle.sol` and `packages/evm-contracts/contracts/GoldClob.sol`.
-- [ ] Freeze Solana config authority policies in `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs` and `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`.
-- [ ] Finalize governance docs and emergency-control stance:
+- [x] Freeze EVM setter surface in `packages/evm-contracts/contracts/DuelOutcomeOracle.sol` and `packages/evm-contracts/contracts/GoldClob.sol`.
+- [x] Freeze Solana config authority policies in `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs` and `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`.
+- [x] Finalize governance docs and emergency-control stance:
   - `docs/prediction-market-release-prep.md`
   - `docs/hyperbet-production-deploy.md`
   - privileged-surface inventory doc under `docs/release/`
+
+### PM20 completion evidence
+
+- [x] EVM governance mutators are intentionally frozen in:
+  - `packages/evm-contracts/contracts/DuelOutcomeOracle.sol`
+  - `packages/evm-contracts/contracts/GoldClob.sol`
+- [x] SVM governance authority initialization and updates now require upgrade-authority
+  ownership + immutable config authority:
+  - `packages/hyperbet-solana/anchor/programs/fight_oracle/src/lib.rs`
+  - `packages/hyperbet-solana/anchor/programs/gold_clob_market/src/lib.rs`
+- [x] Governance evidence and signature policy remain centralized in:
+  - `docs/runbooks/prediction-market-governance-and-emergency-controls.md`
+  - `docs/release/contract-privileged-surface-inventory.md`
 
 ---
 

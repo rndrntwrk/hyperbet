@@ -22,26 +22,28 @@ pub mod fight_oracle {
         dispute_window_secs: i64,
     ) -> Result<()> {
         let program_data = &ctx.accounts.program_data;
-        if let Some(auth) = program_data.upgrade_authority_address {
-            if auth != Pubkey::default() {
-                require_keys_eq!(
-                    auth,
-                    ctx.accounts.authority.key(),
-                    ErrorCode::UnauthorizedInitializer
-                );
-            }
-        }
+        let upgrade_authority = program_data
+            .upgrade_authority_address
+            .ok_or(ErrorCode::UnauthorizedInitializer)?;
+        require!(
+            upgrade_authority != Pubkey::default(),
+            ErrorCode::UnauthorizedInitializer
+        );
+        require_keys_eq!(
+            upgrade_authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::UnauthorizedInitializer
+        );
 
         let oracle_config = &mut ctx.accounts.oracle_config;
-
         if oracle_config.authority == Pubkey::default() {
-            oracle_config.authority = ctx.accounts.authority.key();
+            oracle_config.authority = upgrade_authority;
             oracle_config.bump = ctx.bumps.oracle_config;
         } else {
             require_keys_eq!(
                 oracle_config.authority,
-                ctx.accounts.authority.key(),
-                ErrorCode::Unauthorized
+                upgrade_authority,
+                ErrorCode::ConfigAuthorityImmutable
             );
         }
 
@@ -73,6 +75,7 @@ pub mod fight_oracle {
             ctx.accounts.authority.key(),
             ErrorCode::Unauthorized
         );
+        require!(authority == ctx.accounts.oracle_config.authority, ErrorCode::ConfigAuthorityImmutable);
         require!(authority != Pubkey::default(), ErrorCode::InvalidAuthority);
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
         require!(finalizer != Pubkey::default(), ErrorCode::InvalidFinalizer);
@@ -83,7 +86,6 @@ pub mod fight_oracle {
         require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
 
         let oracle_config = &mut ctx.accounts.oracle_config;
-        oracle_config.authority = authority;
         oracle_config.reporter = reporter;
         oracle_config.finalizer = finalizer;
         oracle_config.challenger = challenger;
@@ -575,4 +577,6 @@ pub enum ErrorCode {
     ChallengeWindowExpired,
     #[msg("Dispute window still active")]
     DisputeWindowActive,
+    #[msg("Config authority is immutable")]
+    ConfigAuthorityImmutable,
 }
