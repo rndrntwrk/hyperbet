@@ -1,7 +1,11 @@
 name: Fund Multisig Signers
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - enoomian/pm16-17-20-21
+    paths:
+      - .github/workflows/fund-multisig-signers.yml
 
 jobs:
   fund-signers:
