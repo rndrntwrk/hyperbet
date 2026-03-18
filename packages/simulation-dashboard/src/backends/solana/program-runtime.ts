@@ -509,10 +509,23 @@ export class SolanaProgramRuntime {
         return duelState;
     }
 
+    async waitForBettingWindowClose(duelState: PublicKey): Promise<void> {
+        const duel = await this.fetchDuelState(duelState);
+        const betCloseTs = Number(duel.betCloseTs);
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (nowSec >= betCloseTs) {
+            return;
+        }
+
+        const waitMs = (betCloseTs - nowSec + 2) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+
     async lockDuel(
         market: SolanaOpenMarket,
         metadataUri = "https://hyperbet.local/lock",
     ): Promise<string> {
+        await this.waitForBettingWindowClose(market.duelState);
         await this.setDuelStatus(market.duelKey, "locked", metadataUri);
         return this.syncMarketFromDuel(market);
     }
@@ -726,14 +739,8 @@ export class SolanaProgramRuntime {
         const oracleConfig = deriveOracleConfigPda(this.fightProgram.programId);
         const duelState = deriveDuelStatePda(this.fightProgram.programId, args.duelKey);
 
-        // Wait for betting window to close before proposing (FIX-6 guard)
-        const duel = await this.fetchDuelState(duelState);
-        const betCloseTs = Number(duel.betCloseTs);
-        const nowSec = Math.floor(Date.now() / 1000);
-        if (nowSec < betCloseTs) {
-            const waitMs = (betCloseTs - nowSec + 2) * 1000;
-            await new Promise((resolve) => setTimeout(resolve, waitMs));
-        }
+        // The oracle lifecycle now rejects pre-close lock/propose transitions.
+        await this.waitForBettingWindowClose(duelState);
 
         const now = Math.floor(Date.now() / 1000);
 

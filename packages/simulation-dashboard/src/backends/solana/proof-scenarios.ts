@@ -368,8 +368,8 @@ async function executeCancelReplaceGriefingFlow(
     );
 
     const placements = [
-        { orderId: 2, amount: 500n },
-        { orderId: 3, amount: 550n },
+        { orderId: 2, amount: 1_000n },
+        { orderId: 3, amount: 2_000n },
     ];
     let quoteChecks = 0;
     let quoteActiveChecks = 0;

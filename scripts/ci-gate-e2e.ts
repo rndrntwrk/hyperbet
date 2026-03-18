@@ -78,7 +78,7 @@ async function prebuild(harnessEnv: NodeJS.ProcessEnv): Promise<void> {
 
   if (!evmRoot) return;
 
-  await runCommand("forge", ["build", "--root", evmRoot], {
+  await runCommand("bun", ["run", "--cwd", "packages/evm-contracts", "build:foundry:pm"], {
     env: harnessEnv,
     stdoutFile: evmBuildLogPath,
     stderrFile: evmBuildLogPath,
