@@ -1,6 +1,6 @@
 # PM Launch Execution Plan
 
-> **TL;DR:** Three-phase plan. Phase 0: get PM gates true by closing AVAX canonicalization, governance deployment, and audit packet (branch: `release/pm-gates-closeout`). Phase 1: harden AMM on frozen PM base (branch: `feature/pm-amm-hardening-v1`). Phase 2: integrate AMM with PM stack (branch: `feature/pm-amm-integration-v1`). PR #19 is excluded from the launch-critical merge train.
+> **TL;DR:** Testnet-first, mainnet-is-ceremony model. Phase 0 proves everything on testnets with exhaustive integration, scenario, and simulation evidence — mainnet is a mechanical replay. Phase 1 hardens AMM on the frozen PM base. Phase 2 integrates AMM with the PM stack. PR #19 is excluded from the launch-critical merge train.
 
 ---
 
@@ -19,83 +19,254 @@ main
 
 ---
 
+## Core Principle: Testnet-First, Mainnet-Is-Ceremony
+
+Every deployment, governance action, integration test, and scenario simulation is executed and proven on testnets first. Mainnet deployment is a mechanical replay of the exact same runbook with production keys. Zero decisions at deploy time. Zero debugging at deploy time. If it wasn't proven on testnet, it doesn't happen on mainnet.
+
+---
+
 ## Phase 0 — Get PM Gates True
 
 **Branch:** `release/pm-gates-closeout`
 **Parent:** `enoomian/pm16-17-20-21` (after PR #27 merges to develop)
-**Goal:** Close all remaining PM gates so the branch is audit-handoff ready.
+**Goal:** Prove the entire deployment, governance, and integration pipeline on testnets. Capture exhaustive evidence. Make mainnet deployment a mechanical ceremony.
 
-### WS 0.1 — AVAX Canonicalization and Proof Gating
+### Stage A — Testnet Proving Ground (Engineering)
 
-- [ ] Populate canonical AVAX deployment truth in `packages/hyperbet-chain-registry/src/index.ts`
-  - [ ] `duelOracleAddress`
-  - [ ] `goldClobAddress`
-  - [ ] `adminAddress`
-  - [ ] `marketOperatorAddress`
-  - [ ] `treasuryAddress`
-  - [ ] `marketMakerAddress`
-  - [ ] `reporterAddress`
-  - [ ] `finalizerAddress`
-  - [ ] `challengerAddress`
-  - [ ] `timelockAddress`
-  - [ ] `multisigAddress`
-  - [ ] `emergencyCouncilAddress`
-  - [ ] `goldTokenAddress`
-- [ ] Attach Fuji deployment evidence (tx hashes, explorer links)
-- [ ] Attach mainnet deployment evidence
-- [ ] Attach staged-proof artifact bundles
-- [ ] Re-enable AVAX as fully promoted in CI cross-chain lanes
-- [ ] Update `docs/release/prediction-market-launch-freeze-tracker.md` Gate 6
+Everything in Stage A is executed by engineering on testnets with test funds. No real funds. No production keys. Full control. Full debuggability. This is where all problems are found and fixed.
 
-**Acceptance:** Gate 6 green. AVAX registry values non-blank. Cross-chain docs no longer say "pending canonical proof."
+#### WS 0.1A — Testnet Deployment
 
-### WS 0.2 — Governance Deployment and Activation
+- [ ] Deploy `TimelockController` on BSC Testnet
+- [ ] Deploy `TimelockController` on Base Sepolia
+- [ ] Deploy `TimelockController` on AVAX Fuji
+- [ ] Deploy Safe multisig (2-of-3) on BSC Testnet
+- [ ] Deploy Safe multisig (2-of-3) on Base Sepolia
+- [ ] Deploy Safe multisig (2-of-3) on AVAX Fuji
+- [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on BSC Testnet
+- [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on Base Sepolia
+- [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on AVAX Fuji
+- [ ] Verify CREATE2 addresses are identical across all 3 testnets
+- [ ] Deploy Solana programs on devnet
+- [ ] Transfer Solana devnet upgrade authority to test multisig
+- [ ] Execute `freeze_oracle_config` on Solana devnet
+- [ ] Execute `freeze_config` on Solana devnet
+- [ ] Record all testnet tx hashes in evidence bundle
 
-- [ ] Deploy `TimelockController` on BSC
-- [ ] Deploy `TimelockController` on Base
-- [ ] Deploy `TimelockController` on AVAX
-- [ ] Deploy Safe multisig on BSC (2-of-3 or 3-of-5)
-- [ ] Deploy Safe multisig on Base
-- [ ] Deploy Safe multisig on AVAX
-- [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on BSC
-- [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on Base
-- [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on AVAX
-- [ ] Verify CREATE2 addresses are identical across all 3 chains
-- [ ] Transfer Solana upgrade authority to Squads multisig
-- [ ] Execute `freeze_oracle_config` on Solana
-- [ ] Execute `freeze_config` on Solana
-- [ ] Record all governance tx hashes in chain-registry
-- [ ] Verify role assignments via block explorer on all chains
-- [ ] Update chain-registry `deploymentVersion` to `"v3"` for all mainnets
+**Acceptance:** All 3 EVM testnets + Solana devnet deployed with identical governance topology as production target.
 
-**Acceptance:** Timelock/multisig live on all EVM chains. Solana authority transferred. Freeze transactions completed. Explorer verification confirms constructor args and role wiring.
+#### WS 0.2A — Testnet Registry Population
 
-### WS 0.3 — Gate 22 Audit Packet and Doc-Truth Alignment
+- [ ] Populate chain-registry `bscTestnet` with deployed v3 addresses
+- [ ] Populate chain-registry `baseSepolia` with deployed v3 addresses
+- [ ] Populate chain-registry `avaxFuji` with deployed v3 addresses (all 13 fields)
+- [ ] Populate Solana devnet program IDs and config addresses
+- [ ] Update `deploymentVersion` to `"v3"` for all testnet entries
+- [ ] Commit registry updates to `release/pm-gates-closeout`
+- [ ] Verify `bun test` deployment tests pass with new values
+- [ ] Verify `bun x tsc --noEmit` passes for all chain apps
+
+**Acceptance:** Registry is complete for all testnets. No blank fields. Deployment tests pass.
+
+#### WS 0.3A — Deployment Verification Script
+
+Build a script that validates a deployment is correct. Run it on testnet. Run it again on mainnet later.
+
+- [ ] Create `scripts/verify-deployment.ts` that takes a chain config and checks:
+  - [ ] Contracts deployed at expected CREATE2 addresses (`getCode` != `0x`)
+  - [ ] Oracle constructor args match: admin, reporter, finalizer, challenger, pauser, disputeWindow
+  - [ ] CLOB constructor args match: admin, operator, oracle, treasury, marketMaker, pauser
+  - [ ] `duelOracle`, `treasury`, `marketMaker` are immutable and match expected values
+  - [ ] `grantRole(REPORTER_ROLE, ...)` reverts with `GovernanceSurfaceFrozen`
+  - [ ] `setFeeConfig(...)` reverts with `GovernanceSurfaceFrozen`
+  - [ ] Timelock is `DEFAULT_ADMIN_ROLE` holder
+  - [ ] Fee config matches expected snapshot values
+  - [ ] Dispute window == 3600 (or expected value)
+- [ ] Create `scripts/verify-solana-deployment.ts` that checks:
+  - [ ] Program deployed at expected address
+  - [ ] OracleConfig authority matches expected pubkey
+  - [ ] OracleConfig `config_frozen == true`
+  - [ ] OracleConfig `paused == false`
+  - [ ] MarketConfig authority, treasury, market_maker match expected
+  - [ ] MarketConfig `config_frozen == true`
+  - [ ] Upgrade authority transferred (no longer original deployer)
+- [ ] Run verification scripts against all testnet deployments
+- [ ] All checks pass
+
+**Acceptance:** Automated verification confirms deployment correctness on all testnets.
+
+#### WS 0.4A — UI and Game Integration Testing
+
+- [ ] Connect UI to testnet deployments (BSC Testnet, Base Sepolia, AVAX Fuji, Solana devnet)
+- [ ] Verify wallet connection flow on all chains
+- [ ] Verify market creation flow end-to-end
+- [ ] Verify order placement flow (GTC, IOC, Post-Only) on all chains
+- [ ] Verify order cancellation flow
+- [ ] Verify order matching and position tracking
+- [ ] Verify settlement flow: propose → finalize → claim
+- [ ] Verify cancellation flow: cancel → refund
+- [ ] Verify `reclaimRestingOrder` flow for locked collateral
+- [ ] Verify `reproposeResult` flow after challenge
+- [ ] Verify chain switching in UI
+- [ ] Verify the Hyperscapes game integration:
+  - [ ] Game events trigger duel creation correctly
+  - [ ] Betting window opens and closes at correct times
+  - [ ] Game outcome maps to correct oracle proposal
+  - [ ] Settlement reflects game result
+- [ ] Capture screenshots/recordings of each flow as evidence
+
+**Acceptance:** Every user-facing flow works end-to-end on testnets against deployed v3 contracts with real game integration.
+
+#### WS 0.5A — Scenario Testing and Simulation Evidence
+
+- [ ] Run full CI gate suite against testnet deployments:
+  - [ ] Solana Exploit Gate (all 6 scenarios)
+  - [ ] EVM Exploit Gate
+  - [ ] Cross-Chain E2E (Solana, BSC, AVAX)
+  - [ ] Base Add-Chain Smoke
+  - [ ] EVM Contract Proof Gate (anvil adversarial simulation)
+- [ ] Run market-maker adversarial simulations:
+  - [ ] Seed corpus (all chains)
+  - [ ] Replay corpus (all chains)
+  - [ ] CI gate (all chains, min 13 passes)
+- [ ] Run extended fuzz testing: `forge test --fuzz-runs 2048`
+- [ ] Run keeper lifecycle test:
+  - [ ] Start keeper against testnet
+  - [ ] Verify keeper creates markets from game events
+  - [ ] Verify keeper syncs oracle state
+  - [ ] Kill keeper, restart, verify recovery
+  - [ ] Verify no state corruption after restart
+- [ ] Run pause/unpause drill:
+  - [ ] Pause oracle on testnet
+  - [ ] Verify all writes blocked
+  - [ ] Verify reads/claims still work
+  - [ ] Unpause, verify recovery
+- [ ] Run emergency cancel drill:
+  - [ ] Cancel a duel with active positions
+  - [ ] Verify all users can claim refunds
+  - [ ] Verify resting orders can be reclaimed
+- [ ] Capture all scenario results as structured evidence artifacts
+
+**Acceptance:** Every exploit scenario, adversarial simulation, and operational drill passes on testnets. Evidence artifacts captured and indexed.
+
+#### WS 0.6A — Evidence Bundle Assembly
+
+- [ ] Create `docs/release/evidence/` directory with structured evidence:
+  - [ ] `testnet-deployment-receipts/` — tx hashes, explorer links, verification script output for each chain
+  - [ ] `testnet-governance-receipts/` — timelock deploy, multisig deploy, role assignment, freeze tx hashes
+  - [ ] `testnet-integration-evidence/` — UI flow screenshots/recordings, game integration evidence
+  - [ ] `testnet-scenario-evidence/` — exploit gate results, adversarial simulation reports, fuzz results
+  - [ ] `testnet-operational-evidence/` — keeper lifecycle, pause drill, emergency cancel drill
+- [ ] Create `docs/release/evidence/testnet-signoff-summary.md` — single document linking all evidence with pass/fail status
+- [ ] Verify every item in `docs/release/external-audit-package-checklist.md` can be checked with testnet evidence
+
+**Acceptance:** Complete evidence bundle exists. Every claim is backed by a testnet artifact.
+
+#### WS 0.7A — Gate 22 Audit Packet Finalization
 
 - [ ] Finalize `docs/release/gate-22-required-check-contract.md`
-- [ ] Attach freeze manifest with final RC commit hash
-- [ ] Attach ABI freeze files (verify against deployed bytecode)
-- [ ] Attach staged-proof evidence bundles (read-only + canary-write)
-- [ ] Attach governance assignment tx hashes
-- [ ] Finalize residual-risk register (remove stale tracking items already resolved)
-- [ ] Finalize engineer evidence artifacts
-- [ ] Finalize findings ledger with accepted residual risks
+- [ ] Attach freeze manifest with RC commit hash
+- [ ] Attach ABI freeze files (verify against deployed testnet bytecode)
+- [ ] Attach staged-proof evidence bundles from WS 0.5A
+- [ ] Attach governance tx hashes from WS 0.1A
+- [ ] Finalize residual-risk register (all tracking items resolved or explicitly accepted)
+- [ ] Finalize findings ledger
 - [ ] Close `docs/release/external-audit-package-checklist.md` — all items checked
-- [ ] Verify no release doc contradicts implementation or CI
+- [ ] Verify no release doc contradicts implementation, CI, or evidence
+- [ ] Update launch-freeze tracker: Gate 6 green, Gate 22 green
 
-**Acceptance:** Gate 22 green. Every release-facing claim links to proof artifact, test, or tx hash.
+**Acceptance:** Gate 22 closed. Audit packet complete. No doc contradicts code or evidence.
 
-### WS 0.4 — Final PM-Gates Signoff
+#### WS 0.8A — Final Testnet Signoff
 
-- [ ] Run full verification flow: `forge test --fuzz-runs 512` + `hardhat test` + deployment tests + TS checks
-- [ ] Run staged live proof in read-only mode
-- [ ] Run staged live proof in canary-write mode
-- [ ] Confirm Solana/BSC/AVAX E2E lanes passing
-- [ ] Confirm Base add-chain smoke passing
-- [ ] Tag final audit candidate commit
-- [ ] Record RC tag in freeze tracker
+- [ ] All CI checks green on `release/pm-gates-closeout`
+- [ ] Deployment verification scripts pass on all testnets
+- [ ] Evidence bundle complete and reviewed
+- [ ] Audit packet complete and reviewed
+- [ ] Tag testnet RC: `v3.0.0-rc.1-testnet`
+- [ ] Explicit signoff: "Stage A complete. Testnet is proven. Ready for mainnet ceremony."
 
-**Acceptance:** PM gates are true. Tri-chain launch evidence complete. PM-core ready for external audit.
+**Acceptance:** Everything that will happen on mainnet has been proven on testnet. No open questions.
+
+---
+
+### Stage B — Mainnet Deployment Ceremony (Admin Ops)
+
+Stage B is a ceremony, not an engineering session. Every action here is a mechanical replay of what was proven in Stage A. The admin follows the runbook exactly. No improvisation. No debugging. If something fails, stop — do not proceed until the failure is understood and re-proven on testnet.
+
+**Prerequisites:** Stage A signoff complete. Testnet RC tagged. Evidence bundle reviewed.
+
+**Who:** Admin with production keys. Engineering on standby for observation only.
+
+**Duration:** ~2 hours for all chains.
+
+#### Step B.1 — Pre-Ceremony Verification
+
+- [ ] Verify the branch being deployed matches the testnet RC tag exactly
+- [ ] Verify production deployer wallet has sufficient gas on BSC, Base, AVAX
+- [ ] Verify production Solana deployer has sufficient SOL
+- [ ] Verify Safe multisig signers have confirmed availability
+- [ ] Verify Squads multisig signers have confirmed availability
+- [ ] Communication: notify stakeholders that mainnet deployment is starting
+
+#### Step B.2 — EVM Mainnet Deployment (Replay of WS 0.1A)
+
+- [ ] Deploy `TimelockController` on BSC — record tx hash
+- [ ] Deploy `TimelockController` on Base — record tx hash
+- [ ] Deploy `TimelockController` on AVAX — record tx hash
+- [ ] Deploy Safe multisig on BSC — record address
+- [ ] Deploy Safe multisig on Base — record address
+- [ ] Deploy Safe multisig on AVAX — record address
+- [ ] Run `deploy-create2.ts --network bsc` with timelock as admin — record receipt
+- [ ] Run `deploy-create2.ts --network base` with timelock as admin — record receipt
+- [ ] Run `deploy-create2.ts --network avax` with timelock as admin — record receipt
+- [ ] Verify CREATE2 addresses match testnet predictions (must be identical)
+- [ ] If addresses don't match: STOP. Do not proceed. Investigate on testnet first.
+
+#### Step B.3 — Solana Mainnet Deployment (Replay of WS 0.1A)
+
+- [ ] Deploy fight_oracle program on mainnet — record program ID
+- [ ] Deploy gold_clob_market program on mainnet — record program ID
+- [ ] Verify program IDs match expected values
+- [ ] Initialize oracle config with production governance keys
+- [ ] Initialize market config with production governance keys
+- [ ] Transfer upgrade authority to Squads multisig — record tx
+- [ ] Execute `freeze_oracle_config` — record tx
+- [ ] Execute `freeze_config` — record tx
+
+#### Step B.4 — Post-Deployment Verification (Replay of WS 0.3A)
+
+- [ ] Run `verify-deployment.ts` against BSC mainnet
+- [ ] Run `verify-deployment.ts` against Base mainnet
+- [ ] Run `verify-deployment.ts` against AVAX mainnet
+- [ ] Run `verify-solana-deployment.ts` against Solana mainnet
+- [ ] All verification checks pass
+- [ ] If any check fails: STOP. Do not proceed. Investigate.
+
+#### Step B.5 — Registry Population
+
+- [ ] Populate chain-registry mainnet entries with deployed addresses
+- [ ] Populate governance addresses (timelock, multisig, emergency council)
+- [ ] Update `deploymentVersion` to `"v3"` for all mainnet entries
+- [ ] Commit registry updates
+- [ ] Run `bun test` deployment tests — all pass
+
+#### Step B.6 — Post-Ceremony Verification
+
+- [ ] Run smoke test against mainnet deployments (read-only — no real funds yet)
+- [ ] Verify block explorer shows correct constructor args on all chains
+- [ ] Verify governance roles on all chains via block explorer
+- [ ] Verify freeze state on Solana via explorer
+
+#### Step B.7 — Ceremony Completion
+
+- [ ] Tag mainnet RC: `v3.0.0`
+- [ ] Record all mainnet tx hashes in `docs/release/evidence/mainnet-deployment-receipts/`
+- [ ] Update launch-freeze tracker with mainnet evidence
+- [ ] Communication: notify stakeholders that mainnet deployment is complete
+- [ ] Explicit signoff: "Mainnet deployment complete. Contracts verified. Ready for canary operations."
+
+**Acceptance:** Mainnet matches testnet exactly. Verification scripts pass. All evidence recorded. Admin's job is done.
 
 ---
 
@@ -227,3 +398,5 @@ main
 - Do NOT reopen PM16/17/20/21 contract semantics for AMM compatibility
 - Do NOT widen the trust-bearing surface by merging keeper/dashboard churn into PM-core
 - Do NOT deploy AMM contracts without matching CREATE2/registry/governance discipline
+- Do NOT deploy to mainnet anything that wasn't proven on testnet first
+- Do NOT debug on mainnet — if something fails during ceremony, stop and return to testnet
