@@ -25,9 +25,11 @@ jobs:
             "0x785fceED2d6ab37e5a22329E2ED496427A58CbE2"
             "0x62e7028DEe826a2a6F811021a5eAA379713A36C6"
           )
-          for addr in "${SIGNERS[@]}"; do
-            echo "Sending 0.005 tBNB to $addr..."
-            cast send "$addr" --value 0.005ether --rpc-url "$RPC" --private-key "$DEPLOYER_KEY"
+          NONCE=$(cast nonce 0x25DFe05ea0d5bb2F96b9D351765CC5E2DB86dCC0 --rpc-url "$RPC")
+          for i in "${!SIGNERS[@]}"; do
+            addr="${SIGNERS[$i]}"
+            echo "Sending 0.005 tBNB to $addr (nonce $((NONCE + i)))..."
+            cast send "$addr" --value 0.005ether --rpc-url "$RPC" --private-key "$DEPLOYER_KEY" --nonce "$((NONCE + i))"
             echo "Done: $addr"
           done
 
@@ -41,9 +43,11 @@ jobs:
             "0x785fceED2d6ab37e5a22329E2ED496427A58CbE2"
             "0x62e7028DEe826a2a6F811021a5eAA379713A36C6"
           )
-          for addr in "${SIGNERS[@]}"; do
-            echo "Sending 0.02 AVAX to $addr..."
-            cast send "$addr" --value 0.02ether --rpc-url "$RPC" --private-key "$DEPLOYER_KEY"
+          NONCE=$(cast nonce 0x25DFe05ea0d5bb2F96b9D351765CC5E2DB86dCC0 --rpc-url "$RPC")
+          for i in "${!SIGNERS[@]}"; do
+            addr="${SIGNERS[$i]}"
+            echo "Sending 0.02 AVAX to $addr (nonce $((NONCE + i)))..."
+            cast send "$addr" --value 0.02ether --rpc-url "$RPC" --private-key "$DEPLOYER_KEY" --nonce "$((NONCE + i))"
             echo "Done: $addr"
           done
 
