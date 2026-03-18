@@ -352,7 +352,7 @@ async function createFreshSolanaOpenMarket(
     authority.publicKey,
     authority.publicKey,
     authority.publicKey,
-    0,
+    60,
   );
   const duelState = await upsertDuel(fightProgram as never, authority, duelKey, {
     status: duelStatusBettingOpen(),
