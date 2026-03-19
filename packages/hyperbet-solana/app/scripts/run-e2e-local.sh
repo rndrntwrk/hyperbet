@@ -427,6 +427,7 @@ run_with_retries \
     E2E_SOLANA_WS_URL="$SOLANA_WS_URL" \
     E2E_BROWSER_SOLANA_RPC_URL="$SOLANA_PROXY_URL" \
     E2E_BROWSER_SOLANA_WS_URL="$SOLANA_PROXY_WS_URL" \
+    E2E_SOLANA_BOOTSTRAP_KEYPAIR="$SOLANA_BOOTSTRAP_KEYPAIR" \
     bun run "$APP_DIR/tests/e2e/setup-localnet.ts"
 
 echo "[e2e] seeding keeper database"
