@@ -68,6 +68,27 @@ function writeDeploymentReceipt(receipt: DeploymentReceipt): void {
   console.log("\n📝 Deployment receipt written to:", outputPath);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForCode(
+  address: string,
+  attempts = 15,
+  delayMs = 1000,
+): Promise<string> {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const code = await ethers.provider.getCode(address);
+    if (code !== "0x") {
+      return code;
+    }
+    if (attempt < attempts) {
+      await sleep(delayMs);
+    }
+  }
+  return "0x";
+}
+
 // ── CREATE2 Deploy Helper ────────────────────────────────────────────
 
 /**
@@ -116,8 +137,9 @@ async function deployViaCreate2(
     throw new Error(`${label} deployment transaction failed: ${tx.hash}`);
   }
 
-  // Verify the contract is deployed at the expected address
-  const deployedCode = await ethers.provider.getCode(expectedAddress);
+  // Some RPC backends lag briefly between the mined receipt and code availability.
+  // Poll for code before treating this as a genuine CREATE2 mismatch.
+  const deployedCode = await waitForCode(expectedAddress);
   if (deployedCode === "0x") {
     throw new Error(
       `${label} deployment tx succeeded but no code at ${expectedAddress}. ` +

@@ -136,6 +136,28 @@ function writeSummary(outPath: string | undefined, payload: unknown): void {
   fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + "\n");
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForCode(
+  provider: ethers.JsonRpcProvider,
+  address: string,
+  attempts = 10,
+  delayMs = 1000,
+): Promise<string> {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const code = await provider.getCode(address);
+    if (code !== "0x") {
+      return code;
+    }
+    if (attempt < attempts) {
+      await sleep(delayMs);
+    }
+  }
+  return "0x";
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes("--help")) usage();
 
@@ -187,13 +209,17 @@ async function main(): Promise<void> {
   const clob = new ethers.Contract(goldClobAddress, CLOB_ABI, provider);
 
   const failures: string[] = [];
+  const [oracleCode, clobCode] = await Promise.all([
+    waitForCode(provider, duelOracleAddress),
+    waitForCode(provider, goldClobAddress),
+  ]);
   appendCheck(
-    (await provider.getCode(duelOracleAddress)) !== "0x",
+    oracleCode !== "0x",
     `DuelOutcomeOracle deployed at ${duelOracleAddress}`,
     failures,
   );
   appendCheck(
-    (await provider.getCode(goldClobAddress)) !== "0x",
+    clobCode !== "0x",
     `GoldClob deployed at ${goldClobAddress}`,
     failures,
   );
