@@ -48,7 +48,6 @@ All private keys are stored as GitHub Actions secrets in `HyperscapeAI/hyperbet`
 | Secret Name | Corresponds To | Created |
 |-------------|---------------|---------|
 | `TESTNET_DEPLOYER_PRIVATE_KEY` | DEPLOYER EVM wallet | 2026-03-18 |
-| `TESTNET_ADMIN_PRIVATE_KEY` | ADMIN EVM wallet | 2026-03-18 |
 | `TESTNET_REPORTER_PRIVATE_KEY` | REPORTER EVM wallet | 2026-03-18 |
 | `TESTNET_FINALIZER_PRIVATE_KEY` | FINALIZER EVM wallet | 2026-03-18 |
 | `TESTNET_CHALLENGER_PRIVATE_KEY` | CHALLENGER EVM wallet | 2026-03-18 |
@@ -60,21 +59,44 @@ All private keys are stored as GitHub Actions secrets in `HyperscapeAI/hyperbet`
 | `TESTNET_MULTISIG_SIGNER_3_PRIVATE_KEY` | MULTISIG_SIGNER_3 | 2026-03-18 |
 | `TESTNET_SOLANA_DEPLOYER_KEYPAIR` | Solana DEPLOYER (JSON byte array) | 2026-03-18 |
 
+Additional repository-level secrets used by the Stage A workflows:
+
+| Secret Name | Purpose |
+|-------------|---------|
+| `ADMIN_ADDRESS` | Shared EVM admin role address |
+| `MARKET_OPERATOR_ADDRESS` | Shared EVM market-operator role address |
+| `REPORTER_ADDRESS` | Shared EVM reporter address when not derived from key |
+| `TREASURY_ADDRESS` | Shared EVM treasury address when not derived from key |
+| `MARKET_MAKER_ADDRESS` | Shared EVM market-maker address when not derived from key |
+| `BSC_TESTNET_RPC` | BSC Testnet RPC URL |
+| `AVAX_FUJI_RPC` | AVAX Fuji RPC URL |
+
 **Access pattern:** Secrets are consumed by GitHub Actions workflows only. They cannot be read back via the API (write-only). The `fund-multisig-signers.yml` workflow demonstrates the pattern for using deployer keys in CI.
 
 ### Secret Consumption Model
 
-All Stage A deployment and verification runs through GitHub Actions workflows. Secrets are injected at workflow runtime via the `staging` environment. There is no local materialization step — operators do not need private keys on their machines.
+All Stage A deployment and verification runs through GitHub Actions workflows using **repository-level secrets**. There is no `staging` environment requirement for the current Stage A path. Operators do not need private keys on their machines.
 
-The workflows map GitHub Secrets to the env surface consumed by `deploy-create2.ts` and `verify-deployment.ts`:
+The workflows map repo secrets to the env surface consumed by `deploy-create2.ts`, `packages/hyperbet-solana/scripts/init-pm-config.ts`, and the verification scripts:
 
 | Runtime env | Secret source |
 |-------------|--------------|
 | `PRIVATE_KEY` | `TESTNET_DEPLOYER_PRIVATE_KEY` |
-| `BSC_TESTNET_RPC` | `BSC_TESTNET_RPC_URL` |
-| `AVAX_FUJI_RPC` | `AVAX_FUJI_RPC_URL` |
+| `BSC_TESTNET_RPC` | `BSC_TESTNET_RPC` |
+| `AVAX_FUJI_RPC` | `AVAX_FUJI_RPC` |
+| `ADMIN_ADDRESS` | `ADMIN_ADDRESS` |
+| `MARKET_OPERATOR_ADDRESS` | `MARKET_OPERATOR_ADDRESS` |
+| `REPORTER_ADDRESS` | `REPORTER_ADDRESS` or `TESTNET_REPORTER_PRIVATE_KEY` |
+| `FINALIZER_ADDRESS` | derived from `TESTNET_FINALIZER_PRIVATE_KEY` |
+| `CHALLENGER_ADDRESS` | derived from `TESTNET_CHALLENGER_PRIVATE_KEY` |
+| `PAUSER_ADDRESS` | derived from `TESTNET_PAUSER_PRIVATE_KEY` |
+| `TREASURY_ADDRESS` | `TREASURY_ADDRESS` or `TESTNET_TREASURY_PRIVATE_KEY` |
+| `MARKET_MAKER_ADDRESS` | `MARKET_MAKER_ADDRESS` or `TESTNET_MARKET_MAKER_PRIVATE_KEY` |
+| `ANCHOR_WALLET` | temp runner file materialized from `TESTNET_SOLANA_DEPLOYER_KEYPAIR` |
+| `SOLANA_EXPECTED_AUTHORITY` | derived from the temp `ANCHOR_WALLET` via `solana-keygen pubkey` |
+| `SOLANA_EXPECTED_UPGRADE_AUTHORITY` | derived from the temp `ANCHOR_WALLET` via `solana-keygen pubkey` |
 
-Role addresses (ADMIN, REPORTER, FINALIZER, etc.) are derived from the wallet inventory above and passed as workflow inputs — they are public addresses, not secrets.
+The runtime export happens through [`scripts/export-stage-a-env.sh`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/scripts/export-stage-a-env.sh), which validates that any stored public address matches its paired private key when both are present before exporting the effective Stage A env.
 
 ---
 
@@ -126,20 +148,16 @@ Funded by `.github/workflows/fund-multisig-signers.yml` using `TESTNET_DEPLOYER_
 | Workflow | Secrets Used | Purpose |
 |----------|-------------|---------|
 | `fund-multisig-signers.yml` | `TESTNET_DEPLOYER_PRIVATE_KEY` | Sends gas to multisig signers |
-
-**Planned workflows** (to be created during WS 0.1A execution):
-- `deploy-testnet-v3.yml` — CREATE2 deployment + role assignment (uses `TESTNET_DEPLOYER_PRIVATE_KEY` + RPC secrets)
-- `verify-testnet-deployment.yml` — read-only post-deploy verification (uses RPC secrets only)
-
-These do not exist on this branch yet. They will be created as part of the Stage A testnet deployment workstream.
+| `deploy-testnet-v3.yml` | repo-level Stage A secrets listed above | Deploys BSC Testnet + AVAX Fuji PM contracts and Solana devnet PM programs/config |
+| `verify-testnet-deployment.yml` | repo-level Stage A secrets listed above | Verifies deployed testnet PM surfaces and writes structured artifacts |
 
 ---
 
 ## Security Notes
 
 1. **All keys are testnet-only.** They hold zero real value. Compromise has no financial impact.
-2. **GitHub Secrets are write-only.** Once stored, they cannot be read back via API or CLI. They are only injected into workflow environments at runtime.
-3. **Local copies were deleted** immediately after GitHub Secret storage was confirmed.
+2. **GitHub Secrets are write-only.** Once stored, they cannot be read back via API or CLI. They are only injected into workflow runtime.
+3. **Local copies were deleted** immediately after GitHub Secret storage was confirmed. The only exception in Stage A is the temporary runner-local `ANCHOR_WALLET` file materialized from `TESTNET_SOLANA_DEPLOYER_KEYPAIR` during workflow execution.
 4. **Mainnet keys will be generated separately** during the Stage B ceremony, following the same role separation but with hardware wallet / multisig custody.
 5. **The funding workflow** (`fund-multisig-signers.yml`) is triggered by push to `enoomian/pm16-17-20-21` when its own file changes. It should be removed or disabled before merge to `develop`.
 

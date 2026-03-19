@@ -3,11 +3,24 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_CLUSTER="${1:-${SOLANA_DEPLOY_CLUSTER:-}}"
-PROGRAMS=(
-  "fight_oracle"
-  "gold_clob_market"
-  "gold_perps_market"
-)
+PROGRAM_SCOPE="${HYPERBET_SOLANA_PROGRAM_SCOPE:-all}"
+
+if [[ "${2:-}" == "--pm-only" ]]; then
+  PROGRAM_SCOPE="pm"
+fi
+
+if [[ "$PROGRAM_SCOPE" == "pm" ]]; then
+  PROGRAMS=(
+    "fight_oracle"
+    "gold_clob_market"
+  )
+else
+  PROGRAMS=(
+    "fight_oracle"
+    "gold_clob_market"
+    "gold_perps_market"
+  )
+fi
 
 resolve_wallet_path() {
   local candidates=()
@@ -57,6 +70,7 @@ done
 
 WALLET_PATH="$(resolve_wallet_path)"
 echo "[deploy] cluster: $TARGET_CLUSTER"
+echo "[deploy] scope:   $PROGRAM_SCOPE"
 echo "[deploy] wallet:  $WALLET_PATH"
 echo "[deploy] address: $(solana-keygen pubkey "$WALLET_PATH")"
 echo "[deploy] balance: $(solana balance --url "$TARGET_CLUSTER" --keypair "$WALLET_PATH")"

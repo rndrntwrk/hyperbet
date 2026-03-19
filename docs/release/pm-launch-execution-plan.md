@@ -37,7 +37,7 @@ Everything in Stage A is executed by engineering on testnets with test funds. No
 
 #### WS 0.1A — Testnet Deployment
 
-- [ ] Materialize the Stage A deploy env from [`testnet-operations-ledger.md`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/docs/release/testnet-operations-ledger.md) into either local `packages/evm-contracts/.env` or workflow runtime env before rerunning `deploy:preflight:testnet`
+- [ ] Materialize the Stage A deploy env from [`testnet-operations-ledger.md`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/docs/release/testnet-operations-ledger.md) through [`scripts/export-stage-a-env.sh`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/scripts/export-stage-a-env.sh) before running testnet deployment workflows
 - [ ] Deploy `TimelockController` on BSC Testnet
 - [ ] Deploy `TimelockController` on AVAX Fuji
 - [ ] Deploy Safe multisig (3-of-3) on BSC Testnet
@@ -45,13 +45,14 @@ Everything in Stage A is executed by engineering on testnets with test funds. No
 - [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on BSC Testnet
 - [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on AVAX Fuji
 - [ ] Verify CREATE2 addresses are identical across both EVM testnets
-- [ ] Deploy Solana programs on devnet
+- [ ] Deploy Solana PM programs on devnet (`fight_oracle` + `gold_clob_market`; perps excluded from Stage A)
+- [ ] Initialize Solana PM oracle + market config on devnet
 - [ ] Transfer Solana devnet upgrade authority to test multisig
 - [ ] Execute `freeze_oracle_config` on Solana devnet
 - [ ] Execute `freeze_config` on Solana devnet
 - [ ] Record all testnet tx hashes in evidence bundle
 
-**Acceptance:** Both EVM testnets (BSC + AVAX) + Solana devnet deployed with identical governance topology as production target. Base is out of scope for this Stage A lane.
+**Acceptance:** Both EVM testnets (BSC + AVAX) + Solana devnet deployed for PM scope. Base is out of scope for this Stage A lane.
 
 #### WS 0.2A — Testnet Registry Population
 
@@ -69,7 +70,7 @@ Everything in Stage A is executed by engineering on testnets with test funds. No
 
 Build a script that validates a deployment is correct. Run it on testnet. Run it again on mainnet later.
 
-- [ ] Create `scripts/verify-deployment.ts` that takes a chain config and checks:
+- [ ] Create [`packages/evm-contracts/scripts/verify-deployment.ts`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/packages/evm-contracts/scripts/verify-deployment.ts) that takes a chain config and checks:
   - [ ] Contracts deployed at expected CREATE2 addresses (`getCode` != `0x`)
   - [ ] Oracle constructor args match: admin, reporter, finalizer, challenger, pauser, disputeWindow
   - [ ] CLOB constructor args match: admin, operator, oracle, treasury, marketMaker, pauser
@@ -79,7 +80,7 @@ Build a script that validates a deployment is correct. Run it on testnet. Run it
   - [ ] Timelock is `DEFAULT_ADMIN_ROLE` holder
   - [ ] Fee config matches expected snapshot values
   - [ ] Dispute window == 3600 (or expected value)
-- [ ] Create `scripts/verify-solana-deployment.ts` that checks:
+- [ ] Create [`packages/hyperbet-solana/scripts/verify-deployment.ts`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/packages/hyperbet-solana/scripts/verify-deployment.ts) that checks:
   - [ ] Program deployed at expected address
   - [ ] OracleConfig authority matches expected pubkey
   - [ ] OracleConfig `config_frozen == true`

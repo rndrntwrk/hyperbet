@@ -42,6 +42,8 @@
     "deploy:duel-oracle:bsc": "hardhat run scripts/deploy-duel-oracle.ts --network bsc",
     "deploy:duel-oracle:base": "hardhat run scripts/deploy-duel-oracle.ts --network base",
     "deploy:duel-oracle:avax": "hardhat run scripts/deploy-duel-oracle.ts --network avax",
+    "verify:bsc-testnet": "node --import tsx scripts/verify-deployment.ts --network bscTestnet",
+    "verify:avax-fuji": "node --import tsx scripts/verify-deployment.ts --network avaxFuji",
     "simulate:localnet": "hardhat run scripts/simulate-localnet.ts",
     "simulate:adversarial:anvil": "ts-node --transpile-only scripts/simulate-adversarial-localnet.ts"
   },
