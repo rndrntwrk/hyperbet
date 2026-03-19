@@ -62,6 +62,33 @@ All private keys are stored as GitHub Actions secrets in `HyperscapeAI/hyperbet`
 
 **Access pattern:** Secrets are consumed by GitHub Actions workflows only. They cannot be read back via the API (write-only). The `fund-multisig-signers.yml` workflow demonstrates the pattern for using deployer keys in CI.
 
+### Deploy / Preflight Env Projection
+
+The package preflight and deploy scripts consume the normalized EVM env surface from [`packages/evm-contracts/.env.example`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/packages/evm-contracts/.env.example). For local execution, materialize these values into `packages/evm-contracts/.env`. For CI execution, map the GitHub secrets above into the same env names at workflow runtime.
+
+| Runtime env | Value source |
+|-------------|--------------|
+| `PRIVATE_KEY` | `TESTNET_DEPLOYER_PRIVATE_KEY` |
+| `ADMIN_ADDRESS` | ADMIN wallet address from the inventory above |
+| `MARKET_OPERATOR_ADDRESS` | MARKET_OPERATOR wallet address from the inventory above |
+| `REPORTER_ADDRESS` | REPORTER wallet address from the inventory above |
+| `FINALIZER_ADDRESS` | FINALIZER wallet address from the inventory above |
+| `CHALLENGER_ADDRESS` | CHALLENGER wallet address from the inventory above |
+| `PAUSER_ADDRESS` | PAUSER wallet address from the inventory above |
+| `TREASURY_ADDRESS` | TREASURY wallet address from the inventory above |
+| `MARKET_MAKER_ADDRESS` | MARKET_MAKER wallet address from the inventory above |
+| `MULTISIG_ADDRESS` | Safe address from WS 0.1A after deployment |
+| `TIMELOCK_ADDRESS` | Timelock address from WS 0.1A after deployment |
+| `BSC_TESTNET_RPC` | Testnet RPC URL for BSC Testnet |
+| `BASE_SEPOLIA_RPC` | Testnet RPC URL for Base Sepolia |
+| `AVAX_FUJI_RPC` | Testnet RPC URL for AVAX Fuji |
+
+Current interpretation of `deploy:preflight:testnet`:
+
+- Solana artifact / manifest consistency is expected to pass before deployment.
+- BSC Testnet and Base Sepolia remain expected to fail until both the deploy env above and the Stage A testnet v3 PM addresses exist.
+- AVAX Fuji can pass address/governance metadata checks once its committed testnet entries are present, but it still requires the same deploy env before rerunning the workflow locally.
+
 ---
 
 ## Funding Records
@@ -112,7 +139,7 @@ Funded by `.github/workflows/fund-multisig-signers.yml` using `TESTNET_DEPLOYER_
 | Workflow | Secrets Used | Purpose |
 |----------|-------------|---------|
 | `fund-multisig-signers.yml` | `TESTNET_DEPLOYER_PRIVATE_KEY` | Sends gas to multisig signers |
-| (planned) `deploy-testnet-v3.yml` | `TESTNET_DEPLOYER_PRIVATE_KEY`, role keys | CREATE2 deployment + role assignment |
+| (planned) `deploy-testnet-v3.yml` | `TESTNET_DEPLOYER_PRIVATE_KEY`, projected role env above | CREATE2 deployment + role assignment |
 | (planned) `verify-testnet-deployment.yml` | None (read-only) | Post-deploy verification |
 
 ---

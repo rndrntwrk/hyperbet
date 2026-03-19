@@ -37,6 +37,7 @@ Everything in Stage A is executed by engineering on testnets with test funds. No
 
 #### WS 0.1A — Testnet Deployment
 
+- [ ] Materialize the Stage A deploy env from [`testnet-operations-ledger.md`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/docs/release/testnet-operations-ledger.md) into either local `packages/evm-contracts/.env` or workflow runtime env before rerunning `deploy:preflight:testnet`
 - [ ] Deploy `TimelockController` on BSC Testnet
 - [ ] Deploy `TimelockController` on Base Sepolia
 - [ ] Deploy `TimelockController` on AVAX Fuji
