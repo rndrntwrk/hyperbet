@@ -49,6 +49,21 @@ function resolveRpcUrl(cluster: BettingSolanaCluster): string {
   return clusterApiUrl(cluster === "mainnet-beta" ? "mainnet-beta" : cluster);
 }
 
+function resolveWalletPath(): string | null {
+  const candidates = [
+    process.env.SOLANA_STAGE_A_WALLET_PATH,
+    process.env.ANCHOR_WALLET,
+    path.join(process.env.HOME ?? "", ".config/solana/hyperscape-keys/deployer.json"),
+    path.join(process.env.HOME ?? "", ".config/solana/id.json"),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return null;
+}
+
 function deriveOracleConfigPda(programId: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync([Buffer.from("oracle_config")], programId)[0];
 }
@@ -81,9 +96,17 @@ function appendCheck(
   else failures.push(message);
 }
 
-async function readUpgradeAuthority(programId: string, cluster: BettingSolanaCluster): Promise<string | null> {
+async function readUpgradeAuthority(
+  programId: string,
+  cluster: BettingSolanaCluster,
+  walletPath: string | null,
+): Promise<string | null> {
   try {
-    const args = ["program", "show", "--url", cluster, programId];
+    const args = ["program", "show", "--url", cluster];
+    if (walletPath) {
+      args.push("--keypair", walletPath);
+    }
+    args.push(programId);
     const { stdout } = await execFile("solana", args, { env: process.env });
     const match = stdout.match(/Authority:\s+([1-9A-HJ-NP-Za-km-z]+)/);
     return match ? match[1] : null;
@@ -105,6 +128,7 @@ async function main(): Promise<void> {
   const expectedAuthority = process.env.SOLANA_EXPECTED_AUTHORITY?.trim() || null;
   const expectedUpgradeAuthority =
     process.env.SOLANA_EXPECTED_UPGRADE_AUTHORITY?.trim() || null;
+  const walletPath = resolveWalletPath();
 
   const deployment = resolveBettingSolanaDeployment(cluster);
   const rpcUrl = resolveRpcUrl(cluster);
@@ -262,8 +286,16 @@ async function main(): Promise<void> {
     }
   }
 
-  const fightUpgradeAuthority = await readUpgradeAuthority(oracleProgramId.toBase58(), cluster);
-  const clobUpgradeAuthority = await readUpgradeAuthority(clobProgramId.toBase58(), cluster);
+  const fightUpgradeAuthority = await readUpgradeAuthority(
+    oracleProgramId.toBase58(),
+    cluster,
+    walletPath,
+  );
+  const clobUpgradeAuthority = await readUpgradeAuthority(
+    clobProgramId.toBase58(),
+    cluster,
+    walletPath,
+  );
   if (expectedUpgradeAuthority) {
     appendCheck(
       fightUpgradeAuthority === expectedUpgradeAuthority,

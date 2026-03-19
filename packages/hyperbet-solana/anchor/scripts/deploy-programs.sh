@@ -102,7 +102,7 @@ for program in "${PROGRAMS[@]}"; do
     "$binary_path"
 
   echo "[deploy] verifying $program ($program_id)"
-  solana program show --url "$TARGET_CLUSTER" "$program_id"
+  solana program show --url "$TARGET_CLUSTER" --keypair "$WALLET_PATH" "$program_id"
 done
 
 echo "[deploy] complete"

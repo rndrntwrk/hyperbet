@@ -83,6 +83,6 @@ solana program deploy \
   "$BINARY_PATH"
 
 echo "[deploy] verifying $PROGRAM ($PROGRAM_ID)"
-solana program show --url "$TARGET_CLUSTER" "$PROGRAM_ID"
+solana program show --url "$TARGET_CLUSTER" --keypair "$WALLET_PATH" "$PROGRAM_ID"
 
 echo "[deploy] complete"
