@@ -18,8 +18,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+      - name: Setup funding toolchain
+        uses: ./.github/actions/setup-hyperbet
+        with:
+          install-foundry: "true"
+          install-solana: "true"
 
       - name: Resolve local wallet targets
         run: |
@@ -87,6 +90,31 @@ jobs:
               --nonce "$current_nonce"
           done
 
+      - name: Fund Solana devnet wallets
+        env:
+          TESTNET_SOLANA_DEPLOYER_KEYPAIR: ${{ secrets.TESTNET_SOLANA_DEPLOYER_KEYPAIR }}
+        run: |
+          set -euo pipefail
+          wallet_file="$(mktemp)"
+          trap 'rm -f "$wallet_file"' EXIT
+          printf '%s' "$TESTNET_SOLANA_DEPLOYER_KEYPAIR" > "$wallet_file"
+          chmod 600 "$wallet_file"
+          TARGETS=(
+            "${SOLANA_KEEPER_ADDRESS}:0.30"
+            "${SOLANA_CANARY_ADDRESS}:0.15"
+          )
+          for target in "${TARGETS[@]}"; do
+            address="${target%%:*}"
+            value="${target##*:}"
+            echo "Sending ${value} SOL to ${address} on Solana devnet"
+            solana transfer \
+              "$address" \
+              "$value" \
+              --url devnet \
+              --keypair "$wallet_file" \
+              --allow-unfunded-recipient
+          done
+
       - name: Verify EVM balances
         env:
           BSC_RPC: ${{ secrets.BSC_TESTNET_RPC }}
@@ -106,4 +134,12 @@ jobs:
           echo "=== AVAX Fuji ==="
           for address in "${ADDRESSES[@]}"; do
             echo "${address}: $(cast balance "$address" --rpc-url "$AVAX_RPC" --ether) AVAX"
+          done
+
+      - name: Verify Solana balances
+        run: |
+          set -euo pipefail
+          echo "=== Solana Devnet ==="
+          for address in "$SOLANA_KEEPER_ADDRESS" "$SOLANA_CANARY_ADDRESS"; do
+            echo "${address}: $(solana balance "$address" --url devnet)"
           done
