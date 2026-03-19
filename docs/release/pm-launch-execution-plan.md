@@ -39,27 +39,23 @@ Everything in Stage A is executed by engineering on testnets with test funds. No
 
 - [ ] Materialize the Stage A deploy env from [`testnet-operations-ledger.md`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/docs/release/testnet-operations-ledger.md) into either local `packages/evm-contracts/.env` or workflow runtime env before rerunning `deploy:preflight:testnet`
 - [ ] Deploy `TimelockController` on BSC Testnet
-- [ ] Deploy `TimelockController` on Base Sepolia
 - [ ] Deploy `TimelockController` on AVAX Fuji
-- [ ] Deploy Safe multisig (2-of-3) on BSC Testnet
-- [ ] Deploy Safe multisig (2-of-3) on Base Sepolia
-- [ ] Deploy Safe multisig (2-of-3) on AVAX Fuji
+- [ ] Deploy Safe multisig (3-of-3) on BSC Testnet
+- [ ] Deploy Safe multisig (3-of-3) on AVAX Fuji
 - [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on BSC Testnet
-- [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on Base Sepolia
 - [ ] Deploy v3 PM contracts via CREATE2 with timelock as admin on AVAX Fuji
-- [ ] Verify CREATE2 addresses are identical across all 3 testnets
+- [ ] Verify CREATE2 addresses are identical across both EVM testnets
 - [ ] Deploy Solana programs on devnet
 - [ ] Transfer Solana devnet upgrade authority to test multisig
 - [ ] Execute `freeze_oracle_config` on Solana devnet
 - [ ] Execute `freeze_config` on Solana devnet
 - [ ] Record all testnet tx hashes in evidence bundle
 
-**Acceptance:** All 3 EVM testnets + Solana devnet deployed with identical governance topology as production target.
+**Acceptance:** Both EVM testnets (BSC + AVAX) + Solana devnet deployed with identical governance topology as production target. Base is excluded from Stage A scope — it will be added later via the same CREATE2 runbook as a simple chain extension.
 
 #### WS 0.2A — Testnet Registry Population
 
 - [ ] Populate chain-registry `bscTestnet` with deployed v3 addresses
-- [ ] Populate chain-registry `baseSepolia` with deployed v3 addresses
 - [ ] Populate chain-registry `avaxFuji` with deployed v3 addresses (all 13 fields)
 - [ ] Populate Solana devnet program IDs and config addresses
 - [ ] Update `deploymentVersion` to `"v3"` for all testnet entries
@@ -98,7 +94,7 @@ Build a script that validates a deployment is correct. Run it on testnet. Run it
 
 #### WS 0.4A — UI and Game Integration Testing
 
-- [ ] Connect UI to testnet deployments (BSC Testnet, Base Sepolia, AVAX Fuji, Solana devnet)
+- [ ] Connect UI to testnet deployments (BSC Testnet, AVAX Fuji, Solana devnet)
 - [ ] Verify wallet connection flow on all chains
 - [ ] Verify market creation flow end-to-end
 - [ ] Verify order placement flow (GTC, IOC, Post-Only) on all chains
@@ -204,7 +200,7 @@ Stage B is a ceremony, not an engineering session. Every action here is a mechan
 #### Step B.1 — Pre-Ceremony Verification
 
 - [ ] Verify the branch being deployed matches the testnet RC tag exactly
-- [ ] Verify production deployer wallet has sufficient gas on BSC, Base, AVAX
+- [ ] Verify production deployer wallet has sufficient gas on BSC, AVAX
 - [ ] Verify production Solana deployer has sufficient SOL
 - [ ] Verify Safe multisig signers have confirmed availability
 - [ ] Verify Squads multisig signers have confirmed availability
@@ -213,13 +209,10 @@ Stage B is a ceremony, not an engineering session. Every action here is a mechan
 #### Step B.2 — EVM Mainnet Deployment (Replay of WS 0.1A)
 
 - [ ] Deploy `TimelockController` on BSC — record tx hash
-- [ ] Deploy `TimelockController` on Base — record tx hash
 - [ ] Deploy `TimelockController` on AVAX — record tx hash
-- [ ] Deploy Safe multisig on BSC — record address
-- [ ] Deploy Safe multisig on Base — record address
-- [ ] Deploy Safe multisig on AVAX — record address
+- [ ] Deploy Safe multisig (3-of-3) on BSC — record address
+- [ ] Deploy Safe multisig (3-of-3) on AVAX — record address
 - [ ] Run `deploy-create2.ts --network bsc` with timelock as admin — record receipt
-- [ ] Run `deploy-create2.ts --network base` with timelock as admin — record receipt
 - [ ] Run `deploy-create2.ts --network avax` with timelock as admin — record receipt
 - [ ] Verify CREATE2 addresses match testnet predictions (must be identical)
 - [ ] If addresses don't match: STOP. Do not proceed. Investigate on testnet first.
@@ -238,7 +231,6 @@ Stage B is a ceremony, not an engineering session. Every action here is a mechan
 #### Step B.4 — Post-Deployment Verification (Replay of WS 0.3A)
 
 - [ ] Run `verify-deployment.ts` against BSC mainnet
-- [ ] Run `verify-deployment.ts` against Base mainnet
 - [ ] Run `verify-deployment.ts` against AVAX mainnet
 - [ ] Run `verify-solana-deployment.ts` against Solana mainnet
 - [ ] All verification checks pass

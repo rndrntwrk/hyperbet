@@ -6,7 +6,7 @@ Single source of truth for all testnet wallet generation, funding, secret storag
 
 ## Wallet Inventory
 
-### EVM Wallets (shared across BSC Testnet, Base Sepolia, AVAX Fuji)
+### EVM Wallets (shared across BSC Testnet, AVAX Fuji)
 
 | Role | Address | Purpose |
 |------|---------|---------|
@@ -62,32 +62,19 @@ All private keys are stored as GitHub Actions secrets in `HyperscapeAI/hyperbet`
 
 **Access pattern:** Secrets are consumed by GitHub Actions workflows only. They cannot be read back via the API (write-only). The `fund-multisig-signers.yml` workflow demonstrates the pattern for using deployer keys in CI.
 
-### Deploy / Preflight Env Projection
+### Secret Consumption Model
 
-The package preflight and deploy scripts consume the normalized EVM env surface from [`packages/evm-contracts/.env.example`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/packages/evm-contracts/.env.example). For local execution, materialize these values into `packages/evm-contracts/.env`. For CI execution, map the GitHub secrets above into the same env names at workflow runtime.
+All Stage A deployment and verification runs through GitHub Actions workflows. Secrets are injected at workflow runtime via the `staging` environment. There is no local materialization step — operators do not need private keys on their machines.
 
-| Runtime env | Value source |
+The workflows map GitHub Secrets to the env surface consumed by `deploy-create2.ts` and `verify-deployment.ts`:
+
+| Runtime env | Secret source |
 |-------------|--------------|
 | `PRIVATE_KEY` | `TESTNET_DEPLOYER_PRIVATE_KEY` |
-| `ADMIN_ADDRESS` | ADMIN wallet address from the inventory above |
-| `MARKET_OPERATOR_ADDRESS` | MARKET_OPERATOR wallet address from the inventory above |
-| `REPORTER_ADDRESS` | REPORTER wallet address from the inventory above |
-| `FINALIZER_ADDRESS` | FINALIZER wallet address from the inventory above |
-| `CHALLENGER_ADDRESS` | CHALLENGER wallet address from the inventory above |
-| `PAUSER_ADDRESS` | PAUSER wallet address from the inventory above |
-| `TREASURY_ADDRESS` | TREASURY wallet address from the inventory above |
-| `MARKET_MAKER_ADDRESS` | MARKET_MAKER wallet address from the inventory above |
-| `MULTISIG_ADDRESS` | Safe address from WS 0.1A after deployment |
-| `TIMELOCK_ADDRESS` | Timelock address from WS 0.1A after deployment |
-| `BSC_TESTNET_RPC` | Testnet RPC URL for BSC Testnet |
-| `BASE_SEPOLIA_RPC` | Testnet RPC URL for Base Sepolia |
-| `AVAX_FUJI_RPC` | Testnet RPC URL for AVAX Fuji |
+| `BSC_TESTNET_RPC` | `BSC_TESTNET_RPC_URL` |
+| `AVAX_FUJI_RPC` | `AVAX_FUJI_RPC_URL` |
 
-Current interpretation of `deploy:preflight:testnet`:
-
-- Solana artifact / manifest consistency is expected to pass before deployment.
-- BSC Testnet and Base Sepolia remain expected to fail until both the deploy env above and the Stage A testnet v3 PM addresses exist.
-- AVAX Fuji can pass address/governance metadata checks once its committed testnet entries are present, but it still requires the same deploy env before rerunning the workflow locally.
+Role addresses (ADMIN, REPORTER, FINALIZER, etc.) are derived from the wallet inventory above and passed as workflow inputs — they are public addresses, not secrets.
 
 ---
 
@@ -139,8 +126,12 @@ Funded by `.github/workflows/fund-multisig-signers.yml` using `TESTNET_DEPLOYER_
 | Workflow | Secrets Used | Purpose |
 |----------|-------------|---------|
 | `fund-multisig-signers.yml` | `TESTNET_DEPLOYER_PRIVATE_KEY` | Sends gas to multisig signers |
-| (planned) `deploy-testnet-v3.yml` | `TESTNET_DEPLOYER_PRIVATE_KEY`, projected role env above | CREATE2 deployment + role assignment |
-| (planned) `verify-testnet-deployment.yml` | None (read-only) | Post-deploy verification |
+
+**Planned workflows** (to be created during WS 0.1A execution):
+- `deploy-testnet-v3.yml` — CREATE2 deployment + role assignment (uses `TESTNET_DEPLOYER_PRIVATE_KEY` + RPC secrets)
+- `verify-testnet-deployment.yml` — read-only post-deploy verification (uses RPC secrets only)
+
+These do not exist on this branch yet. They will be created as part of the Stage A testnet deployment workstream.
 
 ---
 
