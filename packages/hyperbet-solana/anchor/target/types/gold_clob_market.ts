@@ -293,6 +293,32 @@ export type GoldClobMarket = {
           "writable": true
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "marketMaker",
+          "writable": true
+        },
+        {
           "name": "vault",
           "writable": true,
           "pda": {
@@ -696,6 +722,103 @@ export type GoldClobMarket = {
       ]
     },
     {
+      "name": "reclaimRestingOrder",
+      "discriminator": [
+        6,
+        69,
+        10,
+        23,
+        16,
+        193,
+        161,
+        163
+      ],
+      "accounts": [
+        {
+          "name": "marketState",
+          "writable": true
+        },
+        {
+          "name": "duelState"
+        },
+        {
+          "name": "order",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  100,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "marketState"
+              },
+              {
+                "kind": "arg",
+                "path": "orderId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "priceLevel",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "marketState"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "orderId",
+          "type": "u64"
+        },
+        {
+          "name": "side",
+          "type": "u8"
+        },
+        {
+          "name": "price",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "setMarketPaused",
       "docs": [
         "Emergency pause/unpause for market creation and order placement.",
@@ -986,6 +1109,19 @@ export type GoldClobMarket = {
       ]
     },
     {
+      "name": "restingOrderReclaimed",
+      "discriminator": [
+        119,
+        79,
+        122,
+        108,
+        115,
+        169,
+        15,
+        78
+      ]
+    },
+    {
       "name": "selfTradePolicyTriggered",
       "discriminator": [
         83,
@@ -1194,6 +1330,16 @@ export type GoldClobMarket = {
       "code": 6038,
       "name": "configFrozen",
       "msg": "Config is permanently frozen"
+    },
+    {
+      "code": 6039,
+      "name": "marketStillOpen",
+      "msg": "Market is still open"
+    },
+    {
+      "code": 6040,
+      "name": "nothingToReclaim",
+      "msg": "Nothing to reclaim"
     }
   ],
   "types": [
@@ -1792,6 +1938,22 @@ export type GoldClobMarket = {
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "restingOrderReclaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "marketKey",
+            "type": "pubkey"
+          },
+          {
+            "name": "orderId",
+            "type": "u64"
           }
         ]
       }

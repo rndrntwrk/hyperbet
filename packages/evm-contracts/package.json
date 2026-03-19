@@ -6,6 +6,7 @@
   "scripts": {
     "build:foundry": "forge build",
     "build:foundry:pm": "forge build contracts/DuelOutcomeOracle.sol contracts/GoldClob.sol test/OracleFinality.t.sol test/GoldClobSettlement.t.sol test/PrecisionDoS.t.sol test/ExploitSuite.t.sol test/fuzz/GoldClobFuzz.t.sol",
+    "build:foundry:e2e": "forge build contracts/MockERC20.sol contracts/DuelOutcomeOracle.sol contracts/GoldClob.sol test/OracleFinality.t.sol test/GoldClobSettlement.t.sol test/PrecisionDoS.t.sol test/ExploitSuite.t.sol test/fuzz/GoldClobFuzz.t.sol",
     "compile": "hardhat compile",
     "test": "bun run test:hardhat",
     "test:hardhat": "hardhat test",
