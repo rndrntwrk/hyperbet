@@ -15,7 +15,7 @@
 
 | Behavior | EVM surface | SVM surface | Notes |
 |---|---|---|---|
-| Initialize oracle authority/config | `DuelOutcomeOracle.constructor(admin, reporter)` | `fight_oracle::initialize_oracle(reporter)` | EVM uses AccessControl bootstrap; SVM uses upgrade-authority-only PDA init, with no bootstrap-authority fallback. |
+| Initialize oracle authority/config | `DuelOutcomeOracle.constructor(admin, reporter, …)` | `fight_oracle::initialize_oracle(reporter, finalizer, challenger, dispute_window_secs)` | EVM uses AccessControl bootstrap; SVM uses upgrade-authority-only PDA init (no bootstrap shortcut); all four params required, `dispute_window_secs >= 60`. |
 | Rotate reporter | `setReporter(reporter, enabled)` | `update_oracle_config(authority, reporter)` | PM20 froze EVM mutator calls (`GovernanceSurfaceFrozen`); SVM updates remain via config authority checks. |
 | Upsert duel lifecycle | `upsertDuel(...)` | `upsert_duel(...)` | Monotonic lifecycle progression enforced on both. |
 | Cancel duel | `cancelDuel(duelKey, metadataUri)` | `cancel_duel(duel_key, metadata_uri)` | Finalization guard on both. |

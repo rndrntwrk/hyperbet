@@ -43,8 +43,14 @@ Branch: `enoomian/pm16-17-20-21` (synced with `origin/enoomian/pm16-17-20-21`).
 
 3. **Solana** [`packages/hyperbet-solana/scripts/init-pm-config.ts`](packages/hyperbet-solana/scripts/init-pm-config.ts) — if oracle or market config already has `configFrozen`, skip `updateOracleConfig` / `updateConfig` so Stage-A / Deploy Testnet v3 reruns do not revert with `ConfigFrozen` after a previous successful freeze.
 
+4. **Second review pass (same script)** — Code review fixes, not only CI:
+   - Validate `DISPUTE_WINDOW_SECONDS >= 60` before sending txs (matches `fight_oracle` on-chain check).
+   - Correct `initialize_config` / `update_config` argument order vs `gold_clob_market` (market operator, treasury, market maker — the previous `initializeConfig` call passed `authority` as the first arg, which was interpreted as **market operator** only by coincidence when all roles were the deployer).
+   - Skip no-op `updateOracleConfig` / `updateConfig` when on-chain state already matches desired roles, fees, and dispute window.
+   - Optional env `SOLANA_PM_*_PUBKEY` overrides for reporter/finalizer/challenger and market operator/treasury/market maker (base58); EVM `*_ADDRESS` vars are **not** valid Solana pubkeys — documented in `--help`.
+
 ## GitHub Actions (PR #27)
 
 From `gh pr checks 27` after the review push: core prediction-market and validation jobs **pass** (EVM/Solana proof & exploit gates, cross-chain E2E, app `Validate hyperbet-*`, Pre-PR Ready, Shared Validation).
 
-**Deploy Testnet v3** had failed with `ConfigFrozen` while updating an already-frozen devnet config; fix (3) addresses idempotency. Push the script change and re-run that workflow to confirm.
+**Deploy Testnet v3** had failed with `ConfigFrozen` while updating an already-frozen devnet config; fix (3) addresses idempotency. Re-run after pushes that touch `init-pm-config.ts`.

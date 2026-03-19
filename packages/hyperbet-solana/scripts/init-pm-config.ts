@@ -37,9 +37,17 @@ function parseCluster(): BettingSolanaCluster {
 }
 
 function usage(): never {
-  console.log(
-    "usage: node --import tsx packages/hyperbet-solana/scripts/init-pm-config.ts [--cluster devnet|testnet|mainnet-beta|localnet] [--freeze] [--out <path>]",
-  );
+  console.log(`usage: node --import tsx packages/hyperbet-solana/scripts/init-pm-config.ts \\
+  [--cluster devnet|testnet|mainnet-beta|localnet] [--freeze] [--out <path>]
+
+env:
+  DISPUTE_WINDOW_SECONDS   default 3600; must be >= 60 (on-chain minimum)
+  ANCHOR_WALLET            path to authority keypair (upgrade authority)
+
+optional role overrides (base58 Solana pubkeys; default = deployer):
+  SOLANA_PM_REPORTER_PUBKEY   SOLANA_PM_FINALIZER_PUBKEY   SOLANA_PM_CHALLENGER_PUBKEY
+  SOLANA_PM_MARKET_OPERATOR_PUBKEY   SOLANA_PM_TREASURY_PUBKEY   SOLANA_PM_MARKET_MAKER_PUBKEY
+`);
   process.exit(0);
 }
 
@@ -100,19 +108,92 @@ function writeSummary(outPath: string | undefined, payload: unknown): void {
   fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + "\n");
 }
 
+/** Optional base58 pubkeys; default to deployer. EVM *ADDRESS* env vars are not valid here. */
+function optionalSolanaPubkey(envName: string, fallback: PublicKey): PublicKey {
+  const raw = process.env[envName]?.trim();
+  if (!raw) return fallback;
+  try {
+    return new PublicKey(raw);
+  } catch {
+    throw new Error(`${envName} must be a valid base58 Solana public key`);
+  }
+}
+
+function resolveOracleRoleKeys(authority: PublicKey): {
+  reporter: PublicKey;
+  finalizer: PublicKey;
+  challenger: PublicKey;
+} {
+  return {
+    reporter: optionalSolanaPubkey("SOLANA_PM_REPORTER_PUBKEY", authority),
+    finalizer: optionalSolanaPubkey("SOLANA_PM_FINALIZER_PUBKEY", authority),
+    challenger: optionalSolanaPubkey("SOLANA_PM_CHALLENGER_PUBKEY", authority),
+  };
+}
+
+function resolveMarketRoleKeys(authority: PublicKey): {
+  marketOperator: PublicKey;
+  treasury: PublicKey;
+  marketMaker: PublicKey;
+} {
+  return {
+    marketOperator: optionalSolanaPubkey("SOLANA_PM_MARKET_OPERATOR_PUBKEY", authority),
+    treasury: optionalSolanaPubkey("SOLANA_PM_TREASURY_PUBKEY", authority),
+    marketMaker: optionalSolanaPubkey("SOLANA_PM_MARKET_MAKER_PUBKEY", authority),
+  };
+}
+
+const DEFAULT_TRADE_TREASURY_FEE_BPS = 100;
+const DEFAULT_TRADE_MM_FEE_BPS = 100;
+const DEFAULT_WINNINGS_MM_FEE_BPS = 200;
+
+function oracleStateMatches(
+  existing: NonNullable<Awaited<ReturnType<Program["account"]["oracleConfig"]["fetchNullable"]>>>,
+  reporter: PublicKey,
+  finalizer: PublicKey,
+  challenger: PublicKey,
+  disputeWindowSecs: number,
+): boolean {
+  return (
+    existing.reporter.equals(reporter) &&
+    existing.finalizer.equals(finalizer) &&
+    existing.challenger.equals(challenger) &&
+    existing.disputeWindowSecs.toNumber() === disputeWindowSecs
+  );
+}
+
+function marketStateMatches(
+  existing: NonNullable<Awaited<ReturnType<Program["account"]["marketConfig"]["fetchNullable"]>>>,
+  authority: PublicKey,
+  marketOperator: PublicKey,
+  treasury: PublicKey,
+  marketMaker: PublicKey,
+): boolean {
+  return (
+    existing.authority.equals(authority) &&
+    existing.marketOperator.equals(marketOperator) &&
+    existing.treasury.equals(treasury) &&
+    existing.marketMaker.equals(marketMaker) &&
+    existing.tradeTreasuryFeeBps === DEFAULT_TRADE_TREASURY_FEE_BPS &&
+    existing.tradeMarketMakerFeeBps === DEFAULT_TRADE_MM_FEE_BPS &&
+    existing.winningsMarketMakerFeeBps === DEFAULT_WINNINGS_MM_FEE_BPS
+  );
+}
+
 async function ensureOracleConfig(
   program: Program,
   authority: Keypair,
   disputeWindowSecs: number,
 ): Promise<PublicKey> {
+  const { reporter, finalizer, challenger } = resolveOracleRoleKeys(authority.publicKey);
   const oracleConfig = deriveOracleConfigPda(program.programId);
   const existing = await program.account.oracleConfig.fetchNullable(oracleConfig);
   if (!existing) {
     await program.methods
       .initializeOracle(
-        authority.publicKey,
-        authority.publicKey,
-        authority.publicKey,
+        reporter,
+        finalizer,
+        challenger,
         new BN(disputeWindowSecs),
       )
       .accountsPartial({
@@ -129,12 +210,16 @@ async function ensureOracleConfig(
 
   if (existing.configFrozen) return oracleConfig;
 
+  if (oracleStateMatches(existing, reporter, finalizer, challenger, disputeWindowSecs)) {
+    return oracleConfig;
+  }
+
   await program.methods
     .updateOracleConfig(
       authority.publicKey,
-      authority.publicKey,
-      authority.publicKey,
-      authority.publicKey,
+      reporter,
+      finalizer,
+      challenger,
       new BN(disputeWindowSecs),
     )
     .accountsPartial({
@@ -147,17 +232,18 @@ async function ensureOracleConfig(
 }
 
 async function ensureMarketConfig(program: Program, authority: Keypair): Promise<PublicKey> {
+  const { marketOperator, treasury, marketMaker } = resolveMarketRoleKeys(authority.publicKey);
   const config = deriveMarketConfigPda(program.programId);
   const existing = await program.account.marketConfig.fetchNullable(config);
   if (!existing) {
     await program.methods
       .initializeConfig(
-        authority.publicKey,
-        authority.publicKey,
-        authority.publicKey,
-        100,
-        100,
-        200,
+        marketOperator,
+        treasury,
+        marketMaker,
+        DEFAULT_TRADE_TREASURY_FEE_BPS,
+        DEFAULT_TRADE_MM_FEE_BPS,
+        DEFAULT_WINNINGS_MM_FEE_BPS,
       )
       .accountsPartial({
         authority: authority.publicKey,
@@ -173,15 +259,19 @@ async function ensureMarketConfig(program: Program, authority: Keypair): Promise
 
   if (existing.configFrozen) return config;
 
+  if (marketStateMatches(existing, authority.publicKey, marketOperator, treasury, marketMaker)) {
+    return config;
+  }
+
   await program.methods
     .updateConfig(
       authority.publicKey,
-      authority.publicKey,
-      authority.publicKey,
-      authority.publicKey,
-      100,
-      100,
-      200,
+      marketOperator,
+      treasury,
+      marketMaker,
+      DEFAULT_TRADE_TREASURY_FEE_BPS,
+      DEFAULT_TRADE_MM_FEE_BPS,
+      DEFAULT_WINNINGS_MM_FEE_BPS,
     )
     .accountsPartial({
       authority: authority.publicKey,
@@ -230,6 +320,11 @@ async function main(): Promise<void> {
   );
   if (!Number.isFinite(disputeWindowSecs) || disputeWindowSecs <= 0) {
     throw new Error(`Invalid DISPUTE_WINDOW_SECONDS '${process.env.DISPUTE_WINDOW_SECONDS ?? ""}'`);
+  }
+  if (disputeWindowSecs < 60) {
+    throw new Error(
+      `DISPUTE_WINDOW_SECONDS must be >= 60 (on-chain fight_oracle minimum); got ${disputeWindowSecs}`,
+    );
   }
 
   const walletPath = resolveWalletPath();
