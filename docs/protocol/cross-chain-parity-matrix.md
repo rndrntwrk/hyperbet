@@ -1,6 +1,6 @@
 # Cross-Chain Parity Matrix (EVM vs SVM)
 
-> **TL;DR:** Full parity on state machine (7 states), matching (50-iteration bound, cancel-taker STP), settlement (snapshotted fees, terminal-only claims), and validation (price 1-999, amount % 1000). 14 divergences catalogued — 12 intentional/documented, 2 were bugs now fixed (Solana trade fee source, missing betting-window guard). Known intentional differences: dispute window mutability, continuation model, cancel authority model, global pause (EVM-only).
+> **TL;DR:** Full parity on state machine (7 states), matching (50-iteration bound, cancel-taker STP), settlement (snapshotted fees, terminal-only claims), and validation (price 1-999, amount % 1000). 14 divergences catalogued — 12 intentional/documented, 2 were bugs now fixed (Solana trade fee source, missing betting-window guard). Known intentional differences: dispute window mutability (EVM constructor-immutable vs SVM admin-updatable until frozen), continuation model, and cancel-authority *shape* (EVM `PAUSER_ROLE` vs SVM oracle `authority` on `cancel_duel`). **Pause/freeze:** both stacks support governance freeze of privileged mutators, explicit post-deploy **freeze** instructions on SVM (`freeze_oracle_config` / `freeze_config`), and pauser-gated **operational pause** (EVM: `setOraclePaused`, `setMarketCreationPaused`, `setOrderPlacementPaused`; SVM: `set_oracle_paused`, `set_market_paused`). Re-initialization cannot rewrite frozen oracle/market config on SVM (P1).
 
 ## Runtime Surfaces
 
@@ -27,6 +27,9 @@
 | Bounded matching / continuation | Matching loop bound enforced via bounded iterations in `GoldClob` | Matching loop bound enforced via bounded iterations in `gold_clob_market` | Both require explicit continuation when matching bounds are reached in GTC flows. |
 | Self-trade policy | Matching path emits deterministic self-trade policy handling | Matching path emits deterministic self-trade policy handling | Both preserve bookkeeping and policy signals for self-cross candidates. |
 | PM20 governance freeze | `setReporter/setFinalizer/setChallenger` and `setOracle/setTreasury/setMarketMaker/setFeeConfig` | `initialize_oracle` + `update_oracle_config` / `initialize_config` + `update_config` | EVM privileged setters now revert (`GovernanceSurfaceFrozen`) after deploy; SVM config authority is upgrade-authority derived, then immutable during updates. |
+| Post-deploy config freeze (SVM ops) | N/A (EVM mutators frozen via PM20 flag at deploy) | `freeze_oracle_config` / `freeze_config` | SVM-only explicit freeze bits block further config updates; aligns operational intent with EVM governance surface lock. |
+| Operational pause (oracle / market ops) | `setOraclePaused` / `setMarketCreationPaused` / `setOrderPlacementPaused` (`PAUSER_ROLE`) | `set_oracle_paused` / `set_market_paused` | Pauser-gated on EVM; oracle/market config `authority` on SVM. Stops new risky transitions without freezing reads. |
+| Re-init after freeze | Deploy-time only | `initialize_oracle` / `initialize_config` must not rewrite fields when `config_frozen` (P1) | Blocks upgrade authority from resetting reporter/fees after freeze. |
 | Cancel order | `cancelOrder(duelKey, marketKind, orderId)` | `cancel_order(order_id, side, price)` | Maker-only cancellation of active remainder; cancellation is now restricted to `OPEN` markets on both chains. |
 | Claim settlement | `claim(duelKey, marketKind)` | `claim()` | Resolved = winner payout less fee; Cancelled = refund locked stake; nonterminal claims must revert. |
 | Update fee config | `setFeeConfig(...)` | `update_config(...trade/winnings fee bps...)` | Both enforce BPS bounds. |
@@ -43,15 +46,21 @@
 | EVM | `DuelOutcomeOracle.setReporter` / `setFinalizer` / `setChallenger` | `DEFAULT_ADMIN_ROLE` (PM20 frozen; setter calls revert with `GovernanceSurfaceFrozen`) |
 | EVM | `DuelOutcomeOracle.upsertDuel` | `REPORTER_ROLE` |
 | EVM | `DuelOutcomeOracle.cancelDuel` | `PAUSER_ROLE` |
+| EVM | `DuelOutcomeOracle.setOraclePaused` | `PAUSER_ROLE` |
 | EVM | `DuelOutcomeOracle.proposeResult` | `REPORTER_ROLE` |
 | EVM | `GoldClob.setOracle` / `GoldClob.setTreasury` / `GoldClob.setMarketMaker` / `GoldClob.setFeeConfig` | `DEFAULT_ADMIN_ROLE` (PM20 frozen; setter calls revert with `GovernanceSurfaceFrozen`) |
+| EVM | `GoldClob.setMarketCreationPaused` / `GoldClob.setOrderPlacementPaused` | `PAUSER_ROLE` |
 | EVM | `GoldClob.createMarketForDuel` | `MARKET_OPERATOR_ROLE` |
 | SVM | `fight_oracle::initialize_oracle` | upgrade authority only |
+| SVM | `fight_oracle::freeze_oracle_config` | oracle config `authority` signer |
+| SVM | `fight_oracle::set_oracle_paused` | oracle config `authority` signer |
 | SVM | `fight_oracle::update_oracle_config` | oracle config `authority` signer; authority itself is immutable for PM20 |
 | SVM | `fight_oracle::upsert_duel` | oracle config `reporter` signer |
 | SVM | `fight_oracle::cancel_duel` | oracle config `authority` signer |
 | SVM | `fight_oracle::propose_result` | oracle config `reporter` signer |
 | SVM | `gold_clob_market::initialize_config` | upgrade authority only |
+| SVM | `gold_clob_market::freeze_config` | market config `authority` signer |
+| SVM | `gold_clob_market::set_market_paused` | market config `authority` signer |
 | SVM | `gold_clob_market::update_config` | market config `authority` signer; authority itself is immutable for PM20 |
 | SVM | `gold_clob_market::initialize_market` | config `authority` or `market_operator` signer |
 

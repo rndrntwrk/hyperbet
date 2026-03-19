@@ -626,6 +626,8 @@ describe("GoldClob", function () {
         value: quoteCost(BUY_SIDE, 500, makerAmount) + 20n,
       });
 
+    await advanceToTimestamp(openedAt + 60n);
+
     await oracle
       .connect(reporter)
       .upsertDuel(
