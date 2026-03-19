@@ -51,7 +51,7 @@ Everything in Stage A is executed by engineering on testnets with test funds. No
 - [ ] Execute `freeze_config` on Solana devnet
 - [ ] Record all testnet tx hashes in evidence bundle
 
-**Acceptance:** Both EVM testnets (BSC + AVAX) + Solana devnet deployed with identical governance topology as production target. Base is excluded from Stage A scope — it will be added later via the same CREATE2 runbook as a simple chain extension.
+**Acceptance:** Both EVM testnets (BSC + AVAX) + Solana devnet deployed with identical governance topology as production target. Base is out of scope for this Stage A lane.
 
 #### WS 0.2A — Testnet Registry Population
 
@@ -120,7 +120,7 @@ Build a script that validates a deployment is correct. Run it on testnet. Run it
   - [ ] Solana Exploit Gate (all 6 scenarios)
   - [ ] EVM Exploit Gate
   - [ ] Cross-Chain E2E (Solana, BSC, AVAX)
-  - [ ] Base Add-Chain Smoke
+  - [ ] Launch-chain runtime smoke remains green for BSC and AVAX
   - [ ] EVM Contract Proof Gate (anvil adversarial simulation)
 - [ ] Run market-maker adversarial simulations:
   - [ ] Seed corpus (all chains)
@@ -367,7 +367,7 @@ Stage B is a ceremony, not an engineering session. Every action here is a mechan
 
 ### WS 2.4 — Tri-Chain Deployment Integration
 
-- [ ] Extend CREATE2 and registry discipline to AMM EVM deployments on BSC/Base/AVAX
+- [ ] Extend CREATE2 and registry discipline to AMM EVM deployments on BSC/AVAX
 - [ ] Add Solana deployment manifests and authority records for AMM program
 - [ ] Add chain-registry entries for AMM
 - [ ] Add explorer verification and staged-proof checks for AMM
