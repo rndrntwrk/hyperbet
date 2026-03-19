@@ -127,6 +127,8 @@ async function ensureOracleConfig(
     return oracleConfig;
   }
 
+  if (existing.configFrozen) return oracleConfig;
+
   await program.methods
     .updateOracleConfig(
       authority.publicKey,
@@ -168,6 +170,8 @@ async function ensureMarketConfig(program: Program, authority: Keypair): Promise
       .rpc();
     return config;
   }
+
+  if (existing.configFrozen) return config;
 
   await program.methods
     .updateConfig(

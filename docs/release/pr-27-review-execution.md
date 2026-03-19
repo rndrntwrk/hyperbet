@@ -40,3 +40,11 @@ Branch: `enoomian/pm16-17-20-21` (synced with `origin/enoomian/pm16-17-20-21`).
 1. **Hardhat** `GoldClobCanonical.ts` — “rejects order cancellation after betting locks”: advance EVM time to `openedAt + 60` before `upsertDuel` to `LOCKED`, matching `BettingWindowActive` guard on oracle.
 
 2. **Docs** `docs/protocol/cross-chain-parity-matrix.md` — TL;DR and new behavior/privileged rows for freeze, pause, and re-init parity (P1).
+
+3. **Solana** [`packages/hyperbet-solana/scripts/init-pm-config.ts`](packages/hyperbet-solana/scripts/init-pm-config.ts) — if oracle or market config already has `configFrozen`, skip `updateOracleConfig` / `updateConfig` so Stage-A / Deploy Testnet v3 reruns do not revert with `ConfigFrozen` after a previous successful freeze.
+
+## GitHub Actions (PR #27)
+
+From `gh pr checks 27` after the review push: core prediction-market and validation jobs **pass** (EVM/Solana proof & exploit gates, cross-chain E2E, app `Validate hyperbet-*`, Pre-PR Ready, Shared Validation).
+
+**Deploy Testnet v3** had failed with `ConfigFrozen` while updating an already-frozen devnet config; fix (3) addresses idempotency. Push the script change and re-run that workflow to confirm.
