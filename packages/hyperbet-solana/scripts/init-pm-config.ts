@@ -10,6 +10,9 @@ import { Keypair, PublicKey, SystemProgram, clusterApiUrl } from "@solana/web3.j
 import { resolveBettingSolanaDeployment, type BettingSolanaCluster } from "../deployments";
 
 const { Program } = anchor;
+const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111",
+);
 
 function parseArg(name: string): string | undefined {
   const index = process.argv.findIndex((arg) => arg === name);
@@ -69,7 +72,7 @@ function readKeypair(filepath: string): Keypair {
 function deriveProgramDataAddress(programId: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [programId.toBuffer()],
-    anchor.web3.BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+    BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
   )[0];
 }
 
