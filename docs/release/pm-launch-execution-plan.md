@@ -37,7 +37,7 @@ Everything in Stage A is executed by engineering on testnets with test funds. No
 
 #### WS 0.1A — Testnet Deployment
 
-- [ ] Materialize the Stage A deploy env from [`testnet-operations-ledger.md`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/docs/release/testnet-operations-ledger.md) through [`scripts/export-stage-a-env.sh`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/scripts/export-stage-a-env.sh) before running testnet deployment workflows
+- [ ] Materialize the Stage A deploy env from [`testnet-operations-ledger.md`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/docs/release/testnet-operations-ledger.md) through [`scripts/export-stage-a-env.sh`](/Users/mac/Desktop/hyperbet/.claude/worktrees/blissful-golick/scripts/export-stage-a-env.sh) before running testnet deployment workflows; while the workflow remains branch-only, Stage A is kicked by push on `enoomian/pm16-17-20-21`
 - [ ] Deploy `TimelockController` on BSC Testnet
 - [ ] Deploy `TimelockController` on AVAX Fuji
 - [ ] Deploy Safe multisig (3-of-3) on BSC Testnet

@@ -148,7 +148,7 @@ Funded by `.github/workflows/fund-multisig-signers.yml` using `TESTNET_DEPLOYER_
 | Workflow | Secrets Used | Purpose |
 |----------|-------------|---------|
 | `fund-multisig-signers.yml` | `TESTNET_DEPLOYER_PRIVATE_KEY` | Sends gas to multisig signers |
-| `deploy-testnet-v3.yml` | repo-level Stage A secrets listed above | Deploys BSC Testnet + AVAX Fuji PM contracts and Solana devnet PM programs/config |
+| `deploy-testnet-v3.yml` | repo-level Stage A secrets listed above | While branch-only, a push to `enoomian/pm16-17-20-21` triggers PM-scope deploy + verify for BSC Testnet, AVAX Fuji, and Solana devnet |
 | `verify-testnet-deployment.yml` | repo-level Stage A secrets listed above | Verifies deployed testnet PM surfaces and writes structured artifacts |
 
 ---
@@ -160,6 +160,7 @@ Funded by `.github/workflows/fund-multisig-signers.yml` using `TESTNET_DEPLOYER_
 3. **Local copies were deleted** immediately after GitHub Secret storage was confirmed. The only exception in Stage A is the temporary runner-local `ANCHOR_WALLET` file materialized from `TESTNET_SOLANA_DEPLOYER_KEYPAIR` during workflow execution.
 4. **Mainnet keys will be generated separately** during the Stage B ceremony, following the same role separation but with hardware wallet / multisig custody.
 5. **The funding workflow** (`fund-multisig-signers.yml`) is triggered by push to `enoomian/pm16-17-20-21` when its own file changes. It should be removed or disabled before merge to `develop`.
+6. **The Stage A PM deploy workflow** (`deploy-testnet-v3.yml`) is also push-triggered on `enoomian/pm16-17-20-21` while it remains off the default branch, because branch-only `workflow_dispatch` cannot be invoked from GitHub CLI/API.
 
 ---
 
