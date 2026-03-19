@@ -51,6 +51,10 @@ Branch: `enoomian/pm16-17-20-21` (synced with `origin/enoomian/pm16-17-20-21`).
 
 ## GitHub Actions (PR #27)
 
-From `gh pr checks 27` after the review push: core prediction-market and validation jobs **pass** (EVM/Solana proof & exploit gates, cross-chain E2E, app `Validate hyperbet-*`, Pre-PR Ready, Shared Validation).
+**Merge-ready snapshot (2026-03-19):** `gh pr checks 27` completed with **all checks passing**, including Deploy Testnet v3, Pre-PR Ready Check (`node scripts/check-pr-ready.mjs`), Cross-Chain E2E (solana/bsc/avax), Solana Program Build Gate, EVM/Solana exploit gates, and chain validation jobs.
 
-**Deploy Testnet v3** had failed with `ConfigFrozen` while updating an already-frozen devnet config; fix (3) addresses idempotency. Re-run after pushes that touch `init-pm-config.ts`.
+Earlier in the review cycle, **Deploy Testnet v3** failed with `ConfigFrozen` while updating an already-frozen devnet config; fixes (3)–(4) in `init-pm-config.ts` address idempotency, dispute-window validation, and correct role wiring.
+
+## Local CI parity (Pre-PR)
+
+Running `node scripts/check-pr-ready.mjs` from repo root matches the **Pre-PR Ready Check** workflow (frozen installs, three app typechecks + lint, keeper unit tests, market-maker vitest + adversarial gates). Confirmed passing locally on 2026-03-19.
