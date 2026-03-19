@@ -84,6 +84,12 @@ function loadIdl(filepath: string): Idl {
   return JSON.parse(fs.readFileSync(filepath, "utf8")) as Idl;
 }
 
+function loadIdlWithAddress(filepath: string, address: PublicKey): Idl {
+  const idl = loadIdl(filepath) as Idl & { address?: string };
+  idl.address = address.toBase58();
+  return idl;
+}
+
 function writeSummary(outPath: string | undefined, payload: unknown): void {
   if (!outPath) return;
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -234,13 +240,17 @@ async function main(): Promise<void> {
   const clobProgramId = new PublicKey(deployment.goldClobMarketProgramId);
 
   const oracleProgram = new Program(
-    loadIdl(path.join(anchorRoot, "target", "idl", "fight_oracle.json")),
-    oracleProgramId,
+    loadIdlWithAddress(
+      path.join(anchorRoot, "target", "idl", "fight_oracle.json"),
+      oracleProgramId,
+    ),
     provider,
   );
   const clobProgram = new Program(
-    loadIdl(path.join(anchorRoot, "target", "idl", "gold_clob_market.json")),
-    clobProgramId,
+    loadIdlWithAddress(
+      path.join(anchorRoot, "target", "idl", "gold_clob_market.json"),
+      clobProgramId,
+    ),
     provider,
   );
 
