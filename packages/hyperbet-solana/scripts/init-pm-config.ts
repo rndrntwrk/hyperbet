@@ -4,11 +4,12 @@ import { fileURLToPath } from "node:url";
 
 import * as anchor from "@coral-xyz/anchor";
 import type { Idl } from "@coral-xyz/anchor";
+import BN from "bn.js";
 import { Keypair, PublicKey, SystemProgram, clusterApiUrl } from "@solana/web3.js";
 
 import { resolveBettingSolanaDeployment, type BettingSolanaCluster } from "../deployments";
 
-const { BN, Program } = anchor;
+const { Program } = anchor;
 
 function parseArg(name: string): string | undefined {
   const index = process.argv.findIndex((arg) => arg === name);
