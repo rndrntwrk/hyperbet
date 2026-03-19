@@ -53,10 +53,6 @@ jobs:
         env:
           TESTNET_DEPLOYER_PRIVATE_KEY: ${{ secrets.TESTNET_DEPLOYER_PRIVATE_KEY }}
           ADMIN_ADDRESS: ${{ secrets.ADMIN_ADDRESS }}
-          MARKET_OPERATOR_ADDRESS: ${{ secrets.MARKET_OPERATOR_ADDRESS }}
-          REPORTER_ADDRESS: ${{ secrets.REPORTER_ADDRESS }}
-          TREASURY_ADDRESS: ${{ secrets.TREASURY_ADDRESS }}
-          MARKET_MAKER_ADDRESS: ${{ secrets.MARKET_MAKER_ADDRESS }}
           BSC_TESTNET_RPC: ${{ secrets.BSC_TESTNET_RPC }}
           AVAX_FUJI_RPC: ${{ secrets.AVAX_FUJI_RPC }}
           TESTNET_MARKET_OPERATOR_PRIVATE_KEY: ${{ secrets.TESTNET_MARKET_OPERATOR_PRIVATE_KEY }}
