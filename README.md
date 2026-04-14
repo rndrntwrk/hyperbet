@@ -2,6 +2,18 @@
 
 Private monorepo for Hyperbet betting, gambling, and futures products.
 
+## Deployment structure
+
+Verified on 2026-04-14.
+
+- Keeper services deploy through Railway configs in `packages/hyperbet-solana/`, `packages/hyperbet-bsc/`, `packages/hyperbet-avax/`, and `packages/hyperbet-evm/`.
+- Those Railway configs use `keeper/Dockerfile`, start with `bun --bun src/service.ts`, and health check `/status`.
+- Package app Cloudflare configs exist at `packages/*/app/wrangler.toml`.
+- Root package scripts expose deploy entry points: `deploy:pages`, `deploy:pages:solana`, `deploy:pages:bsc`, `deploy:pages:avax`, `deploy:keeper`, `deploy:keeper:solana`, `deploy:keeper:bsc`, and `deploy:keeper:avax`.
+- The detailed production runbook remains `docs/hyperbet-production-deploy.md`.
+
+The local-only 555stream runbook at `555/internal-ops-docs/deploy/DEPLOY_GIT_AUTH_RUNBOOK.md` does not operate Hyperbet. It is cross-project operational context only.
+
 ## Packages
 
 - `packages/hyperbet-chain-registry`: shared chain/deployment registry for Solana and EVM prediction markets.
