@@ -66,7 +66,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(aStakeAfter, 0, "winner A stake should clear");
         assertEq(bStakeAfter, 0, "winner B stake should clear");
 
-        vm.expectRevert(bytes("nothing to claim"));
+        vm.expectRevert(GoldClob.NothingToClaim.selector);
         vm.prank(traderB);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }
@@ -121,7 +121,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(aStakeAfter, 0, "loser A stake should clear");
         assertEq(bStakeAfter, 0, "loser B stake should clear");
 
-        vm.expectRevert(bytes("nothing to claim"));
+        vm.expectRevert(GoldClob.NothingToClaim.selector);
         vm.prank(traderA);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }
@@ -137,7 +137,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(bSharesBefore, amount, "seller should hold B shares before cancel");
 
         uint256 traderBefore = traderA.balance;
-        vm.prank(reporter);
+        vm.prank(admin);
         oracle.cancelDuel(duel, "cancelled");
 
         vm.prank(traderA);
@@ -152,7 +152,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(aStakeAfter, 0, "cancelled A stake should clear");
         assertEq(bStakeAfter, 0, "cancelled B stake should clear");
 
-        vm.expectRevert(bytes("nothing to claim"));
+        vm.expectRevert(GoldClob.NothingToClaim.selector);
         vm.prank(traderA);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }

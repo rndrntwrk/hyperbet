@@ -20,7 +20,7 @@
       ],
       "accounts": [
         {
-          "name": "reporter",
+          "name": "authority",
           "writable": true,
           "signer": true
         },
@@ -745,7 +745,7 @@
     {
       "code": 6006,
       "name": "InvalidDisputeWindow",
-      "msg": "Dispute window must be non-negative"
+      "msg": "Dispute window must be positive"
     },
     {
       "code": 6007,

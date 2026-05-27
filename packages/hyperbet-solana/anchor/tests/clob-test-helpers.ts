@@ -202,7 +202,7 @@ export async function ensureOracleReady(
   reporter = authority.publicKey,
   finalizer = authority.publicKey,
   challenger = authority.publicKey,
-  disputeWindowSecs = 0,
+  disputeWindowSecs = 3600,
 ): Promise<PublicKey> {
   const oracleConfig = deriveOracleConfigPda(program.programId);
   const existingConfig =
@@ -369,7 +369,7 @@ export async function upsertDuel(
 
 export async function cancelDuel(
   program: Program<FightOracle>,
-  reporter: Keypair,
+  authority: Keypair,
   duelKey: readonly number[],
   metadataUri = "https://hyperscape.gg/duels/cancelled",
 ): Promise<PublicKey> {
@@ -379,11 +379,11 @@ export async function cancelDuel(
   await program.methods
     .cancelDuel([...duelKey], metadataUri)
     .accountsPartial({
-      reporter: reporter.publicKey,
+      authority: authority.publicKey,
       oracleConfig,
       duelState,
     })
-    .signers([reporter])
+    .signers([authority])
     .rpc();
 
   return duelState;

@@ -61,6 +61,9 @@ GitHub manual workflow:
   other chain until the failure is understood.
 - If AVAX staging env audit fails, stop there and fix the staging contract
   before attempting canary writes.
+- The staged proof workflow now prechecks AVAX canonical mainnet registry truth; when
+  AVAX mainnet addresses are still placeholder, `workflow_dispatch` target `avax`
+  or `all` will fail fast until canonical values are committed.
 
 ## Exact Recovery Steps
 

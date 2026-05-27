@@ -274,7 +274,7 @@ async function main(): Promise<void> {
     const cancelTx = await fightOracle.methods
       .cancelDuel(Array.from(duelKey), "staged-live-proof-cancelled")
       .accountsPartial({
-        reporter: authority.publicKey,
+        authority: authority.publicKey,
         oracleConfig,
         duelState,
       })

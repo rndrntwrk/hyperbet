@@ -9,8 +9,10 @@ As of March 13, 2026, this is a phase-3 release-prep artifact:
 - AVAX deploy/runtime/proof plumbing is merged into the shared launch rails
 - EVM governance and emergency pause controls are implemented and documented
 - reviewer inventory, release memo, and audit checklist are assembled
-- live staged-proof execution and canonical AVAX mainnet values are still
-  outstanding before launch signoff
+- AVAX Fuji deploy/runtime truth is canonicalized in chain registry, and AVAX
+  production semantics are already wired into fail-closed env/registry runtime
+  gates; AVAX mainnet canonical addresses plus staged proof and signer-proof
+  evidence are still outstanding before launch signoff
 
 This document does not declare the sprint release-ready for unrestricted real
 funds. It is the reviewer handoff for the sprint base after the deploy/proof
@@ -40,8 +42,8 @@ Current dependency state:
 - Gate 13: complete as contract/security CI promotion
 - Gate 14A: proof rail implemented for Solana, BSC, and AVAX; staged
   read-only/canary execution still outstanding
-- Gate 19: AVAX production rollout blocked pending canonical registry values
-  and effective AVAX wallet setup
+- Gate 19: AVAX production rollout blocked pending canonical AVAX mainnet values,
+  effective AVAX wallet setup, and reviewed staged proof evidence
 - Gate 20: governance surfaces merged; live ownership-transfer evidence still
   outstanding
 - Gate 23 / 24: reviewer docs and audit-package scaffold merged; final handoff
@@ -111,13 +113,16 @@ Representative local verification entrypoints already documented elsewhere:
 
 ## Residual Risk And Blocked Follow-Ups
 
-- AVAX is still not canonicalized for production; the deploy/proof rails are in
-  place, but the real mainnet addresses still need to be committed from
-  deployment evidence.
+- AVAX is still not fully canonicalized for production; the deploy/proof rails are
+  in place, Fuji is canonicalized in-chain, and mainnet still lacks canonical
+  addresses.
 - AVAX mainnet also depends on effective wallet setup for timelock, multisig,
   emergency, reporter, finalizer, challenger, market-operator, treasury, and
   market-maker roles; without that signer set the lane is intentionally not
   deployable.
+- AVAX deploy/proof control plane has been aligned for Fuji and staged proof
+  behavior, but production sign-off still requires reviewed staged read-only + canary
+  evidence on the target environment.
 - Contract/security CI is now wired into the repo workflows, but local desktop
   verification can still be constrained by toolchain issues such as Hardhat
   compiler download and macOS-specific Foundry crashes.
@@ -125,5 +130,8 @@ Representative local verification entrypoints already documented elsewhere:
   before claiming full audit-style deployment confidence.
 - Production ownership-transfer evidence for timelock, multisig, emergency, and
   role separation is still outstanding.
-- Any release-facing summary that omits the AVAX rollout block, remaining live
-  proof work, or pending governance receipts would be misleading.
+- Any release-facing summary that omits the AVAX Fuji/production distinction,
+  pending AVAX mainnet canonicality, remaining live proof work, or pending
+  governance receipts would be misleading.
+- AVAX Fuji bootstrap smoke should remain documented as an environment sanity
+  check, not production-canonical completion.

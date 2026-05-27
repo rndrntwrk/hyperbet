@@ -1144,6 +1144,9 @@ export function SolanaClobPanel({
 
       await ensureVaultRentExempt(activeMarket.vault);
 
+      const configPda = findClobConfigPda(clobProgram.programId);
+      const config = await clobProgram.account.marketConfig.fetch(configPda);
+
       const tx = await clobProgram.methods
         .placeOrder(
           new BN(orderId.toString()),
@@ -1158,17 +1161,9 @@ export function SolanaClobPanel({
           userBalance,
           newOrder,
           restingLevel,
-          config: findClobConfigPda(clobProgram.programId),
-          treasury: (
-            await clobProgram.account.marketConfig.fetch(
-              findClobConfigPda(clobProgram.programId),
-            )
-          ).treasury as PublicKey,
-          marketMaker: (
-            await clobProgram.account.marketConfig.fetch(
-              findClobConfigPda(clobProgram.programId),
-            )
-          ).marketMaker as PublicKey,
+          config: configPda,
+          treasury: config.treasury as PublicKey,
+          marketMaker: config.marketMaker as PublicKey,
           vault: activeMarket.vault,
           user: wallet.publicKey,
           systemProgram: SystemProgram.programId,

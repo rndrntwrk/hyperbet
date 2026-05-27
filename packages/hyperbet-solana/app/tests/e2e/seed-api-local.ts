@@ -65,6 +65,7 @@ async function main(): Promise<void> {
   const uplineWallet = "SeedReferrer11111111111111111111111111111111";
   const leaderboardWallet = "SeedLeader1111111111111111111111111111111";
   const inviteeWallet = "SeedInvitee111111111111111111111111111111";
+  const now = Date.now();
 
   const uplineInvite = await requestJson<{ inviteCode: string }>(
     `${gameApiUrl}/api/arena/invite/${encodeURIComponent(uplineWallet)}?platform=solana`,
@@ -140,12 +141,16 @@ async function main(): Promise<void> {
           cycleId: "e2e-cycle-active",
           duelId: currentDuelId,
           duelKeyHex: currentDuelKeyHex,
-          phase: "FIGHTING",
-          cycleStartTime: Date.now() - 90_000,
-          phaseStartTime: Date.now() - 30_000,
-          phaseEndTime: Date.now() + 30_000,
-          countdown: 30,
-          timeRemaining: 30_000,
+          phase: "ANNOUNCEMENT",
+          cycleStartTime: now - 90_000,
+          phaseStartTime: now - 15_000,
+          phaseEndTime: now + 300_000,
+          betOpenTime: now - 15_000,
+          betCloseTime: now + 300_000,
+          fightStartTime: now + 360_000,
+          duelEndTime: null,
+          countdown: 300,
+          timeRemaining: 300_000,
           winnerId: null,
           winnerName: null,
           winReason: null,
@@ -169,13 +174,13 @@ async function main(): Promise<void> {
                 id: "mono-alpha-1",
                 type: "thought",
                 content: "Pressure the midpoint and deny the comeback window.",
-                timestamp: Date.now() - 12_000,
+                timestamp: now - 12_000,
               },
               {
                 id: "mono-alpha-2",
                 type: "action",
                 content: "Heavy swing lands cleanly on the left flank.",
-                timestamp: Date.now() - 7_000,
+                timestamp: now - 7_000,
               },
             ],
           },
@@ -200,13 +205,13 @@ async function main(): Promise<void> {
                 type: "thought",
                 content:
                   "Need one clean punish to get back into price discovery.",
-                timestamp: Date.now() - 10_000,
+                timestamp: now - 10_000,
               },
               {
                 id: "mono-beta-2",
                 type: "action",
                 content: "Retreating toward the pillar to reset the exchange.",
-                timestamp: Date.now() - 4_000,
+                timestamp: now - 4_000,
               },
             ],
           },

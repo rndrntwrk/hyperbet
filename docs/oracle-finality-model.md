@@ -8,6 +8,11 @@ Hyperbet production finality follows a single **propose → challenge → finali
 2. **Challenge Window**: a designated challenger can mark the proposal disputed while the dispute window is active.
 3. **Finalize**: only finalization authority can finalize an unchallenged proposal after dispute window expiry.
 
+Emergency cancellation remains explicitly scoped:
+- `cancelDuel` is an emergency control path, not part of routine launch flow.
+- On EVM, cancellation is pauser-only through `PAUSER_ROLE`.
+- On SVM, cancellation is restricted to the oracle-config authority account, and is separate from reporter lifecycle publishing.
+
 ## Authority Constraints
 - **Reporter authority**: may upsert duel lifecycle and propose outcomes.
 - **Challenger authority**: may challenge only `PROPOSED` outcomes.

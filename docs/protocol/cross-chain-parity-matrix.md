@@ -13,11 +13,11 @@
 
 | Behavior | EVM surface | SVM surface | Notes |
 |---|---|---|---|
-| Initialize oracle authority/config | `DuelOutcomeOracle.constructor(admin, reporter)` | `fight_oracle::initialize_oracle(reporter)` | EVM uses AccessControl bootstrap; SVM uses PDA config with upgrade authority gate. |
+| Initialize oracle authority/config | `DuelOutcomeOracle.constructor(admin, reporter)` | `fight_oracle::initialize_oracle(reporter)` | EVM uses AccessControl bootstrap; SVM uses upgrade-authority-only PDA init, with no bootstrap-authority fallback. |
 | Rotate reporter | `setReporter(reporter, enabled)` | `update_oracle_config(authority, reporter)` | Both privileged. |
 | Upsert duel lifecycle | `upsertDuel(...)` | `upsert_duel(...)` | Monotonic lifecycle progression enforced on both. |
 | Cancel duel | `cancelDuel(duelKey, metadataUri)` | `cancel_duel(duel_key, metadata_uri)` | Finalization guard on both. |
-| Report duel result | `reportResult(...)` | `report_result(...)` | Requires winner `A/B`; end timestamp validity checks. |
+| Report duel result | `proposeResult(...)` | `propose_result(...)` | Requires winner `A/B`; end timestamp validity checks. |
 | Create market | `createMarketForDuel(duelKey, marketKind)` | `initialize_market(duel_key, market_kind)` | Allowed when duel is marketable (`BETTING_OPEN/LOCKED`). |
 | Sync market lifecycle from oracle | `syncMarketFromOracle(duelKey, marketKind)` | `sync_market_from_duel()` | Winner propagation on resolve; winner reset on cancel. |
 | Place order | `placeOrder(duelKey, marketKind, side, price, amount)` | `place_order(order_id, side, price, amount)` | Both validate side, price, status OPEN, and betting window. |
@@ -36,19 +36,19 @@
 |---|---|---|
 | EVM | `DuelOutcomeOracle.setReporter` | `DEFAULT_ADMIN_ROLE` |
 | EVM | `DuelOutcomeOracle.upsertDuel` | `REPORTER_ROLE` |
-| EVM | `DuelOutcomeOracle.cancelDuel` | `REPORTER_ROLE` |
-| EVM | `DuelOutcomeOracle.reportResult` | `REPORTER_ROLE` |
+| EVM | `DuelOutcomeOracle.cancelDuel` | `PAUSER_ROLE` |
+| EVM | `DuelOutcomeOracle.proposeResult` | `REPORTER_ROLE` |
 | EVM | `GoldClob.createMarketForDuel` | `MARKET_OPERATOR_ROLE` |
 | EVM | `GoldClob.setOracle` | `DEFAULT_ADMIN_ROLE` |
 | EVM | `GoldClob.setTreasury` | `DEFAULT_ADMIN_ROLE` |
 | EVM | `GoldClob.setMarketMaker` | `DEFAULT_ADMIN_ROLE` |
 | EVM | `GoldClob.setFeeConfig` | `DEFAULT_ADMIN_ROLE` |
-| SVM | `fight_oracle::initialize_oracle` | upgrade-authority + bootstrap authority check |
+| SVM | `fight_oracle::initialize_oracle` | upgrade authority only |
 | SVM | `fight_oracle::update_oracle_config` | oracle config `authority` signer |
 | SVM | `fight_oracle::upsert_duel` | oracle config `reporter` signer |
-| SVM | `fight_oracle::cancel_duel` | oracle config `reporter` signer |
-| SVM | `fight_oracle::report_result` | oracle config `reporter` signer |
-| SVM | `gold_clob_market::initialize_config` | upgrade-authority + bootstrap authority check |
+| SVM | `fight_oracle::cancel_duel` | oracle config `authority` signer |
+| SVM | `fight_oracle::propose_result` | oracle config `reporter` signer |
+| SVM | `gold_clob_market::initialize_config` | upgrade authority only |
 | SVM | `gold_clob_market::update_config` | market config `authority` signer |
 | SVM | `gold_clob_market::initialize_market` | config `authority` or `market_operator` signer |
 

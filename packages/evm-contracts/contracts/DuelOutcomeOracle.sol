@@ -233,7 +233,7 @@ contract DuelOutcomeOracle is AccessControl {
         emit DuelUpserted(duelKey, status, betOpenTs, betCloseTs, duelStartTs, metadataUri);
     }
 
-    function cancelDuel(bytes32 duelKey, string calldata metadataUri) external onlyRole(REPORTER_ROLE) {
+    function cancelDuel(bytes32 duelKey, string calldata metadataUri) external onlyRole(PAUSER_ROLE) {
         if (oracleActionsPaused) revert OraclePaused();
         DuelState storage duel = duels[duelKey];
         if (duel.status == DuelStatus.NULL) revert DuelMissing();

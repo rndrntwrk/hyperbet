@@ -334,6 +334,9 @@ const GOLD_CLOB_READ_ABI = [
           { name: "duelKey", type: "bytes32" },
           { name: "status", type: "uint8" },
           { name: "winner", type: "uint8" },
+          { name: "tradeTreasuryFeeBpsSnapshot", type: "uint16" },
+          { name: "tradeMarketMakerFeeBpsSnapshot", type: "uint16" },
+          { name: "winningsMarketMakerFeeBpsSnapshot", type: "uint16" },
           { name: "nextOrderId", type: "uint64" },
           { name: "bestBid", type: "uint16" },
           { name: "bestAsk", type: "uint16" },
@@ -527,6 +530,10 @@ const baseRpcUrl = (
   ""
 ).trim();
 const avaxRpcUrl = (process.env.AVAX_RPC_URL || "").trim();
+const avaxContractAddress = (
+  process.env.AVAX_GOLD_CLOB_ADDRESS ||
+  ""
+).trim();
 const baseContractAddress = (
   process.env.BASE_GOLD_CLOB_ADDRESS ||
   process.env.CLOB_CONTRACT_ADDRESS_BASE ||
@@ -545,6 +552,10 @@ const bscClient =
 const baseClient =
   baseRpcUrl && baseContractAddress
     ? createPublicClient({ transport: http(baseRpcUrl) })
+    : null;
+const avaxClient =
+  avaxRpcUrl && avaxContractAddress
+    ? createPublicClient({ transport: http(avaxRpcUrl) })
     : null;
 const EVM_RPC_PROXY_TARGETS = {
   bsc: bscRpcUrl,
@@ -1687,6 +1698,16 @@ async function authorizeExternalBetRecord(
       baseClient,
       baseContractAddress,
       "base",
+      bettorWallet,
+      txSignature,
+      expected,
+    );
+  }
+  if (chainKey === "avax") {
+    return verifyEvmRecordedBet(
+      avaxClient,
+      avaxContractAddress,
+      "avax",
       bettorWallet,
       txSignature,
       expected,

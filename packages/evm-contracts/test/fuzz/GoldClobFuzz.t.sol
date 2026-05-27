@@ -186,7 +186,7 @@ contract GoldClobFuzzTest is Test {
 
         uint256 traderBefore = traderA.balance;
 
-        vm.prank(reporter);
+        vm.prank(admin);
         oracle.cancelDuel(duel, "cancelled");
 
         vm.prank(traderA);

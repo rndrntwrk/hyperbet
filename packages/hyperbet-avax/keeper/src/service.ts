@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -69,10 +68,27 @@ import {
   normalizePointsWalletInput,
 } from "./walletKeys";
 
+type JsonRecord = Record<string, unknown>;
+
+type GoldClobMarketReadRecord = {
+  exists: boolean;
+  duelKey: `0x${string}`;
+  status: number;
+  winner: number;
+  tradeTreasuryFeeBpsSnapshot: number;
+  tradeMarketMakerFeeBpsSnapshot: number;
+  winningsMarketMakerFeeBpsSnapshot: number;
+  nextOrderId: bigint;
+  bestBid: number;
+  bestAsk: number;
+  totalAShares: bigint;
+  totalBShares: bigint;
+};
+
 type StreamState = {
   type: "STREAMING_STATE_UPDATE";
-  cycle: Record<string, any>;
-  leaderboard: any[];
+  cycle: JsonRecord;
+  leaderboard: JsonRecord[];
   cameraTarget: string | null;
   seq: number;
   emittedAt: number;
@@ -128,8 +144,10 @@ type ParserState = {
   enabled: boolean;
   lastSuccessAt: number | null;
   lastError: string | null;
-  snapshot: Record<string, any> | null;
+  snapshot: JsonRecord | null;
 };
+
+type SupportedEvmChainKey = "bsc" | "base" | "avax";
 
 type RateBucket = {
   tokens: number;
@@ -145,6 +163,13 @@ type ProxyCacheEntry = {
   bodyText: string;
   contentType: string;
   expiresAt: number;
+};
+
+type SolanaKeeperContext = {
+  connection: ReturnType<typeof createPrograms>["connection"];
+  fightProgram: ReturnType<typeof createPrograms>["fightOracle"];
+  marketProgram: ReturnType<typeof createPrograms>["goldClobMarket"];
+  marketProgramId: ReturnType<typeof createPrograms>["goldClobMarket"]["programId"];
 };
 
 const encoder = new TextEncoder();
@@ -334,6 +359,9 @@ const GOLD_CLOB_READ_ABI = [
           { name: "duelKey", type: "bytes32" },
           { name: "status", type: "uint8" },
           { name: "winner", type: "uint8" },
+          { name: "tradeTreasuryFeeBpsSnapshot", type: "uint16" },
+          { name: "tradeMarketMakerFeeBpsSnapshot", type: "uint16" },
+          { name: "winningsMarketMakerFeeBpsSnapshot", type: "uint16" },
           { name: "nextOrderId", type: "uint64" },
           { name: "bestBid", type: "uint16" },
           { name: "bestAsk", type: "uint16" },
@@ -488,6 +516,8 @@ const treasuryFeesFromReferralsByWallet: Map<string, number> =
 
 const parsers: {
   solana: ParserState;
+  bsc: ParserState;
+  base: ParserState;
   avax: ParserState;
 } = {
   solana: {
@@ -496,9 +526,41 @@ const parsers: {
     lastError: null,
     snapshot: null,
   },
+  bsc: { enabled: false, lastSuccessAt: null, lastError: null, snapshot: null },
+  base: { enabled: false, lastSuccessAt: null, lastError: null, snapshot: null },
   avax: { enabled: false, lastSuccessAt: null, lastError: null, snapshot: null },
 };
 
+const bscRpcUrl = (
+  process.env.BSC_RPC_URL ||
+  process.env.BSC_TESTNET_RPC ||
+  ""
+).trim();
+const bscContractAddress = (
+  process.env.BSC_GOLD_CLOB_ADDRESS ||
+  process.env.CLOB_CONTRACT_ADDRESS_BSC ||
+  ""
+).trim();
+const bscDuelOracleAddress = (
+  process.env.BSC_DUEL_ORACLE_ADDRESS ||
+  process.env.ORACLE_CONTRACT_ADDRESS_BSC ||
+  ""
+).trim();
+const baseRpcUrl = (
+  process.env.BASE_RPC_URL ||
+  process.env.BASE_SEPOLIA_RPC ||
+  ""
+).trim();
+const baseContractAddress = (
+  process.env.BASE_GOLD_CLOB_ADDRESS ||
+  process.env.CLOB_CONTRACT_ADDRESS_BASE ||
+  ""
+).trim();
+const baseDuelOracleAddress = (
+  process.env.BASE_DUEL_ORACLE_ADDRESS ||
+  process.env.ORACLE_CONTRACT_ADDRESS_BASE ||
+  ""
+).trim();
 const avaxRpcUrl = (
   process.env.AVAX_RPC_URL ||
   process.env.AVAX_FUJI_RPC ||
@@ -514,11 +576,21 @@ const avaxDuelOracleAddress = (
   ""
 ).trim();
 
+const bscClient =
+  bscRpcUrl && bscContractAddress
+    ? createPublicClient({ transport: http(bscRpcUrl) })
+    : null;
+const baseClient =
+  baseRpcUrl && baseContractAddress
+    ? createPublicClient({ transport: http(baseRpcUrl) })
+    : null;
 const avaxClient =
   avaxRpcUrl && avaxContractAddress
     ? createPublicClient({ transport: http(avaxRpcUrl) })
     : null;
 const EVM_RPC_PROXY_TARGETS = {
+  bsc: bscRpcUrl,
+  base: baseRpcUrl,
   avax: avaxRpcUrl,
 } as const;
 type SupportedEvmRpcChain = keyof typeof EVM_RPC_PROXY_TARGETS;
@@ -561,6 +633,8 @@ const EVM_RPC_CACHE_TTL_MS: Record<string, number> = {
 };
 
 parsers.avax.enabled = Boolean(avaxClient);
+parsers.bsc.enabled = Boolean(bscClient);
+parsers.base.enabled = Boolean(baseClient);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -1326,7 +1400,7 @@ function resolvePhaseFromLifecycleStatus(
 
 function selectBotHealthMarket(
   botHealthSnapshot: KeeperBotHealthSnapshot | null,
-  chainKey: "avax",
+  chainKey: SupportedEvmChainKey,
 ): KeeperMarketHealthRecord | null {
   return (
     botHealthSnapshot?.markets.find((market) => market.chainKey === chainKey) ??
@@ -1347,7 +1421,27 @@ function buildPredictionMarketLifecycleRecords(
   const records: PredictionMarketLifecycleRecord[] = [];
 
   if (parsers.solana.enabled || parsers.solana.snapshot) {
-    const snapshot = parsers.solana.snapshot as Record<string, any> | null;
+    const snapshot = parsers.solana.snapshot as JsonRecord | null;
+    const currentDerivedMarketPda =
+      typeof snapshot?.derivedMarketPda === "string"
+        ? snapshot.derivedMarketPda
+        : null;
+    const currentLatestMarketAccount =
+      typeof snapshot?.latestMarketAccount === "string"
+        ? snapshot.latestMarketAccount
+        : null;
+    const currentMarketProgram =
+      typeof snapshot?.marketProgram === "string"
+        ? snapshot.marketProgram
+        : null;
+    const currentRecentSignature =
+      typeof snapshot?.recentSignature === "string"
+        ? snapshot.recentSignature
+        : null;
+    const currentProposalId =
+      typeof snapshot?.currentProposalId === "string"
+        ? snapshot.currentProposalId
+        : null;
     const solanaMarketPda =
       duelKey != null
         ? findMarketPda(
@@ -1376,23 +1470,23 @@ function buildPredictionMarketLifecycleRecords(
       duelId,
       marketId:
         solanaMarketPda ??
-        snapshot?.derivedMarketPda ??
-        snapshot?.latestMarketAccount ??
+        currentDerivedMarketPda ??
+        currentLatestMarketAccount ??
         null,
       marketRef:
         solanaMarketPda ??
-        snapshot?.derivedMarketPda ??
-        snapshot?.latestMarketAccount ??
+        currentDerivedMarketPda ??
+        currentLatestMarketAccount ??
         null,
       lifecycleStatus: solanaLifecycle,
       winner: solanaWinner,
       betCloseTime,
       contractAddress: null,
-      programId: snapshot?.marketProgram ?? null,
-      txRef: snapshot?.recentSignature ?? null,
+      programId: currentMarketProgram,
+      txRef: currentRecentSignature,
       syncedAt: parsers.solana.lastSuccessAt,
       metadata: normalizePredictionMarketLifecycleMetadata({
-        proposalId: normalizeHexProposalId(snapshot?.currentProposalId),
+        proposalId: normalizeHexProposalId(currentProposalId),
         challengeWindowEndsAt: (() => {
           const proposedAt = toNullableTimestamp(snapshot?.currentProposalProposedAt);
           const disputeWindowSeconds = toNullableTimestamp(
@@ -1415,19 +1509,29 @@ function buildPredictionMarketLifecycleRecords(
     });
   }
 
-  const fallbackHealth = selectBotHealthMarket(botHealthSnapshot, "avax");
-  if (parsers.avax.enabled || parsers.avax.snapshot || fallbackHealth) {
-    const snapshot = parsers.avax.snapshot as Record<string, any> | null;
+  for (const chainKey of ["bsc", "base", "avax"] as const) {
+    const parser = parsers[chainKey];
+    const fallbackHealth = selectBotHealthMarket(botHealthSnapshot, chainKey);
+    if (!parser.enabled && !parser.snapshot && !fallbackHealth) {
+      continue;
+    }
+    const snapshot = parser.snapshot as JsonRecord | null;
+    const contractAddress =
+      chainKey === "bsc"
+        ? bscContractAddress
+        : chainKey === "base"
+          ? baseContractAddress
+          : avaxContractAddress;
     records.push(
       buildEvmPredictionMarketLifecycleRecord({
-        chainKey: "avax",
+        chainKey,
         duelKey,
         duelId,
         betCloseTime,
         snapshot,
         fallbackHealth,
-        contractAddress: avaxContractAddress ?? null,
-        syncedAt: parsers.avax.lastSuccessAt ?? botHealthSnapshot?.updatedAtMs ?? null,
+        contractAddress: contractAddress || null,
+        syncedAt: parser.lastSuccessAt ?? botHealthSnapshot?.updatedAtMs ?? null,
       }),
     );
   }
@@ -1646,21 +1750,41 @@ async function authorizeExternalBetRecord(
       expected,
     );
   }
+  if (chainKey === "bsc") {
+    return verifyEvmRecordedBet(
+      bscClient,
+      bscContractAddress,
+      "bsc",
+      bettorWallet,
+      txSignature,
+      expected,
+    );
+  }
+  if (chainKey === "base") {
+    return verifyEvmRecordedBet(
+      baseClient,
+      baseContractAddress,
+      "base",
+      bettorWallet,
+      txSignature,
+      expected,
+    );
+  }
   return null;
 }
 
-function toStreamState(payload: any): StreamState | null {
+function toStreamState(payload: unknown): StreamState | null {
   if (!payload || typeof payload !== "object") return null;
 
-  const candidate = payload as Record<string, any>;
+  const candidate = payload as JsonRecord;
   const cycle = candidate.cycle;
   if (!cycle || typeof cycle !== "object") return null;
 
   return {
     type: "STREAMING_STATE_UPDATE",
-    cycle: cycle as Record<string, any>,
+    cycle: cycle as JsonRecord,
     leaderboard: Array.isArray(candidate.leaderboard)
-      ? candidate.leaderboard
+      ? (candidate.leaderboard as JsonRecord[])
       : [],
     cameraTarget:
       typeof candidate.cameraTarget === "string" ||
@@ -1856,12 +1980,7 @@ const solanaKeyRef =
   process.env.MARKET_MAKER_KEYPAIR ||
   "";
 
-let solanaCtx: {
-  connection: any;
-  fightProgram: any;
-  marketProgram: any;
-  marketProgramId: any;
-} | null = null;
+let solanaCtx: SolanaKeeperContext | null = null;
 
 if (solanaKeyRef) {
   try {
@@ -1956,9 +2075,12 @@ async function pollSolanaSnapshot(): Promise<void> {
             new PublicKey(currentMarketPda),
           )
         : null;
-    const recentSignature =
-      recentSignatures.find((entry: any) => entry?.signature)?.signature ??
-      null;
+    const recentSignature = recentSignatures.find((entry) => {
+        if (!entry || typeof entry !== "object") return false;
+        const signature = (entry as { signature?: unknown }).signature;
+        return typeof signature === "string" && signature.length > 0;
+      },
+    )?.signature;
 
     parsers.solana.snapshot = {
       rpc: sanitizeUrlForStatus(solanaCtx.connection.rpcEndpoint),
@@ -1996,10 +2118,10 @@ async function pollSolanaSnapshot(): Promise<void> {
 }
 
 async function pollEvmSnapshot(
-  label: "avax",
+  label: SupportedEvmChainKey,
   client: ReturnType<typeof createPublicClient> | null,
   contractAddress: string,
-  duelOracleAddress: string,
+  duelOracleAddress?: string,
 ): Promise<void> {
   if (!client || !contractAddress) return;
   const parser = parsers[label];
@@ -2035,13 +2157,13 @@ async function pollEvmSnapshot(
       abi: GOLD_CLOB_READ_ABI,
       functionName: "getMarket",
       args: [normalizedDuelKey, 0],
-    })) as any;
+    })) as GoldClobMarketReadRecord;
 
     const status = Number(market?.status ?? 0);
     const winner = Number(market?.winner ?? 0);
     const yesPool = String(market?.totalAShares ?? 0n);
     const noPool = String(market?.totalBShares ?? 0n);
-    let currentDuel: Record<string, unknown> | null = null;
+    let currentDuel: JsonRecord | null = null;
     if (duelOracleAddress) {
       try {
         const duel = (await client.readContract({
@@ -2049,7 +2171,7 @@ async function pollEvmSnapshot(
           abi: DUEL_OUTCOME_READ_ABI,
           functionName: "getDuel",
           args: [normalizedDuelKey],
-        })) as any;
+        })) as JsonRecord;
         const activeProposalId =
           typeof duel?.activeProposalId === "string"
             ? duel.activeProposalId
@@ -2059,18 +2181,18 @@ async function pollEvmSnapshot(
           abi: DUEL_OUTCOME_READ_ABI,
           functionName: "disputeWindowSeconds",
         });
-        let proposal: any = null;
+        let proposal: JsonRecord | null = null;
         if (
           typeof activeProposalId === "string" &&
           /^0x[0-9a-fA-F]{64}$/.test(activeProposalId) &&
           activeProposalId.toLowerCase() !== ZERO_HEX_32
         ) {
-          proposal = await client.readContract({
+          proposal = (await client.readContract({
             address: duelOracleAddress as Address,
             abi: DUEL_OUTCOME_READ_ABI,
             functionName: "proposals",
             args: [activeProposalId as `0x${string}`],
-          });
+          })) as JsonRecord;
         }
         currentDuel = {
           status: Number(duel?.status ?? 0),
@@ -2115,6 +2237,8 @@ async function pollContractParsers(): Promise<void> {
   try {
     await Promise.all([
       pollSolanaSnapshot(),
+      pollEvmSnapshot("bsc", bscClient, bscContractAddress, bscDuelOracleAddress),
+      pollEvmSnapshot("base", baseClient, baseContractAddress, baseDuelOracleAddress),
       pollEvmSnapshot(
         "avax",
         avaxClient,
@@ -2147,7 +2271,7 @@ function getReferralOwner(
 function pointsForWalletResponse(
   wallet: string,
   scope: string | null,
-): Record<string, any> {
+): Record<string, unknown> {
   const wallets = identityWallets(wallet, scope);
   const aggregate = aggregatePoints(wallets);
   const multiplierDetail = multiplierDetailForWallets(wallets);
@@ -2197,7 +2321,7 @@ function leaderboardResponse(
   };
 }
 
-function rankResponse(wallet: string): Record<string, any> {
+function rankResponse(wallet: string): Record<string, unknown> {
   const normalized = rememberWalletCase(wallet);
   const canonical = ensureIdentity(normalized);
   const rows = leaderboardRows("linked", "alltime");
@@ -2217,7 +2341,7 @@ function historyResponse(
   limit: number,
   offset: number,
   eventType: string | null,
-): Record<string, any> {
+): Record<string, unknown> {
   const normalized = rememberWalletCase(wallet);
   const wallets = new Set(identityWallets(normalized, "linked"));
   const filtered = pointsEvents.filter((entry) => {
@@ -2251,7 +2375,7 @@ function historyResponse(
   };
 }
 
-function multiplierResponse(wallet: string): Record<string, any> {
+function multiplierResponse(wallet: string): Record<string, unknown> {
   const wallets = identityWallets(wallet, "linked");
   const detail = multiplierDetailForWallets(wallets);
   return {
@@ -2265,7 +2389,7 @@ function multiplierResponse(wallet: string): Record<string, any> {
 }
 
 async function handleBetRecord(req: Request): Promise<Response> {
-  let payload: any;
+  let payload: JsonRecord;
   try {
     payload = await req.json();
   } catch {
@@ -2444,7 +2568,7 @@ async function handleInviteRedeem(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: JsonRecord;
   try {
     payload = await req.json();
   } catch {
@@ -2539,7 +2663,7 @@ async function handleWalletLink(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized write key" }, 401);
   }
 
-  let payload: any;
+  let payload: JsonRecord;
   try {
     payload = await req.json();
   } catch {
@@ -2588,7 +2712,7 @@ async function handleWalletLink(req: Request): Promise<Response> {
 function inviteSummary(
   walletRaw: string,
   platformView: string,
-): Record<string, any> {
+): Record<string, unknown> {
   const wallet = rememberWalletCase(walletRaw);
   const code = inviteCodeForWallet(wallet);
   const canonical = ensureIdentity(wallet);
@@ -2887,7 +3011,7 @@ async function handleItemManifest(
     // Fall back below.
   }
 
-  const fallback: any[] = [];
+  const fallback: unknown[] = [];
   manifestCache.set(fileName, fallback);
   return jsonResponse(req, fallback, 200, {
     "cache-control": "public, max-age=60, stale-while-revalidate=60",
@@ -2899,7 +3023,7 @@ async function handleStreamPublish(req: Request): Promise<Response> {
     return jsonResponse(req, { error: "Unauthorized stream publish key" }, 401);
   }
 
-  let payload: any;
+  let payload: JsonRecord;
   try {
     payload = await req.json();
   } catch {
@@ -2973,6 +3097,8 @@ const server = Bun.serve({
         parsers,
         proxies: {
           solanaRpc: Boolean(SOLANA_RPC_PROXY_URL),
+          bscRpc: Boolean(EVM_RPC_PROXY_TARGETS.bsc),
+          baseRpc: Boolean(EVM_RPC_PROXY_TARGETS.base),
           avaxRpc: Boolean(EVM_RPC_PROXY_TARGETS.avax),
         },
         bot: {

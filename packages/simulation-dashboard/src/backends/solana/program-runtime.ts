@@ -525,7 +525,7 @@ export class SolanaProgramRuntime {
         return this.fightProgram.methods
             .cancelDuel([...market.duelKey], metadataUri)
             .accountsPartial({
-                reporter: this.authority.publicKey,
+                authority: this.authority.publicKey,
                 oracleConfig,
                 duelState: market.duelState,
             })

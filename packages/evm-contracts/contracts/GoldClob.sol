@@ -405,7 +405,7 @@ contract GoldClob is AccessControl, ReentrancyGuard {
         MarketStatus status = syncMarketFromOracle(duelKey, marketKind);
         Position storage position = positions[key][msg.sender];
         bool hasPosition = position.aShares > 0 || position.bShares > 0 || position.aStake > 0 || position.bStake > 0;
-        require(hasPosition, "nothing to claim");
+        if (!hasPosition) revert NothingToClaim();
 
         uint256 payout = 0;
         if (status == MarketStatus.RESOLVED) {

@@ -18,6 +18,8 @@ import {
   type Page,
 } from "@playwright/test";
 import {
+  LAMPORTS_PER_SOL,
+  type AccountMeta,
   Connection,
   Keypair,
   PublicKey,
@@ -76,6 +78,19 @@ type MarketStateAccount = {
   nextOrderId?: unknown;
   bestBid?: unknown;
   bestAsk?: unknown;
+};
+
+type PriceLevelAccount = {
+  totalOpen?: unknown;
+  headOrderId?: unknown;
+};
+
+type OrderAccount = {
+  maker?: PublicKey;
+  amount?: unknown;
+  filled?: unknown;
+  nextOrderId?: unknown;
+  active?: boolean;
 };
 
 type AccountNamespaceFetcher = {
@@ -191,6 +206,18 @@ function encodeMarketId(marketId: number): Buffer {
 
 type SignableTx = Transaction | VersionedTransaction;
 type AnchorLikeWallet = Wallet & { payer: Keypair };
+const ORDER_PRICE = 500;
+const SEEDED_LIQUIDITY_LAMPORTS = 5n * 1_000_000_000n;
+const MIN_LIQUIDITY_MAKER_LAMPORTS = 20n * BigInt(LAMPORTS_PER_SOL);
+const MAX_MATCH_ACCOUNTS = 100;
+const ASK_LIQUIDITY_MAKER_SEED = Uint8Array.from([
+  14, 22, 189, 71, 203, 44, 97, 156, 18, 240, 85, 132, 53, 199, 4, 220, 91,
+  11, 144, 201, 32, 77, 165, 118, 246, 17, 63, 154, 208, 39, 121, 6,
+]);
+const BID_LIQUIDITY_MAKER_SEED = Uint8Array.from([
+  101, 33, 174, 9, 57, 218, 66, 140, 211, 45, 87, 16, 193, 24, 129, 204, 73,
+  188, 12, 240, 61, 109, 173, 28, 142, 215, 54, 167, 80, 31, 199, 114,
+]);
 
 function derivePerpsPositionPda(owner: PublicKey, marketId: number): PublicKey {
   return PublicKey.findProgramAddressSync(
@@ -206,6 +233,12 @@ function bnLikeToBigInt(value: unknown): bigint {
     return BigInt((value as { toString: () => string }).toString());
   }
   return 0n;
+}
+
+function seededLiquidityMaker(side: number): Keypair {
+  return Keypair.fromSeed(
+    side === SIDE_ASK ? ASK_LIQUIDITY_MAKER_SEED : BID_LIQUIDITY_MAKER_SEED,
+  );
 }
 
 async function fetchJson<T>(
@@ -635,7 +668,23 @@ async function seedClobLiquidity(
 
   const secret = JSON.parse(fs.readFileSync(walletPath, "utf8")) as number[];
   const authority = Keypair.fromSecretKey(Uint8Array.from(secret));
-  const provider = new AnchorProvider(connection, toWallet(authority), {
+  const authorityProvider = new AnchorProvider(connection, toWallet(authority), {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  });
+  const maker = seededLiquidityMaker(side);
+  const makerBalance = BigInt(await connection.getBalance(maker.publicKey, "confirmed"));
+  if (makerBalance < MIN_LIQUIDITY_MAKER_LAMPORTS) {
+    const fundTx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: authority.publicKey,
+        toPubkey: maker.publicKey,
+        lamports: Number(MIN_LIQUIDITY_MAKER_LAMPORTS - makerBalance),
+      }),
+    );
+    await authorityProvider.sendAndConfirm(fundTx, []);
+  }
+  const provider = new AnchorProvider(connection, toWallet(maker), {
     commitment: "confirmed",
     preflightCommitment: "confirmed",
   });
@@ -650,54 +699,212 @@ async function seedClobLiquidity(
     string,
     AccountNamespaceFetcher
   >;
-  const marketAccount = (await clobAccounts.marketState.fetch(
-    marketState,
-  )) as MarketStateAccount;
-  const bestBid = Number(marketAccount.bestBid ?? 0);
-  const bestAsk = Number(marketAccount.bestAsk ?? 1000);
-  if (side === SIDE_ASK && bestAsk > 0 && bestAsk < 1000) {
-    return;
-  }
-  if (side === SIDE_BID && bestBid > 0 && bestBid < 1000) {
-    return;
-  }
-  const nextOrderId = bnLikeToBigInt(marketAccount?.nextOrderId);
-  if (nextOrderId <= 0n) {
-    throw new Error("Missing next order id for seeded CLOB market");
+  const hasExecutableLiquidity = (marketAccount: MarketStateAccount): boolean => {
+    const bestBid = Number(marketAccount.bestBid ?? 0);
+    const bestAsk = Number(marketAccount.bestAsk ?? 1000);
+    if (side === SIDE_ASK) {
+      return bestAsk > 0 && bestAsk <= ORDER_PRICE;
+    }
+    return bestBid >= ORDER_PRICE && bestBid < 1000;
+  };
+
+  const buildPlaceOrderRemainingAccounts = async (
+    amount: bigint,
+  ): Promise<AccountMeta[]> => {
+    const metas: AccountMeta[] = [];
+    const marketAccount = (await clobAccounts.marketState.fetch(
+      marketState,
+    )) as MarketStateAccount;
+    const oppositeSide = side === SIDE_BID ? SIDE_ASK : SIDE_BID;
+    let remaining = amount;
+    let boundary =
+      side === SIDE_BID
+        ? Number(marketAccount.bestAsk ?? 1000)
+        : Number(marketAccount.bestBid ?? 0);
+    let matches = 0;
+
+    while (remaining > 0n && matches < MAX_MATCH_ACCOUNTS) {
+      const crosses =
+        side === SIDE_BID
+          ? boundary <= ORDER_PRICE && boundary > 0 && boundary < 1000
+          : boundary >= ORDER_PRICE && boundary > 0 && boundary < 1000;
+      if (!crosses) break;
+
+      const levelPda = derivePriceLevelPda(
+        clobProgram.programId,
+        marketState,
+        oppositeSide,
+        boundary,
+      );
+      const level = (await clobProgram.account.priceLevel.fetchNullable(
+        levelPda,
+      )) as PriceLevelAccount | null;
+      if (!level) break;
+
+      metas.push({
+        pubkey: levelPda,
+        isSigner: false,
+        isWritable: true,
+      });
+
+      const levelOpen = bnLikeToBigInt(level.totalOpen);
+      let currentHead = bnLikeToBigInt(level.headOrderId);
+      let currentLevelOpen = levelOpen;
+      if (levelOpen === 0n || currentHead === 0n) {
+        boundary = side === SIDE_BID ? boundary + 1 : boundary - 1;
+        matches += 1;
+        continue;
+      }
+
+      while (remaining > 0n && currentHead > 0n && currentLevelOpen > 0n) {
+        const orderPda = deriveOrderPda(clobProgram.programId, marketState, currentHead);
+        const order = (await clobProgram.account.order.fetch(
+          orderPda,
+        )) as OrderAccount;
+        const makerBalancePda = deriveUserBalancePda(
+          clobProgram.programId,
+          marketState,
+          order.maker as PublicKey,
+        );
+
+        metas.push(
+          {
+            pubkey: orderPda,
+            isSigner: false,
+            isWritable: true,
+          },
+          {
+            pubkey: makerBalancePda,
+            isSigner: false,
+            isWritable: true,
+          },
+        );
+
+        const orderRemaining =
+          bnLikeToBigInt(order.amount) - bnLikeToBigInt(order.filled);
+        if (orderRemaining <= 0n || !order.active) break;
+
+        if (orderRemaining >= remaining) {
+          remaining = 0n;
+          break;
+        }
+
+        remaining -= orderRemaining;
+        currentLevelOpen -= orderRemaining;
+        currentHead = bnLikeToBigInt(order.nextOrderId);
+        matches += 1;
+        if (remaining > 0n && currentHead > 0n && currentLevelOpen > 0n) {
+          metas.push({
+            pubkey: levelPda,
+            isSigner: false,
+            isWritable: true,
+          });
+        }
+      }
+
+      boundary = side === SIDE_BID ? boundary + 1 : boundary - 1;
+      matches += 1;
+    }
+
+    const restingLevelPda = derivePriceLevelPda(
+      clobProgram.programId,
+      marketState,
+      side,
+      ORDER_PRICE,
+    );
+    const restingLevel = await clobProgram.account.priceLevel.fetchNullable(
+      restingLevelPda,
+    );
+    if (restingLevel && bnLikeToBigInt(restingLevel.tailOrderId) > 0n) {
+      metas.push({
+        pubkey: deriveOrderPda(
+          clobProgram.programId,
+          marketState,
+          bnLikeToBigInt(restingLevel.tailOrderId),
+        ),
+        isSigner: false,
+        isWritable: true,
+      });
+    }
+
+    return metas;
+  };
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const marketAccount = (await clobAccounts.marketState.fetch(
+      marketState,
+    )) as MarketStateAccount;
+    if (hasExecutableLiquidity(marketAccount)) {
+      return;
+    }
+
+    const nextOrderId = bnLikeToBigInt(marketAccount.nextOrderId);
+    if (nextOrderId <= 0n) {
+      throw new Error("Missing next order id for seeded CLOB market");
+    }
+
+    const remainingAccounts = await buildPlaceOrderRemainingAccounts(
+      SEEDED_LIQUIDITY_LAMPORTS,
+    );
+
+    try {
+      await clobProgram.methods
+        .placeOrder(
+          new BN(nextOrderId.toString()),
+          side,
+          ORDER_PRICE,
+          new BN(SEEDED_LIQUIDITY_LAMPORTS.toString()),
+          ORDER_BEHAVIOR_GTC,
+        )
+        .accountsPartial({
+          marketState,
+          duelState,
+          userBalance: deriveUserBalancePda(
+            clobProgram.programId,
+            marketState,
+            maker.publicKey,
+          ),
+          newOrder: deriveOrderPda(clobProgram.programId, marketState, nextOrderId),
+          restingLevel: derivePriceLevelPda(
+            clobProgram.programId,
+            marketState,
+            side,
+            ORDER_PRICE,
+          ),
+          config: new PublicKey(state.clobConfig || ""),
+          treasury: new PublicKey(state.clobTreasury || ""),
+          marketMaker: new PublicKey(state.clobMarketMaker || ""),
+          vault,
+          user: maker.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([maker])
+        .rpc();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        attempt === 3 ||
+        (!/MissingMatchAccounts|InvalidRemainingAccount|custom program error: 0x0/i.test(
+          message,
+        ) &&
+          !/Required maker match accounts were not supplied/i.test(message))
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      continue;
+    }
+
+    const refreshedMarketAccount = (await clobAccounts.marketState.fetch(
+      marketState,
+    )) as MarketStateAccount;
+    if (hasExecutableLiquidity(refreshedMarketAccount)) {
+      return;
+    }
   }
 
-  await clobProgram.methods
-    .placeOrder(
-      new BN(nextOrderId.toString()),
-      side,
-      500,
-      new BN("1000000000"),
-      ORDER_BEHAVIOR_GTC,
-    )
-    .accountsPartial({
-      marketState,
-      duelState,
-      userBalance: deriveUserBalancePda(
-        clobProgram.programId,
-        marketState,
-        authority.publicKey,
-      ),
-      newOrder: deriveOrderPda(clobProgram.programId, marketState, nextOrderId),
-      restingLevel: derivePriceLevelPda(
-        clobProgram.programId,
-        marketState,
-        side,
-        500,
-      ),
-      config: new PublicKey(state.clobConfig || ""),
-      treasury: new PublicKey(state.clobTreasury || ""),
-      marketMaker: new PublicKey(state.clobMarketMaker || ""),
-      vault,
-      user: authority.publicKey,
-      systemProgram: SystemProgram.programId,
-    })
-    .signers([authority])
-    .rpc();
+  throw new Error(`Failed to seed executable ${side === SIDE_ASK ? "ask" : "bid"} liquidity`);
 }
 
 async function loadMarketBalances(
