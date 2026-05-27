@@ -62,6 +62,20 @@ Required staging vars are:
 - `HYPERBET_AVAX_STAGING_CHAIN_ID`
 - `HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS`
 
+Required AVAX staged proof vars/secrets used by Gate 14A:
+
+- `HYPERBET_AVAX_STAGING_RPC_URL`
+- `HYPERBET_AVAX_STAGING_REPORTER_PRIVATE_KEY`
+- `HYPERBET_AVAX_STAGING_CANARY_PRIVATE_KEY`
+- `HYPERBET_AVAX_STAGING_DUEL_ORACLE_ADDRESS`
+- `HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS`
+- `HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY`
+- `HYPERBET_AVAX_RAILWAY_STAGING_PROJECT_ID`
+- `HYPERBET_AVAX_RAILWAY_STAGING_ENVIRONMENT_ID`
+- `HYPERBET_AVAX_RAILWAY_STAGING_KEEPER_SERVICE_ID`
+- `HYPERBET_STAGED_PROOF_DUEL_ID`
+- `HYPERBET_STAGED_PROOF_DUEL_KEY`
+
 AVAX rollout remains blocked until canonical deployment truth exists in the shared chain registry and the effective AVAX wallet/signer set is in place. The staging/prod rail is present so proof and release packaging can use one consistent contract once those addresses are committed.
 
 ## 1) Deploy the keeper to Railway

@@ -3,46 +3,57 @@
 
 use anchor_lang::prelude::*;
 
-declare_id!("6tpRysBFd1yXRipYEYwAw9jxEoVHk15kVXfkDGFLMqcD");
+declare_id!("B5mRCRDJk9BrnH7regMWW5mpTQ8QG1CcCGSnDxMt8hmo");
 
 pub const ORACLE_CONFIG_SEED: &[u8] = b"oracle_config";
 pub const DUEL_SEED: &[u8] = b"duel";
-
-const DEFAULT_BOOTSTRAP_AUTHORITY: &str = "DfEnrzh4cgnHxfuZRxLGX69fnLd9DP41XxGuE4gtyJpn";
-const DEFAULT_DISPUTE_WINDOW_SECS: i64 = 3600;
-
-fn bootstrap_authority() -> Pubkey {
-    use std::str::FromStr;
-    if let Some(value) = option_env!("HYPERSCAPE_BOOTSTRAP_AUTHORITY") {
-        Pubkey::from_str(value).expect("invalid HYPERSCAPE_BOOTSTRAP_AUTHORITY")
-    } else {
-        Pubkey::from_str(DEFAULT_BOOTSTRAP_AUTHORITY).expect("invalid default bootstrap authority")
-    }
-}
 
 #[program]
 pub mod fight_oracle {
     use super::*;
 
-    pub fn initialize_oracle(ctx: Context<InitializeOracle>, reporter: Pubkey) -> Result<()> {
-        let oracle_config = &mut ctx.accounts.oracle_config;
+    pub fn initialize_oracle(
+        ctx: Context<InitializeOracle>,
+        reporter: Pubkey,
+        finalizer: Pubkey,
+        challenger: Pubkey,
+        dispute_window_secs: i64,
+    ) -> Result<()> {
+        let program_data = &ctx.accounts.program_data;
+        let upgrade_authority = program_data
+            .upgrade_authority_address
+            .ok_or(ErrorCode::UnauthorizedInitializer)?;
+        require!(
+            upgrade_authority != Pubkey::default(),
+            ErrorCode::UnauthorizedInitializer
+        );
+        require_keys_eq!(
+            upgrade_authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::UnauthorizedInitializer
+        );
 
-        if oracle_config.authority != Pubkey::default() {
-            require_keys_eq!(
-                oracle_config.authority,
-                ctx.accounts.authority.key(),
-                ErrorCode::Unauthorized
-            );
-        } else {
-            oracle_config.authority = ctx.accounts.authority.key();
-            oracle_config.bump = ctx.bumps.oracle_config;
-            oracle_config.finalizer = reporter;
-            oracle_config.challenger = reporter;
-            oracle_config.dispute_window_secs = DEFAULT_DISPUTE_WINDOW_SECS;
-        }
+        let oracle_config = &mut ctx.accounts.oracle_config;
+        // WS2: One-time initialization only. No bootstrap fallback pattern.
+        require!(
+            oracle_config.authority == Pubkey::default(),
+            ErrorCode::AlreadyInitialized
+        );
+        oracle_config.authority = upgrade_authority;
+        oracle_config.bump = ctx.bumps.oracle_config;
 
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
+        require!(finalizer != Pubkey::default(), ErrorCode::InvalidFinalizer);
+        require!(
+            challenger != Pubkey::default(),
+            ErrorCode::InvalidChallenger
+        );
+        require!(dispute_window_secs >= 60, ErrorCode::InvalidDisputeWindow);
+
         oracle_config.reporter = reporter;
+        oracle_config.finalizer = finalizer;
+        oracle_config.challenger = challenger;
+        oracle_config.dispute_window_secs = dispute_window_secs;
         Ok(())
     }
 
@@ -59,6 +70,8 @@ pub mod fight_oracle {
             ctx.accounts.authority.key(),
             ErrorCode::Unauthorized
         );
+        require!(!ctx.accounts.oracle_config.config_frozen, ErrorCode::ConfigFrozen);
+        require!(authority == ctx.accounts.oracle_config.authority, ErrorCode::ConfigAuthorityImmutable);
         require!(authority != Pubkey::default(), ErrorCode::InvalidAuthority);
         require!(reporter != Pubkey::default(), ErrorCode::InvalidReporter);
         require!(finalizer != Pubkey::default(), ErrorCode::InvalidFinalizer);
@@ -66,14 +79,37 @@ pub mod fight_oracle {
             challenger != Pubkey::default(),
             ErrorCode::InvalidChallenger
         );
-        require!(dispute_window_secs >= 0, ErrorCode::InvalidDisputeWindow);
+        require!(dispute_window_secs >= 60, ErrorCode::InvalidDisputeWindow);
 
         let oracle_config = &mut ctx.accounts.oracle_config;
-        oracle_config.authority = authority;
         oracle_config.reporter = reporter;
         oracle_config.finalizer = finalizer;
         oracle_config.challenger = challenger;
         oracle_config.dispute_window_secs = dispute_window_secs;
+        Ok(())
+    }
+
+    /// One-way config freeze — after calling, update_oracle_config reverts permanently.
+    /// Pause controls remain functional.
+    pub fn freeze_oracle_config(ctx: Context<UpdateOracleConfig>) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.oracle_config.authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::Unauthorized
+        );
+        require!(!ctx.accounts.oracle_config.config_frozen, ErrorCode::ConfigFrozen);
+        ctx.accounts.oracle_config.config_frozen = true;
+        Ok(())
+    }
+
+    /// Emergency pause/unpause — remains functional even after config freeze.
+    pub fn set_oracle_paused(ctx: Context<UpdateOracleConfig>, paused: bool) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.oracle_config.authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::Unauthorized
+        );
+        ctx.accounts.oracle_config.paused = paused;
         Ok(())
     }
 
@@ -88,6 +124,7 @@ pub mod fight_oracle {
         metadata_uri: String,
         status: DuelStatus,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         require!(
             status == DuelStatus::Scheduled
                 || status == DuelStatus::BettingOpen
@@ -108,6 +145,12 @@ pub mod fight_oracle {
             duel_start_ts >= bet_close_ts,
             ErrorCode::InvalidLifecycleTransition
         );
+        if status == DuelStatus::Locked {
+            require!(
+                Clock::get()?.unix_timestamp >= bet_close_ts,
+                ErrorCode::BettingWindowActive
+            );
+        }
 
         let duel_state = &mut ctx.accounts.duel_state;
         let is_initialized = duel_state.bump != 0;
@@ -125,6 +168,14 @@ pub mod fight_oracle {
         } else {
             duel_state.bump = ctx.bumps.duel_state;
             duel_state.winner = MarketSide::None;
+        }
+
+        // FIX-4: Lock participant identity and bet timing once betting opens
+        if is_initialized && duel_status_rank(duel_state.status) >= duel_status_rank(DuelStatus::BettingOpen) {
+            require!(participant_a_hash == duel_state.participant_a_hash, ErrorCode::ParticipantHashImmutable);
+            require!(participant_b_hash == duel_state.participant_b_hash, ErrorCode::ParticipantHashImmutable);
+            require!(bet_open_ts == duel_state.bet_open_ts, ErrorCode::TimingImmutable);
+            require!(bet_close_ts == duel_state.bet_close_ts, ErrorCode::TimingImmutable);
         }
 
         duel_state.duel_key = duel_key;
@@ -152,6 +203,7 @@ pub mod fight_oracle {
         _duel_key: [u8; 32],
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         let duel_state = &mut ctx.accounts.duel_state;
         require!(
             duel_state.status != DuelStatus::Resolved && duel_state.status != DuelStatus::Cancelled,
@@ -177,6 +229,7 @@ pub mod fight_oracle {
         duel_end_ts: i64,
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         require!(
             winner == MarketSide::A || winner == MarketSide::B,
             ErrorCode::InvalidWinner
@@ -195,6 +248,13 @@ pub mod fight_oracle {
         require!(
             duel_end_ts >= duel_state.bet_close_ts,
             ErrorCode::InvalidLifecycleTransition
+        );
+
+        // FIX-6: Parity with EVM — block proposals while betting window is still active
+        let clock = Clock::get()?;
+        require!(
+            clock.unix_timestamp >= duel_state.bet_close_ts,
+            ErrorCode::BettingWindowActive
         );
 
         let proposal_id = proposal_id_for(duel_state.duel_key, result_hash, replay_hash);
@@ -227,6 +287,7 @@ pub mod fight_oracle {
         _duel_key: [u8; 32],
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         let duel_state = &mut ctx.accounts.duel_state;
         let oracle_config = &ctx.accounts.oracle_config;
         require!(
@@ -254,11 +315,78 @@ pub mod fight_oracle {
         Ok(())
     }
 
+    // FIX-3: Resolution path for challenged duels — reporter submits new proposal
+    pub fn repropose_result(
+        ctx: Context<ReproposeResult>,
+        _duel_key: [u8; 32],
+        winner: MarketSide,
+        seed: u64,
+        replay_hash: [u8; 32],
+        result_hash: [u8; 32],
+        duel_end_ts: i64,
+        metadata_uri: String,
+    ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
+        let duel_state = &mut ctx.accounts.duel_state;
+        require!(
+            duel_state.status == DuelStatus::Challenged,
+            ErrorCode::NotChallenged
+        );
+        require!(
+            duel_state.status != DuelStatus::Resolved,
+            ErrorCode::DuelAlreadyFinalized
+        );
+        require!(
+            duel_state.status != DuelStatus::Cancelled,
+            ErrorCode::DuelAlreadyCancelled
+        );
+        require!(
+            winner == MarketSide::A || winner == MarketSide::B,
+            ErrorCode::InvalidWinner
+        );
+        require!(duel_end_ts > 0, ErrorCode::InvalidLifecycleTransition);
+        require!(
+            duel_end_ts >= duel_state.bet_close_ts,
+            ErrorCode::InvalidLifecycleTransition
+        );
+
+        let clock = Clock::get()?;
+        require!(
+            clock.unix_timestamp >= duel_state.bet_close_ts,
+            ErrorCode::BettingWindowActive
+        );
+
+        let proposal_id = proposal_id_for(duel_state.duel_key, result_hash, replay_hash);
+        duel_state.status = DuelStatus::Proposed;
+        duel_state.active_proposal = proposal_id;
+        duel_state.pending_winner = winner;
+        duel_state.pending_seed = seed;
+        duel_state.pending_result_hash = result_hash;
+        duel_state.pending_replay_hash = replay_hash;
+        duel_state.pending_duel_end_ts = duel_end_ts;
+        duel_state.pending_proposed_at = clock.unix_timestamp;
+        duel_state.pending_challenged = false;
+
+        emit!(ResultProposed {
+            duel_key: duel_state.duel_key,
+            proposal_id,
+            winner,
+            seed,
+            duel_end_ts,
+            result_hash,
+            replay_hash,
+            metadata_uri: metadata_uri.clone(),
+        });
+        duel_state.metadata_uri = metadata_uri;
+        Ok(())
+    }
+
     pub fn finalize_result(
         ctx: Context<FinalizeResult>,
         _duel_key: [u8; 32],
         metadata_uri: String,
     ) -> Result<()> {
+        require!(!ctx.accounts.oracle_config.paused, ErrorCode::OraclePaused);
         let duel_state = &mut ctx.accounts.duel_state;
         let oracle_config = &ctx.accounts.oracle_config;
         require!(
@@ -328,12 +456,6 @@ pub struct InitializeOracle<'info> {
         constraint = program.programdata_address()? == Some(program_data.key()) @ ErrorCode::UnauthorizedInitializer
     )]
     pub program: Program<'info, crate::program::FightOracle>,
-    #[account(
-        constraint = program_data.upgrade_authority_address == Some(authority.key())
-            || ((program_data.upgrade_authority_address.is_none()
-                || program_data.upgrade_authority_address == Some(Pubkey::default()))
-                && authority.key() == bootstrap_authority()) @ ErrorCode::UnauthorizedInitializer
-    )]
     pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
 }
@@ -371,6 +493,21 @@ pub struct UpsertDuel<'info> {
 #[instruction(duel_key: [u8; 32])]
 pub struct CancelDuel<'info> {
     #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        seeds = [ORACLE_CONFIG_SEED],
+        bump = oracle_config.bump,
+        constraint = oracle_config.authority == authority.key() @ ErrorCode::Unauthorized,
+    )]
+    pub oracle_config: Account<'info, OracleConfig>,
+    #[account(mut, seeds = [DUEL_SEED, duel_key.as_ref()], bump = duel_state.bump)]
+    pub duel_state: Account<'info, DuelState>,
+}
+
+#[derive(Accounts)]
+#[instruction(duel_key: [u8; 32])]
+pub struct ProposeResult<'info> {
+    #[account(mut)]
     pub reporter: Signer<'info>,
     #[account(
         seeds = [ORACLE_CONFIG_SEED],
@@ -382,9 +519,10 @@ pub struct CancelDuel<'info> {
     pub duel_state: Account<'info, DuelState>,
 }
 
+// FIX-3: Accounts for reproposing after a challenge
 #[derive(Accounts)]
 #[instruction(duel_key: [u8; 32])]
-pub struct ProposeResult<'info> {
+pub struct ReproposeResult<'info> {
     #[account(mut)]
     pub reporter: Signer<'info>,
     #[account(
@@ -433,6 +571,8 @@ pub struct OracleConfig {
     pub finalizer: Pubkey,
     pub challenger: Pubkey,
     pub dispute_window_secs: i64,
+    pub paused: bool,
+    pub config_frozen: bool,
     pub bump: u8,
 }
 
@@ -543,7 +683,7 @@ pub enum ErrorCode {
     InvalidFinalizer,
     #[msg("Challenger pubkey cannot be the default address")]
     InvalidChallenger,
-    #[msg("Dispute window must be non-negative")]
+    #[msg("Dispute window must be positive")]
     InvalidDisputeWindow,
     #[msg("Betting window is invalid")]
     InvalidBetWindow,
@@ -567,4 +707,20 @@ pub enum ErrorCode {
     ChallengeWindowExpired,
     #[msg("Dispute window still active")]
     DisputeWindowActive,
+    #[msg("Config authority is immutable")]
+    ConfigAuthorityImmutable,
+    #[msg("Cannot propose result while betting window is still active")]
+    BettingWindowActive,
+    #[msg("Duel must be in Challenged status for reproposal")]
+    NotChallenged,
+    #[msg("Participant hashes are immutable after betting opens")]
+    ParticipantHashImmutable,
+    #[msg("Bet timing is immutable after betting opens")]
+    TimingImmutable,
+    #[msg("Config is already initialized")]
+    AlreadyInitialized,
+    #[msg("Oracle operations are paused")]
+    OraclePaused,
+    #[msg("Config is permanently frozen")]
+    ConfigFrozen,
 }

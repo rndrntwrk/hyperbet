@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
-import "../contracts/DuelOutcomeOracle.sol";
-import "../contracts/GoldClob.sol";
+import {DuelOutcomeOracle} from "../contracts/DuelOutcomeOracle.sol";
+import {GoldClob} from "../contracts/GoldClob.sol";
 
 contract GoldClobSettlementTest is Test {
     uint8 private constant MARKET_KIND_DUEL_WINNER = 0;
@@ -66,7 +66,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(aStakeAfter, 0, "winner A stake should clear");
         assertEq(bStakeAfter, 0, "winner B stake should clear");
 
-        vm.expectRevert(bytes("nothing to claim"));
+        vm.expectRevert(GoldClob.NothingToClaim.selector);
         vm.prank(traderB);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }
@@ -78,6 +78,7 @@ contract GoldClobSettlementTest is Test {
         GoldClob.Market memory marketBefore = clob.getMarket(duel, MARKET_KIND_DUEL_WINNER);
         assertEq(marketBefore.winningsMarketMakerFeeBpsSnapshot, 200, "market should snapshot initial winnings fee");
 
+        vm.expectRevert(GoldClob.GovernanceSurfaceFrozen.selector);
         vm.prank(admin);
         clob.setFeeConfig(0, 0, 5_000);
 
@@ -121,7 +122,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(aStakeAfter, 0, "loser A stake should clear");
         assertEq(bStakeAfter, 0, "loser B stake should clear");
 
-        vm.expectRevert(bytes("nothing to claim"));
+        vm.expectRevert(GoldClob.NothingToClaim.selector);
         vm.prank(traderA);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }
@@ -137,7 +138,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(bSharesBefore, amount, "seller should hold B shares before cancel");
 
         uint256 traderBefore = traderA.balance;
-        vm.prank(reporter);
+        vm.prank(admin);
         oracle.cancelDuel(duel, "cancelled");
 
         vm.prank(traderA);
@@ -152,7 +153,7 @@ contract GoldClobSettlementTest is Test {
         assertEq(aStakeAfter, 0, "cancelled A stake should clear");
         assertEq(bStakeAfter, 0, "cancelled B stake should clear");
 
-        vm.expectRevert(bytes("nothing to claim"));
+        vm.expectRevert(GoldClob.NothingToClaim.selector);
         vm.prank(traderA);
         clob.claim(duel, MARKET_KIND_DUEL_WINNER);
     }
@@ -229,15 +230,16 @@ contract GoldClobSettlementTest is Test {
     }
 
     function _lockDuel(bytes32 duel) private {
-        vm.warp(block.timestamp + 61);
+        DuelOutcomeOracle.DuelState memory d = oracle.getDuel(duel);
+        vm.warp(d.betCloseTs + 1);
         vm.prank(reporter);
         oracle.upsertDuel(
             duel,
-            _hashLabel("winner-payout-a"),
-            _hashLabel("winner-payout-b"),
-            uint64(block.timestamp - 61),
-            uint64(block.timestamp - 1),
-            uint64(block.timestamp + 59),
+            d.participantAHash,
+            d.participantBHash,
+            d.betOpenTs,
+            d.betCloseTs,
+            d.duelStartTs,
             "locked",
             DuelOutcomeOracle.DuelStatus.LOCKED
         );

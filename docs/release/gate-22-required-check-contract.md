@@ -43,6 +43,9 @@ are stable:
   - `challengeWindowEndsAt`
   - `finalizedAt`
   - `cancellationReason`
+- Privileged surfaces are inventoried in
+  `release/contract-privileged-surface-inventory.md` and kept in sync with check
+  criteria.
 - The parity evidence in `docs/protocol/cross-chain-parity-matrix.md` still
   maps every required trace to a concrete passing command.
 - No duplicate heavyweight check names exist outside

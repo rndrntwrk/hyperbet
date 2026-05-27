@@ -2,7 +2,14 @@ import React from "react";
 import * as anchor from "@coral-xyz/anchor";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
+import {
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  SystemProgram,
+  type Connection,
+  type Transaction,
+  type VersionedTransaction,
+} from "@solana/web3.js";
 import {
   Line,
   LineChart,
@@ -67,7 +74,25 @@ type TradeDirection = "LONG" | "SHORT";
 
 interface ModelsMarketViewProps {
   activeMatchup: string;
+  connectionOverride?: Connection;
+  walletOverride?: ModelsWalletLike;
+  walletModalOverride?: ModelsWalletModalLike;
 }
+
+type ModelsWalletLike = {
+  connected: boolean;
+  publicKey: PublicKey | null;
+  signAllTransactions?: <T extends Array<Transaction | VersionedTransaction>>(
+    txs: T,
+  ) => Promise<T>;
+  signTransaction?: <T extends Transaction | VersionedTransaction>(
+    tx: T,
+  ) => Promise<T>;
+};
+
+type ModelsWalletModalLike = {
+  setVisible: (visible: boolean) => void;
+};
 
 interface ConfigAccountState {
   authority: PublicKey;
@@ -620,12 +645,21 @@ function applySignedOi(
   };
 }
 
-export function ModelsMarketView({ activeMatchup }: ModelsMarketViewProps) {
+export function ModelsMarketView({
+  activeMatchup,
+  connectionOverride,
+  walletOverride,
+  walletModalOverride,
+}: ModelsMarketViewProps) {
   const locale = resolveUiLocale();
   const copy = getModelsMarketCopy(locale);
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const { setVisible: setWalletModalVisible } = useWalletModal();
+  const adapterConnection = useConnection();
+  const adapterWallet = useWallet();
+  const adapterWalletModal = useWalletModal();
+  const connection = connectionOverride ?? adapterConnection.connection;
+  const wallet = walletOverride ?? adapterWallet;
+  const setWalletModalVisible =
+    walletModalOverride?.setVisible ?? adapterWalletModal.setVisible;
   const { activeChain, setActiveChain } = useChain();
 
   const [data, setData] = React.useState<PerpsMarketsResponse | null>(null);

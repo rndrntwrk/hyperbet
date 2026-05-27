@@ -10,6 +10,7 @@ Use them together with:
 Runbooks:
 
 - [Staged Live Proof](staged-live-proof.md)
+- [AVAX Fuji Bootstrap Market Smoke](avax-fuji-bootstrap.md)
 - [Prediction-Market Governance And Emergency Controls](prediction-market-governance-and-emergency-controls.md)
 - [Signer Policy And Key Rotation](signer-policy-and-key-rotation.md)
 - [Quote Disablement And Safe Restart](quote-disablement-and-safe-restart.md)

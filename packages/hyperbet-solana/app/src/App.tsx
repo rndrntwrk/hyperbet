@@ -596,7 +596,7 @@ const SolanaClobPanel = lazy(() =>
   })),
 );
 const ModelsMarketView = lazy(() =>
-  import("@hyperbet/ui/components/ModelsMarketView").then((module) => ({
+  import("./components/ModelsMarketView").then((module) => ({
     default: module.ModelsMarketView,
   })),
 );
@@ -2181,7 +2181,7 @@ export function App() {
                     <SolanaClobPanel
                       agent1Name={effAgent1Name}
                       agent2Name={effAgent2Name}
-                      compact={!isE2eMode}
+                      compact={true}
                       onMarketSnapshot={handleSolanaClobSnapshot}
                     />
                   </Suspense>

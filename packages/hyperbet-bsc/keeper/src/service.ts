@@ -334,6 +334,9 @@ const GOLD_CLOB_READ_ABI = [
           { name: "duelKey", type: "bytes32" },
           { name: "status", type: "uint8" },
           { name: "winner", type: "uint8" },
+          { name: "tradeTreasuryFeeBpsSnapshot", type: "uint16" },
+          { name: "tradeMarketMakerFeeBpsSnapshot", type: "uint16" },
+          { name: "winningsMarketMakerFeeBpsSnapshot", type: "uint16" },
           { name: "nextOrderId", type: "uint64" },
           { name: "bestBid", type: "uint16" },
           { name: "bestAsk", type: "uint16" },
@@ -527,6 +530,10 @@ const baseRpcUrl = (
   ""
 ).trim();
 const avaxRpcUrl = (process.env.AVAX_RPC_URL || "").trim();
+const avaxContractAddress = (
+  process.env.AVAX_GOLD_CLOB_ADDRESS ||
+  ""
+).trim();
 const baseContractAddress = (
   process.env.BASE_GOLD_CLOB_ADDRESS ||
   process.env.CLOB_CONTRACT_ADDRESS_BASE ||
@@ -545,6 +552,10 @@ const bscClient =
 const baseClient =
   baseRpcUrl && baseContractAddress
     ? createPublicClient({ transport: http(baseRpcUrl) })
+    : null;
+const avaxClient =
+  avaxRpcUrl && avaxContractAddress
+    ? createPublicClient({ transport: http(avaxRpcUrl) })
     : null;
 const EVM_RPC_PROXY_TARGETS = {
   bsc: bscRpcUrl,
@@ -1471,6 +1482,61 @@ function buildPredictionMarketLifecycleRecords(
   return records;
 }
 
+function toFallbackKeeperMarketHealthRecord(
+  record: PredictionMarketLifecycleRecord,
+): KeeperMarketHealthRecord {
+  return {
+    chainKey: record.chainKey,
+    duelId: record.duelId ?? null,
+    duelKey: record.duelKey ?? null,
+    marketRef: record.marketRef ?? null,
+    lifecycleStatus: record.lifecycleStatus,
+    winner: record.winner,
+    fairValue: null,
+    bidPrice: null,
+    askPrice: null,
+    bidUnits: 0,
+    askUnits: 0,
+    openOrderCount: 0,
+    inventoryYes: 0,
+    inventoryNo: 0,
+    openYes: 0,
+    openNo: 0,
+    netExposure: 0,
+    grossExposure: 0,
+    drawdownBps: 0,
+    quoteAgeMs: null,
+    lastStreamAtMs: record.syncedAt ?? null,
+    lastOracleAtMs: record.syncedAt ?? null,
+    lastRpcAtMs: record.syncedAt ?? null,
+    circuitBreakerReason: null,
+    lastResolvedAtMs:
+      typeof record.metadata?.finalizedAt === "number"
+        ? record.metadata.finalizedAt
+        : null,
+    lastClaimAtMs: null,
+    recovery: [],
+  };
+}
+
+function resolveKeeperBotHealthSnapshot(
+  botHealthSnapshot: KeeperBotHealthSnapshot | null,
+): KeeperBotHealthSnapshot | null {
+  if (botHealthSnapshot == null || botHealthSnapshot.markets.length > 0) {
+    return botHealthSnapshot;
+  }
+  const fallbackMarkets = buildPredictionMarketLifecycleRecords(
+    botHealthSnapshot,
+  ).map(toFallbackKeeperMarketHealthRecord);
+  if (fallbackMarkets.length === 0) {
+    return botHealthSnapshot;
+  }
+  return {
+    ...botHealthSnapshot,
+    markets: fallbackMarkets,
+  };
+}
+
 function handlePredictionMarkets(req: Request): Response {
   const botHealthSnapshot = loadKeeperBotHealthSnapshot();
   const markets = buildPredictionMarketLifecycleRecords(botHealthSnapshot);
@@ -1687,6 +1753,16 @@ async function authorizeExternalBetRecord(
       baseClient,
       baseContractAddress,
       "base",
+      bettorWallet,
+      txSignature,
+      expected,
+    );
+  }
+  if (chainKey === "avax") {
+    return verifyEvmRecordedBet(
+      avaxClient,
+      avaxContractAddress,
+      "avax",
       bettorWallet,
       txSignature,
       expected,
@@ -2987,7 +3063,9 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/status") {
-      const botHealthSnapshotRaw = loadKeeperBotHealthSnapshot();
+      const botHealthSnapshotRaw = resolveKeeperBotHealthSnapshot(
+        loadKeeperBotHealthSnapshot(),
+      );
       const predictionMarkets = buildPredictionMarketLifecycleRecords(
         botHealthSnapshotRaw,
       );
@@ -3082,7 +3160,9 @@ const server = Bun.serve({
     }
 
     if (req.method === "GET" && url.pathname === "/api/keeper/bot-health") {
-      const botHealthSnapshotRaw = loadKeeperBotHealthSnapshot();
+      const botHealthSnapshotRaw = resolveKeeperBotHealthSnapshot(
+        loadKeeperBotHealthSnapshot(),
+      );
       return jsonResponse(req, {
         ok: true,
         running: Boolean(botSubprocess),

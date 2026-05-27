@@ -49,6 +49,20 @@ concurrency:
 
 env:
   PREDICTION_MARKET_GATE_REF: ${{ github.event_name == 'schedule' && 'enoomian/prediction-market-sprint-base' || github.ref }}
+# AVAX production-readiness posture in this workflow:
+# - The AVAX mainnet lane is still launch-promotion dependent on canonical registry truth.
+# - Proof lanes are complete only after reviewed staged read-only + canary evidence for AVAX.
+# - Required staging inputs for AVAX proof include:
+#   HYPERBET_AVAX_STAGING_RPC_URL,
+#   HYPERBET_AVAX_STAGING_REPORTER_PRIVATE_KEY,
+#   HYPERBET_AVAX_STAGING_CANARY_PRIVATE_KEY,
+#   HYPERBET_AVAX_STAGING_DUEL_ORACLE_ADDRESS,
+#   HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS,
+#   HYPERBET_AVAX_STAGING_CHAIN_ID,
+#   HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY,
+#   HYPERBET_AVAX_RAILWAY_STAGING_PROJECT_ID,
+#   HYPERBET_AVAX_RAILWAY_STAGING_ENVIRONMENT_ID,
+#   HYPERBET_AVAX_RAILWAY_STAGING_KEEPER_SERVICE_ID,
 
 jobs:
   solana-program-build-gate:
@@ -236,6 +250,13 @@ jobs:
 
       - name: Install Playwright browser
         run: bunx playwright install --with-deps chromium
+
+      - name: AVAX gate posture note
+        if: matrix.chain == 'avax'
+        run: |
+          echo "::warning title=AVAX Gate posture::AVAX launch gate is not promoted to required status until chain-registry production mainnet fields are canonical and staged read-only/canary-write proof artifacts are reviewed."
+          echo "Evidence requirement for AVAX completion: reviewed proof bundle from both `bun run staged:proof -- --mode=read-only --target=avax` and `bun run staged:proof -- --mode=canary-write --target=avax`."
+          echo "Required AVAX staged proof inputs/secrets: HYPERBET_AVAX_STAGING_RPC_URL, HYPERBET_AVAX_STAGING_CHAIN_ID, HYPERBET_AVAX_STAGING_REPORTER_PRIVATE_KEY, HYPERBET_AVAX_STAGING_CANARY_PRIVATE_KEY, HYPERBET_AVAX_STAGING_DUEL_ORACLE_ADDRESS, HYPERBET_AVAX_STAGING_GOLD_CLOB_ADDRESS, HYPERBET_AVAX_STAGING_STREAM_PUBLISH_KEY, HYPERBET_AVAX_RAILWAY_STAGING_PROJECT_ID, HYPERBET_AVAX_RAILWAY_STAGING_ENVIRONMENT_ID, HYPERBET_AVAX_RAILWAY_STAGING_KEEPER_SERVICE_ID"
 
       - name: Run Gate 10 local E2E
         run: node --import tsx scripts/ci-gate-e2e.ts --chain=${{ matrix.chain }}

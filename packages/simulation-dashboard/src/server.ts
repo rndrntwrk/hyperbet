@@ -2555,6 +2555,7 @@ async function settleDuel(
 ): Promise<void> {
   try {
     const reporter = await provider.getSigner(2);
+    const pauser = await provider.getSigner(0);
     const operator = await provider.getSigner(1);
     updateActiveRunStage("resolve-advance-time");
 
@@ -2569,7 +2570,7 @@ async function settleDuel(
     if (settlementMode === "cancel") {
         updateActiveRunStage("resolve-cancel-duel");
         tx1 = await withTimeout(
-            (oracle.connect(reporter) as any).cancelDuel(
+            (oracle.connect(pauser) as any).cancelDuel(
                 currentDuelKey,
                 `cancelled-${currentDuelLabel}`,
             ),

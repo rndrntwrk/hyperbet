@@ -45,7 +45,6 @@ const E2E_PERPS_MAX_ORACLE_STALENESS_SECONDS = 3_600;
 const DUEL_WINNER_MARKET_KIND = 1;
 const SIDE_BID = 1;
 const SIDE_ASK = 2;
-const ORDER_BEHAVIOR_GTC = 0;
 const E2E_TRADER_SEED = Uint8Array.from([
   88, 41, 190, 12, 77, 164, 231, 5, 199, 118, 43, 91, 16, 220, 58, 147, 9, 175,
   63, 204, 132, 54, 241, 28, 115, 67, 154, 210, 36, 143, 80, 11,
@@ -483,7 +482,14 @@ async function main(): Promise<void> {
   const envPath = path.resolve(appDir, ".env.e2e");
   const solanaRpcUrl =
     process.env.E2E_SOLANA_RPC_URL || "http://127.0.0.1:8899";
-  const solanaWsUrl = process.env.E2E_SOLANA_WS_URL || "ws://127.0.0.1:8900";
+  const solanaWsUrl =
+    process.env.E2E_SOLANA_WS_URL ||
+    (() => {
+      const rpcUrl = new URL(solanaRpcUrl);
+      rpcUrl.protocol = rpcUrl.protocol === "https:" ? "wss:" : "ws:";
+      rpcUrl.port = String(Number(rpcUrl.port || "80") + 1);
+      return rpcUrl.toString();
+    })();
   const browserSolanaRpcUrl =
     process.env.E2E_BROWSER_SOLANA_RPC_URL || solanaRpcUrl;
   const browserSolanaWsUrl =
@@ -568,26 +574,38 @@ async function main(): Promise<void> {
   const currentBetOpenTs = currentUnixTs - 15;
   const currentBetCloseTs = currentUnixTs + currentBetWindowSeconds;
   const currentDuelStartTs = currentUnixTs + currentFightDelaySeconds;
+  const localDisputeWindowSeconds = 60;
 
-  markStage("initialize fight oracle");
-  await fight.methods
-    .initializeOracle(authority.publicKey)
-    .accountsPartial({
-      authority: authority.publicKey,
-      oracleConfig: oracleConfigPda,
-      program: fightProgram.programId,
-      programData: deriveProgramDataAddress(fightProgram.programId),
-      systemProgram: SystemProgram.programId,
-    })
-    .signers([authority])
-    .rpc();
+  const existingOracleConfig =
+    await fight.account.oracleConfig.fetchNullable(oracleConfigPda);
+  if (!existingOracleConfig) {
+    markStage("initialize fight oracle");
+    await fight.methods
+      .initializeOracle(
+        authority.publicKey,
+        authority.publicKey,
+        authority.publicKey,
+        new BN(localDisputeWindowSeconds),
+      )
+      .accountsPartial({
+        authority: authority.publicKey,
+        oracleConfig: oracleConfigPda,
+        program: fightProgram.programId,
+        programData: deriveProgramDataAddress(fightProgram.programId),
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([authority])
+      .rpc();
+  }
+
+  markStage("configure fight oracle");
   await fight.methods
     .updateOracleConfig(
       authority.publicKey,
       authority.publicKey,
       authority.publicKey,
       authority.publicKey,
-      new BN(0),
+      new BN(localDisputeWindowSeconds),
     )
     .accountsPartial({
       authority: authority.publicKey,
@@ -639,6 +657,7 @@ async function main(): Promise<void> {
       })
       .signers([authority])
       .rpc();
+    await sleep((localDisputeWindowSeconds + 3) * 1000);
     markStage("finalize resolved duel result");
     await fight.methods
       .finalizeResult(
@@ -871,13 +890,7 @@ async function main(): Promise<void> {
   if (!existingFirstOrder) {
     markStage("seed first clob order");
     await clob.methods
-      .placeOrder(
-        new BN(1),
-        SIDE_ASK,
-        600,
-        seededClobOrderAmount,
-        ORDER_BEHAVIOR_GTC,
-      )
+      .placeOrder(new BN(1), SIDE_ASK, 600, seededClobOrderAmount, 0)
       .accountsPartial({
         marketState: clobMarketState,
         duelState: currentDuelPda,
@@ -898,13 +911,7 @@ async function main(): Promise<void> {
   if (!existingSecondOrder) {
     markStage("seed second clob order");
     await clob.methods
-      .placeOrder(
-        new BN(2),
-        SIDE_BID,
-        400,
-        seededClobOrderAmount,
-        ORDER_BEHAVIOR_GTC,
-      )
+      .placeOrder(new BN(2), SIDE_BID, 400, seededClobOrderAmount, 0)
       .accountsPartial({
         marketState: clobMarketState,
         duelState: currentDuelPda,
