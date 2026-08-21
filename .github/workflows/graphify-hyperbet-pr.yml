@@ -1,0 +1,275 @@
+name: Hyperbet Graphify PR evidence (ephemeral)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/graphify-hyperbet-pr.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: graphify-hyperbet-pr-3b10c4e0
+  cancel-in-progress: false
+
+jobs:
+  graphify:
+    name: Native Graphify 0.9.46 at frozen source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      SOURCE_SHA: 3b10c4e08a8e07177c1f61a2394a7c3db7bcf659
+      SOURCE_TREE: e6c0d7275124261b5844d5e2b36f7d5febfeda8f
+      GRAPHIFY_VERSION: 0.9.46
+      GRAPHIFY_WHEEL_SHA256: 35d854d66884c623a8e25ca059b54744ade91ae17ffc0f79fd39e108a1666b5d
+      GRAPHIFY_QUERY_LOG_DISABLE: '1'
+      GRAPHIFY_MAX_WORKERS: '1'
+      PYTHONHASHSEED: '0'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      NO_COLOR: '1'
+      TZ: UTC
+
+    steps:
+      - name: Check out exact frozen source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Prove freeze and inventory corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-evidence"
+          mkdir -p "$evidence/logs" "$evidence/queries"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          {
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "source_sha=$(git rev-parse HEAD)"
+            echo "source_tree=$(git rev-parse HEAD^{tree})"
+            echo "source_commit_date=$(git show -s --format=%cI HEAD)"
+            echo "workflow_event_sha=$GITHUB_SHA"
+            echo "workflow_ref=$GITHUB_REF"
+          } | tee "$evidence/logs/source-freeze.log"
+          git status --short --branch | tee "$evidence/logs/initial-git-status.log"
+          git submodule status --recursive > "$evidence/logs/submodules.log" 2>&1 || true
+          git lfs ls-files > "$evidence/logs/git-lfs-files.log" 2>&1 || true
+          export EVIDENCE_DIR="$evidence"
+          python3 - <<'PY'
+          import csv, hashlib, json, os, subprocess
+          from collections import Counter
+          from pathlib import Path
+          root=Path(os.environ['EVIDENCE_DIR'])
+          raw=subprocess.check_output(['git','ls-files','-z'])
+          paths=[Path(x.decode()) for x in raw.split(b'\0') if x]
+          rows=[]
+          for p in paths:
+              data=p.read_bytes()
+              rows.append({'path':p.as_posix(),'bytes':len(data),'extension':p.suffix.lower() or '[none]','sha256':hashlib.sha256(data).hexdigest()})
+          with (root/'tracked-source-inventory.csv').open('w',encoding='utf-8',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=['path','bytes','extension','sha256']); w.writeheader(); w.writerows(rows)
+          packages=sorted({p.parts[1] for p in paths if len(p.parts)>1 and p.parts[0]=='packages'})
+          (root/'tracked-source-inventory.json').write_text(json.dumps({
+              'tracked_file_count':len(rows),'tracked_bytes':sum(r['bytes'] for r in rows),
+              'extensions':dict(sorted(Counter(r['extension'] for r in rows).items())),
+              'top_level':dict(sorted(Counter(p.parts[0] for p in paths).items())),
+              'packages':packages,'package_count':len(packages)
+          },indent=2)+'\n')
+          PY
+
+      - name: Install checksum-verified Graphify
+        id: install
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-evidence"; venv="$RUNNER_TEMP/graphify-venv"; status=0
+          python3 -m venv "$venv" || status=$?
+          if [ "$status" -eq 0 ]; then source "$venv/bin/activate"; python -m pip install --upgrade pip > "$evidence/logs/pip-upgrade.log" 2>&1 || status=$?; fi
+          if [ "$status" -eq 0 ]; then
+            mkdir -p "$RUNNER_TEMP/graphify-wheel"
+            python -m pip download --no-deps --only-binary=:all: "graphifyy==$GRAPHIFY_VERSION" -d "$RUNNER_TEMP/graphify-wheel" > "$evidence/logs/wheel-download.log" 2>&1 || status=$?
+          fi
+          if [ "$status" -eq 0 ]; then wheel="$(find "$RUNNER_TEMP/graphify-wheel" -name 'graphifyy-*.whl' -print -quit)"; test -n "$wheel" || status=1; fi
+          if [ "$status" -eq 0 ]; then printf '%s  %s\n' "$GRAPHIFY_WHEEL_SHA256" "$wheel" | sha256sum -c - > "$evidence/logs/wheel-sha256.log" 2>&1 || status=$?; fi
+          if [ "$status" -eq 0 ]; then python -m pip install "$wheel" > "$evidence/logs/graphify-install.log" 2>&1 || status=$?; cp "$wheel" "$evidence/"; fi
+          if [ "$status" -eq 0 ]; then
+            for parser in tree-sitter-typescript tree-sitter-javascript tree-sitter-rust tree-sitter-solidity tree-sitter-json tree-sitter-yaml tree-sitter-toml; do
+              set +e; python -m pip install "$parser" >> "$evidence/logs/optional-parsers.log" 2>&1; rc=$?; set -e
+              printf '%s\t%s\n' "$parser" "$rc" >> "$evidence/logs/optional-parser-status.tsv"
+            done
+            graphify --version | tee "$evidence/logs/graphify-version.log" || status=$?
+            python -m pip freeze | sort > "$evidence/logs/python-environment.freeze.txt"
+          fi
+          printf '{"exit_code":%s}\n' "$status" > "$evidence/graphify-install-status.json"
+          exit "$status"
+
+      - name: Run two native passes and verify determinism
+        id: native
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-evidence"; status=0
+          if [ ! -f "$RUNNER_TEMP/graphify-venv/bin/activate" ]; then status=125; else
+            source "$RUNNER_TEMP/graphify-venv/bin/activate"
+            for run in 1 2; do
+              rm -rf graphify-out graph.json
+              graphify extract . --code-only --force --timing --max-workers 1 > "$evidence/logs/graphify-pass-${run}-extract.log" 2>&1 || { status=$?; break; }
+              graphify cluster-only . --no-label --timing > "$evidence/logs/graphify-pass-${run}-cluster.log" 2>&1 || { status=$?; break; }
+              test -s graphify-out/graph.json && test -s graphify-out/GRAPH_REPORT.md || { status=126; break; }
+              cp -a graphify-out "$evidence/run-${run}"
+            done
+          fi
+          export EVIDENCE_DIR="$evidence"
+          if [ "$status" -eq 0 ]; then
+            python3 - <<'PY' > "$evidence/logs/native-review.log" 2>&1 || status=$?
+          import hashlib,json,os
+          from collections import Counter
+          from pathlib import Path
+          root=Path(os.environ['EVIDENCE_DIR'])
+          volatile={'generated_at','created_at','updated_at','timestamp','timing','duration','duration_ms','elapsed','cost','run_id','built_at'}
+          def scrub(v):
+              if isinstance(v,dict): return {k:scrub(x) for k,x in sorted(v.items()) if k not in volatile}
+              if isinstance(v,list): return [scrub(x) for x in v]
+              return v
+          summaries=[]; payloads=[]
+          for name in ('run-1','run-2'):
+              p=root/name/'graph.json'; data=json.loads(p.read_text()); nodes=data.get('nodes',[]); edges=data.get('links',data.get('edges',[]))
+              if isinstance(nodes,dict): nodes=list(nodes.values())
+              if isinstance(edges,dict): edges=list(edges.values())
+              ids=[str(n.get('id')) for n in nodes]; known=set(ids); missing=[]; self_loops=0; sig=[]
+              for e in edges:
+                  s=e.get('source'); t=e.get('target')
+                  if isinstance(s,dict): s=s.get('id')
+                  if isinstance(t,dict): t=t.get('id')
+                  s=str(s); t=str(t)
+                  if s not in known or t not in known: missing.append([s,t])
+                  if s==t: self_loops+=1
+                  sig.append((s,t,str(e.get('relation',e.get('type','unknown')))))
+              canonical=json.dumps({'nodes':sorted(json.dumps(scrub(n),sort_keys=True,separators=(',',':')) for n in nodes),'edges':sorted(json.dumps(scrub(e),sort_keys=True,separators=(',',':')) for e in edges)},sort_keys=True,separators=(',',':')).encode()
+              payloads.append(canonical)
+              summaries.append({'run':name,'graph_json_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'canonical_structure_sha256':hashlib.sha256(canonical).hexdigest(),'node_count':len(nodes),'edge_count':len(edges),'unique_node_ids':len(ids)==len(set(ids)),'missing_endpoint_count':len(missing),'self_loop_count':self_loops,'duplicate_edge_signature_count':len(sig)-len(set(sig)),'node_types':dict(sorted(Counter(str(n.get('type',n.get('kind','unknown'))) for n in nodes).items())),'edge_relations':dict(sorted(Counter(str(e.get('relation',e.get('type','unknown'))) for e in edges).items()))})
+          result={'runs':summaries,'exact_graph_json_match':summaries[0]['graph_json_sha256']==summaries[1]['graph_json_sha256'],'canonical_structure_match':payloads[0]==payloads[1]}
+          (root/'native-determinism.json').write_text(json.dumps(result,indent=2)+'\n')
+          assert result['canonical_structure_match']
+          assert all(x['unique_node_ids'] and x['missing_endpoint_count']==0 and x['self_loop_count']==0 and x['duplicate_edge_signature_count']==0 for x in summaries)
+          PY
+          fi
+          printf '{"exit_code":%s}\n' "$status" > "$evidence/native-status.json"
+          exit "$status"
+
+      - name: Run exact query probes
+        id: queries
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-evidence"; status=0
+          if [ -f "$RUNNER_TEMP/graphify-venv/bin/activate" ] && [ -s "$evidence/run-2/graph.json" ]; then
+            source "$RUNNER_TEMP/graphify-venv/bin/activate"
+            questions=('GoldClob' 'DuelOutcomeOracle' 'prediction market finality' 'keeper settlement' 'market maker inventory' 'Hyperforge duel oracle' 'Solana prediction market' 'EVM prediction market' 'fee snapshot' 'market resolution')
+            i=0
+            for q in "${questions[@]}"; do i=$((i+1)); printf -v file 'Q%02d.txt' "$i"; set +e; { echo QUESTION; echo "$q"; echo; graphify query "$q" --graph "$evidence/run-2/graph.json"; } > "$evidence/queries/$file" 2>&1; rc=$?; set -e; printf '%02d\t%s\t%s\n' "$i" "$rc" "$q" >> "$evidence/query-status.tsv"; [ "$rc" -eq 0 ] || status=$rc; done
+          else status=125; fi
+          printf '{"exit_code":%s}\n' "$status" > "$evidence/query-status.json"; exit "$status"
+
+      - name: Set up Hyperbet toolchain
+        id: toolchain
+        continue-on-error: true
+        uses: ./.github/actions/setup-hyperbet
+        with:
+          install-foundry: 'true'
+
+      - name: Run fresh project gates
+        id: qualify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-evidence"
+          run_gate(){ name="$1"; shift; set +e; timeout 1200 "$@" > "$evidence/logs/${name}.log" 2>&1; rc=$?; set -e; printf '%s\n' "$rc" > "$evidence/logs/${name}.exit-code"; }
+          set -e
+          bun --version > "$evidence/logs/bun-version.log" 2>&1 || true
+          forge --version > "$evidence/logs/forge-version.log" 2>&1 || true
+          run_gate install-root bash scripts/ci-install-verified.sh root
+          if [ "$(cat "$evidence/logs/install-root.exit-code")" = 0 ]; then
+            run_gate env-audit bun run ci:env
+            run_gate typecheck bun run typecheck
+            run_gate lint bun run lint
+            run_gate tests bun run test
+            run_gate contracts-fast bun run ci:contracts:fast
+            run_gate evm-gate bun run ci:gate:evm
+            run_gate solana-gate bun run ci:gate:solana
+          else for name in env-audit typecheck lint tests contracts-fast evm-gate solana-gate; do printf '125\n' > "$evidence/logs/${name}.exit-code"; done; fi
+          export EVIDENCE_DIR="$evidence"
+          python3 - <<'PY' > "$evidence/project-qualification.json"
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['EVIDENCE_DIR'])/'logs'; names=['install-root','env-audit','typecheck','lint','tests','contracts-fast','evm-gate','solana-gate']
+          print(json.dumps({n:int((root/f'{n}.exit-code').read_text().strip()) for n in names},indent=2))
+          PY
+          test "$(cat "$evidence/logs/install-root.exit-code")" = 0
+          test "$(cat "$evidence/logs/typecheck.exit-code")" = 0
+          test "$(cat "$evidence/logs/lint.exit-code")" = 0
+          test "$(cat "$evidence/logs/tests.exit-code")" = 0
+
+      - name: Finalize manifest and hashes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-evidence"; mkdir -p "$evidence/logs"
+          export EVIDENCE_DIR="$evidence" EVENT_SHA="$GITHUB_SHA" EVENT_REF="$GITHUB_REF" REPOSITORY="$GITHUB_REPOSITORY" RUN_ID="$GITHUB_RUN_ID" RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT"
+          export INSTALL_OUTCOME="${{ steps.install.outcome }}" NATIVE_OUTCOME="${{ steps.native.outcome }}" QUERY_OUTCOME="${{ steps.queries.outcome }}" TOOLCHAIN_OUTCOME="${{ steps.toolchain.outcome }}" QUALIFY_OUTCOME="${{ steps.qualify.outcome }}"
+          python3 - <<'PY'
+          import hashlib,json,os,platform
+          from pathlib import Path
+          root=Path(os.environ['EVIDENCE_DIR'])
+          def digest(p):
+              h=hashlib.sha256();
+              with p.open('rb') as f:
+                  for b in iter(lambda:f.read(1048576),b''): h.update(b)
+              return h.hexdigest()
+          files=[]
+          for p in sorted(x for x in root.rglob('*') if x.is_file()):
+              if p.name in {'ARTIFACT_HASHES.sha256','NATIVE_RUN_MANIFEST.json'}: continue
+              files.append({'path':p.relative_to(root).as_posix(),'bytes':p.stat().st_size,'sha256':digest(p)})
+          manifest={'schema_version':'1.0','repository':os.environ['REPOSITORY'],'frozen_source_sha':os.environ['SOURCE_SHA'],'frozen_source_tree':os.environ['SOURCE_TREE'],'workflow_event_sha':os.environ['EVENT_SHA'],'workflow_ref':os.environ['EVENT_REF'],'workflow_run_id':os.environ['RUN_ID'],'workflow_run_attempt':os.environ['RUN_ATTEMPT'],'graphify_package':'graphifyy','graphify_version':os.environ['GRAPHIFY_VERSION'],'graphify_wheel_sha256':os.environ['GRAPHIFY_WHEEL_SHA256'],'execution_mode':'native Graphify CLI; code-only; two clean passes; no LLM labels','query_logging_disabled':os.environ.get('GRAPHIFY_QUERY_LOG_DISABLE')=='1','python':platform.python_version(),'platform':platform.platform(),'step_outcomes':{'install':os.environ['INSTALL_OUTCOME'],'native':os.environ['NATIVE_OUTCOME'],'queries':os.environ['QUERY_OUTCOME'],'toolchain':os.environ['TOOLCHAIN_OUTCOME'],'qualification':os.environ['QUALIFY_OUTCOME']},'files':files}
+          mp=root/'NATIVE_RUN_MANIFEST.json'; mp.write_text(json.dumps(manifest,indent=2)+'\n')
+          with (root/'ARTIFACT_HASHES.sha256').open('w') as f:
+              for x in files: f.write(f"{x['sha256']}  {x['path']}\n")
+              f.write(f"{digest(mp)}  NATIVE_RUN_MANIFEST.json\n")
+          PY
+          find "$evidence" -maxdepth 4 -type f -printf '%P\t%s bytes\n' | sort | tee "$evidence/logs/artifact-list.log"
+
+      - name: Upload native evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hyperbet-native-graphify-3b10c4e0-pr
+          path: ${{ runner.temp }}/hyperbet-evidence/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+          compression-level: 6
+          overwrite: false
+
+      - name: Enforce native graph gate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-evidence"
+          test -s "$evidence/run-1/graph.json"
+          test -s "$evidence/run-2/graph.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'hyperbet-evidence'; d=json.loads((root/'native-determinism.json').read_text()); assert d['canonical_structure_match']
+          PY
