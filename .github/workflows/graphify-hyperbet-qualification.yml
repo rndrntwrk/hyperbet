@@ -1,0 +1,168 @@
+name: Hyperbet frozen-source qualification (ephemeral)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/graphify-hyperbet-qualification.yml
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Frozen source install, build, test and protocol gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      SOURCE_SHA: 3b10c4e08a8e07177c1f61a2394a7c3db7bcf659
+      SOURCE_TREE: e6c0d7275124261b5844d5e2b36f7d5febfeda8f
+      NO_COLOR: '1'
+      CI: 'true'
+      TZ: UTC
+
+    steps:
+      - name: Check out exact frozen source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Prove source freeze
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-qualification"
+          mkdir -p "$evidence/logs"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          {
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "source_sha=$(git rev-parse HEAD)"
+            echo "source_tree=$(git rev-parse HEAD^{tree})"
+            echo "source_commit_date=$(git show -s --format=%cI HEAD)"
+            echo "workflow_event_sha=$GITHUB_SHA"
+            echo "workflow_ref=$GITHUB_REF"
+          } | tee "$evidence/logs/source-freeze.log"
+
+      - name: Setup pinned Bun, Rust, Foundry and Solana
+        id: toolchain
+        continue-on-error: true
+        uses: ./.github/actions/setup-hyperbet
+        with:
+          install-rust: 'true'
+          install-foundry: 'true'
+          install-solana: 'true'
+          install-anchor: 'false'
+          bun-version: '1.3.1'
+          solana-version: '2.3.0'
+
+      - name: Record toolchain
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-qualification"
+          {
+            bun --version || true
+            node --version || true
+            rustc --version || true
+            cargo --version || true
+            forge --version || true
+            solana --version || true
+          } > "$evidence/logs/toolchain.log" 2>&1
+
+      - name: Execute qualification matrix
+        id: qualification
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-qualification"
+          mkdir -p "$evidence/logs"
+          run_gate() {
+            local name="$1"; shift
+            set +e
+            "$@" > "$evidence/logs/${name}.log" 2>&1
+            local rc=$?
+            set -e
+            printf '%s\n' "$rc" > "$evidence/logs/${name}.exit-code"
+          }
+          set -e
+          run_gate bun-install bun install --frozen-lockfile
+          if [ "$(cat "$evidence/logs/bun-install.exit-code")" = 0 ]; then
+            run_gate ci-env bun run ci:env
+            run_gate typecheck bun run typecheck
+            run_gate lint bun run lint
+            run_gate test bun run test
+            run_gate build bun run build
+            run_gate contracts-fast bun run ci:contracts:fast
+            run_gate contracts-security bun run ci:contracts:security
+            run_gate gate-evm bun run ci:gate:evm
+            run_gate gate-solana-build bun run ci:gate:solana:build
+            run_gate market-maker-adversarial bun run market-maker:simulate:adversarial:ci
+          else
+            for name in ci-env typecheck lint test build contracts-fast contracts-security gate-evm gate-solana-build market-maker-adversarial; do
+              printf '125\n' > "$evidence/logs/${name}.exit-code"
+              echo 'not run because bun install failed' > "$evidence/logs/${name}.log"
+            done
+          fi
+          export EVIDENCE_DIR="$evidence"
+          python3 - <<'PY' > "$evidence/qualification-summary.json"
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ['EVIDENCE_DIR'])/'logs'
+          result={p.name.removesuffix('.exit-code'):int(p.read_text().strip()) for p in sorted(root.glob('*.exit-code'))}
+          print(json.dumps(result,indent=2))
+          PY
+
+      - name: Finalize hashes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/hyperbet-qualification"
+          export EVIDENCE_DIR="$evidence"
+          export TOOLCHAIN_OUTCOME="${{ steps.toolchain.outcome }}"
+          export QUALIFICATION_OUTCOME="${{ steps.qualification.outcome }}"
+          export RUN_ID="$GITHUB_RUN_ID"
+          export RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT"
+          python3 - <<'PY'
+          import hashlib,json,os,platform
+          from pathlib import Path
+          root=Path(os.environ['EVIDENCE_DIR'])
+          def digest(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+          files=[]
+          for p in sorted(x for x in root.rglob('*') if x.is_file()):
+              if p.name in {'ARTIFACT_HASHES.sha256','QUALIFICATION_MANIFEST.json'}: continue
+              files.append({'path':p.relative_to(root).as_posix(),'bytes':p.stat().st_size,'sha256':digest(p)})
+          manifest={
+              'schema_version':'1.0','repository':os.environ['GITHUB_REPOSITORY'],
+              'frozen_source_sha':os.environ['SOURCE_SHA'],'frozen_source_tree':os.environ['SOURCE_TREE'],
+              'workflow_run_id':os.environ['RUN_ID'],'workflow_run_attempt':os.environ['RUN_ATTEMPT'],
+              'toolchain_outcome':os.environ['TOOLCHAIN_OUTCOME'],
+              'qualification_step_outcome':os.environ['QUALIFICATION_OUTCOME'],
+              'python':platform.python_version(),'platform':platform.platform(),'files':files,
+          }
+          mp=root/'QUALIFICATION_MANIFEST.json'; mp.write_text(json.dumps(manifest,indent=2)+'\n')
+          with (root/'ARTIFACT_HASHES.sha256').open('w') as f:
+              for x in files: f.write(f"{x['sha256']}  {x['path']}\n")
+              f.write(f"{digest(mp)}  QUALIFICATION_MANIFEST.json\n")
+          PY
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hyperbet-qualification-3b10c4e0
+          path: ${{ runner.temp }}/hyperbet-qualification/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+          compression-level: 6
+          overwrite: false
