@@ -16,6 +16,7 @@ import {
   parseMarketParity,
   type MarketParityInfo,
 } from "./marketParity";
+import { startSingleFlightPolling } from "./singleFlightPolling";
 
 const ACTIVE_PREDICTION_MARKETS_URL = `${GAME_API_URL.replace(/\/$/, "")}/api/arena/prediction-markets/active`;
 const OVERVIEW_PREDICTION_MARKETS_URL = `${GAME_API_URL.replace(/\/$/, "")}/api/arena/prediction-markets/overview`;
@@ -346,6 +347,7 @@ export function usePredictionMarketLifecycle(
       setIsLoading(true);
       try {
         const nextData = await fetchActivePredictionMarkets(signal);
+        if (signal?.aborted) return null;
         setData(nextData);
         setError(null);
         return nextData;
@@ -375,20 +377,7 @@ export function usePredictionMarketLifecycle(
       return;
     }
 
-    const controller = new AbortController();
-    let activePollController: AbortController | null = null;
-    void refresh(controller.signal);
-    const intervalId = window.setInterval(() => {
-      activePollController?.abort();
-      activePollController = new AbortController();
-      void refresh(activePollController.signal);
-    }, pollIntervalMs);
-
-    return () => {
-      controller.abort();
-      activePollController?.abort();
-      window.clearInterval(intervalId);
-    };
+    return startSingleFlightPolling(refresh, pollIntervalMs);
   }, [chainKey, disabled, pollIntervalMs, refresh]);
 
   const market = useMemo(
@@ -428,6 +417,7 @@ export function usePredictionMarketOverview(
       setIsLoading(true);
       try {
         const nextData = await fetchPredictionMarketsOverview(signal);
+        if (signal?.aborted) return null;
         setData(nextData);
         setError(null);
         return nextData;
@@ -457,20 +447,7 @@ export function usePredictionMarketOverview(
       return;
     }
 
-    const controller = new AbortController();
-    let activePollController: AbortController | null = null;
-    void refresh(controller.signal);
-    const intervalId = window.setInterval(() => {
-      activePollController?.abort();
-      activePollController = new AbortController();
-      void refresh(activePollController.signal);
-    }, pollIntervalMs);
-
-    return () => {
-      controller.abort();
-      activePollController?.abort();
-      window.clearInterval(intervalId);
-    };
+    return startSingleFlightPolling(refresh, pollIntervalMs);
   }, [chainKey, disabled, pollIntervalMs, refresh]);
 
   const live = useMemo(
@@ -516,6 +493,7 @@ export function usePredictionMarketSyncStatus(
       if (disabled) return null;
       try {
         const nextData = await fetchPredictionMarketSyncStatus(signal);
+        if (signal?.aborted) return null;
         setData(nextData);
         setError(null);
         return nextData;
@@ -540,20 +518,7 @@ export function usePredictionMarketSyncStatus(
       return;
     }
 
-    const controller = new AbortController();
-    let activePollController: AbortController | null = null;
-    void refresh(controller.signal);
-    const intervalId = window.setInterval(() => {
-      activePollController?.abort();
-      activePollController = new AbortController();
-      void refresh(activePollController.signal);
-    }, pollIntervalMs);
-
-    return () => {
-      controller.abort();
-      activePollController?.abort();
-      window.clearInterval(intervalId);
-    };
+    return startSingleFlightPolling(refresh, pollIntervalMs);
   }, [disabled, pollIntervalMs, refresh]);
 
   return {

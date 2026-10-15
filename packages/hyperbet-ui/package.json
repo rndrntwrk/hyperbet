@@ -10,7 +10,8 @@
     "storybook:build": "CI=1 STORYBOOK_DISABLE_TELEMETRY=1 storybook build",
     "storybook:screenshots": "bun run storybook:build && bash ./scripts/run-storybook-screenshots.sh",
     "typecheck": "bunx tsc --noEmit --project tsconfig.verify.json",
-    "test": "bun test --preload ./tests/setup.ts"
+    "test": "bun test --preload ./tests/setup.ts",
+    "test:polling:node": "node --test ./tests/singleFlightPolling.node.mjs"
   },
   "exports": {
     ".": "./src/index.ts",
